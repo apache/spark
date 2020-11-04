@@ -604,29 +604,30 @@ class ClientSuite extends SparkFunSuite with Matchers {
         |  }]
         |}}
         |""".stripMargin
-    val (stdout, stderr) = Client.parseAppAttemptsJsonResponse(jsonString).get
-    assert(stdout ===
+    val logLinkMap = Client.parseAppAttemptsJsonResponse(jsonString)
+    assert(logLinkMap.keySet === Set("stdout", "stderr"))
+    assert(logLinkMap("stdout") ===
         s"http://$nodeHost:8042/node/containerlogs/$containerId/username/stdout?start=-4096")
-    assert(stderr ===
+    assert(logLinkMap("stderr") ===
         s"http://$nodeHost:8042/node/containerlogs/$containerId/username/stderr?start=-4096")
   }
 
   test("SPARK-33185 Parse YARN AppAttempts invalid JSON response") {
     // No "appAttempt" present
-    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts": { } }""") === None)
+    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts": { } }""") === Map())
 
     // "appAttempt" is empty
-    assert(
-      Client.parseAppAttemptsJsonResponse("""{"appAttempts": { "appAttempt": [ ] } }""") === None)
+    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts": { "appAttempt": [ ] } }""")
+        === Map())
 
     // logsLink is missing
-    assert(
-      Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"id":1}]}}""") === None)
+    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"id":1}]}}""")
+        === Map())
 
     // logsLink is present but empty
     assert(
       Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"logsLink":""}]}}""")
-          === None)
+          === Map())
   }
 
   private val matching = Seq(
