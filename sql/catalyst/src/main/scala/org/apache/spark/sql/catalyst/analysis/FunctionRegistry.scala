@@ -433,6 +433,7 @@ object FunctionRegistry {
     // collection functions
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
+    expression[ArrayContainsArray]("array_contains_array"),
     expression[ArraysOverlap]("arrays_overlap"),
     expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),

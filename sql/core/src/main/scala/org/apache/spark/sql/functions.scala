@@ -3506,6 +3506,15 @@ object functions {
   }
 
   /**
+   * Returns null if the array is null, true if the array a1 contains a2, and false otherwise.
+   * @group collection_funcs
+   * @since 3.1.0
+   */
+  def array_contains_array(a1: Column, a2: Column): Column = withExpr {
+    ArrayContainsArray(a1.expr, a2.expr)
+  }
+
+  /**
    * Returns `true` if `a1` and `a2` have at least one non-null element in common. If not and both
    * the arrays are non-empty and any of them contains a `null`, it returns `null`. It returns
    * `false` otherwise.

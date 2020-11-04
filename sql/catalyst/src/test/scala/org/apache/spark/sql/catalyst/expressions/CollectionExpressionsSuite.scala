@@ -449,6 +449,37 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(aa1, aae), false)
   }
 
+  test("ArrayContainsArray") {
+    val a0 = Literal.create(Seq(1, 2, 3, null), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq(null, 2, 3), ArrayType(IntegerType))
+    val a3 = Literal.create(Seq(7, 8), ArrayType(IntegerType))
+    val a4 = Literal.create(Seq(null), ArrayType(IntegerType))
+    val a5 = Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))
+    val a6 = Literal.create(Seq[String]("", "abc"), ArrayType(StringType))
+    val a7 = Literal.create(Seq[String]("def", "ghi"), ArrayType(StringType))
+    val a8 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val emptyIntArray = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    checkEvaluation(ArrayContainsArray(a0, a1), true)
+    checkEvaluation(ArrayContainsArray(a0, a2), true)
+    checkEvaluation(ArrayContainsArray(a0, a3), false)
+    checkEvaluation(ArrayContainsArray(a0, a4), true)
+    checkEvaluation(ArrayContainsArray(a2, a4), true)
+    checkEvaluation(ArrayContainsArray(a0, a8), true)
+    checkEvaluation(ArrayContainsArray(a0, emptyIntArray), true)
+    checkEvaluation(ArrayContainsArray(emptyIntArray, emptyIntArray), true)
+    checkEvaluation(ArrayContainsArray(emptyIntArray, a0), false)
+    checkEvaluation(ArrayContainsArray(a0, Literal.create(null, ArrayType(IntegerType))), null)
+    checkEvaluation(ArrayContainsArray(Literal.create(null, ArrayType(IntegerType)),
+      emptyIntArray), null)
+    checkEvaluation(ArrayContainsArray(Literal.create(null, ArrayType(IntegerType)),
+      Literal.create(null, ArrayType(IntegerType))), null)
+
+    checkEvaluation(ArrayContainsArray(a5, a6), true)
+    checkEvaluation(ArrayContainsArray(a5, a7), false)
+  }
+
   test("ArraysOverlap") {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq(4, 5, 3), ArrayType(IntegerType))

@@ -3957,3 +3957,194 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
   override def prettyName: String = "array_except"
 }
+
+/**
+ * Checks if the array (left) has the array (right)
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array1, array2) - Returns true if the array1 contains the array2.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(2));
+       true
+  """,
+  group = "array_funcs",
+  since = "3.1.0")
+case class ArrayContainsArray(left: Expression, right: Expression)
+  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
+
+  override def dataType: DataType = BooleanType
+
+  override def et: DataType = elementType
+
+  override def dt: DataType = dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(et, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  @transient lazy val evalContains: (ArrayData, ArrayData) => Boolean = {
+    if (TypeUtils.typeWithProperEquals(elementType)) {
+      (array1, array2) =>
+        if (array2.numElements() == 0) {
+          true
+        } else if (array1.numElements() == 0) {
+          false
+        } else {
+          val hs = new OpenHashSet[Any]
+          var result = true
+          var foundNullElement = false
+          var i = 0
+          while (i < array1.numElements()) {
+            if (array1.isNullAt(i) && !foundNullElement) {
+              foundNullElement = true
+            } else {
+              val elem = array1.get(i, elementType)
+              hs.add(elem)
+            }
+            i += 1
+          }
+          i = 0
+          while (i < array2.numElements() && result) {
+            if (array2.isNullAt(i)) {
+              if (!foundNullElement) {
+                result = false
+              }
+            } else {
+              val elem = array2.get(i, elementType)
+              if (!hs.contains(elem)) {
+                result = false
+              }
+            }
+            i += 1
+          }
+          result
+        }
+    } else {
+      (array1, array2) =>
+        if (array2.numElements() == 0) {
+          true
+        } else if (array1.numElements() == 0) {
+          false
+        } else {
+          var alreadySeenNull = false
+          var i = 0
+          var elementFound = true
+          while (i < array2.numElements()) {
+            var found = false
+            val elem1 = array2.get(i, elementType)
+            if (array2.isNullAt(i)) {
+              if (!alreadySeenNull) {
+                var j = 0
+                while (!found && j < array1.numElements()) {
+                  found = array1.isNullAt(j)
+                  j += 1
+                }
+                // array1 is scanned only once for null element
+                alreadySeenNull = true
+              }
+            } else {
+              var j = 0
+              while (!found && j < array2.numElements()) {
+                if (!array2.isNullAt(j)) {
+                  val elem2 = array2.get(j, elementType)
+                  if (ordering.equiv(elem1, elem2)) {
+                    found = true
+                  }
+                }
+                j += 1
+              }
+            }
+            if (!found) {
+              elementFound = false
+            }
+            i += 1
+          }
+          elementFound
+        }
+    }
+  }
+
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val array1 = input1.asInstanceOf[ArrayData]
+    val array2 = input2.asInstanceOf[ArrayData]
+
+    evalContains(array1, array2)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val i = ctx.freshName("i")
+    val value = ctx.freshName("value")
+    if (canUseSpecializedHashSet) {
+      val jt = CodeGenerator.javaType(elementType)
+
+      nullSafeCodeGen(ctx, ev, (array1, array2) => {
+        val result = ctx.freshName("result")
+        val foundNullElement = ctx.freshName("foundNullElement")
+        val openHashSet = classOf[OpenHashSet[_]].getName
+        val classTag = s"scala.reflect.ClassTag$$.MODULE$$.$hsTypeName()"
+        val hashSet = ctx.freshName("hashSet")
+
+        def withArray1NullCheck(body: String): String =
+          s"""
+             |if ($array1.isNullAt($i) && !$foundNullElement) {
+             |  $foundNullElement = true;
+             |} else {
+             |  $body
+             |}
+               """.stripMargin
+
+        val writeArray1ToHashSet = withArray1NullCheck(
+          s"""
+             |$jt $value = ${genGetValue(array1, i)};
+             |$hashSet.add$hsPostFix($hsValueCast$value);
+           """.stripMargin)
+
+        val processArray2 =
+          s"""
+             |if ($array2.isNullAt($i)) {
+             |  if (!$foundNullElement) {
+             |    $result = false;
+             |  }
+             |} else {
+             |  $jt $value = ${genGetValue(array2, i)};
+             |  if (!$hashSet.contains($hsValueCast$value)) {
+             |   $result = false;
+             |  }
+             |}
+          """.stripMargin
+
+        s"""
+           |if ($array2.numElements() == 0) {
+           |  ${ev.value} = true;
+           |} else if ($array1.numElements() == 0) {
+           |  ${ev.value} = false;
+           |} else {
+           |  $openHashSet $hashSet = new $openHashSet$hsPostFix($classTag);
+           |  boolean $result = true;
+           |  boolean $foundNullElement = false;
+           |  for (int $i = 0; $i < $array1.numElements(); $i++) {
+           |    $writeArray1ToHashSet
+           |  }
+           |  for (int $i = 0; $i < $array2.numElements(); $i++) {
+           |    $processArray2
+           |  }
+           |  ${ev.value} = $result;
+           |}
+         """.stripMargin
+      })
+    } else {
+      nullSafeCodeGen(ctx, ev, (array1, array2) => {
+        val expr = ctx.addReferenceObj("arrayContainsArrayExpr", this)
+        s"${ev.value} = (Boolean)$expr.nullSafeEval($array1, $array2);"
+      })
+    }
+  }
+
+  override def prettyName: String = "array_contains_array"
+}
