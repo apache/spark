@@ -303,11 +303,30 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test (expected = RuntimeException.class)
-  public void testFailureWith3Streams() throws IOException {
+  public void testCollision() throws IOException {
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
-    PushBlockStream pbStream2 = new PushBlockStream(TEST_APP, 0, 1, 0, 0);
+    StreamCallbackWithID stream2 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 1, 0, 0));
+    // This should be deferred
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[5]));
+    // Since stream2 didn't get any opportunity it will throw couldn't find opportunity error
+    try {
+      stream2.onComplete(stream2.getID());
+    } catch (RuntimeException re) {
+      assertEquals(
+        "Couldn't find an opportunity to write block shufflePush_0_1_0 to merged shuffle",
+        re.getMessage());
+      throw re;
+    }
+  }
+
+  @Test (expected = RuntimeException.class)
+  public void testFailureInAStreamDoesNotInterfereWithStreamWhichIsWriting() throws IOException {
+    StreamCallbackWithID stream1 =
+      pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     StreamCallbackWithID stream2 =
       pushResolver.receiveBlockDataAsStream(new PushBlockStream(TEST_APP, 0, 1, 0, 0));
     // There is a failure with stream2
