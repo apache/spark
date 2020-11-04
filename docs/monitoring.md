@@ -1125,12 +1125,14 @@ This is the component with the largest amount of instrumented metrics
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
-  - tasks.blackListedExecutors.count
+  - tasks.blackListedExecutors.count // deprecated use excludedExecutors instead
+  - tasks.excludedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count
   - tasks.killedTasks.count
   - tasks.skippedTasks.count
-  - tasks.unblackListedExecutors.count
+  - tasks.unblackListedExecutors.count // deprecated use unexcludedExecutors instead
+  - tasks.unexcludedExecutors.count
   - jobs.succeededJobs
   - jobs.failedJobs
   - jobDuration

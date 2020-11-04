@@ -185,7 +185,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
-  override protected def isBlacklisted(executorId: String, hostname: String): Boolean = {
+  override protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = {
     podAllocator.isDeleted(executorId)
   }
 

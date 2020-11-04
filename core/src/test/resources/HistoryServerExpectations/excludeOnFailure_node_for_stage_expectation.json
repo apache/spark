@@ -805,7 +805,8 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true
     },
     "5" : {
       "taskTime" : 1579,
@@ -822,7 +823,8 @@
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true
     },
     "1" : {
       "taskTime" : 2411,
@@ -839,7 +841,8 @@
       "shuffleWriteRecords" : 12,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "isExcludedForStage" : false
     },
     "2" : {
       "taskTime" : 2446,
@@ -856,7 +859,8 @@
       "shuffleWriteRecords" : 15,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : false
+      "isBlacklistedForStage" : false,
+      "isExcludedForStage" : false
     },
     "3" : {
       "taskTime" : 1774,
@@ -873,7 +877,8 @@
       "shuffleWriteRecords" : 3,
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
-      "isBlacklistedForStage" : true
+      "isBlacklistedForStage" : true,
+      "isExcludedForStage" : true
     }
   },
   "killedTasksSummary" : { },

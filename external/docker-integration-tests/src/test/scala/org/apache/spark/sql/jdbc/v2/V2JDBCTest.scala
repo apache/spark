@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -44,6 +44,14 @@ trait V2JDBCTest extends SharedSparkSession {
       sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
     }.getMessage
     assert(msg.contains("Cannot update missing field bad_column"))
+  }
+
+  def testRenameColumn(tbl: String): Unit = {
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType().add("RENAMED", StringType, nullable = true)
+      .add("ID1", StringType, nullable = true).add("ID2", StringType, nullable = true)
+    assert(t.schema === expectedSchema)
   }
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
@@ -110,6 +118,24 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
+  test("SPARK-33034: ALTER TABLE ... rename column") {
+    withTable(s"$catalogName.alt_table") {
+      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL," +
+        s" ID1 STRING NOT NULL, ID2 STRING NOT NULL) USING _")
+      testRenameColumn(s"$catalogName.alt_table")
+      // Rename to already existing column
+      val msg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
+      }.getMessage
+      assert(msg.contains("Cannot rename column, because ID2 already exists"))
+    }
+    // Rename a column in a not existing table
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
+    }.getMessage
+    assert(msg.contains("Table not found"))
+  }
+
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnNullability(s"$catalogName.alt_table")
@@ -121,3 +147,4 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 }
+

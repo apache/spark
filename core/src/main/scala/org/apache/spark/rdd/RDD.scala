@@ -1919,9 +1919,8 @@ abstract class RDD[T: ClassTag](
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
-        "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
-          info.numCachedPartitions, bytesToString(info.memSize),
-          bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
+        "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
 
       s"$rdd [$persistence]" +: storageInfo
     }

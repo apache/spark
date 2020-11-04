@@ -30,7 +30,7 @@
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
     <!-- Note: Please update the kubernetes client version in kubernetes/integration-tests/pom.xml -->
-    <kubernetes.client.version>4.10.3</kubernetes.client.version>
+    <kubernetes.client.version>4.11.1</kubernetes.client.version>
   </properties>
 
   <dependencies>

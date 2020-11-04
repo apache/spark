@@ -20,7 +20,7 @@ import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests._
 
-class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
+class HealthTrackerIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
   val badHost = "host-0"
 
@@ -40,9 +40,9 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // Test demonstrating the issue -- without a config change, the scheduler keeps scheduling
   // according to locality preferences, and so the job fails
-  testScheduler("If preferred node is bad, without blacklist job will fail",
+  testScheduler("If preferred node is bad, without excludeOnFailure job will fail",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "false"
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "false"
   )) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
@@ -55,19 +55,19 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       config.TASK_MAX_FAILURES.key -> "4",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "5",
       TEST_N_CORES_EXECUTOR.key -> "10"
     )
   ) {
-    // To reliably reproduce the failure that would occur without blacklisting, we have to use 1
+    // To reliably reproduce the failure that would occur without exludeOnFailure, we have to use 1
     // task.  That way, we ensure this 1 task gets rotated through enough bad executors on the host
     // to fail the taskSet, before we have a bunch of different tasks fail in the executors so we
-    // blacklist them.
-    // But the point here is -- without blacklisting, we would never schedule anything on the good
-    // host-1 before we hit too many failures trying our preferred host-0.
+    // exclude them.
+    // But the point here is -- without excludeOnFailure, we would never schedule anything on the
+    // good host-1 before we hit too many failures trying our preferred host-0.
     val rdd = new MockRDDWithLocalityPrefs(sc, 1, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 1).toArray)
@@ -76,12 +76,12 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = true)
   }
 
-  // Here we run with the blacklist on, and the default config takes care of having this
+  // Here we run with the excludeOnFailure on, and the default config takes care of having this
   // robust to one bad node.
   testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
-       config.BLACKLIST_ENABLED.key -> "true",
+       config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       // just to avoid this test taking too long
       config.LOCALITY_WAIT.key -> "10ms"
     )
@@ -100,7 +100,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "true",
+      config.EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
       TEST_N_HOSTS.key -> "2",
       TEST_N_EXECUTORS_HOST.key -> "1",
       TEST_N_CORES_EXECUTOR.key -> "1",
@@ -116,7 +116,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       awaitJobTermination(jobFuture, duration)
       val pattern = (
         s"""|Aborting TaskSet 0.0 because task .*
-            |cannot run anywhere due to node and executor blacklist""".stripMargin).r
+            |cannot run anywhere due to node and executor excludeOnFailure""".stripMargin).r
       assert(pattern.findFirstIn(failure.getMessage).isDefined,
         s"Couldn't find $pattern in ${failure.getMessage()}")
     }

@@ -100,9 +100,14 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
 
-    :param timezone: A timezone to respect when handling timestamp values
-    :param safecheck: If True, conversion from Arrow to Pandas checks for overflow/truncation
-    :param assign_cols_by_name: If True, then Pandas DataFrames will get columns by name
+    Parameters
+    ----------
+    timezone : str
+        A timezone to respect when handling timestamp values
+    safecheck : bool
+        If True, conversion from Arrow to Pandas checks for overflow/truncation
+    assign_cols_by_name : bool
+        If True, then Pandas DataFrames will get columns by name
     """
 
     def __init__(self, timezone, safecheck, assign_cols_by_name):
@@ -130,8 +135,15 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         Create an Arrow record batch from the given pandas.Series or list of Series,
         with optional type.
 
-        :param series: A single pandas.Series, list of Series, or list of (series, arrow_type)
-        :return: Arrow RecordBatch
+        Parameters
+        ----------
+        series : pandas.Series or list
+            A single series, list of series, or list of (series, arrow_type)
+
+        Returns
+        -------
+        pyarrow.RecordBatch
+            Arrow RecordBatch
         """
         import pandas as pd
         import pyarrow as pa
