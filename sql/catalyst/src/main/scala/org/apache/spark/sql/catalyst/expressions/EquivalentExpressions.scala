@@ -66,10 +66,45 @@ class EquivalentExpressions {
   }
 
   /**
+   * Adds only expressions which are common in each of given expressions, in a recursive way.
+   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
+   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   */
+  def addCommonExprs(exprs: Seq[Expression], addFunc: Expression => Boolean = addExpr): Unit = {
+    var exprSetForAll = ExpressionSet()
+
+    addExprTree(exprs.head, (expr: Expression) => {
+      if (exprSetForAll.contains(expr)) {
+        true
+      } else {
+        exprSetForAll += expr
+        false
+      }
+    })
+
+    exprs.tail.foreach { expr =>
+      var exprSet = ExpressionSet()
+      addExprTree(expr, (expr: Expression) => {
+        if (exprSet.contains(expr)) {
+          true
+        } else {
+          exprSet += expr
+          false
+        }
+      })
+      exprSetForAll = exprSetForAll.intersect(exprSet)
+    }
+
+    exprSetForAll.foreach(addFunc)
+  }
+
+  /**
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
    */
-  def addExprTree(expr: Expression): Unit = {
+  def addExprTree(
+      expr: Expression,
+      addFunc: Expression => Boolean = addExpr): Unit = {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
@@ -96,8 +131,21 @@ class EquivalentExpressions {
       case other => other.children
     }
 
-    if (!skip && !addExpr(expr)) {
-      childrenToRecurse.foreach(addExprTree)
+    // For some special expressions we cannot just recurse into all of its children, but we can
+    // recursively add the common expressions shared between all of its children.
+    def commonChildrenToRecurse: Seq[Seq[Expression]] = expr match {
+      case i: If => Seq(Seq(i.trueValue, i.falseValue))
+      case c: CaseWhen =>
+        val conditions = c.branches.tail.map(_._1)
+        val values = c.branches.map(_._2) ++ c.elseValue
+        Seq(conditions, values)
+      case c: Coalesce => Seq(c.children.tail)
+      case _ => Nil
+    }
+
+    if (!skip && !addFunc(expr)) {
+      childrenToRecurse.foreach(addExprTree(_, addFunc))
+      commonChildrenToRecurse.filter(_.nonEmpty).foreach(addCommonExprs(_, addFunc))
     }
   }
 

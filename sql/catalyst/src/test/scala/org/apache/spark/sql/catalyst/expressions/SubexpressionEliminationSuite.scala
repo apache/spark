@@ -149,17 +149,43 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
   }
 
-  test("Children of conditional expressions") {
-    val condition = And(Literal(true), Literal(false))
+  test("Children of conditional expressions: If") {
     val add = Add(Literal(1), Literal(2))
-    val ifExpr = If(condition, add, add)
+    val condition = GreaterThan(add, Literal(3))
 
-    val equivalence = new EquivalentExpressions
-    equivalence.addExprTree(ifExpr)
-    // the `add` inside `If` should not be added
-    assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
-    // only ifExpr and its predicate expression
-    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 2)
+    val ifExpr1 = If(condition, add, add)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(ifExpr1)
+
+    // `add` is in both two branches of `If` and predicate.
+    assert(equivalence1.getAllEquivalentExprs.count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add, add))
+    // one-time expressions: only ifExpr and its predicate expression
+    assert(equivalence1.getAllEquivalentExprs.count(_.size == 1) == 2)
+    assert(equivalence1.getAllEquivalentExprs.filter(_.size == 1).head == Seq(ifExpr1))
+    assert(equivalence1.getAllEquivalentExprs.filter(_.size == 1).last == Seq(condition))
+
+    // Repeated `add` is only in one branch, so we don't count it.
+    val ifExpr2 = If(condition, Add(Literal(1), Literal(3)), Add(add, add))
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(ifExpr2)
+
+    assert(equivalence2.getAllEquivalentExprs.count(_.size > 1) == 0)
+    assert(equivalence2.getAllEquivalentExprs.count(_.size == 1) == 3)
+
+    val ifExpr3 = If(condition, ifExpr1, ifExpr1)
+    val equivalence3 = new EquivalentExpressions
+    equivalence3.addExprTree(ifExpr3)
+
+    // `add`: 2, `condition`: 2
+    assert(equivalence3.getAllEquivalentExprs.count(_.size == 2) == 2)
+    assert(equivalence3.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add, add))
+    assert(equivalence3.getAllEquivalentExprs.filter(_.size == 2).last == Seq(condition, condition))
+
+    // `ifExpr1`, `ifExpr3`
+    assert(equivalence3.getAllEquivalentExprs.count(_.size == 1) == 2)
+    assert(equivalence3.getAllEquivalentExprs.filter(_.size == 1).head == Seq(ifExpr1))
+    assert(equivalence3.getAllEquivalentExprs.filter(_.size == 1).last == Seq(ifExpr3))
   }
 }
 
