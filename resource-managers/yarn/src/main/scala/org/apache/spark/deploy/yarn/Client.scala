@@ -1621,11 +1621,11 @@ private object Client extends Logging {
     // which allows for safe continuation of chaining. The `elements()` call will be empty,
     // and None will get returned.
     objectMapper.readTree(jsonString)
-        .path("appAttempts").path("appAttempt")
-        .elements().asScala.toList.takeRight(1).headOption
-        .flatMap(node => Option(node.get("logsLink")))
-        .map(_.asText())
-        .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
+      .path("appAttempts").path("appAttempt")
+      .elements().asScala.toList.takeRight(1).headOption
+      .flatMap(node => Option(node.get("logsLink")))
+      .map(_.asText())
+      .map(baseUrl => (s"$baseUrl/stdout?start=-4096", s"$baseUrl/stderr?start=-4096"))
   }
 }
 
