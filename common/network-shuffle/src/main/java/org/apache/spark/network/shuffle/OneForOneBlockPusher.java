@@ -35,6 +35,8 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * be merged instead of for fetching them from remote shuffle services. This is used by
  * ShuffleWriter when the block push process is initiated. The supplied BlockFetchingListener
  * is used to handle the success or failure in pushing each blocks.
+ *
+ * @since 3.1.0
  */
 public class OneForOneBlockPusher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);

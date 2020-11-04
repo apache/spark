@@ -24,10 +24,11 @@ import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
 
-
 /**
  * Request to push a block to a remote shuffle service to be merged in push based shuffle.
  * The remote shuffle service will also include this message when responding the push requests.
+ *
+ * @since 3.1.0
  */
 public class PushBlockStream extends BlockTransferMessage {
   public final String appId;

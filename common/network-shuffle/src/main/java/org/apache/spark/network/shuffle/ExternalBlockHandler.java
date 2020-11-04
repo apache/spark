@@ -431,6 +431,8 @@ public class ExternalBlockHandler extends RpcHandler {
   /**
    * Dummy implementation of merged shuffle file manager. Suitable for when push-based shuffle
    * is not enabled.
+   *
+   * @since 3.1.0
    */
   public static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
 

@@ -173,7 +173,11 @@ public class Encoders {
     }
   }
 
-  /** Bitmap arrays are encoded with the number of bitmaps followed by per-Bitmap encoding. */
+  /**
+   * Bitmap arrays are encoded with the number of bitmaps followed by per-Bitmap encoding.
+   *
+   * @since 3.1.0
+   */
   public static class BitmapArrays {
     public static int encodedLength(RoaringBitmap[] bitmaps) {
       int totalLength = 4;

@@ -19,13 +19,13 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
-
 
 /**
  * The MergedShuffleFileManager is used to process push based shuffle when enabled. It works
@@ -34,7 +34,10 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * remotely pushed streams of shuffle blocks to merge them into merged shuffle files. Right
  * now, support for push based shuffle is only implemented for external shuffle service in
  * YARN mode.
+ *
+ * @since 3.1.0
  */
+@Evolving
 public interface MergedShuffleFileManager {
   /**
    * Provides the stream callback used to process a remotely pushed block. The callback is

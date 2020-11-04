@@ -67,6 +67,8 @@ import org.apache.spark.network.util.TransportConf;
 /**
  * An implementation of {@link MergedShuffleFileManager} that provides the most essential shuffle
  * service processing logic to support push based shuffle.
+ *
+ * @since 3.1.0
  */
 public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
@@ -199,7 +201,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
    */
   private File getFile(String appId, String filename) {
-    // TODO: Change the message when this service is able to handle NM restart
+    // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
       "application " + appId + " is not registered or NM was restarted.");
     File targetFile = ExecutorDiskUtils.getFile(appPathsInfo.activeLocalDirs,
@@ -236,7 +238,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
-    // TODO: Change the message when this service is able to handle NM restart
+    // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.remove(appId),
       "application " + appId + " is not registered or NM was restarted.");
     Iterator<Map.Entry<AppShuffleId, Map<Integer, AppShufflePartitionInfo>>> iterator =
@@ -547,7 +549,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // placed inside the synchronized block to make sure that checking the key is still
         // present and processing the data is atomic.
         if (shufflePartitions == null || !shufflePartitions.containsKey(partitionInfo.reduceId)) {
-          // TODO is it necessary to dereference deferredBufs?
           deferredBufs = null;
           return;
         }
@@ -616,11 +617,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public void onComplete(String streamId) throws IOException {
-      // TODO should the merge manager check for the merge completion ratio here and finalize
-      // TODO shuffle merge if appropriate? So the merge manager can potentially finalize early
-      // TODO and the file channel can be closed even if finalize merge request is somehow not
-      // TODO received from the driver? If so, then we need to know # maps for this shuffle.
-
       synchronized (partitionInfo) {
         logger.trace("{} shuffleId {} reduceId {} onComplete invoked",
           partitionInfo.appShuffleId.appId, partitionInfo.appShuffleId.shuffleId,
@@ -885,41 +881,45 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void closeAllFiles() {
-      try {
-        if (dataChannel != null) {
+      if (dataChannel != null) {
+        try {
           dataChannel.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing data channel for {} shuffleId {} reduceId {}",
+            appShuffleId.appId, appShuffleId.shuffleId, reduceId);
+        } finally {
           dataChannel = null;
         }
-      } catch (IOException ioe) {
-        logger.warn("Error closing data channel for {} shuffleId {} reduceId {}",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId);
       }
-      try {
-        if (metaChannel != null) {
+      if (metaChannel != null) {
+        try {
           metaChannel.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing meta channel for {} shuffleId {} reduceId {}",
+            appShuffleId.appId, appShuffleId.shuffleId, reduceId);
+        } finally {
           metaChannel = null;
         }
-      } catch (IOException ioe) {
-        logger.warn("Error closing meta channel for {} shuffleId {} reduceId {}",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId);
       }
-      try {
-        if (indexWriteStream != null) {
+      if (indexWriteStream != null) {
+        try {
           indexWriteStream.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing index stream for {} shuffleId {} reduceId {}",
+            appShuffleId.appId, appShuffleId.shuffleId, reduceId);
+        } finally {
           indexWriteStream = null;
         }
-      } catch (IOException ioe) {
-        logger.warn("Error closing index stream for {} shuffleId {} reduceId {}",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId);
       }
-      try {
-        if (indexChannel != null) {
+      if (indexChannel != null) {
+        try {
           indexChannel.close();
+        } catch (IOException ioe) {
+          logger.warn("Error closing index channel for {} shuffleId {} reduceId {}",
+            appShuffleId.appId, appShuffleId.shuffleId, reduceId);
+        } finally {
           indexChannel = null;
         }
-      } catch (IOException ioe) {
-        logger.warn("Error closing index channel for {} shuffleId {} reduceId {}",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId);
       }
     }
 
