@@ -17,8 +17,28 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowTablesSuite extends CommonShowTablesSuite {
-  override def catalog: String = "aaa"
+class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
+  override def catalog: String = "test_catalog_v2"
+  override protected def namespaceColumn: String = "namespace"
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    sql(s"CREATE DATABASE $catalog.$namespace")
+    sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) USING PARQUET")
+  }
+
+  protected override def afterAll(): Unit = {
+    sql(s"DROP TABLE $catalog.$namespace.$table")
+    sql(s"DROP DATABASE $catalog.$namespace")
+    super.afterAll()
+  }
 }
