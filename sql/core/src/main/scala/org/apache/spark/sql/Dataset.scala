@@ -2425,7 +2425,7 @@ class Dataset[T] private[sql](
         case (colName, _) => resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => new Column(field)
+        case _ => Column(field)
       }
     }
 
@@ -2434,7 +2434,7 @@ class Dataset[T] private[sql](
         case (colName, _) => resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => new Column(field)
+        case _ => Column(field)
       }
     }
 
