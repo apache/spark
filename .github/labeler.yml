@@ -114,7 +114,7 @@ MLLIB:
   - "mllib-local/**/*"
   - "python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
-  - "sql/**/streaming/**/*"  # TODO - Does this one need a leading **/ or */ ?
+  - "**/sql/**/streaming/**/*"
   - "external/kafka-0-10-sql/**/*"
   - "python/pyspark/sql/streaming.py"
   - "python/pyspark/sql/tests/test_streaming.py"
