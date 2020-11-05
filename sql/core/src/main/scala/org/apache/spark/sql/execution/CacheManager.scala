@@ -27,6 +27,8 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{DefaultCachedBatchSerializer, InMemoryRelation}
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -113,6 +115,34 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Un-cache all cache entries that refer to the given table.
+   *
+   * @param table The [[Table]] to be un-cached
+   */
+  def uncacheV2Table(table: Table): Unit = {
+    uncacheByCondition(_.plan.find(lookupV2Table(table)).isDefined)
+  }
+
+  private def lookupV2Table(table: Table)(plan: LogicalPlan): Boolean = plan match {
+    case DataSourceV2Relation(t: Table, _, _, _, _) => table == t
+    case StreamingRelationV2(_, _, t: Table, _, _, _, _, _) => table == t
+    case _ => false
+  }
+
+  /**
+   * Invalidate all cache entries that satisfy the input `condition`.
+   */
+  def uncacheByCondition(
+      condition: CachedData => Boolean,
+      blocking: Boolean = false): Unit = {
+    val plansToUncache = cachedData.filter(condition)
+    this.synchronized {
+      cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
+    }
+    plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking)}
+  }
+
+  /**
    * Un-cache the given plan or all the cache entries that refer to the given plan.
    * @param query     The [[Dataset]] to be un-cached.
    * @param cascade   If true, un-cache all the cache entries that refer to the given
@@ -143,11 +173,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       } else {
         _.sameResult(plan)
       }
-    val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
-    this.synchronized {
-      cachedData = cachedData.filterNot(cd => plansToUncache.exists(_ eq cd))
-    }
-    plansToUncache.foreach { _.cachedRepresentation.cacheBuilder.clearCache(blocking) }
+    uncacheByCondition(cd => shouldRemove(cd.plan))
 
     // Re-compile dependent cached queries after removing the cached query.
     if (!cascade) {

@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Physical plan node for dropping a table.
@@ -36,8 +35,8 @@ case class DropTableExec(
 
   override def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
-      val table = catalog.name +: ident.asMultipartIdentifier
-      session.sharedState.cacheManager.uncacheQuery(session.table(table), cascade = true)
+      val table = catalog.loadTable(ident)
+      session.sharedState.cacheManager.uncacheV2Table(table)
       catalog.dropTable(ident, purge)
     } else if (!ifExists) {
       throw new NoSuchTableException(ident)
