@@ -77,7 +77,7 @@ SPARK SHELL:
   - "bin/spark-shell*"
 SQL:
 #- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming.py", "!python/pyspark/sql/tests/test_streaming.py"]
-  - "**/sql/**/*" # TODO - Does this match top level SQL folder?
+  - "**/sql/**/*"
   - "common/unsafe/**/*"
   #- "!python/pyspark/sql/avro/**/*"
   #- "!python/pyspark/sql/streaming.py"
@@ -124,7 +124,7 @@ PYTHON:
   - "**/python/**/*"
 R:
   - "**/r/**/*"
-  - "**/R/**/*"  # TODO - Does this match top level R directory?
+  - "**/R/**/*"
   - "bin/sparkR*"
 YARN:
   - "resource-managers/yarn/**/*"
