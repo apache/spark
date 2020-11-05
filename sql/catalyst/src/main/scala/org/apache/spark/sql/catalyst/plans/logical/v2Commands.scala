@@ -35,20 +35,20 @@ trait V2WriteCommand extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = outputResolved
+  override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
+    assert(table.resolved && query.resolved,
+      "`outputResolved` can only be called when `table` and `query` are both resolved.")
     // If the table doesn't require schema match, we don't need to resolve the output columns.
-    table.skipSchemaResolution || {
-      table.resolved && query.resolved && query.output.size == table.output.size &&
-        query.output.zip(table.output).forall {
-          case (inAttr, outAttr) =>
-            // names and types must match, nullability must be compatible
-            inAttr.name == outAttr.name &&
-              DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
-              (outAttr.nullable || !inAttr.nullable)
-        }
-    }
+    table.skipSchemaResolution || (query.output.size == table.output.size &&
+      query.output.zip(table.output).forall {
+        case (inAttr, outAttr) =>
+          // names and types must match, nullability must be compatible
+          inAttr.name == outAttr.name &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
+            (outAttr.nullable || !inAttr.nullable)
+      })
   }
 }
 
@@ -86,7 +86,9 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
-  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+  override lazy val resolved: Boolean = {
+    table.resolved && query.resolved && outputResolved && deleteExpr.resolved
+  }
 }
 
 object OverwriteByExpression {
@@ -566,4 +568,26 @@ case class ShowFunctions(
     systemScope: Boolean,
     pattern: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
+}
+
+/**
+ * The logical plan of the ANALYZE TABLE command that works for v2 catalogs.
+ */
+case class AnalyzeTable(
+    child: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ANALYZE TABLE FOR COLUMNS command that works for v2 catalogs.
+ */
+case class AnalyzeColumn(
+    child: LogicalPlan,
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends Command {
+  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
+    "mutually exclusive. Only one of them should be specified.")
+  override def children: Seq[LogicalPlan] = child :: Nil
 }

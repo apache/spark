@@ -865,9 +865,14 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
-      case u @ UnresolvedTableOrView(ident) =>
+      case u @ UnresolvedTableOrView(ident, allowTempView) =>
         lookupTempView(ident)
-          .map(_ => ResolvedView(ident.asIdentifier, isTemp = true))
+          .map { _ =>
+            if (!allowTempView) {
+              u.failAnalysis(s"${ident.quoted} is a temp view not table or permanent view.")
+            }
+            ResolvedView(ident.asIdentifier, isTemp = true)
+          }
           .getOrElse(u)
     }
 
@@ -926,7 +931,7 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1026,7 +1031,7 @@ class Analyzer(
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier) =>
+      case u @ UnresolvedTableOrView(identifier, _) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
@@ -1502,7 +1507,8 @@ class Analyzer(
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
-      case o: OverwriteByExpression if !o.outputResolved =>
+      case o: OverwriteByExpression
+          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
         // do not resolve expression attributes until the query attributes are resolved against the
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o

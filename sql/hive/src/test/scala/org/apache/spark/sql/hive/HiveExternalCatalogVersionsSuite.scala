@@ -42,26 +42,33 @@ import org.apache.spark.util.Utils
  * Test HiveExternalCatalog backward compatibility.
  *
  * Note that, this test suite will automatically download spark binary packages of different
- * versions to a local directory `/tmp/spark-test`. If there is already a spark folder with
- * expected version under this local directory, e.g. `/tmp/spark-test/spark-2.0.3`, we will skip the
- * downloading for this spark version.
+ * versions to a local directory. If the `spark.test.cache-dir` system property is defined, this
+ * directory will be used. If there is already a spark folder with expected version under this
+ * local directory, e.g. `/{cache-dir}/spark-2.0.3`, downloading for this spark version will be
+ * skipped. If the system property is not present, a temporary directory will be used and cleaned
+ * up after the test.
  */
 @SlowHiveTest
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
+  import HiveExternalCatalogVersionsSuite._
   private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
-  // For local test, you can set `sparkTestingDir` to a static value like `/tmp/test-spark`, to
+  // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
   // avoid downloading Spark of different versions in each run.
-  private val sparkTestingDir = new File("/tmp/test-spark")
+  private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
+      .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
   override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(wareHousePath)
       Utils.deleteRecursively(tmpDataDir)
-      Utils.deleteRecursively(sparkTestingDir)
+      // Only delete sparkTestingDir if it wasn't defined to a static location by the system prop
+      if (Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY)).isEmpty) {
+        Utils.deleteRecursively(sparkTestingDir)
+      }
     } finally {
       super.afterAll()
     }
@@ -307,3 +314,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
     }
   }
 }
+
+object HiveExternalCatalogVersionsSuite {
+  private val SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY = "spark.test.cache-dir"
+}
+

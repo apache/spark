@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -470,5 +471,19 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     CreateNamedStruct(Seq("a", "x", "b", 2.0)).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-33338: semanticEquals should handle static GetMapValue correctly") {
+    val keys = new Array[UTF8String](1)
+    val values = new Array[UTF8String](1)
+    keys(0) = UTF8String.fromString("key")
+    values(0) = UTF8String.fromString("value")
+
+    val d1 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
+    val d2 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
+    val m1 = GetMapValue(Literal.create(d1, MapType(StringType, StringType)), Literal("a"))
+    val m2 = GetMapValue(Literal.create(d2, MapType(StringType, StringType)), Literal("a"))
+
+    assert(m1.semanticEquals(m2))
   }
 }

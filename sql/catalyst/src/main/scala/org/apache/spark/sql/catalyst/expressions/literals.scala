@@ -316,6 +316,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       (value, o.value) match {
         case (null, null) => true
         case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
+        case (a: ArrayBasedMapData, b: ArrayBasedMapData) =>
+          a.keyArray == b.keyArray && a.valueArray == b.valueArray
         case (a, b) => a != null && a.equals(b)
       }
     case _ => false
