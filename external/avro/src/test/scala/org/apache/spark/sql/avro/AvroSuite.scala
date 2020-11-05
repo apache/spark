@@ -1017,18 +1017,44 @@ abstract class AvroSuite
 
   test("support user provided nullable avro schema " +
     "for non-nullable catalyst schema without any null record") {
-    withTempPath { tempDir =>
-      val catalystSchema =
-        StructType(Seq(
-          StructField("Age", IntegerType, nullable = false),
-          StructField("Name", StringType, nullable = false)))
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Age", IntegerType, nullable = false),
+        StructField("Name", StringType, nullable = false)))
 
-      val avroSchema = """
+    val avroSchema = """
+      |{
+      |  "type" : "record",
+      |  "name" : "test_schema",
+      |  "fields" : [
+      |    {"name": "Age", "type": ["null", "int"]},
+      |    {"name": "Name", "type": ["null", "string"]}
+      |  ]
+      |}
+    """.stripMargin
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+    withTempPath { tempDir =>
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempDir.getPath))
+    }
+  }
+
+  test("unsupported nullable avro type") {
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Age", IntegerType, nullable = false),
+        StructField("Name", StringType, nullable = false)))
+
+    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+      val avroSchema = s"""
         |{
         |  "type" : "record",
         |  "name" : "test_schema",
         |  "fields" : [
-        |    {"name": "Age", "type": ["null", "int"]},
+        |    {"name": "Age", "type": $unsupportedAvroType},
         |    {"name": "Name", "type": ["null", "string"]}
         |  ]
         |}
@@ -1037,37 +1063,9 @@ abstract class AvroSuite
       val df = spark.createDataFrame(
         spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
 
-      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
-      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempDir.getPath))
-    }
-  }
-
-  test("unsupported nullable avro type") {
-    withTempPath { tempDir =>
-      val catalystSchema =
-        StructType(Seq(
-          StructField("Age", IntegerType, nullable = false),
-          StructField("Name", StringType, nullable = false)))
-
-      for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
-        val avroSchema = s"""
-          |{
-          |  "type" : "record",
-          |  "name" : "test_schema",
-          |  "fields" : [
-          |    {"name": "Age", "type": $unsupportedAvroType},
-          |    {"name": "Name", "type": ["null", "string"]}
-          |  ]
-          |}
-        """.stripMargin
-
-        val df = spark.createDataFrame(
-          spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
-
-        val tempSavePath = s"$tempDir/save/${UUID.randomUUID()}"
-
+      withTempPath { tempDir =>
         val message = intercept[SparkException] {
-          df.write.format("avro").option("avroSchema", avroSchema).save(tempSavePath)
+          df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
         }.getCause.getMessage
         assert(message.contains("Only UNION of a null type and a non-null type is supported"))
       }
