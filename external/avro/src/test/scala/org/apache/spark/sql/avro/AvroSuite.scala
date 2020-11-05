@@ -1019,6 +1019,63 @@ abstract class AvroSuite
     }
   }
 
+  test("support user provided nullable avro schema " +
+    "for non-nullable catalyst schema without any null record") {
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Age", IntegerType, nullable = false),
+        StructField("Name", StringType, nullable = false)))
+
+    val avroSchema = """
+      |{
+      |  "type" : "record",
+      |  "name" : "test_schema",
+      |  "fields" : [
+      |    {"name": "Age", "type": ["null", "int"]},
+      |    {"name": "Name", "type": ["null", "string"]}
+      |  ]
+      |}
+    """.stripMargin
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+    withTempPath { tempDir =>
+      df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+      checkAvroSchemaEquals(avroSchema, getAvroSchemaStringFromFiles(tempDir.getPath))
+    }
+  }
+
+  test("unsupported nullable avro type") {
+    val catalystSchema =
+      StructType(Seq(
+        StructField("Age", IntegerType, nullable = false),
+        StructField("Name", StringType, nullable = false)))
+
+    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+      val avroSchema = s"""
+        |{
+        |  "type" : "record",
+        |  "name" : "test_schema",
+        |  "fields" : [
+        |    {"name": "Age", "type": $unsupportedAvroType},
+        |    {"name": "Name", "type": ["null", "string"]}
+        |  ]
+        |}
+      """.stripMargin
+
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(2, "Aurora"))), catalystSchema)
+
+      withTempPath { tempDir =>
+        val message = intercept[SparkException] {
+          df.write.format("avro").option("avroSchema", avroSchema).save(tempDir.getPath)
+        }.getCause.getMessage
+        assert(message.contains("Only UNION of a null type and a non-null type is supported"))
+      }
+    }
+  }
+
   test("error handling for unsupported Interval data types") {
     withTempDir { dir =>
       val tempDir = new File(dir, "files").getCanonicalPath
