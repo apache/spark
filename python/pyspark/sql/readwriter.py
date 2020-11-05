@@ -457,8 +457,8 @@ class DataFrameReader(OptionUtils):
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
-             recursiveFileLookup=None, modifiedBefore=modifiedBefore,
-             modifiedAfter=modifiedAfter):
+             recursiveFileLookup=None, modifiedBefore=None,
+             modifiedAfter=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
