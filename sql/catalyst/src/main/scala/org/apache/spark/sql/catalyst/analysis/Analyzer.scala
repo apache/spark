@@ -1363,7 +1363,8 @@ class Analyzer(
       case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
         a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
 
-      case o: OverwriteByExpression if !o.outputResolved =>
+      case o: OverwriteByExpression
+          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
         // do not resolve expression attributes until the query attributes are resolved against the
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o

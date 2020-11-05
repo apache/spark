@@ -230,6 +230,15 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
+  test("skipSchemaResolution should still require query to be resolved") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType),
+      StructField("b", DoubleType))).toAttributes)
+    val query = UnresolvedRelation(Seq("t"))
+    val parsedPlan = byName(table, query)
+    assertNotResolved(parsedPlan)
+  }
+
   test("byName: basic behavior") {
     val query = TestRelation(table.schema.toAttributes)
 
