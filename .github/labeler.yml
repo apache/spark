@@ -26,7 +26,10 @@
 # `all` of the files in the change set.
 #
 # However, `any`/`all` are not supported in a released version and testing off of the `main` branch
-# did not work properly for me. I'd prefer to be on a released version that's been vetted.
+# resulted in some other errors when testing.
+#
+# An issue has been opened upstream requesting that a release be cut that has support for all/any:
+#   - https://github.com/actions/labeler/issues/111
 #
 # While we wait for this issue to be handled upstream, we can remove
 # the negated / `!` matches for now and at least have labels again.
