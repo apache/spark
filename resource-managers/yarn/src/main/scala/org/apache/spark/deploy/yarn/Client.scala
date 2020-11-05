@@ -25,11 +25,16 @@ import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Objects
 import com.google.common.io.Files
+import javax.ws.rs.client.ClientBuilder
+import javax.ws.rs.core.MediaType
+import javax.ws.rs.core.Response.Status.Family
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -46,6 +51,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.api.python.PythonUtils
@@ -58,7 +64,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1080,9 +1086,9 @@ private[spark] class Client(
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(formatReportDetails(report))
+          logDebug(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
         } else if (lastState != state) {
-          logInfo(formatReportDetails(report))
+          logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
         }
       }
 
@@ -1152,7 +1158,17 @@ private[spark] class Client(
     appMaster
   }
 
-  private def formatReportDetails(report: ApplicationReport): String = {
+  /**
+   * Format an application report and optionally, links to driver logs, in a human-friendly manner.
+   *
+   * @param report The application report from YARN.
+   * @param driverLogsLinks A map of driver log files and their links. Keys are the file names
+   *                        (e.g. `stdout`), and values are the links. If empty, nothing will be
+   *                        printed.
+   * @return Human-readable version of the input data.
+   */
+  private def formatReportDetails(report: ApplicationReport,
+    driverLogsLinks: IMap[String, String]): String = {
     val details = Seq[(String, String)](
       ("client token", getClientToken(report)),
       ("diagnostics", report.getDiagnostics),
@@ -1163,13 +1179,44 @@ private[spark] class Client(
       ("final status", report.getFinalApplicationStatus.toString),
       ("tracking URL", report.getTrackingUrl),
       ("user", report.getUser)
-    )
+    ) ++ driverLogsLinks.map { case (fname, link) => (s"Driver Logs ($fname)", link) }
 
     // Use more loggable format if value is null or empty
     details.map { case (k, v) =>
       val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
       s"\n\t $k: $newValue"
     }.mkString("")
+  }
+
+  /**
+   * Fetch links to the logs of the driver for the given application ID. This requires hitting the
+   * RM REST API. Returns an empty map if the links could not be fetched. If this feature is
+   * disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], an empty map is returned immediately.
+   */
+  private def getDriverLogsLink(appId: ApplicationId): IMap[String, String] = {
+    if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)) {
+      return IMap()
+    }
+    try {
+      val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
+      val response = ClientBuilder.newClient()
+          .target(baseRmUrl)
+          .path("ws").path("v1").path("cluster").path("apps")
+          .path(appId.toString).path("appattempts")
+          .request(MediaType.APPLICATION_JSON)
+          .get()
+      response.getStatusInfo.getFamily match {
+        case Family.SUCCESSFUL => parseAppAttemptsJsonResponse(response.readEntity(classOf[String]))
+        case _ =>
+          logWarning(s"Unable to fetch app attempts info from $baseRmUrl, got "
+              + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
+          IMap()
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Unable to get driver log links for $appId", e)
+        IMap()
+    }
   }
 
   /**
@@ -1186,7 +1233,7 @@ private[spark] class Client(
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report))
+      logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         throw new SparkException(s"Application $appId finished with status: $state")
       }
@@ -1576,6 +1623,20 @@ private object Client extends Logging {
     props.store(writer, "Spark configuration.")
     writer.flush()
     out.closeEntry()
+  }
+
+  private[yarn] def parseAppAttemptsJsonResponse(jsonString: String): IMap[String, String] = {
+    val objectMapper = new ObjectMapper()
+    // If JSON response is malformed somewhere along the way, MissingNode will be returned,
+    // which allows for safe continuation of chaining. The `elements()` call will be empty,
+    // and None will get returned.
+    objectMapper.readTree(jsonString)
+      .path("appAttempts").path("appAttempt")
+      .elements().asScala.toList.takeRight(1).headOption
+      .map(_.path("logsLink").asText(""))
+      .filterNot(_ == "")
+      .map(baseUrl => YarnContainerInfoHelper.getLogUrlsFromBaseUrl(baseUrl))
+      .getOrElse(IMap())
   }
 }
 
