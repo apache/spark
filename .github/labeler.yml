@@ -30,61 +30,61 @@ INFRA:
   - ".github/**/*"
   - "appveyor.yml"
   - "tools/**/*"
-  - "/dev/create-release/**/*"
+  - "dev/create-release/**/*"
   - ".asf.yaml"
   - ".gitattributes"
   - ".gitignore"
-  - "/dev/github_jira_sync.py"
-  - "/dev/merge_spark_pr.py"
-  - "/dev/run-tests-jenkins*"
+  - "dev/github_jira_sync.py"
+  - "dev/merge_spark_pr.py"
+  - "dev/run-tests-jenkins*"
 BUILD:
  # Can be supported when a stable release with correct all/any is released
- #- any: ['/dev/**/*', '!/dev/github_jira_sync.py', '!/dev/merge_spark_pr.py', '!/dev/.rat-excludes']
- - "/dev/**/*"
- - "/build/**/*"
- - "/project/**/*"
- - "/assembly/**/*"
+ #- any: ['dev/**/*', '!dev/github_jira_sync.py', '!dev/merge_spark_pr.py', '!dev/.rat-excludes']
+ - "dev/**/*"
+ - "build/**/*"
+ - "project/**/*"
+ - "assembly/**/*"
  - "**/*pom.xml"
- - "/bin/docker-image-tool.sh"
- - "/bin/find-spark-home*"
+ - "bin/docker-image-tool.sh"
+ - "bin/find-spark-home*"
  - "scalastyle-config.xml"
  # These can be added in the above `any` clause (and the /dev/**/* glob removed) when
  # `any`/`all` support is released
- # - "!/dev/github_jira_sync.py"
- # - "!/dev/merge_spark_pr.py"
- # - "!/dev/run-tests-jenkins*"
- # - "!/dev/.rat-excludes"
+ # - "!dev/github_jira_sync.py"
+ # - "!dev/merge_spark_pr.py"
+ # - "!dev/run-tests-jenkins*"
+ # - "!dev/.rat-excludes"
 DOCS:
   - "docs/**/*"
   - "**/README.md"
   - "**/CONTRIBUTING.md"
 EXAMPLES:
   - "examples/**/*"
-  - "/bin/run-example*"
+  - "bin/run-example*"
 # CORE needs to be updated when all/any are released upstream.
 CORE:
-  # - any: ["/core/**/*", "!**/*UI.scala", "!**/ui/**/*"] # If any file matches all of the globs defined in the list started by `any`, label is applied.
-  - "/core/**/*"
-  - "/common/kvstore/**/*"
-  - "/common/network-common/**/*"
-  - "/common/network-shuffle/**/*"
-  - "/python/pyspark/**/*.py"
-  - "/python/pyspark/tests/**/*.py"
+  # - any: ["core/**/*", "!**/*UI.scala", "!**/ui/**/*"] # If any file matches all of the globs defined in the list started by `any`, label is applied.
+  - "core/**/*"
+  - "common/kvstore/**/*"
+  - "common/network-common/**/*"
+  - "common/network-shuffle/**/*"
+  - "python/pyspark/**/*.py"
+  - "python/pyspark/tests/**/*.py"
 SPARK SUBMIT:
-  - "/bin/spark-submit*"
+  - "bin/spark-submit*"
 SPARK SHELL:
-  - "/repl/**/*"
-  - "/bin/spark-shell*"
+  - "repl/**/*"
+  - "bin/spark-shell*"
 SQL:
-  #- any: ["**/sql/**/*", "!/python/pyspark/sql/avro/**/*", "!/python/pyspark/sql/streaming.py", "!/python/pyspark/sql/tests/test_streaming.py"]
-  - "**/sql/**/*"
-  - "/common/unsafe/**/*"
-  #- "!/python/pyspark/sql/avro/**/*"
-  #- "!/python/pyspark/sql/streaming.py"
-  #- "!/python/pyspark/sql/tests/test_streaming.py"
-  - "/bin/spark-sql*"
-  - "/bin/beeline*"
-  - "/sbin/*thriftserver*.sh"
+#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming.py", "!python/pyspark/sql/tests/test_streaming.py"]
+  - "**/sql/**/*" # TODO - Does this match top level SQL folder?
+  - "common/unsafe/**/*"
+  #- "!python/pyspark/sql/avro/**/*"
+  #- "!python/pyspark/sql/streaming.py"
+  #- "!python/pyspark/sql/tests/test_streaming.py"
+  - "bin/spark-sql*"
+  - "bin/beeline*"
+  - "sbin/*thriftserver*.sh"
   - "**/*SQL*.R"
   - "**/DataFrame.R"
   - "**/*WindowSpec.R"
@@ -95,50 +95,50 @@ SQL:
   - "**/*schema.R"
   - "**/*types.R"
 AVRO:
-  - "/external/avro/**/*"
-  - "/python/pyspark/sql/avro/**/*"
+  - "external/avro/**/*"
+  - "python/pyspark/sql/avro/**/*"
 DSTREAM:
-  - "/streaming/**/*"
-  - "/data/streaming/**/*"
-  - "/external/flume*"
-  - "/external/kinesis*"
-  - "/external/kafka*"
-  - "/python/pyspark/streaming/**/*"
+  - "streaming/**/*"
+  - "data/streaming/**/*"
+  - "external/kinesis*/**/*"
+  - "external/kafka*/**/*"
+  - "python/pyspark/streaming/**/*"
 GRAPHX:
-  - "/graphx/**/*"
-  - "/data/graphx/**/*"
+  - "graphx/**/*"
+  - "data/graphx/**/*"
 ML:
   - "**/ml/**/*"
   - "**/*mllib_*.R"
 MLLIB:
   - "**/spark/mllib/**/*"
-  - "/mllib-local/**/*"
-  - "/python/pyspark/mllib/**/*"
+  - "mllib-local/**/*"
+  - "python/pyspark/mllib/**/*"
 STRUCTURED STREAMING:
   - "sql/**/streaming/**/*"  # TODO - Does this one need a leading **/ or */ ?
-  - "/external/kafka-0-10-sql/**/*"
-  - "/python/pyspark/sql/streaming.py"
-  - "/python/pyspark/sql/tests/test_streaming.py"
+  - "external/kafka-0-10-sql/**/*"
+  - "python/pyspark/sql/streaming.py"
+  - "python/pyspark/sql/tests/test_streaming.py"
   - "**/*streaming.R"
 PYTHON:
-  - "/bin/pyspark*"
+  - "bin/pyspark*"
   - "**/python/**/*"
 R:
   - "**/r/**/*"
-  - "**/R/**/*"
-  - "/bin/sparkR*"
+  - "**/R/**/*"  # TODO - Does this match top level R directory?
+  - "bin/sparkR*"
 YARN:
-  - "/resource-managers/yarn/**/*"
+  - "resource-managers/yarn/**/*"
 MESOS:
-  - "/resource-managers/mesos/**/*"
-  - "/sbin/*mesos*.sh"
+  - "resource-managers/mesos/**/*"
+  - "sbin/*mesos*.sh"
 KUBERNETES:
-  - "/resource-managers/kubernetes/**/*"
+  - "resource-managers/kubernetes/**/*"
 WINDOWS:
   - "**/*.cmd"
-  - "/R/pkg/tests/fulltests/test_Windows.R"
+  - "R/pkg/tests/fulltests/test_Windows.R"
 WEB UI:
   - "**/ui/**/*"
   - "**/*UI.scala"
 DEPLOY:
-  - "/sbin/**/*"
+  - "sbin/**/*"
+
