@@ -80,7 +80,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
     val locations = rdds.zip(parentPartitions).flatMap {
       case (rdd, part) =>
-        val parentLocations = currPrefLocs(rdd, part)
+        val parentLocations = rdd.preferredLocations(part)
         logDebug("Location of " + rdd + " partition " + part.index + " = " + parentLocations)
         parentLocations
     }
@@ -104,10 +104,5 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdds = null
-  }
-
-  // Get the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
-  private def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] = {
-    rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
   }
 }
