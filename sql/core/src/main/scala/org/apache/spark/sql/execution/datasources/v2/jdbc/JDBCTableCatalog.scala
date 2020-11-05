@@ -126,7 +126,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
         case (k, v) => k match {
           case "comment" => tableComment = v
           case "provider" | "owner" | "location" => // provider, owner and location can't be set.
-          case _ => tableProperties = tableProperties + " " + s"$k=$v"
+          case _ => tableProperties = tableProperties + " " + s"$k $v"
         }
       }
     }
@@ -137,7 +137,7 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     if (tableProperties != "") {
       // table property is set in JDBC_CREATE_TABLE_OPTIONS, which will be appended
       // to CREATE TABLE statement.
-      // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+      // E.g., "CREATE TABLE t (name string) ENGINE InnoDB DEFAULT CHARACTER SET utf8"
       // Spark doesn't check if these table properties are supported by databases. If
       // table property is invalid, database will fail the table creation.
       tableOptions = tableOptions + (JDBCOptions.JDBC_CREATE_TABLE_OPTIONS -> tableProperties)

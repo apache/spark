@@ -58,6 +58,14 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(t.schema === expectedSchema)
   }
 
+  def testCreateTableWithProperty(tbl: String): Unit = {
+    val m = intercept[AnalysisException] {
+      sql(s"CREATE TABLE $tbl (i INT) USING _" +
+        " TBLPROPERTIES('ENGINE'='InnoDB', 'CHARACTER SET'='utf8')")
+    }.message
+    assert(m.contains("Failed table creation"))
+  }
+
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING) USING _")
@@ -162,6 +170,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
         .map(_.getRenderedMessage)
         .exists(_.contains("Cannot create JDBC table comment"))
       assert(createCommentWarning === notSupportsTableComment)
+    }
+  }
+
+  test("CREATE TABLE with table property") {
+    withTable(s"$catalogName.new_table") {
+      testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
 }

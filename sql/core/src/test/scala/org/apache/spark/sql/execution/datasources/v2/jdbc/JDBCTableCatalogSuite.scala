@@ -414,7 +414,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _" +
           " TBLPROPERTIES('ENGINE'='tableEngineName')")
       }.cause.get.getMessage
-      assert(m.contains("Feature not supported: \"TABLEENGINENAME\""))
+      assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
 }
