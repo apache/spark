@@ -50,7 +50,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest
+class
+
+extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -662,6 +664,17 @@ class DataFrameSuite extends QueryTest
       }
       assert(err.getMessage.contains("Found duplicate column(s)"))
     }
+  }
+
+  test("withColumn: given position") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1, 1)
+    testData.show()
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, key + 1, value)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "newCol", "value"))
   }
 
   test("withColumns: given metadata") {

@@ -2388,10 +2388,18 @@ class Dataset[T] private[sql](
   def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
+   * Returns a new Dataset by adding a column at specific position or replacing the
+   * existing column that has the same name.
+   */
+  def withColumn(colName: String, col: Column, pos: Int): DataFrame =
+    withColumns(Seq(colName), Seq(col), pos)
+
+  /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
    * the same names.
    */
-  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column],
+                                 pos: Int = -1): DataFrame = {
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
@@ -2403,22 +2411,38 @@ class Dataset[T] private[sql](
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
 
+    var new_pos = pos
+    if (pos < 0 || pos > output.length - 1) {
+      new_pos = output.length
+    }
+    val pre = output.slice(0, new_pos)
+    val post = output.slice(new_pos, output.length)
+
     val columnMap = colNames.zip(cols).toMap
 
-    val replacedAndExistingColumns = output.map { field =>
-      columnMap.find { case (colName, _) =>
-        resolver(field.name, colName)
+    val replacedAndExistingColumnsPre: Seq[Column] = pre.map { field =>
+      columnMap.find {
+        case (colName, _) => resolver(field.name, colName)
       } match {
         case Some((colName: String, col: Column)) => col.as(colName)
-        case _ => Column(field)
+        case _ => new Column(field)
       }
     }
 
-    val newColumns = columnMap.filter { case (colName, col) =>
+    val replacedAndExistingColumnsPost: Seq[Column] = post.map { field =>
+      columnMap.find {
+        case (colName, _) => resolver(field.name, colName)
+      } match {
+        case Some((colName: String, col: Column)) => col.as(colName)
+        case _ => new Column(field)
+      }
+    }
+
+    val newColumns = columnMap.filter { case (colName, _) =>
       !output.exists(f => resolver(f.name, colName))
     }.map { case (colName, col) => col.as(colName) }
 
-    select(replacedAndExistingColumns ++ newColumns : _*)
+    select(replacedAndExistingColumnsPre ++ newColumns ++ replacedAndExistingColumnsPost : _*)
   }
 
   /**
