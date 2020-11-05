@@ -1993,6 +1993,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getShufflePushMergerLocations(10, Set("hostB")).size == 3)
   }
 
+  test("Prefer active executors locations for shuffle push mergers") {
+    makeBlockManager(100, "execA",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    makeBlockManager(100, "execB",
+      transferService = Some(new MockBlockTransferService(10, "hostB")))
+    makeBlockManager(100, "execC",
+      transferService = Some(new MockBlockTransferService(10, "hostC")))
+    makeBlockManager(100, "execD",
+      transferService = Some(new MockBlockTransferService(10, "hostD")))
+    makeBlockManager(100, "execE",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
+
+    master.removeExecutor("execA")
+    master.removeExecutor("execE")
+
+    assert(master.getShufflePushMergerLocations(3, Set.empty).size == 3)
+    val expectedHosts = Set("hostB", "hostC", "hostD")
+    val shufflePushMergers = master
+      .getShufflePushMergerLocations(3, Set.empty).map(x => x.host).toSet
+    assert(expectedHosts.forall(x => shufflePushMergers.contains(x)))
+  }
+
   class MockBlockTransferService(
       val maxFailures: Int,
       hostname: String = "MockBlockTransferServiceHost") extends BlockTransferService {
