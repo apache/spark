@@ -218,6 +218,9 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         Or(e3, EqualTo(UnresolvedAttribute("b"), Literal(2)))))
 
     assertEquivalent(
+      EqualTo(CaseWhen(Seq(normalBranch, (e1, Literal(1)), (e3, Literal(1))), None), Literal(1)),
+      Or(e1, e3))
+    assertEquivalent(
       EqualTo(CaseWhen(Seq(normalBranch, (e1, Literal(1)), (e3, Literal(2))), None), Literal(3)),
       FalseLiteral)
 
