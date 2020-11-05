@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 
@@ -33,6 +34,12 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     sql(s"DROP TABLE $namespace.$table")
     sql(s"DROP DATABASE $namespace")
     super.afterAll()
+  }
+
+  test("show an existing table in V1 catalog") {
+    val tables = sql(s"SHOW TABLES IN $catalog.test")
+    assert(tables.schema.fieldNames.toSet === Set(namespaceColumn, tableColumn, "isTemporary"))
+    checkAnswer(tables.select("isTemporary"), Row(false))
   }
 
   test("show table in a not existing namespace") {
