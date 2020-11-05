@@ -1502,7 +1502,8 @@ class Analyzer(
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
-      case o: OverwriteByExpression if !o.outputResolved =>
+      case o: OverwriteByExpression
+          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
         // do not resolve expression attributes until the query attributes are resolved against the
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o
