@@ -146,7 +146,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     equivalence.addExprTree(add)
     // the `two` inside `fallback` should not be added
     assert(equivalence.getAllEquivalentExprs.count(_.size > 1) == 0)
-    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3)  // add, two, explode
+    assert(equivalence.getAllEquivalentExprs.count(_.size == 1) == 3) // add, two, explode
   }
 
   test("Children of conditional expressions: If") {
@@ -186,6 +186,69 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence3.getAllEquivalentExprs.count(_.size == 1) == 2)
     assert(equivalence3.getAllEquivalentExprs.filter(_.size == 1).head == Seq(ifExpr1))
     assert(equivalence3.getAllEquivalentExprs.filter(_.size == 1).last == Seq(ifExpr3))
+  }
+
+  test("Children of conditional expressions: CaseWhen") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions1 = (GreaterThan(add2, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr1 = CaseWhen(conditions1, None)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+
+    // `add2` is repeatedly in all conditions.
+    assert(equivalence1.getAllEquivalentExprs.count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add2, add2))
+
+    val conditions2 = (GreaterThan(add1, Literal(3)), add1) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr2 = CaseWhen(conditions2, None)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(caseWhenExpr2)
+
+    // `add2` is repeatedly in all branch values, and first predicate.
+    assert(equivalence2.getAllEquivalentExprs.count(_.size == 2) == 1)
+    assert(equivalence2.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add1, add1))
+
+    val conditions3 = (GreaterThan(add1, Literal(3)), add2) ::
+      (GreaterThan(add2, Literal(4)), add1) ::
+      (GreaterThan(add2, Literal(5)), add1) :: Nil
+
+    val caseWhenExpr3 = CaseWhen(conditions3, None)
+    val equivalence3 = new EquivalentExpressions
+    equivalence3.addExprTree(caseWhenExpr3)
+    assert(equivalence3.getAllEquivalentExprs.count(_.size == 2) == 0)
+  }
+
+  test("Children of conditional expressions: Coalesce") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(Literal(2), Literal(3))
+    val conditions1 = GreaterThan(add2, Literal(3)) ::
+      GreaterThan(add2, Literal(4)) ::
+      GreaterThan(add2, Literal(5)) :: Nil
+
+    val coalesceExpr1 = Coalesce(conditions1)
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(coalesceExpr1)
+
+    // `add2` is repeatedly in all conditions.
+    assert(equivalence1.getAllEquivalentExprs.count(_.size == 2) == 1)
+    assert(equivalence1.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add2, add2))
+
+    val conditions2 = GreaterThan(add1, Literal(3)) ::
+      GreaterThan(add2, Literal(4)) ::
+      GreaterThan(add2, Literal(5)) :: Nil
+
+    val coalesceExpr2 = Coalesce(conditions2)
+    val equivalence2 = new EquivalentExpressions
+    equivalence2.addExprTree(coalesceExpr2)
+
+    assert(equivalence2.getAllEquivalentExprs.count(_.size == 2) == 0)
   }
 }
 
