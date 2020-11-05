@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
@@ -32,5 +33,12 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     sql(s"DROP TABLE $namespace.$table")
     sql(s"DROP DATABASE $namespace")
     super.afterAll()
+  }
+
+  test("show table in a not existing namespace") {
+    val msg = intercept[NoSuchDatabaseException] {
+      checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
+    }.getMessage
+    assert(msg.contains("Database 'bad_test' not found"))
   }
 }

@@ -41,4 +41,8 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     sql(s"DROP DATABASE $catalog.$namespace")
     super.afterAll()
   }
+
+  test("show table in a not existing namespace") {
+    checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
+  }
 }
