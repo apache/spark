@@ -21,6 +21,7 @@ import java.sql.{Connection, SQLException}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -125,7 +126,11 @@ class JDBCTableCatalog extends TableCatalog with Logging {
       properties.asScala.map {
         case (k, v) => k match {
           case "comment" => tableComment = v
-          case "provider" | "owner" | "location" => // provider, owner and location can't be set.
+          // ToDo: have a follow up to fail provider once unify create table syntax PR is merged
+          case "provider" =>
+          case "owner" => // owner is ignored. It is default to current user name.
+          case "location" =>
+            throw new AnalysisException("Cannot create JDBC table with property location.")
           case _ => tableProperties = tableProperties + " " + s"$k $v"
         }
       }

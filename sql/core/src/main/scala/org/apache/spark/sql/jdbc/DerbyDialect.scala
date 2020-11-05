@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLFeatureNotSupportedException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.types._
@@ -53,14 +53,7 @@ private object DerbyDialect extends JdbcDialect {
 
   // Derby currently doesn't support comment on table. Here is the ticket to add the support
   // https://issues.apache.org/jira/browse/DERBY-7008
-  override def createTable(
-      table: String,
-      strSchema: String,
-      createTableOptions: String,
-      tableComment: String): Array[String] = {
-    if (!tableComment.isEmpty) {
-      logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
-    }
-    Array(s"CREATE TABLE $table ($strSchema) $createTableOptions")
+  override def getTableCommentQuery(table: String, comment: String): String = {
+    throw new SQLFeatureNotSupportedException(s"comment on table is not supported")
   }
 }

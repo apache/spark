@@ -266,18 +266,8 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} SET $nullable"
   }
 
-  def createTable(
-      table: String,
-      strSchema: String,
-      createTableOptions: String,
-      tableComment: String): Array[String] = {
-    val createTable = s"CREATE TABLE $table ($strSchema) $createTableOptions"
-    if (!tableComment.isEmpty) {
-      val comment = s"COMMENT ON TABLE $table IS '$tableComment'"
-      Array(createTable, comment)
-    } else {
-      Array(createTable)
-    }
+  def getTableCommentQuery(table: String, comment: String): String = {
+    s"COMMENT ON TABLE $table IS '$comment'"
   }
 
   /**

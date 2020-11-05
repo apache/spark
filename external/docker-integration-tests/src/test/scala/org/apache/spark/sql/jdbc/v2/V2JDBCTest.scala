@@ -58,13 +58,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     assert(t.schema === expectedSchema)
   }
 
-  def testCreateTableWithProperty(tbl: String): Unit = {
-    val m = intercept[AnalysisException] {
-      sql(s"CREATE TABLE $tbl (i INT) USING _" +
-        " TBLPROPERTIES('ENGINE'='InnoDB', 'CHARACTER SET'='utf8')")
-    }.message
-    assert(m.contains("Failed table creation"))
-  }
+  def testCreateTableWithProperty(tbl: String): Unit = {}
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
@@ -175,6 +169,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
 
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
+      val m = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $catalogName.new_table (i INT) USING _ TBLPROPERTIES('a'='1')")
+      }.message
+      assert(m.contains("Failed table creation"))
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
