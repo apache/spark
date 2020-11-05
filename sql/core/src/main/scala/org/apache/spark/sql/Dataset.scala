@@ -2412,7 +2412,7 @@ class Dataset[T] private[sql](
     val output = queryExecution.analyzed.output
 
     var new_pos = pos
-    if (pos < 0 || pos > output.length - 1) {
+    if (pos < 0 || pos > output.length) {
       new_pos = output.length
     }
     val pre = output.slice(0, new_pos)
