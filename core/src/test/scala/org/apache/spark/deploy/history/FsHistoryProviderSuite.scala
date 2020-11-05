@@ -138,7 +138,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
           completed: Boolean): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
-        ApplicationInfo(id, name,
+        new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
             new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
       }

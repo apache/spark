@@ -1548,7 +1548,7 @@ private[history] class AppListingListener(
     var name: String = null
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, Nil)
+      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
 

@@ -126,6 +126,10 @@ private[spark] class AppStatusListener(
     appInfo = v1.ApplicationInfo(
       event.appId.get,
       event.appName,
+      None,
+      None,
+      None,
+      None,
       Seq(attempt))
 
     kvstore.write(new ApplicationInfoWrapper(appInfo))
@@ -195,6 +199,10 @@ private[spark] class AppStatusListener(
     appInfo = v1.ApplicationInfo(
       appInfo.id,
       appInfo.name,
+      None,
+      None,
+      None,
+      None,
       Seq(attempt))
     kvstore.write(new ApplicationInfoWrapper(appInfo))
   }
