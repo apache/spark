@@ -201,33 +201,28 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   }
 
   test("SPARK-33315: simplify CaseWhen with EqualTo") {
-    val e1 = EqualTo(UnresolvedAttribute("a"), Literal(100))
-    val e3 = EqualTo(UnresolvedAttribute("c"), Literal(true))
-    val caseWhen = CaseWhen(
-      Seq(normalBranch, (e1, Literal(1)), (e3, Literal(2))), Some(UnresolvedAttribute("b")))
+    val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
+    val b = UnresolvedAttribute("b")
+    val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
+    val caseWhen = CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(2))), Some(b))
 
-    assertEquivalent(EqualTo(caseWhen, Literal(1)),
-      Or(e1, EqualTo(UnresolvedAttribute("b"), Literal(1))))
-    assertEquivalent(EqualTo(caseWhen, Literal(3)),
-      EqualTo(UnresolvedAttribute("b"), Literal(3)))
-    assertEquivalent(EqualTo(caseWhen, Literal(4)),
-      EqualTo(UnresolvedAttribute("b"), Literal(4)))
+    assertEquivalent(EqualTo(caseWhen, Literal(1)), Or(a, EqualTo(b, Literal(1))))
+    assertEquivalent(EqualTo(caseWhen, Literal(3)), EqualTo(b, Literal(3)))
 
     assertEquivalent(And(EqualTo(caseWhen, Literal(1)), EqualTo(caseWhen, Literal(2))),
-      And(Or(e1, EqualTo(UnresolvedAttribute("b"), Literal(1))),
-        Or(e3, EqualTo(UnresolvedAttribute("b"), Literal(2)))))
+      And(Or(a, EqualTo(b, Literal(1))), Or(c, EqualTo(b, Literal(2)))))
 
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(normalBranch, (e1, Literal(1)), (e3, Literal(1))), None), Literal(1)),
-      Or(e1, e3))
+      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(1))), None), Literal(1)),
+      Or(a, c))
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(normalBranch, (e1, Literal(1)), (e3, Literal(2))), None), Literal(3)),
+      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(2))), None), Literal(3)),
       FalseLiteral)
 
     // Do not simplify if it contains non foldable expressions.
     assertEquivalent(EqualTo(caseWhen, NonFoldableLiteral(true)),
       EqualTo(caseWhen, NonFoldableLiteral(true)))
-    val nonFoldable = CaseWhen(Seq(normalBranch, (e1, UnresolvedAttribute("b"))), None)
+    val nonFoldable = CaseWhen(Seq(normalBranch, (a, b)), None)
     assertEquivalent(EqualTo(nonFoldable, Literal(1)), EqualTo(nonFoldable, Literal(1)))
   }
 }
