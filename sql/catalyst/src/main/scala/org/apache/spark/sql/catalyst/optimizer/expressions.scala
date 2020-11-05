@@ -511,9 +511,13 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
 
-      case EqualTo(CaseWhen(branches, _), right)
-          if branches.count(_._2.semanticEquals(right)) == 1 =>
-        branches.filter(_._2.semanticEquals(right)).head._1
+      case EqualTo(CaseWhen(branches, elseValue), right)
+          if right.foldable && branches.forall(_._2.foldable) =>
+        (branches.filter(_._2.equals(right)).map(_._1) ++
+          elseValue.map(e => EqualTo(e, right))).reduceLeftOption(Or) match {
+          case Some(value) => value
+          case None => FalseLiteral
+        }
     }
   }
 }
