@@ -183,7 +183,7 @@ private[spark] abstract class YarnSchedulerBackend(
       numExecutors
     }
     val tasksPerExecutor = sc.resourceProfileManager
-        .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
+      .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
     val numMergersNeeded = math.min(
       math.max(1, math.ceil(numPartitions / tasksPerExecutor).toInt), maxExecutors)
     val minMergersThreshold = math.max(minMergersStaticThreshold,

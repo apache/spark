@@ -126,7 +126,7 @@ class BlockManagerMaster(
   }
 
   /**
-   * Get list of unique shuffle service locations where an executor is successfully
+   * Get a list of unique shuffle service locations where an executor is successfully
    * registered in the past for block push/merge with push based shuffle.
    */
   def getShufflePushMergerLocations(

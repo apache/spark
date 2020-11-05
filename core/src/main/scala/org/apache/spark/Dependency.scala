@@ -98,28 +98,28 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, this)
 
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
-  private[spark] var _shuffleMergeEnabled =
+  private[spark] var shuffleMergeEnabled =
     Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
 
   def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
-    _shuffleMergeEnabled = shuffleMergeEnabled
+    this.shuffleMergeEnabled = shuffleMergeEnabled
   }
 
-  def shuffleMergeEnabled : Boolean = _shuffleMergeEnabled
+  def isShuffleMergeEnabled : Boolean = shuffleMergeEnabled
 
   /**
    * Stores the location of the list of chosen external shuffle services for handling the
    * shuffle merge requests from mappers in this shuffle map stage.
    */
-  private[spark] var _mergerLocs: Seq[BlockManagerId] = Nil
+  private[spark] var mergerLocs: Seq[BlockManagerId] = Nil
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
     if (mergerLocs != null && mergerLocs.length > 0) {
-      _mergerLocs = mergerLocs
+      this.mergerLocs = mergerLocs
     }
   }
 
-  def getMergerLocs: Seq[BlockManagerId] = _mergerLocs
+  def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)

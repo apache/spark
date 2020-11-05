@@ -685,7 +685,7 @@ class BlockManagerMasterEndpoint(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
     val activeBlockManagers = blockManagerIdByExecutor.groupBy(_._2.host)
-        .mapValues(_.head).values.map(_._2).toSet
+      .mapValues(_.head).values.map(_._2).toSet
     val filteredActiveBlockManagers = activeBlockManagers
       .filterNot(x => hostsToFilter.contains(x.host))
     val filteredActiveMergers = filteredActiveBlockManagers.map(

@@ -1974,7 +1974,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  test("mergerLocations should be bounded with in" +
+  test("Shuffle push merger locations should be bounded with in" +
     " spark.shuffle.push.retainedMergerLocations") {
     assert(master.getShufflePushMergerLocations(10, Set.empty).isEmpty)
     makeBlockManager(100, "execA",

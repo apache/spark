@@ -1930,7 +1930,11 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
-      .doc("Set to 'true' to enable push based shuffle")
+      .doc("Set to 'true' to enable push based shuffle on the client side and this works in" +
+        "conjunction with the server side flag spark.shuffle.server.mergedShuffleFileManagerImpl" +
+        "which needs to be set with the appropriate" +
+        "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based" +
+        "shuffle to be enabled")
       .booleanConf
       .createWithDefault(false)
 
