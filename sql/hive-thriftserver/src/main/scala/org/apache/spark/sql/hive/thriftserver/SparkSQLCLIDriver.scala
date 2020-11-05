@@ -465,7 +465,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
         private var interruptRequested: Boolean = false
 
-        override def handle(signal: Signal) {
+        override def handle(signal: Signal): Unit = {
           val initialRequest = !interruptRequested
           interruptRequested = true
 

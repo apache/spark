@@ -94,7 +94,7 @@ class SparkSession private(
    * since that would cause every new session to reinvoke Spark Session Extensions on the currently
    * running extensions.
    */
-  private[sql] def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) = {
     this(sc, None, None,
       SparkSession.applyExtensions(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),

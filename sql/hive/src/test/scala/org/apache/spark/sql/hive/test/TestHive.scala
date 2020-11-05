@@ -130,11 +130,11 @@ class TestHiveContext(
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
-  def this(sc: SparkContext, loadTestTables: Boolean = true) {
+  def this(sc: SparkContext, loadTestTables: Boolean = true) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient) {
+  def this(sc: SparkContext, hiveClient: HiveClient) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
@@ -178,7 +178,7 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  def this(sc: SparkContext, loadTestTables: Boolean) {
+  def this(sc: SparkContext, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = None,
@@ -186,7 +186,7 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) {
+  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = Some(new TestHiveSharedState(sc, Some(hiveClient))),
@@ -584,11 +584,11 @@ private[hive] class TestHiveQueryExecution(
     logicalPlan: LogicalPlan)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
-  def this(sparkSession: TestHiveSparkSession, sql: String) {
+  def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
   }
 
-  def this(sql: String) {
+  def this(sql: String) = {
     this(TestHive.sparkSession, sql)
   }
 
