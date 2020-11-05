@@ -188,6 +188,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     recacheByCondition(spark, _.plan.find(_.sameResult(plan)).isDefined)
   }
 
+  def recacheByExactPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
+    recacheByCondition(spark, _.plan.sameResult(plan))
+  }
+
   /**
    *  Re-caches all the cache entries that satisfies the given `condition`.
    */
