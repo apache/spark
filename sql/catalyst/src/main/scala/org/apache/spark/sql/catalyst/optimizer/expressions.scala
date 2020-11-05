@@ -512,7 +512,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         }
 
       case EqualTo(CaseWhen(branches, elseValue), right)
-          if right.foldable && branches.forall(_._2.foldable) =>
+          if right.isInstanceOf[Literal] && branches.forall(_._2.isInstanceOf[Literal]) =>
         (branches.filter(_._2.equals(right)).map(_._1) ++
           elseValue.map(e => EqualTo(e, right))).reduceLeftOption(Or) match {
           case Some(value) => value
