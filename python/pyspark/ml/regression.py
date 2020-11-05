@@ -136,8 +136,12 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     * L1 (Lasso)
     * L2 + L1 (elastic net)
 
-    Note: Fitting with huber loss only supports none and L2 regularization.
+    Notes
+    -----
+    Fitting with huber loss only supports none and L2 regularization.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, 2.0, Vectors.dense(1.0)),
@@ -361,9 +365,11 @@ class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, Gener
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on, where dataset is an
+            instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -420,12 +426,15 @@ class LinearRegressionSummary(JavaWrapper):
         Returns the explained variance regression score.
         explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
 
-        .. seealso:: `Wikipedia explain variation
-            <http://en.wikipedia.org/wiki/Explained_variation>`_
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark
-            versions.
+        For additional information see
+        `Explained variation on Wikipedia \
+        <http://en.wikipedia.org/wiki/Explained_variation>`_
         """
         return self._call_java("explainedVariance")
 
@@ -437,9 +446,11 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the absolute error
         loss or l1-norm loss.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark
-            versions.
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
         """
         return self._call_java("meanAbsoluteError")
 
@@ -451,9 +462,11 @@ class LinearRegressionSummary(JavaWrapper):
         corresponding to the expected value of the squared error
         loss or quadratic loss.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark
-            versions.
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
         """
         return self._call_java("meanSquaredError")
 
@@ -464,9 +477,11 @@ class LinearRegressionSummary(JavaWrapper):
         Returns the root mean squared error, which is defined as the
         square root of the mean squared error.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark
-            versions.
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
         """
         return self._call_java("rootMeanSquaredError")
 
@@ -476,12 +491,14 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns R^2, the coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination
-            <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark
-            versions.
+        See also `Wikipedia coefficient of determination \
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
         """
         return self._call_java("r2")
 
@@ -491,11 +508,13 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns Adjusted R^2, the adjusted coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2
-            <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
+        Notes
+        -----
+        This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark versions.
 
-        .. note:: This ignores instance weights (setting all to 1.0) from
-            `LinearRegression.weightCol`. This will change in later Spark versions.
+        `Wikipedia coefficient of determination, Adjusted R^2 \
+        <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
         """
         return self._call_java("r2adj")
 
@@ -533,7 +552,6 @@ class LinearRegressionSummary(JavaWrapper):
         return self._call_java("devianceResiduals")
 
     @property
-    @since("2.0.0")
     def coefficientStandardErrors(self):
         """
         Standard error of estimated coefficients and intercept.
@@ -542,12 +560,15 @@ class LinearRegressionSummary(JavaWrapper):
         If :py:attr:`LinearRegression.fitIntercept` is set to True,
         then the last element returned corresponds to the intercept.
 
-        .. seealso:: :py:attr:`LinearRegression.solver`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        LinearRegression.solver
         """
         return self._call_java("coefficientStandardErrors")
 
     @property
-    @since("2.0.0")
     def tValues(self):
         """
         T-statistic of estimated coefficients and intercept.
@@ -556,12 +577,15 @@ class LinearRegressionSummary(JavaWrapper):
         If :py:attr:`LinearRegression.fitIntercept` is set to True,
         then the last element returned corresponds to the intercept.
 
-        .. seealso:: :py:attr:`LinearRegression.solver`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        LinearRegression.solver
         """
         return self._call_java("tValues")
 
     @property
-    @since("2.0.0")
     def pValues(self):
         """
         Two-sided p-value of estimated coefficients and intercept.
@@ -570,7 +594,11 @@ class LinearRegressionSummary(JavaWrapper):
         If :py:attr:`LinearRegression.fitIntercept` is set to True,
         then the last element returned corresponds to the intercept.
 
-        .. seealso:: :py:attr:`LinearRegression.solver`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        LinearRegression.solver
         """
         return self._call_java("pValues")
 
@@ -585,25 +613,31 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
     """
 
     @property
-    @since("2.0.0")
     def objectiveHistory(self):
         """
         Objective function (scaled loss + regularization) at each
         iteration.
         This value is only available when using the "l-bfgs" solver.
 
-        .. seealso:: :py:attr:`LinearRegression.solver`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        LinearRegression.solver
         """
         return self._call_java("objectiveHistory")
 
     @property
-    @since("2.0.0")
     def totalIterations(self):
         """
         Number of training iterations until termination.
         This value is only available when using the "l-bfgs" solver.
 
-        .. seealso:: :py:attr:`LinearRegression.solver`
+        .. versionadded:: 2.0.0
+
+        See Also
+        --------
+        LinearRegression.solver
         """
         return self._call_java("totalIterations")
 
@@ -648,6 +682,8 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -833,6 +869,8 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -1051,9 +1089,11 @@ class DecisionTreeRegressionModel(
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        .. note:: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
-              to determine feature importance instead.
+        Notes
+        -----
+        Feature importance for single decision trees can have high variance due to
+        correlated predictor variables. Consider using a :py:class:`RandomForestRegressor`
+        to determine feature importance instead.
         """
         return self._call_java("featureImportances")
 
@@ -1082,6 +1122,8 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    Examples
+    --------
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -1307,7 +1349,9 @@ class RandomForestRegressionModel(
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
+        Examples
+        --------
+        DecisionTreeRegressionModel.featureImportances
         """
         return self._call_java("featureImportances")
 
@@ -1349,6 +1393,8 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    Examples
+    --------
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -1602,7 +1648,9 @@ class GBTRegressionModel(
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
 
-        .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
+        Examples
+        --------
+        DecisionTreeRegressionModel.featureImportances
         """
         return self._call_java("featureImportances")
 
@@ -1617,10 +1665,12 @@ class GBTRegressionModel(
         """
         Method to compute error or loss for every iteration of gradient boosting.
 
-        :param dataset:
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
             Test dataset to evaluate model on, where dataset is an
             instance of :py:class:`pyspark.sql.DataFrame`
-        :param loss:
+        loss : str
             The loss function used to compute error.
             Supported options: squared, absolute
         """
@@ -1688,8 +1738,14 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     Fit a parametric AFT survival regression model based on the Weibull distribution
     of the survival time.
 
-    .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
+    Notes
+    -----
+    For more information see Wikipedia page on
+    `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
 
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0), 1.0),
@@ -1987,8 +2043,14 @@ class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionPa
     * "tweedie"  -> power link function specified through "linkPower". \
                     The default link power in the tweedie family is 1 - variancePower.
 
-    .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
 
+    Notes
+    -----
+    For more information see Wikipedia page on
+    `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(0.0, 0.0)),
@@ -2222,9 +2284,11 @@ class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearR
         """
         Evaluates the model on a test dataset.
 
-        :param dataset:
-          Test dataset to evaluate model on, where dataset is an
-          instance of :py:class:`pyspark.sql.DataFrame`
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            Test dataset to evaluate model on, where dataset is an
+            instance of :py:class:`pyspark.sql.DataFrame`
         """
         if not isinstance(dataset, DataFrame):
             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
@@ -2301,8 +2365,11 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         Get the residuals of the fitted model by type.
 
-        :param residualsType: The type of residuals which should be returned.
-                              Supported options: deviance (default), pearson, working, and response.
+        Parameters
+        ----------
+        residualsType : str, optional
+            The type of residuals which should be returned.
+            Supported options: deviance (default), pearson, working, and response.
         """
         return self._call_java("residuals", residualsType)
 
@@ -2474,6 +2541,8 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     * gd (normal mini-batch gradient descent)
     * adamW (default)
 
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.regression import FMRegressor
     >>> df = spark.createDataFrame([
