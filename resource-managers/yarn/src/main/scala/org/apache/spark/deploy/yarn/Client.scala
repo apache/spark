@@ -1197,17 +1197,24 @@ private[spark] class Client(
     if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)) {
       return IMap()
     }
-    val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
-    val response = ClientBuilder.newClient()
-      .target(baseRmUrl)
-      .path("ws").path("v1").path("cluster").path("apps").path(appId.toString).path("appattempts")
-      .request(MediaType.APPLICATION_JSON)
-      .get()
-    response.getStatusInfo.getFamily match {
-      case Family.SUCCESSFUL => parseAppAttemptsJsonResponse(response.readEntity(classOf[String]))
-      case _ =>
-        logWarning(s"Unable to fetch app attempts info from $baseRmUrl, got "
-          + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
+    try {
+      val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
+      val response = ClientBuilder.newClient()
+          .target(baseRmUrl)
+          .path("ws").path("v1").path("cluster").path("apps")
+          .path(appId.toString).path("appattempts")
+          .request(MediaType.APPLICATION_JSON)
+          .get()
+      response.getStatusInfo.getFamily match {
+        case Family.SUCCESSFUL => parseAppAttemptsJsonResponse(response.readEntity(classOf[String]))
+        case _ =>
+          logWarning(s"Unable to fetch app attempts info from $baseRmUrl, got "
+              + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
+          IMap()
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Unable to get driver log links for $appId", e)
         IMap()
     }
   }
