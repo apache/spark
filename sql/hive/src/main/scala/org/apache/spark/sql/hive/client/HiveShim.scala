@@ -1264,7 +1264,7 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       }
       if (num > limit) {
         throw new RuntimeException(s"$num partitions of table $table had been queried " +
-          s"by filter '$filter', which had exceeded the limit of $limit")
+          s"by filter '$filter', which already exceeded the limit of $limit")
       }
     }
 
