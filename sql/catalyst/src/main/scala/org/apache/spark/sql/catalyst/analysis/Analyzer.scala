@@ -3046,40 +3046,15 @@ class Analyzer(
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case append @ AppendData(table, query, _, isByName)
-          if table.resolved && query.resolved && !append.outputResolved =>
+      case v2Write: V2WriteCommand
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          append.copy(query = projection)
+        val projection = TableOutputResolver.resolveOutputColumns(
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+        if (projection != v2Write.query) {
+          v2Write.withNewQuery(projection)
         } else {
-          append
-        }
-
-      case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
-        }
-
-      case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
+          v2Write
         }
     }
   }
