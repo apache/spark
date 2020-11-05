@@ -111,13 +111,6 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-maven-
-    - name: Cache Ivy local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.ivy2/cache
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -213,13 +206,6 @@ jobs:
         key: pyspark-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           pyspark-maven-
-    - name: Cache Ivy local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.ivy2/cache
-        key: pyspark-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          pyspark-ivy-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -296,13 +282,6 @@ jobs:
         key: sparkr-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           sparkr-maven-
-    - name: Cache Ivy local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.ivy2/cache
-        key: sparkr-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          sparkr-ivy-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
@@ -425,13 +404,6 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
-    - name: Cache Ivy local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.ivy2/cache
-        key: scala-213-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          scala-213-ivy-
     - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
