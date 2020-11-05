@@ -185,7 +185,7 @@ trait WindowExecBase extends UnaryExecNode {
               new FrameLessOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
                 functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
@@ -196,7 +196,7 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
                 functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
@@ -208,7 +208,7 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
                 functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
