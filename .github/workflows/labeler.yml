@@ -31,8 +31,8 @@ jobs:
     #
     # Github issue which requests a timeline for a release with any/all support:
     #     - https://github.com/actions/labeler/issues/111
-    # This issue also references the issue that mentioned that any/all are only supported
-    # on main branch (previously called master):
+    # This issue also references the issue that mentioned that any/all are only
+    # supported on main branch (previously called master):
     #    - https://github.com/actions/labeler/issues/73#issuecomment-639034278
     #
     # However, these are not in a published release and the current `main` branch
