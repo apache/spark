@@ -589,3 +589,15 @@ case class AnalyzeColumn(
     "mutually exclusive. Only one of them should be specified.")
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the LOAD DATA INTO TABLE command that works for v2 catalogs.
+ */
+case class LoadData(
+    child: LogicalPlan,
+    path: String,
+    isLocal: Boolean,
+    isOverwrite: Boolean,
+    partition: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
