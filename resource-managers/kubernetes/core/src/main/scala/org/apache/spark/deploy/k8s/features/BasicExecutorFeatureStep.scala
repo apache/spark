@@ -17,7 +17,6 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model._
 
@@ -27,7 +26,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Python._
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -54,57 +52,27 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
-  private var executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
+  private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+  private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
 
-  private var memoryOverheadMiB = kubernetesConf
-    .get(EXECUTOR_MEMORY_OVERHEAD)
-    .getOrElse(math.max(
-      (kubernetesConf.get(MEMORY_OVERHEAD_FACTOR) * executorMemoryMiB).toInt,
-      MEMORY_OVERHEAD_MIN_MIB))
+  val execResources = ResourceProfile.getResourcesForClusterManager(
+    resourceProfile.id,
+    resourceProfile.executorResources,
+    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR),
+    kubernetesConf.sparkConf,
+    isPythonApp,
+    Map.empty)
 
-  private var executorCores = kubernetesConf.sparkConf.get(EXECUTOR_CORES)
-
-  private var pysparkMemoryMiB =
-    kubernetesConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0).toLong
-
-  private var memoryOffHeapMiB = Utils.executorOffHeapMemorySizeAsMb(kubernetesConf.sparkConf)
-
-  private val customResources = new mutable.HashSet[ExecutorResourceRequest]
-  resourceProfile.executorResources.foreach { case (resource, execReq) =>
-    resource match {
-      case ResourceProfile.MEMORY =>
-        executorMemoryMiB = execReq.amount
-      case ResourceProfile.OVERHEAD_MEM =>
-        memoryOverheadMiB = execReq.amount
-      case ResourceProfile.PYSPARK_MEM =>
-        pysparkMemoryMiB = execReq.amount
-      case ResourceProfile.OFFHEAP_MEM =>
-        memoryOffHeapMiB = execReq.amount.toInt
-      case ResourceProfile.CORES =>
-        executorCores = execReq.amount.toInt
-      case rName =>
-        customResources += execReq
-    }
-  }
-
-  private val executorMemoryString = s"${executorMemoryMiB}m"
-
+  private val executorMemoryString = s"${execResources.executorMemoryMiB}m"
+  // we don't include any kubernetes conf specific requests or limits when using custom
+  // ResourceProfiles because we don't have a way of overriding them if needed
   private val executorCoresRequest =
-    if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
+    if (isDefaultProfile && kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
     } else {
-      executorCores.toString
+      execResources.cores.toString
     }
   private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
-
-  private val executorMemoryWithOverhead =
-    executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB
-  private val executorMemoryTotal =
-    if (kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)) {
-      executorMemoryWithOverhead + pysparkMemoryMiB
-    } else {
-      executorMemoryWithOverhead
-    }
 
   private def buildExecutorResourcesQuantities(
       customResources: Set[ExecutorResourceRequest]): Map[String, Quantity] = {
@@ -132,15 +100,20 @@ private[spark] class BasicExecutorFeatureStep(
       // Replace dangerous characters in the remaining string with a safe alternative.
       .replaceAll("[^\\w-]+", "_")
 
-    val executorMemoryQuantity = new Quantity(s"${executorMemoryTotal}Mi")
+    val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)
 
-    val executorResourceQuantities = buildExecutorResourcesQuantities(customResources.toSet)
+    // TODO - we need to remove any resources from the template when not using the
+    if (isDefaultProfile) {
+      logWarning("default profile so pick up template stuff, otherwise remove extra resources")
+    }
+    val executorResourceQuantities =
+      buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
     val executorEnv: Seq[EnvVar] = {
         (Seq(
           (ENV_DRIVER_URL, driverUrl),
-          (ENV_EXECUTOR_CORES, executorCores.toString),
+          (ENV_EXECUTOR_CORES, execResources.cores.toString),
           (ENV_EXECUTOR_MEMORY, executorMemoryString),
           (ENV_APPLICATION_ID, kubernetesConf.appId),
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
@@ -208,6 +181,8 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
+    logWarning("k8s pod limits are: " + pod.container.getResources().getLimits())
+
     val executorContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
       .withImage(executorContainerImage)
@@ -226,14 +201,18 @@ private[spark] class BasicExecutorFeatureStep(
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
-    val containerWithLimitCores = executorLimitCores.map { limitCores =>
-      val executorCpuLimitQuantity = new Quantity(limitCores)
-      new ContainerBuilder(executorContainer)
-        .editResources()
+    val containerWithLimitCores = if (isDefaultProfile) {
+      executorLimitCores.map { limitCores =>
+        val executorCpuLimitQuantity = new Quantity(limitCores)
+        new ContainerBuilder(executorContainer)
+          .editResources()
           .addToLimits("cpu", executorCpuLimitQuantity)
           .endResources()
-        .build()
-    }.getOrElse(executorContainer)
+          .build()
+      }.getOrElse(executorContainer)
+    } else {
+      executorContainer
+    }
     val containerWithLifecycle =
       if (!kubernetesConf.workerDecommissioning) {
         logInfo("Decommissioning not enabled, skipping shutdown script")

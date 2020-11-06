@@ -53,6 +53,8 @@ private[spark] class KubernetesExecutorBuilder {
       initialPod,
       executorKubernetesResources = Seq.empty)
 
+    // If using a template this will always get the resources from that and combine
+    // them with any Spark conf or ResourceProfile resources.
     features.foldLeft(spec) { case (spec, feature) =>
       val configuredPod = feature.configurePod(spec.pod)
       val addedResources = feature.getAdditionalKubernetesResources()

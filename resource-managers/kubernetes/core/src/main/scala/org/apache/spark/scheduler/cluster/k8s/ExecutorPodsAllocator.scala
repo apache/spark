@@ -168,15 +168,15 @@ private[spark] class ExecutorPodsAllocator(
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
-      mutable.HashMap[Int, mutable.LinkedHashMap[Long, ExecutorPodState]]()
+      mutable.HashMap[Int, mutable.HashMap[Long, ExecutorPodState]]()
     if (totalExpectedExecutorsPerResourceProfileId.size <= 1) {
       rpIdToExecsAndPodState(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) =
-        mutable.LinkedHashMap.empty ++= lastSnapshot.executorPods
+        mutable.HashMap.empty ++= lastSnapshot.executorPods
     } else {
       lastSnapshot.executorPods.foreach { case (execId, execPodState) =>
         val rpId = execPodState.pod.getMetadata.getLabels.get(SPARK_RESOURCE_PROFILE_ID_LABEL).toInt
         val execPods = rpIdToExecsAndPodState.getOrElseUpdate(rpId,
-          mutable.LinkedHashMap[Long, ExecutorPodState]())
+          mutable.HashMap[Long, ExecutorPodState]())
         execPods(execId) = execPodState
       }
     }
@@ -184,7 +184,7 @@ private[spark] class ExecutorPodsAllocator(
     var totalPendingCount = 0
     // The order we request executors for each ResourceProfile is not guaranteed.
     totalExpectedExecutorsPerResourceProfileId.asScala.foreach { case (rpId, targetNum) =>
-      val podsForRpId = rpIdToExecsAndPodState.getOrElse(rpId, mutable.LinkedHashMap.empty)
+      val podsForRpId = rpIdToExecsAndPodState.getOrElse(rpId, mutable.HashMap.empty)
 
       val currentRunningCount = podsForRpId.values.count {
         case PodRunning(_) => true

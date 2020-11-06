@@ -54,7 +54,8 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
   private val isK8s = master.isDefined && master.get.startsWith("k8s://")
-  private val errorForTesting = !isTesting || sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
+  private val notRunningUnitTests = !isTesting
+  private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
   // If we use anything except the default profile, its only supported on YARN right now.
   // Throw an exception if not supported.
@@ -63,7 +64,10 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     val notYarnOrK8sAndNotDefaultProfile = isNotDefaultProfile && !(isYarn || isK8s)
     val YarnOrK8sNotDynAllocAndNotDefaultProfile =
       isNotDefaultProfile && (isYarn || isK8s) && !dynamicEnabled
-    if (errorForTesting &&
+    // We want the exception to be thrown only when we are specifically testing for the
+    // exception or in a real application. Otherwise in all other testing scenarios we want
+    // to skip throwing the exception so that we can test in other modes to make testing easier.
+    if ((notRunningUnitTests || testExceptionThrown) &&
         (notYarnOrK8sAndNotDefaultProfile || YarnOrK8sNotDynAllocAndNotDefaultProfile)) {
       throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
         "with dynamic allocation enabled.")

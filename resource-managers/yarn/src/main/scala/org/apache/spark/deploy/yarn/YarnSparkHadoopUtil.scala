@@ -38,7 +38,6 @@ object YarnSparkHadoopUtil {
   // the common cases. Memory overhead tends to grow with container size.
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
 
