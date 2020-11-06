@@ -415,12 +415,13 @@ object ResourceProfile extends Logging {
       val memoryOverheadMiB = ResourceProfile.calculateOverHeadMemory(
         defaultResources.memoryOverheadMiB, defaultResources.executorMemoryMiB, overheadFactor)
       val pysparkMemToUseMiB = if (isPythonApp) {
-        defaultResources.pysparkMemoryMiB.getOrElse(0)
+        defaultResources.pysparkMemoryMiB.getOrElse(0L)
       } else {
-        0
+        0L
       }
-      val totalMemMiB = defaultResources.executorMemoryMiB +
-          defaultResources.memoryOffHeapMiB + pysparkMemToUseMiB + memoryOverheadMiB
+      val execMem = defaultResources.executorMemoryMiB
+      val offHeap = defaultResources.memoryOffHeapMiB
+      val totalMemMiB = execMem + offHeap + pysparkMemToUseMiB + memoryOverheadMiB
       val customResources = defaultResources.customResources.map { case (rName, execReq) =>
         val nameToUse = resourceMappings.get(rName).getOrElse(rName)
         (nameToUse, execReq)
@@ -434,7 +435,7 @@ object ResourceProfile extends Logging {
       var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
       var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
         executorMemoryMiB, overheadFactor)
-      var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0)
+      var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
       val customResources = new mutable.HashMap[String, ExecutorResourceRequest]
       execResources.foreach { case (r, execReq) =>
         r match {
@@ -457,7 +458,7 @@ object ResourceProfile extends Logging {
       val pysparkMemToUseMiB = if (isPythonApp) {
         pysparkMemoryMiB
       } else {
-        0
+        0L
       }
       val totalMemMiB =
         (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)

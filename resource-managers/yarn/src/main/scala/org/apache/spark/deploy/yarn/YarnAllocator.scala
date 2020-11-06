@@ -683,13 +683,10 @@ private[yarn] class YarnAllocator(
       }
 
       val rp = rpIdToResourceProfile(rpId)
-      // TODO - different
       val defaultResources = ResourceProfile.getDefaultProfileExecutorResources(sparkConf)
       val containerMem = rp.executorResources.get(ResourceProfile.MEMORY).
-        map(_.amount.toInt).getOrElse(defaultResources.executorMemoryMiB).toInt
-
+        map(_.amount).getOrElse(defaultResources.executorMemoryMiB).toInt
       val containerCores = rp.getExecutorCores.getOrElse(defaultResources.cores)
-
       val rpRunningExecs = getOrUpdateRunningExecutorForRPId(rpId).size
       if (rpRunningExecs < getOrUpdateTargetNumExecutorsForRPId(rpId)) {
         getOrUpdateNumExecutorsStartingForRPId(rpId).incrementAndGet()
