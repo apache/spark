@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
-import org.apache.spark.sql.catalyst.catalog.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -285,14 +284,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists)
-        if parts.resolved =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists) =>
       AlterTableAddPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _)
-        if parts.resolved =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
 

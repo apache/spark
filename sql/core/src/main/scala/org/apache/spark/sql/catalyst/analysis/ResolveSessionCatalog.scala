@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange, V1Table}
@@ -502,14 +502,13 @@ class ResolveSessionCatalog(
         "ALTER TABLE RECOVER PARTITIONS")
 
     case AlterTableAddPartition(r @ ResolvedTable(_, _, _: V1Table), partSpecsAndLocs, ifNotExists)
-        if isSessionCatalog(r.catalog) && !partSpecsAndLocs.resolved =>
+        if isSessionCatalog(r.catalog) =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableAddPartition(r: ResolvedView, partSpecsAndLocs, ifNotExists)
-        if !partSpecsAndLocs.resolved =>
+    case AlterTableAddPartition(r: ResolvedView, partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
         r.identifier.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
@@ -524,7 +523,7 @@ class ResolveSessionCatalog(
 
     case AlterTableDropPartition(
         r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
-        if isSessionCatalog(r.catalog) && !specs.resolved =>
+        if isSessionCatalog(r.catalog) =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
@@ -532,8 +531,7 @@ class ResolveSessionCatalog(
         purge,
         retainData)
 
-    case AlterTableDropPartition(r: ResolvedView, specs, ifExists, purge, retainData)
-        if !specs.resolved =>
+    case AlterTableDropPartition(r: ResolvedView, specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),

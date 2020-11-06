@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, Alte
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
+import org.apache.spark.sql.types.StructType
 
 /**
  * Analyze PartitionSpecs in datasource v2 commands.
@@ -29,14 +30,22 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r@ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _)
-        if !partSpecs.resolved =>
-      r.copy(parts = partSpecs.asResolved(table.partitionSchema()))
+    case r @ AlterTableAddPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
+      r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
 
-    case r@ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _)
-        if !partSpecs.resolved =>
-      r.copy(parts = partSpecs.asResolved(table.partitionSchema()))
+    case r @ AlterTableDropPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
+      r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
   }
+
+  def resolvePartitionSpecs(
+      partSpecs: Seq[PartitionSpec], partSchema: StructType): Seq[ResolvedPartitionSpec] =
+    partSpecs.map {
+      case unresolvedPartSpec: UnresolvedPartitionSpec =>
+        ResolvedPartitionSpec(
+          unresolvedPartSpec.spec.asPartitionIdentifier(partSchema), unresolvedPartSpec.location)
+      case resolvedPartitionSpec: ResolvedPartitionSpec =>
+        resolvedPartitionSpec
+    }
 }

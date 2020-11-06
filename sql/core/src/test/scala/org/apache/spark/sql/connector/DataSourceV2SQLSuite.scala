@@ -38,62 +38,10 @@ import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructFiel
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-class DataSourceV2SQLSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests {
+class DataSourceV2SQLSuite extends DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-
-  private val v2Source = classOf[FakeV2Provider].getName
-  override protected val v2Format = v2Source
-  override protected val catalogAndNamespace = "testcat.ns1.ns2."
-  private val defaultUser: String = Utils.getCurrentUserName()
-
-  private def catalog(name: String): CatalogPlugin = {
-    spark.sessionState.catalogManager.catalog(name)
-  }
-
-  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
-    val tmpView = "tmp_view"
-    withTempView(tmpView) {
-      insert.createOrReplaceTempView(tmpView)
-      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
-      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
-    }
-  }
-
-  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
-    checkAnswer(spark.table(tableName), expected)
-  }
-
-  override def getTableMetadata(tableName: String): Table = {
-    val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    val v2Catalog = catalog(nameParts.head).asTableCatalog
-    val namespace = nameParts.drop(1).init.toArray
-    v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
-  }
-
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testpart", classOf[InMemoryPartitionTableCatalog].getName)
-    spark.conf.set(
-        "spark.sql.catalog.testcat_atomic", classOf[StagingInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
-    spark.conf.set(
-      V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[InMemoryTableSessionCatalog].getName)
-
-    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-    df.createOrReplaceTempView("source")
-    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
-    df2.createOrReplaceTempView("source2")
-  }
-
-  after {
-    spark.sessionState.catalog.reset()
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
-  }
 
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
@@ -2151,54 +2099,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER TABLE ADD PARTITIONS") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(
-        s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(2))))
-
-      val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
-      assert(partMetadata.containsKey("location"))
-      assert(partMetadata.get("location") == "loc")
-
-      val partMetadata1 = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(2)))
-      assert(partMetadata1.containsKey("location"))
-      assert(partMetadata1.get("location") == "loc1")
-
-      partTable.clearPartitions()
-    }
-  }
-
-  test("ALTER TABLE ADD PARTITIONS: partition already exists") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(
-        s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
-
-      assertThrows[PartitionsAlreadyExistException](
-        spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'"))
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      spark.sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(2))))
-
-      partTable.clearPartitions()
-    }
-  }
-
   test("ALTER TABLE RENAME PARTITION") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2220,42 +2120,6 @@ class DataSourceV2SQLSuite
       val partTable =
         catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-    }
-  }
-
-  test("ALTER TABLE DROP PARTITIONS") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
-    }
-  }
-
-  test("ALTER TABLE DROP PARTITIONS: partition not exists") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      assertThrows[NoSuchPartitionsException](
-        spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)"))
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      spark.sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
     }
   }
 

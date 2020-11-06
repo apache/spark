@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
-import org.apache.spark.sql.catalyst.catalog.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 

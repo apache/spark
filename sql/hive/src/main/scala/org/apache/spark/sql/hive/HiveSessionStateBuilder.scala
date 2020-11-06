@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolvePartitionSpec, ResolveSessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -82,7 +82,6 @@ class HiveSessionStateBuilder(
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, catalog.isTempView, catalog.isTempFunction) +:
-        ResolvePartitionSpec +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =

@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
@@ -88,35 +88,11 @@ object DataSourceV2Implicits {
   }
 
   implicit class PartitionSpecsHelper(partSpecs: Seq[PartitionSpec]) {
-    def resolved: Boolean = partSpecs.forall(_.isInstanceOf[ResolvedPartitionSpec])
+    def asUnresolvedPartitionSpecs: Seq[UnresolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
 
-    def asResolved(partSchema: StructType): Seq[ResolvedPartitionSpec] =
-      partSpecs.asUnresolvedPartitionSpecs
-        .map { unresolvedPartSpec =>
-          ResolvedPartitionSpec(
-            unresolvedPartSpec.spec.asPartitionIdentifier(partSchema),
-            unresolvedPartSpec.location)
-        }
-
-    def asUnresolvedPartitionSpecs: Seq[UnresolvedPartitionSpec] = {
-      if (partSpecs.forall(_.isInstanceOf[UnresolvedPartitionSpec])) {
-        partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
-      } else {
-        throw new IllegalArgumentException(
-          "Failed to cast PartitionSpec as UnresolvedPartitionSpec, " +
-            "some of them has been already resolved")
-      }
-    }
-
-    def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] = {
-      if (partSpecs.forall(_.isInstanceOf[ResolvedPartitionSpec])) {
-        partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
-      } else {
-        throw new IllegalArgumentException(
-          "Failed to cast PartitionSpec as ResolvedPartitionSpec, " +
-            "some of them did not resolved")
-      }
-    }
+    def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
   }
 
   implicit class TablePartitionSpecHelper(partSpec: TablePartitionSpec) {

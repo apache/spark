@@ -225,6 +225,7 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
+      ResolvePartitionSpec ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::

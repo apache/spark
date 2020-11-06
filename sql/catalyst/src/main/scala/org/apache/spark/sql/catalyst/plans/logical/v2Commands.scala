@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.PartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.connector.catalog._
@@ -603,7 +602,7 @@ case class AnalyzeColumn(
 case class AlterTableAddPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
-    ignoreIfExists: Boolean) extends Command {
+    ifNotExists: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -619,7 +618,7 @@ case class AlterTableAddPartition(
 case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
-    ignoreIfNotExists: Boolean,
+    ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil

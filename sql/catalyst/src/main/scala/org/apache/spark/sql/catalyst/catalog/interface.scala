@@ -30,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -637,16 +636,6 @@ object CatalogTypes {
    */
   lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
-
-trait PartitionSpec
-
-case class UnresolvedPartitionSpec(
-    spec: TablePartitionSpec,
-    location: Option[String] = None) extends PartitionSpec
-
-case class ResolvedPartitionSpec(
-    spec: InternalRow,
-    location: Option[String] = None) extends PartitionSpec
 
 /**
  * A placeholder for a table relation, which will be replaced by concrete relation like

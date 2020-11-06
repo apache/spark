@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType, UnresolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -3434,7 +3434,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       UnresolvedPartitionSpec(spec, location)
     }
     AlterTableAddPartition(
-      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3476,9 +3476,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
-      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       partSpecs.toSeq,
-      ignoreIfNotExists = ctx.EXISTS != null,
+      ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)
   }
