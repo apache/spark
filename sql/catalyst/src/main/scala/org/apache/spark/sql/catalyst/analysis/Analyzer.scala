@@ -618,6 +618,10 @@ class Analyzer(
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
+        case a @ Aggregate(Seq(c @ Cube(groupingSets)), _, _) =>
+          a.copy(groupingExpressions = c.groupByExprs)
+        case a @ Aggregate(Seq(r @ Rollup(groupingSets)), _, _) =>
+          a.copy(groupingExpressions = r.groupByExprs)
         case a @ Aggregate(Seq(gs @ GroupingSetsV2(_)), _, _) =>
           a.copy(groupingExpressions = gs.groupByExprs)
         case g: GroupingSets =>
@@ -638,8 +642,7 @@ class Analyzer(
               cubeExprs(groupingSets), c.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case Aggregate(Seq(r @ Rollup(groupingSets)), aggregateExpressions, child) =>
             constructAggregate(
-              rollupExprs(groupingSets), r.groupByExprs,
-              aggregateExpressions ++ extraAggExprs, child)
+              rollupExprs(groupingSets), r.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets)),
           aggregateExpressions, child) =>
             constructAggregate(
