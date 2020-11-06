@@ -624,7 +624,7 @@ class Analyzer(
         case a @ Aggregate(Seq(r @ Rollup(_)), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(r.groupingSets, r.groupByExprs))
-        case a @ Aggregate(Seq(gs @ GroupingSetsV2(_)), _, _) =>
+        case a @ Aggregate(Seq(gs @ GroupingSetsV2(_, _)), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
         case g: GroupingSets =>
@@ -648,7 +648,7 @@ class Analyzer(
             constructAggregate(
               rollupExprs(groupingSets),
               r.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets)), aggregateExpressions, child) =>
+          case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets, _)), aggregateExpressions, child) =>
             constructAggregate(
               groupingSets, gs.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
@@ -683,7 +683,7 @@ class Analyzer(
           if agg.childrenResolved && (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(
-      _, agg @ Aggregate(Seq(gs @ GroupingSetsV2(_)), aggregateExpressions, _))
+      _, agg @ Aggregate(Seq(gs @ GroupingSetsV2(_, _)), aggregateExpressions, _))
         if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(_, g: GroupingSets)
@@ -699,7 +699,7 @@ class Analyzer(
       case Aggregate(Seq(r @ Rollup(groupingSets)), aggregateExpressions, child)
         if (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(rollupExprs(groupingSets), r.groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets)), aggregateExpressions, child)
+      case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets, _)), aggregateExpressions, child)
         if (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         constructAggregate(groupingSets, gs.groupByExprs, aggregateExpressions, child)
       // Ensure all the expressions have been resolved.
@@ -1391,8 +1391,9 @@ class Analyzer(
             c.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))))
           case r @ Rollup(groupingSets) =>
             r.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))))
-          case gs @ GroupingSetsV2(groupingSets) =>
-            gs.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))))
+          case gs @ GroupingSetsV2(groupingSets, groupByExpressions) =>
+            gs.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))),
+              groupByExpressions = groupByExpressions.map(innerResolve(_, isTopLevel = false)))
           case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
         }
       }
@@ -1504,10 +1505,13 @@ class Analyzer(
               r.copy(groupingSets =
                 groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
                   .map(trimTopLevelGetStructFieldAlias)))
-            case gs @ GroupingSetsV2(groupingSets) =>
+            case gs @ GroupingSetsV2(groupingSets, groupByExpressions) =>
               gs.copy(groupingSets =
                 groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
-                  .map(trimTopLevelGetStructFieldAlias)))
+                  .map(trimTopLevelGetStructFieldAlias)),
+                groupByExpressions =
+                  groupByExpressions.map(resolveExpressionTopDown(_, a, trimAlias = true))
+                    .map(trimTopLevelGetStructFieldAlias))
             case e =>
               trimTopLevelGetStructFieldAlias(resolveExpressionTopDown(e, a, trimAlias = true))
           }
@@ -1856,9 +1860,10 @@ class Analyzer(
           case r @ Rollup(groupingSets) =>
             r.copy(groupingSets =
               groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
-          case gs @ GroupingSetsV2(groupingSets) =>
-            gs.copy(groupingSets =
-              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
+          case gs @ GroupingSetsV2(groupingSets, groupByExpressions) =>
+            gs.copy(
+              groupingSets = groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
+              groupByExpressions = mayResolveAttrByAggregateExprs(groupByExpressions, aggs, child))
           case e => e
         }
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(resolvedGroups, aggs, child))
@@ -2088,9 +2093,10 @@ class Analyzer(
           case r @ Rollup(groupingSets) =>
             r.copy(groupingSets =
               groupingSets.map(_.map(_.transformDown(resolveFunction))))
-          case gs @ GroupingSetsV2(groupingSets) =>
-            gs.copy(groupingSets =
-              groupingSets.map(_.map(_.transformDown(resolveFunction))))
+          case gs @ GroupingSetsV2(groupingSets, groupByExpressions) =>
+            gs.copy(
+              groupingSets = groupingSets.map(_.map(_.transformDown(resolveFunction))),
+              groupByExpressions = groupByExpressions.map(_.transformDown(resolveFunction)))
           case e => e
         }
         a.copy(groupingExpressions = newGroups) transformExpressions resolveFunction
