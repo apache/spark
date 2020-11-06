@@ -134,7 +134,7 @@ class WorkerTests(ReusedPySparkTestCase):
         t.daemon = True
         t.start()
         t.join(5)
-        self.assertTrue(not t.isAlive())
+        self.assertTrue(not t.is_alive())
         self.assertEqual(100000, rdd.count())
 
     def test_with_different_versions_of_python(self):
