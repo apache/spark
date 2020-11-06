@@ -618,12 +618,15 @@ class Analyzer(
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(c @ Cube(groupingSets)), _, _) =>
-          a.copy(groupingExpressions = c.groupByExprs)
-        case a @ Aggregate(Seq(r @ Rollup(groupingSets)), _, _) =>
-          a.copy(groupingExpressions = r.groupByExprs)
+        case a @ Aggregate(Seq(c @ Cube(_)), _, _) =>
+          a.copy(groupingExpressions =
+            getFinalGroupByExpressions(c.groupingSets, c.groupByExprs))
+        case a @ Aggregate(Seq(r @ Rollup(_)), _, _) =>
+          a.copy(groupingExpressions =
+            getFinalGroupByExpressions(r.groupingSets, r.groupByExprs))
         case a @ Aggregate(Seq(gs @ GroupingSetsV2(_)), _, _) =>
-          a.copy(groupingExpressions = gs.groupByExprs)
+          a.copy(groupingExpressions =
+            getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
         case g: GroupingSets =>
           Aggregate(
             getFinalGroupByExpressions(g.selectedGroupByExprs, g.groupByExprs),
@@ -639,12 +642,13 @@ class Analyzer(
         val newChild = h.child match {
           case Aggregate(Seq(c @ Cube(groupingSets)), aggregateExpressions, child) =>
             constructAggregate(
-              cubeExprs(groupingSets), c.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+              cubeExprs(groupingSets),
+              c.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case Aggregate(Seq(r @ Rollup(groupingSets)), aggregateExpressions, child) =>
             constructAggregate(
-              rollupExprs(groupingSets), r.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets)),
-          aggregateExpressions, child) =>
+              rollupExprs(groupingSets),
+              r.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+          case Aggregate(Seq(gs @ GroupingSetsV2(groupingSets)), aggregateExpressions, child) =>
             constructAggregate(
               groupingSets, gs.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
           case x: GroupingSets =>
@@ -1491,7 +1495,22 @@ class Analyzer(
         }
 
         val resolvedGroupingExprs = a.groupingExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+          .map {
+            case c @ Cube(groupingSets) =>
+              c.copy(groupingSets =
+                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
+                  .map(trimTopLevelGetStructFieldAlias)))
+            case r @ Rollup(groupingSets) =>
+              r.copy(groupingSets =
+                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
+                  .map(trimTopLevelGetStructFieldAlias)))
+            case gs @ GroupingSetsV2(groupingSets) =>
+              gs.copy(groupingSets =
+                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
+                  .map(trimTopLevelGetStructFieldAlias)))
+            case e =>
+              trimTopLevelGetStructFieldAlias(resolveExpressionTopDown(e, a, trimAlias = true))
+          }
           .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = a.aggregateExpressions
@@ -1830,7 +1849,19 @@ class Analyzer(
       case agg @ Aggregate(groups, aggs, child)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
-        agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
+        val resolvedGroups = groups.map {
+          case c @ Cube(groupingSets) =>
+            c.copy(groupingSets =
+              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
+          case r @ Rollup(groupingSets) =>
+            r.copy(groupingSets =
+              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
+          case gs @ GroupingSetsV2(groupingSets) =>
+            gs.copy(groupingSets =
+              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
+          case e => e
+        }
+        agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(resolvedGroups, aggs, child))
 
       case gs @ GroupingSets(selectedGroups, groups, child, aggs)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
@@ -1989,65 +2020,83 @@ class Analyzer(
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
+
+    def resolveFunction(): PartialFunction[Expression, Expression] = {
+      case u if !u.childrenResolved => u // Skip until children are resolved.
+      case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
+        withPosition(u) {
+          Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
+        }
+      case u@UnresolvedGenerator(name, children) =>
+        withPosition(u) {
+          v1SessionCatalog.lookupFunction(name, children) match {
+            case generator: Generator => generator
+            case other =>
+              failAnalysis(s"$name is expected to be a generator. However, " +
+                s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
+          }
+        }
+      case u@UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
+        withPosition(u) {
+          v1SessionCatalog.lookupFunction(funcId, arguments) match {
+            // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+            // the context of a Window clause. They do not need to be wrapped in an
+            // AggregateExpression.
+            case wf: AggregateWindowFunction =>
+              if (isDistinct || filter.isDefined) {
+                failAnalysis("DISTINCT or FILTER specified, " +
+                  s"but ${wf.prettyName} is not an aggregate function")
+              } else {
+                wf
+              }
+            // We get an aggregate function, we need to wrap it in an AggregateExpression.
+            case agg: AggregateFunction =>
+              if (filter.isDefined && !filter.get.deterministic) {
+                failAnalysis("FILTER expression is non-deterministic, " +
+                  "it cannot be used in aggregate functions")
+              }
+              AggregateExpression(agg, Complete, isDistinct, filter)
+            // This function is not an aggregate function, just return the resolved one.
+            case other if (isDistinct || filter.isDefined) =>
+              failAnalysis("DISTINCT or FILTER specified, " +
+                s"but ${other.prettyName} is not an aggregate function")
+            case e: String2TrimExpression if arguments.size == 2 =>
+              if (trimWarningEnabled.get) {
+                log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                  " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+                  " instead.")
+                trimWarningEnabled.set(false)
+              }
+              e
+            case other =>
+              other
+          }
+        }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Resolve functions with concrete relations from v2 catalog.
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
-      case q: LogicalPlan =>
-        q transformExpressions {
-          case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-            withPosition(u) {
-              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
-            }
-          case u @ UnresolvedGenerator(name, children) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(name, children) match {
-                case generator: Generator => generator
-                case other =>
-                  failAnalysis(s"$name is expected to be a generator. However, " +
-                    s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
-              }
-            }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, arguments) match {
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    failAnalysis("DISTINCT or FILTER specified, " +
-                      s"but ${wf.prettyName} is not an aggregate function")
-                  } else {
-                    wf
-                  }
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction =>
-                  if (filter.isDefined && !filter.get.deterministic) {
-                    failAnalysis("FILTER expression is non-deterministic, " +
-                      "it cannot be used in aggregate functions")
-                  }
-                  AggregateExpression(agg, Complete, isDistinct, filter)
-                // This function is not an aggregate function, just return the resolved one.
-                case other if (isDistinct || filter.isDefined) =>
-                  failAnalysis("DISTINCT or FILTER specified, " +
-                    s"but ${other.prettyName} is not an aggregate function")
-                case e: String2TrimExpression if arguments.size == 2 =>
-                  if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-                      " instead.")
-                    trimWarningEnabled.set(false)
-                  }
-                  e
-                case other =>
-                  other
-              }
-            }
+      case a: Aggregate =>
+        val newGroups = a.groupingExpressions.map {
+          case c @ Cube(groupingSets) =>
+            c.copy(groupingSets =
+              groupingSets.map(_.map(_.transformDown(resolveFunction))))
+          case r @ Rollup(groupingSets) =>
+            r.copy(groupingSets =
+              groupingSets.map(_.map(_.transformDown(resolveFunction))))
+          case gs @ GroupingSetsV2(groupingSets) =>
+            gs.copy(groupingSets =
+              groupingSets.map(_.map(_.transformDown(resolveFunction))))
+          case e => e
         }
+        a.copy(groupingExpressions = newGroups) transformExpressions resolveFunction
+
+      case q: LogicalPlan =>
+        q transformExpressions resolveFunction
     }
   }
 
