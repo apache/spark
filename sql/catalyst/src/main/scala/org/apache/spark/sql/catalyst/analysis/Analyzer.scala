@@ -672,12 +672,10 @@ class Analyzer(
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(c @ Cube(_)), aggregateExpressions, _))
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(c @ Cube(_)), aggregateExpressions, _))
           if agg.childrenResolved && (c.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(
-          _, agg @ Aggregate(Seq(r @ Rollup(_)), aggregateExpressions, _))
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(r @ Rollup(_)), aggregateExpressions, _))
           if agg.childrenResolved && (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(
