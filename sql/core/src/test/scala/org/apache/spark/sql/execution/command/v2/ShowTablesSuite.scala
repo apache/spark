@@ -53,13 +53,48 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   }
 
   test("ShowTables: using v2 catalog") {
-    spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) USING foo")
-    spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) USING foo")
+    withTable(s"$catalog.db.table_name") {
+      spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) USING foo")
+      runShowTablesSql(s"SHOW TABLES FROM $catalog.db", Seq(Row("db", "table_name")))
+    }
 
-    runShowTablesSql(s"SHOW TABLES FROM $catalog.db", Seq(Row("db", "table_name")))
+    withTable(s"$catalog.n1.n2.db") {
+      spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) USING foo")
+      runShowTablesSql(
+        s"SHOW TABLES FROM $catalog.n1.n2.db",
+        Seq(Row("n1.n2.db", "table_name")))
+    }
+  }
 
-    runShowTablesSql(
-      s"SHOW TABLES FROM $catalog.n1.n2.db",
-      Seq(Row("n1.n2.db", "table_name")))
+  test("ShowTables: using v2 catalog with a pattern") {
+    withTable(
+      s"$catalog.db.table",
+      s"$catalog.db.table_name_1",
+      s"$catalog.db.table_name_2",
+      s"$catalog.db2.table_name_2") {
+      spark.sql(s"CREATE TABLE $catalog.db.table (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.db.table_name_1 (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.db.table_name_2 (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.db2.table_name_2 (id bigint, data string) USING foo")
+
+      runShowTablesSql(
+        s"SHOW TABLES FROM $catalog.db",
+        Seq(
+          Row("db", "table"),
+          Row("db", "table_name_1"),
+          Row("db", "table_name_2")))
+
+      runShowTablesSql(
+        s"SHOW TABLES FROM $catalog.db LIKE '*name*'",
+        Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
+
+      runShowTablesSql(
+        s"SHOW TABLES FROM $catalog.db LIKE '*2'",
+        Seq(Row("db", "table_name_2")))
+    }
+  }
+
+  test("ShowTables: using v2 catalog, namespace doesn't exist") {
+    runShowTablesSql(s"SHOW TABLES FROM $catalog.unknown", Seq())
   }
 }
