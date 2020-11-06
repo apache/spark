@@ -48,7 +48,7 @@ private[sql] class AvroDeserializer(
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
-  def this(rootAvroType: Schema, rootCatalystType: DataType) {
+  def this(rootAvroType: Schema, rootCatalystType: DataType) = {
     this(
       rootAvroType,
       rootCatalystType,
