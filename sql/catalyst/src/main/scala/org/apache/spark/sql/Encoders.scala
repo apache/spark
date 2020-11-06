@@ -146,7 +146,8 @@ object Encoders {
    *  - String
    *  - java.math.BigDecimal, java.math.BigInteger
    *  - time related: java.sql.Date, java.sql.Timestamp, java.time.LocalDate, java.time.Instant
-   *  - collection types: only array and java.util.List currently, map support is in progress
+   *  - collection types: array, java.util.List, and map
+   *  - map is only available since version 2.1.0
    *  - nested java bean.
    *
    * @since 1.6.0
