@@ -74,10 +74,14 @@ class EquivalentExpressions {
     var exprSetForAll = ExpressionSet()
 
     addExprTree(exprs.head, (expr: Expression) => {
-      if (exprSetForAll.contains(expr)) {
-        true
+      if (expr.deterministic) {
+        if (exprSetForAll.contains(expr)) {
+          true
+        } else {
+          exprSetForAll += expr
+          false
+        }
       } else {
-        exprSetForAll += expr
         false
       }
     })
@@ -85,10 +89,14 @@ class EquivalentExpressions {
     exprs.tail.foreach { expr =>
       var exprSet = ExpressionSet()
       addExprTree(expr, (expr: Expression) => {
-        if (exprSet.contains(expr)) {
-          true
+        if (expr.deterministic) {
+          if (exprSet.contains(expr)) {
+            true
+          } else {
+            exprSet += expr
+            false
+          }
         } else {
-          exprSet += expr
           false
         }
       })
@@ -96,6 +104,18 @@ class EquivalentExpressions {
     }
 
     exprSetForAll.foreach(addFunc)
+  }
+
+  // For some special expressions we cannot just recurse into all of its children, but we can
+  // recursively add the common expressions shared between all of its children.
+  def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
+    case i: If => Seq(Seq(i.trueValue, i.falseValue))
+    case c: CaseWhen =>
+      val conditions = c.branches.tail.map(_._1)
+      val values = c.branches.map(_._2) ++ c.elseValue
+      Seq(conditions, values)
+    case c: Coalesce => Seq(c.children.tail)
+    case _ => Nil
   }
 
   /**
@@ -131,21 +151,9 @@ class EquivalentExpressions {
       case other => other.children
     }
 
-    // For some special expressions we cannot just recurse into all of its children, but we can
-    // recursively add the common expressions shared between all of its children.
-    def commonChildrenToRecurse: Seq[Seq[Expression]] = expr match {
-      case i: If => Seq(Seq(i.trueValue, i.falseValue))
-      case c: CaseWhen =>
-        val conditions = c.branches.tail.map(_._1)
-        val values = c.branches.map(_._2) ++ c.elseValue
-        Seq(conditions, values)
-      case c: Coalesce => Seq(c.children.tail)
-      case _ => Nil
-    }
-
     if (!skip && !addFunc(expr)) {
       childrenToRecurse.foreach(addExprTree(_, addFunc))
-      commonChildrenToRecurse.filter(_.nonEmpty).foreach(addCommonExprs(_, addFunc))
+      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(addCommonExprs(_, addFunc))
     }
   }
 

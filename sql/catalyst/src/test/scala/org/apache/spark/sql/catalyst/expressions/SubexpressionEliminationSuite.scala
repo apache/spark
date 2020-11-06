@@ -211,10 +211,11 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     val equivalence2 = new EquivalentExpressions
     equivalence2.addExprTree(caseWhenExpr2)
 
-    // `add2` is repeatedly in all branch values, and first predicate.
+    // `add1` is repeatedly in all branch values, and first predicate.
     assert(equivalence2.getAllEquivalentExprs.count(_.size == 2) == 1)
     assert(equivalence2.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add1, add1))
 
+    // Negative case. `add1` or `add2` is not commonly used in all predicates/branch values.
     val conditions3 = (GreaterThan(add1, Literal(3)), add2) ::
       (GreaterThan(add2, Literal(4)), add1) ::
       (GreaterThan(add2, Literal(5)), add1) :: Nil
@@ -240,6 +241,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     assert(equivalence1.getAllEquivalentExprs.count(_.size == 2) == 1)
     assert(equivalence1.getAllEquivalentExprs.filter(_.size == 2).head == Seq(add2, add2))
 
+    // Negative case. `add1` and `add2` both are not used in all branches.
     val conditions2 = GreaterThan(add1, Literal(3)) ::
       GreaterThan(add2, Literal(4)) ::
       GreaterThan(add2, Literal(5)) :: Nil
