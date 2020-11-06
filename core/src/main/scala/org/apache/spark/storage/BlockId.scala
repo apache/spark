@@ -88,6 +88,11 @@ case class ShufflePushBlockId(shuffleId: Int, mapIndex: Int, reduceId: Int) exte
 }
 
 @DeveloperApi
+case class ShufflePushBlockId(shuffleId: Int, mapIndex: Integer, reduceId: Int) extends BlockId {
+  override def name: String = "shuffle_" + shuffleId + "_" + mapIndex + "_" + reduceId
+}
+
+@DeveloperApi
 case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }
