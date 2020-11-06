@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, TimestampType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class FilterPushdownSuite extends PlanTest {
@@ -1206,6 +1206,36 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
+  }
+
+
+  test("push down predicate through expand") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query =
+      Aggregate(
+        Seq('a, 'b),
+        Seq(sum('c).as("sum")),
+        Filter('a > 1,
+          Expand(
+            Seq(
+              Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
+              Seq('a, 'b, 'c, 'a, 2)),
+            Seq('a, 'b, 'c),
+            input))).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      Aggregate(
+        Seq('a, 'b),
+        Seq(sum('c).as("sum")),
+        Expand(
+          Seq(
+            Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
+            Seq('a, 'b, 'c, 'a, 2)),
+          Seq('a, 'b, 'c),
+          Filter('a > 1, input))).analyze
+
+    comparePlans(optimized, expected)
   }
 
   test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
