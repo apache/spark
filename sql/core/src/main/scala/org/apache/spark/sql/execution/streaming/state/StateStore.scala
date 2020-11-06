@@ -36,10 +36,14 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
- * version of state data, and such instances are created through a [[StateStoreProvider]].
+ * Base trait for a versioned key-value store which provides read operations. Each instance of a
+ * `ReadStateStore` represents a specific version of state data, and such instances are created
+ * through a [[StateStoreProvider]].
+ *
+ * `abort` method will be called when the task is completed - please clean up the resources in
+ * the method.
  */
-trait StateStore {
+trait ReadStateStore {
 
   /** Unique identifier of the store */
   def id: StateStoreId
@@ -52,17 +56,6 @@ trait StateStore {
    * @return a non-null row if the key exists in the store, otherwise null.
    */
   def get(key: UnsafeRow): UnsafeRow
-
-  /**
-   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
-   * the params can be reused, and must make copies of the data as needed for persistence.
-   */
-  def put(key: UnsafeRow, value: UnsafeRow): Unit
-
-  /**
-   * Remove a single non-null key.
-   */
-  def remove(key: UnsafeRow): Unit
 
   /**
    * Get key value pairs with optional approximate `start` and `end` extents.
@@ -81,6 +74,40 @@ trait StateStore {
     iterator()
   }
 
+  /** Return an iterator containing all the key-value pairs in the StateStore. */
+  def iterator(): Iterator[UnsafeRowPair]
+
+  /**
+   * Clean up the resource.
+   *
+   * The method name is to respect backward compatibility on [[StateStore]].
+   */
+  def abort(): Unit
+}
+
+/**
+ * Base trait for a versioned key-value store which provides both read and write operations. Each
+ * instance of a `StateStore` represents a specific version of state data, and such instances are
+ * created through a [[StateStoreProvider]].
+ *
+ * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds
+ * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
+ * Implementation should deal with resource cleanup in both methods, and also need to guard with
+ * double resource cleanup.
+ */
+trait StateStore extends ReadStateStore {
+
+  /**
+   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
+   * the params can be reused, and must make copies of the data as needed for persistence.
+   */
+  def put(key: UnsafeRow, value: UnsafeRow): Unit
+
+  /**
+   * Remove a single non-null key.
+   */
+  def remove(key: UnsafeRow): Unit
+
   /**
    * Commit all the updates that have been made to the store, and return the new version.
    * Implementations should ensure that no more updates (puts, removes) can be after a commit in
@@ -92,13 +119,13 @@ trait StateStore {
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
-  def abort(): Unit
+  override def abort(): Unit
 
   /**
    * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
    */
-  def iterator(): Iterator[UnsafeRowPair]
+  override def iterator(): Iterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -107,6 +134,19 @@ trait StateStore {
    * Whether all updates have been committed
    */
   def hasCommitted: Boolean
+}
+
+/** Wraps the instance of StateStore to make the instance read-only. */
+class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
+  override def id: StateStoreId = store.id
+
+  override def version: Long = store.version
+
+  override def get(key: UnsafeRow): UnsafeRow = store.get(key)
+
+  override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
+
+  override def abort(): Unit = store.abort()
 }
 
 /**
@@ -205,6 +245,15 @@ trait StateStoreProvider {
 
   /** Return an instance of [[StateStore]] representing state data of the given version */
   def getStore(version: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * By default it will return the same instance as getStore(version) but wrapped to prevent
+   * modification. Providers can override and return optimized version of [[ReadStateStore]]
+   * based on the fact the instance will be only used for reading.
+   */
+  def getReadStore(version: Long): ReadStateStore =
+    new WrappedReadStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -379,6 +428,21 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
 
+  /** Get or create a read-only store associated with the id. */
+  def getReadOnly(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      version: Long,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): ReadStateStore = {
+    require(version >= 0)
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      indexOrdinal, storeConf, hadoopConf)
+    storeProvider.getReadStore(version)
+  }
+
   /** Get or create a store associated with the id. */
   def get(
       storeProviderId: StateStoreProviderId,
@@ -389,7 +453,19 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     require(version >= 0)
-    val storeProvider = loadedProviders.synchronized {
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      indexOrdinal, storeConf, hadoopConf)
+    storeProvider.getStore(version)
+  }
+
+  private def getStateStoreProvider(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStoreProvider = {
+    loadedProviders.synchronized {
       startMaintenanceIfNeeded()
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
@@ -399,7 +475,6 @@ object StateStore extends Logging {
       reportActiveStoreInstance(storeProviderId)
       provider
     }
-    storeProvider.getStore(version)
   }
 
   /** Unload a state store provider */

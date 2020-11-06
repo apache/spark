@@ -136,8 +136,9 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: FrameLessOffsetWindowFunction => collect("FRAME_LESS_OFFSET", frame, e, f)
-            case f: OffsetWindowSpec if !f.ignoreNulls &&
+            case f: FrameLessOffsetWindowFunction =>
+              collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
+            case f: OffsetWindowFunction if !f.ignoreNulls &&
               frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
@@ -184,8 +185,8 @@ trait WindowExecBase extends UnaryExecNode {
               new FrameLessOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
@@ -195,8 +196,8 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
@@ -207,8 +208,8 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),

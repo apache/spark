@@ -80,7 +80,7 @@ object WindowFunctionFrame {
 abstract class OffsetWindowFunctionFrameBase(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowSpec],
+    expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
@@ -144,7 +144,7 @@ abstract class OffsetWindowFunctionFrameBase(
 class FrameLessOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowSpec],
+    expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
@@ -187,12 +187,13 @@ class FrameLessOffsetWindowFunctionFrame(
 class UnboundedOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowSpec],
+    expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+  assert(offset > 0)
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -230,12 +231,13 @@ class UnboundedOffsetWindowFunctionFrame(
 class UnboundedPrecedingOffsetWindowFunctionFrame(
     target: InternalRow,
     ordinal: Int,
-    expressions: Array[OffsetWindowSpec],
+    expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+  assert(offset > 0)
 
   var selectedRow: UnsafeRow = null
 
