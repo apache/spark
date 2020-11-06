@@ -130,7 +130,8 @@ class JDBCTableCatalog extends TableCatalog with Logging {
           case "provider" =>
           case "owner" => // owner is ignored. It is default to current user name.
           case "location" =>
-            throw new AnalysisException("Cannot create JDBC table with property location.")
+            throw new AnalysisException("CREATE TABLE ... LOCATION ... is not supported in" +
+              " JDBC catalog.")
           case _ => tableProperties = tableProperties + " " + s"$k $v"
         }
       }
