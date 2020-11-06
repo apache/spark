@@ -2024,25 +2024,28 @@ package object config {
       .doubleConf
       .createWithDefault(5)
 
-  private[spark] val PUSH_BASED_SHUFFLE_PUSHER_THREADS =
-    ConfigBuilder("spark.shuffle.push.based.pusherThreads")
+  private[spark] val PUSH_SHUFFLE_NUM_PUSH_THREADS =
+    ConfigBuilder("spark.shuffle.push.numPushThreads")
       .doc("Specify the number of threads in the block pusher pool. These threads assist  " +
         "in creating connections and pushing blocks to remote shuffle services when push based " +
         "shuffle is enabled. By default, the threadpool size is equal to the number of cores")
+      .version("3.1.0")
       .intConf
       .createOptional
 
-  private[spark] val PUSH_BASED_SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH =
-    ConfigBuilder("spark.shuffle.push.based.maxBlockSizeToPush")
+  private[spark] val PUSH_SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH =
+    ConfigBuilder("spark.shuffle.push.maxBlockSizeToPush")
       .doc("The max size of an individual block to push to the remote shuffle services when push " +
         "based shuffle is enabled. Blocks larger than this threshold are not pushed.")
+      .version("3.1.0")
       .bytesConf(ByteUnit.KiB)
       .createWithDefaultString("800k")
 
-  private[spark] val PUSH_BASED_SHUFFLE_MAX_BLOCK_BATCH_SIZE =
-    ConfigBuilder("spark.shuffle.push.based.maxBlockBatchSize")
+  private[spark] val PUSH_SHUFFLE_MAX_BLOCK_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
       .doc("The max size of a batch of shuffle blocks to be grouped into a single push request " +
         "when push based shuffle is enabled.")
+      .version("3.1.0")
       .bytesConf(ByteUnit.MiB)
       // 2m is also the default value for TransportConf#memoryMapBytes.
       // Having this default to 2m will very likely make each batch of block loaded in memory with

@@ -17,23 +17,24 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
 import java.net.ConnectException
 import java.nio.ByteBuffer
-import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockPushException, BlockStoreClient}
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient}
+import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
@@ -45,10 +46,12 @@ class ShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
   @Mock(answer = RETURNS_SMART_NULLS) private var shuffleClient: BlockStoreClient = _
 
-  private val conf: SparkConf = new SparkConf(loadDefaults = false)
+  private var conf: SparkConf = _
+  private var pushedBlocks = new ArrayBuffer[String]
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    conf = new SparkConf(loadDefaults = false)
     MockitoAnnotations.initMocks(this)
     when(dependency.partitioner).thenReturn(new HashPartitioner(8))
     when(dependency.serializer).thenReturn(new JavaSerializer(conf))
@@ -63,86 +66,169 @@ class ShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(blockManager.blockStoreClient).thenReturn(shuffleClient)
   }
 
-  test("test block push") {
-    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions)
-    val allBlocks = new ArrayBuffer[String]
+  override def afterEach(): Unit = {
+    pushedBlocks.clear()
+    super.afterEach()
+  }
 
+  private def interceptPushedBlocksForSuccess(): Unit = {
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val pushedBlocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        allBlocks ++= pushedBlocks
+        val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        pushedBlocks ++= blocks
         val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
         val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-        (pushedBlocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+        (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
           blockFetchListener.onBlockFetchSuccess(blockId, buffer)
         })
       })
+  }
+
+  test("Basic block push") {
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
+    interceptPushedBlocksForSuccess()
     testWriter.initiateBlockPush(
       blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
-
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
-    assert(allBlocks.length == dependency.partitioner.numPartitions)
+    assert(pushedBlocks.length == dependency.partitioner.numPartitions)
     testWriter.stop(true)
   }
 
-  test("error retries") {
-    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions)
+  test("Large blocks are skipped for push") {
+    conf.set("spark.shuffle.push.maxBlockSizeToPush", "1k")
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array(2, 2, 2, 2, 2, 2, 2, 1100))
+    interceptPushedBlocksForSuccess()
+    testWriter.initiateBlockPush(
+      blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
+    verify(shuffleClient, times(1))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pushedBlocks.length == dependency.partitioner.numPartitions - 1)
+    testWriter.stop(true)
+  }
+
+  test("Number of blocks in flight per address are limited by maxBlocksInFlightPerAddress") {
+    conf.set("spark.reducer.maxBlocksInFlightPerAddress", "1")
+    interceptPushedBlocksForSuccess()
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
+    testWriter.initiateBlockPush(
+      blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
+    verify(shuffleClient, times(8))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pushedBlocks.length == dependency.partitioner.numPartitions)
+    testWriter.stop(true)
+  }
+
+  test("Hit maxBlocksInFlightPerAddress limit so that the blocks are deferred") {
+    conf.set("spark.reducer.maxBlocksInFlightPerAddress", "2")
+    var blockPendingResponse : String = null
+    var listener : BlockFetchingListener = null
+    when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        pushedBlocks ++= blocks
+        val managedBuffers = invocation.getArguments()(3).asInstanceOf[Array[ManagedBuffer]]
+        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        // Expecting 2 blocks
+        assert(blocks.length == 2)
+        if (blockPendingResponse == null) {
+          blockPendingResponse = blocks(1)
+          listener = blockFetchListener
+          // Respond with success only for the first block which will cause all the rest of the
+          // blocks to be deferred
+          blockFetchListener.onBlockFetchSuccess(blocks(0), managedBuffers(0))
+        } else {
+          (blocks, managedBuffers).zipped.foreach((blockId, buffer) => {
+            blockFetchListener.onBlockFetchSuccess(blockId, buffer)
+          })
+        }
+      })
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
+    testWriter.initiateBlockPush(
+      blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
+    verify(shuffleClient, times(1))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pushedBlocks.length == 2)
+    // this will trigger push of deferred blocks
+    listener.onBlockFetchSuccess(blockPendingResponse, mock(classOf[ManagedBuffer]))
+    verify(shuffleClient, times(4))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pushedBlocks.length == 8)
+    testWriter.stop(true)
+  }
+
+  test("Number of shuffle blocks grouped in a single push request is limited by " +
+      "maxBlockBatchSize") {
+    conf.set("spark.shuffle.push.maxBlockBatchSize", "1m")
+    interceptPushedBlocksForSuccess()
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 512 * 1024 })
+    testWriter.initiateBlockPush(
+      blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
+    verify(shuffleClient, times(4))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pushedBlocks.length == dependency.partitioner.numPartitions)
+    testWriter.stop(true)
+  }
+
+  test("Error retries") {
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
     val errorHandler = testWriter.createErrorHandler()
     assert(
       !errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))))
+        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
-      errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))))
+      errorHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
     assert (errorHandler.shouldRetryError(new Throwable()))
   }
 
-  test("error logging") {
-    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions)
+  test("Error logging") {
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
     val errorHandler = testWriter.createErrorHandler()
     assert(
       !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))))
-    assert(
-      !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushException.COULD_NOT_FIND_OPPORTUNITY_MSG_PREFIX))))
+        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
+    assert(!errorHandler.shouldLogError(new RuntimeException(
+      new IllegalArgumentException(
+        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
     assert(errorHandler.shouldLogError(new Throwable()))
   }
 
-  test("connect exceptions removes all the push requests for that host") {
+  test("Connect exceptions removes all the push requests for that host") {
     when(dependency.getMergerLocs).thenReturn(
       Seq(BlockManagerId("client1", "client1", 1), BlockManagerId("client2", "client2", 2)))
     conf.set("spark.reducer.maxBlocksInFlightPerAddress", "2")
-    val executorService = mock(classOf[ExecutorService])
-    when(executorService.submit(any[Runnable]())).thenAnswer(new Answer[Unit] {
-      override def answer(invocationOnMock: InvocationOnMock): Unit = {
-      }
-    })
-    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions)
-    val allBlocks = new ArrayBuffer[String]
-
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val pushedBlocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        allBlocks ++= pushedBlocks
+        val blocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        pushedBlocks ++= blocks
         val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-        pushedBlocks.foreach(blockId => {
+        blocks.foreach(blockId => {
           blockFetchListener.onBlockFetchFailure(
             blockId, new RuntimeException(new ConnectException()))
         })
       })
+    val testWriter = new TestShuffleWriter(dependency.partitioner.numPartitions,
+      Array.fill(dependency.partitioner.numPartitions) { 2 })
     testWriter.initiateBlockPush(
       blockResolver, testWriter.getPartitionLengths(), dependency, 0, 0, conf)
     verify(shuffleClient, times(2))
       .pushBlocks(any(), any(), any(), any(), any())
     // 2 blocks for each merger locations
-    assert(allBlocks.length == 4)
+    assert(pushedBlocks.length == 4)
   }
 
   private class TestShuffleWriter(
-    private val numPartitions: Int) extends ShuffleWriter[Int, Int] {
+    private val numPartitions: Int,
+    private val partitionLengths: Array[Long]) extends ShuffleWriter[Int, Int] {
 
     override protected def submitTask(task: Runnable): Unit = {
      // Making this synchronous for testing
@@ -158,16 +244,18 @@ class ShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     override def getPartitionLengths(): Array[Long] = {
-      Array.fill(numPartitions) {
-        2
-      }
+      partitionLengths
     }
 
-    override protected def sliceReqBufferIntoBlockBuffers(
-      reqBuffer: ManagedBuffer, blockSizes: Seq[Long]) = {
-      Array.fill(blockSizes.length) {
-        new NioManagedBuffer(ByteBuffer.wrap(Array[Byte](2)))
-      }
+    override protected def createRequestBuffer(
+        conf: TransportConf,
+        dataFile: File,
+        offset: Long,
+        length: Long): ManagedBuffer = {
+      val managedBuffer = mock(classOf[ManagedBuffer])
+      val byteBuffer = new Array[Byte](length.toInt)
+      when(managedBuffer.nioByteBuffer()).thenReturn(ByteBuffer.wrap(byteBuffer))
+      managedBuffer
     }
   }
 }

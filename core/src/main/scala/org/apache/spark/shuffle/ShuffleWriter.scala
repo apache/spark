@@ -23,21 +23,22 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+
+import com.google.common.base.Throwables
+
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockPushException, BlockStoreClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient}
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.ShuffleWriter._
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShufflePushBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
-
-import scala.collection.mutable
 
 /**
  * Obtained inside a map task to write out records to the shuffle system, and optionally
@@ -64,20 +65,17 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
 
   def getPartitionLengths(): Array[Long]
 
-  /**
-   * VisbleForTesting
-   */
+  // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
     new BlockPushErrorHandler() {
+      /**
+       * For a connection exception against a particular host, we will stop pushing any
+       * blocks to just that host and continue push blocks to other hosts. So, here push of
+       * all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
+       */
       override def shouldRetryError(t: Throwable): Boolean = {
         // If the block is too late, there is no need to retry it
-        if ((t.getMessage != null &&
-          t.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX)) ||
-          (t.getCause != null && t.getCause.getMessage != null &&
-            t.getCause.getMessage.contains(BlockPushException.TOO_LATE_MESSAGE_SUFFIX))) {
-          return false
-        }
-        true
+        !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)
       }
     }
   }
@@ -106,8 +104,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-    val maxBlockSizeToPush = conf.get(PUSH_BASED_SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
-    val maxBlockBatchSize = conf.get(PUSH_BASED_SHUFFLE_MAX_BLOCK_BATCH_SIZE) * 1024 * 1024
+    val maxBlockSizeToPush = conf.get(PUSH_SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
+    val maxBlockBatchSize = conf.get(PUSH_SHUFFLE_MAX_BLOCK_BATCH_SIZE) * 1024 * 1024
     val mergerLocs = dep.getMergerLocs.map(loc =>
       BlockManagerId("", loc.host, loc.port))
 
@@ -129,7 +127,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
 
   /**
    * Triggers the push. It's a separate method for testing.
-   * Visible for testing
+   * VisibleForTesting
    */
   protected def submitTask(task: Runnable): Unit = {
     if (BLOCK_PUSHER_POOL != null) {
@@ -188,8 +186,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     // Checks if sending a new push request will exceed the max no. of blocks being pushed to a
     // given remote address.
     def isRemoteAddressMaxedOut(remoteAddress: BlockManagerId, request: PushRequest): Boolean = {
-      numBlocksInFlightPerAddress.getOrElse(remoteAddress, 0)
-        + request.blocks.size > maxBlocksInFlightPerAddress
+      (numBlocksInFlightPerAddress.getOrElse(remoteAddress, 0)
+        + request.blocks.size) > maxBlocksInFlightPerAddress
     }
   }
 
@@ -212,9 +210,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     val remainingBlocks = new HashSet[String]() ++= blockIds
 
     val blockPushListener = new BlockFetchingListener {
-
       // Initiating a connection and pushing blocks to a remote shuffle service is always handled by
-      // the block-push-threads. We don't initiate the connection creation in the
+      // the block-push-threads. We should not initiate the connection creation in the
       // blockPushListener callbacks which are invoked by the netty eventloop because:
       // 1. TrasportClient.createConnection(...) blocks for connection to be established and it's
       // recommended to avoid any blocking operations in the eventloop;
@@ -262,10 +259,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
    *                  the shuffle data file for a PushRequest
    * @param blockSizes Array of block sizes
    * @return Array of in memory buffer for each individual block
-   *
-   * VisibleForTesting
    */
-  protected def sliceReqBufferIntoBlockBuffers(
+  private def sliceReqBufferIntoBlockBuffers(
       reqBuffer: ManagedBuffer,
       blockSizes: Seq[Long]): Array[ManagedBuffer] = {
     if (blockSizes.size == 1) {
@@ -298,12 +293,11 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
    * @return true if more blocks should be pushed; false otherwise.
    */
   private def updateStateAndCheckIfPushMore(
-    bytesPushed: Long,
-    address: BlockManagerId,
-    remainingBlocks: HashSet[String],
-    pushResult: PushResult): Boolean = synchronized {
+      bytesPushed: Long,
+      address: BlockManagerId,
+      remainingBlocks: HashSet[String],
+      pushResult: PushResult): Boolean = synchronized {
     remainingBlocks -= pushResult.blockId
-
     bytesInFlight = bytesInFlight - bytesPushed
     numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
     if (remainingBlocks.isEmpty) {
@@ -376,7 +370,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     var blocks = new ArrayBuffer[(BlockId, Long)]
     for (reduceId <- 0 until numPartitions) {
       val blockSize = partitionLengths(reduceId)
-      logDebug(s"Block ${ShuffleBlockId(shuffleId, partitionId, reduceId)} is of size $blockSize")
+      logDebug(
+        s"Block ${ShufflePushBlockId(shuffleId, partitionId, reduceId)} is of size $blockSize")
       // Skip 0-length blocks and blocks that are large enough
       if (blockSize > 0) {
         val mergerId = math.min(math.floor(reduceId * 1.0 / numPartitions * numMergers),
@@ -396,8 +391,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
           if (blocks.nonEmpty) {
             // Convert the previous batch into a PushRequest
             requests += PushRequest(mergerLocs(currentMergerId), blocks,
-              new FileSegmentManagedBuffer(transportConf, dataFile,
-                currentReqOffset, currentReqSize))
+              createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
           }
           // Start a new batch
           currentReqSize = 0
@@ -409,7 +403,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         }
         // Skip blocks exceeding the size limit for push
         if (blockSize <= maxBlockSizeToPush) {
-          blocks += ((ShuffleBlockId(shuffleId, partitionId, reduceId), blockSize))
+          blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSize))
           // Only update currentReqOffset if the current block is the first in the request
           if (currentReqOffset == -1) {
             currentReqOffset = offset
@@ -424,9 +418,18 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     // Add in the final request
     if (blocks.nonEmpty) {
       requests += PushRequest(mergerLocs(currentMergerId), blocks,
-        new FileSegmentManagedBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
+        createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
     }
     requests
+  }
+
+  // Visible for testing
+  protected def createRequestBuffer(
+      conf: TransportConf,
+      dataFile: File,
+      offset: Long,
+      length: Long): ManagedBuffer = {
+    new FileSegmentManagedBuffer(conf, dataFile, offset, length)
   }
 }
 
@@ -452,14 +455,14 @@ private[spark] object ShuffleWriter {
    * @param failure exception if the push was unsuccessful; null otherwise;
    */
   private case class PushResult(
-    blockId: String,
-    failure: Throwable
+      blockId: String,
+      failure: Throwable
   )
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
     if (Utils.isPushBasedShuffleEnabled(conf)) {
-      val numThreads = conf.get(PUSH_BASED_SHUFFLE_PUSHER_THREADS)
+      val numThreads = conf.get(PUSH_SHUFFLE_NUM_PUSH_THREADS)
         .getOrElse(conf.getInt(SparkLauncher.EXECUTOR_CORES, 1))
       ThreadUtils.newDaemonFixedThreadPool(numThreads, "block-push-thread")
     } else {
