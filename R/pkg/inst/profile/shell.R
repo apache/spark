@@ -44,7 +44,7 @@
   cat("\n")
 
   cat("\nSpark context Web UI available at", sparkR.uiWebUrl(), "\n")
-  cat("\nSpark context available as 'sc' (master = ", unlist(sparkR.conf("spark.master")), ", 
-  app id = ",unlist(sparkR.conf("spark.app.id")), ").\n", sep="")
+  cat("\nSpark context available as 'sc' (master = ", unlist(sparkR.conf("spark.master")),
+  ", app id = ",unlist(sparkR.conf("spark.app.id")), ").\n", sep="")
   cat("\nSparkSession available as 'spark'.\n")
 }
