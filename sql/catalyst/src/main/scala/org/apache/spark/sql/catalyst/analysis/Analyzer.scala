@@ -242,6 +242,7 @@ class Analyzer(
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
+      WindowFirstSubstitution ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
@@ -2976,6 +2977,18 @@ class Analyzer(
           }
           udf.copy(inputEncoders = boundEncoders)
       }
+    }
+  }
+
+  /**
+   * Substitute the aggregate expression which uses [[First]] as the aggregate function
+   * in the window with the window function [[NthValue]].
+   */
+  object WindowFirstSubstitution extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), _) =>
+        we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
+      case other => other
     }
   }
 
