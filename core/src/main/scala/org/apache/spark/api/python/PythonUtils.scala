@@ -29,14 +29,9 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 private[spark] object PythonUtils {
   val PY4J_ZIP_NAME = "py4j-0.10.9-src.zip"
 
-  /** Get the PYTHONPATH for PySpark, either from SPARK_HOME, if it is set, or from our JAR */
+  /** Get the PYTHONPATH for PySpark from our JAR */
   def sparkPythonPath: String = {
     val pythonPath = new ArrayBuffer[String]
-    for (sparkHome <- sys.env.get("SPARK_HOME")) {
-      pythonPath += Seq(sparkHome, "python", "lib", "pyspark.zip").mkString(File.separator)
-      pythonPath +=
-        Seq(sparkHome, "python", "lib", PY4J_ZIP_NAME).mkString(File.separator)
-    }
     pythonPath ++= SparkContext.jarOfObject(this)
     pythonPath.mkString(File.pathSeparator)
   }
