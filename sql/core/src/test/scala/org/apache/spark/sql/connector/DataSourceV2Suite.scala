@@ -790,7 +790,7 @@ class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSourc
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     throw new IllegalArgumentException(
       "Dataframe writer should not require inferring table schema the data source supports" +
-        " external eetadata.")
+        " external metadata.")
   }
 }
 
