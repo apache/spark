@@ -39,67 +39,19 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 }
 
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_([col1[, col2 ..]]) - create a multi-dimensional cube using the specified columns
-      so that we can run aggregation on them.
-  """,
-  examples = """
-    Examples:
-      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age);
-        Bob	5	1
-        Alice	2	1
-        Alice	NULL	1
-        NULL	2	1
-        NULL	NULL	2
-        Bob	NULL	1
-        NULL	5	1
-  """,
-  since = "2.0.0")
-// scalastyle:on line.size.limit line.contains.tab
-case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
-
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_([col1[, col2 ..]]) - create a multi-dimensional rollup using the specified columns
-      so that we can run aggregation on them.
-  """,
-  examples = """
-    Examples:
-      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age);
-        Bob	5	1
-        Alice	2	1
-        Alice	NULL	1
-        NULL	NULL	2
-        Bob	NULL	1
-  """,
-  since = "2.0.0")
-// scalastyle:on line.size.limit line.contains.tab
-case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
-
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_(([col1[, col2 ..]])*) - create a multi-dimensional grouping sets using the specified columns
-      so that we can run aggregation on them.
-  """,
-  examples = """
-    Examples:
-      > SELECT name, age, count(*) FROM VALUES (2, 'Alice'), (5, 'Bob') people(age, name) GROUP BY _FUNC_(name, age, (name, age));
-        Bob 5 1
-        Alice 2 1
-        Alice NULL	1
-        NULL  2  2
-        Bob NULL  1
-        NULL  5 1
-  """,
-  since = "2.0.0")
-// scalastyle:on line.size.limit line.contains.tab
-case class GroupingSetsV2(selectedGroupByExprs: Seq[Seq[Expression]]) extends GroupingSet {
+case class Cube(groupingSets: Seq[Seq[Expression]]) extends GroupingSet {
   override def groupByExprs: Seq[Expression] =
-    selectedGroupByExprs.flatMap(_.distinct).distinct
+    groupingSets.flatMap(_.distinct).distinct
+}
+
+case class Rollup(groupingSets: Seq[Seq[Expression]]) extends GroupingSet {
+  override def groupByExprs: Seq[Expression] =
+    groupingSets.flatMap(_.distinct).distinct
+}
+
+case class GroupingSetsV2(groupingSets: Seq[Seq[Expression]]) extends GroupingSet {
+  override def groupByExprs: Seq[Expression] =
+    groupingSets.flatMap(_.distinct).distinct
 }
 
 /**
