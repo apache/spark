@@ -901,8 +901,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
-    if (!legacyCastToStr) code"""$buffer.append("$s");"""
-    else EmptyBlock
+    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
   }
 
   private def writeArrayToStringBuilder(

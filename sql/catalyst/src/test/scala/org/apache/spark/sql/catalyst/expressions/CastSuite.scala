@@ -717,7 +717,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
   }
 
-  test("SPARK-33291 Cast array with null elements to string") {
+  test("SPARK-33291: Cast array with null elements to string") {
     Seq(false, true).foreach { omitNull =>
       withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
         val ret1 = cast(Literal.create(Array(null, null)), StringType)
@@ -784,7 +784,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33291 Cast struct with null elements to string") {
+  test("SPARK-33291: Cast struct with null elements to string") {
     Seq(
       false -> ("{", "}"),
       true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
