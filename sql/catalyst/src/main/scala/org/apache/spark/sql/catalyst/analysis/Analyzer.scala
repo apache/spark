@@ -1463,7 +1463,7 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      // SPARK-31607: Resolve Struct field in groupByExpressions and aggregateExpressions
+      // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
       // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
       // different ExprId. This cause aggregateExpressions can't be replaced by expanded
       // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
@@ -1487,7 +1487,7 @@ class Analyzer(
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
-      // SPARK-31607: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+      // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
       // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
       // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
       // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
