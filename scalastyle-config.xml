@@ -105,6 +105,9 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="true"></check>
 
+  <check level="error" class="org.scalastyle.scalariform.ProcedureDeclarationChecker"
+         enabled="true"/>
+
   <check level="error" class="org.scalastyle.scalariform.IfBraceChecker" enabled="true">
     <parameters>
       <parameter name="singleLineAllowed"><![CDATA[true]]></parameter>
