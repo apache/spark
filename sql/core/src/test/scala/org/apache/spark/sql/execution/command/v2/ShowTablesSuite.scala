@@ -18,14 +18,20 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
   override def catalog: String = "test_catalog_v2"
   override protected def namespaceColumn: String = "namespace"
+  override protected def showSchema: StructType = {
+    new StructType()
+      .add("namespace", StringType, nullable = false)
+      .add("tableName", StringType, nullable = false)
+  }
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
@@ -44,5 +50,16 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
 
   test("show table in a not existing namespace") {
     checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
+  }
+
+  test("ShowTables: using v2 catalog") {
+    spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) USING foo")
+    spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) USING foo")
+
+    runShowTablesSql(s"SHOW TABLES FROM $catalog.db", Seq(Row("db", "table_name")))
+
+    runShowTablesSql(
+      s"SHOW TABLES FROM $catalog.n1.n2.db",
+      Seq(Row("n1.n2.db", "table_name")))
   }
 }

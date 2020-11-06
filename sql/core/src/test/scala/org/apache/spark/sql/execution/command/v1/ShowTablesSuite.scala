@@ -20,9 +20,16 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
   override def catalog: String = "spark_catalog"
+  override protected def showSchema: StructType = {
+    new StructType()
+      .add("database", StringType, nullable = false)
+      .add("tableName", StringType, nullable = false)
+      .add("isTemporary", BooleanType, nullable = false)
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

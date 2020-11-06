@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def catalog: String
@@ -26,6 +27,12 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def namespace: String = "test"
   protected def tableColumn: String = "tableName"
   protected def table: String = "people"
+  protected def showSchema: StructType
+  protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
+    val df = spark.sql(sqlText)
+    assert(df.schema === showSchema)
+    assert(expected === df.collect())
+  }
 
   test("show an existing table") {
     val tables = sql(s"SHOW TABLES IN $catalog.test")

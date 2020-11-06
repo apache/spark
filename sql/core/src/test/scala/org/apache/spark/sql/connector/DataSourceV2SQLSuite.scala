@@ -898,17 +898,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowTables: using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
-
-    runShowTablesSql("SHOW TABLES FROM testcat.db", Seq(Row("db", "table_name")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.n1.n2.db",
-      Seq(Row("n1.n2.db", "table_name")))
-  }
-
   test("ShowTables: using v2 catalog with a pattern") {
     spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
     spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
