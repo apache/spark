@@ -57,7 +57,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 @Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
-    val parentState: Option[SessionState] = None) {
+    val parentState: Option[SessionState],
+    val options: Map[String, String]) {
   type NewBuilder = (SparkSession, Option[SessionState]) => BaseSessionStateBuilder
 
   /**
@@ -97,6 +98,9 @@ abstract class BaseSessionStateBuilder(
     }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sparkContext.conf)
+      options.foreach {
+        case (k, v) => conf.setConfString(k, v)
+      }
       conf
     }
   }
@@ -173,20 +177,20 @@ abstract class BaseSessionStateBuilder(
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new FindDataSourceTable(session) +:
-        new ResolveSQLOnFile(session) +:
-        new FallBackFileSourceV2(session) +:
+      FindDataSourceTable +:
+        ResolveSQLOnFile +:
+        FallBackFileSourceV2 +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
-          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
+          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
         ResolvePartitionSpec +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetectAmbiguousSelfJoin(conf) +:
-        PreprocessTableCreation(session) +:
-        PreprocessTableInsertion(conf) +:
-        DataSourceAnalysis(conf) +:
+      DetectAmbiguousSelfJoin +:
+        PreprocessTableCreation +:
+        PreprocessTableInsertion +:
+        DataSourceAnalysis +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =

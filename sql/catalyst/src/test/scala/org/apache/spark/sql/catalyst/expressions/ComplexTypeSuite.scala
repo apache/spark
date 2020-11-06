@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -143,21 +144,26 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("GetArrayStructFields") {
-    val typeAS = ArrayType(StructType(StructField("a", IntegerType, false) :: Nil))
-    val typeNullAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
-    val arrayStruct = Literal.create(Seq(create_row(1)), typeAS)
-    val nullArrayStruct = Literal.create(null, typeNullAS)
+    // test 4 types: struct field nullability X array element nullability
+    val type1 = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val type2 = ArrayType(StructType(StructField("a", IntegerType, nullable = false) :: Nil))
+    val type3 = ArrayType(StructType(StructField("a", IntegerType) :: Nil), containsNull = false)
+    val type4 = ArrayType(
+      StructType(StructField("a", IntegerType, nullable = false) :: Nil), containsNull = false)
 
-    def getArrayStructFields(expr: Expression, fieldName: String): GetArrayStructFields = {
-      expr.dataType match {
-        case ArrayType(StructType(fields), containsNull) =>
-          val field = fields.find(_.name == fieldName).get
-          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
-      }
+    val input1 = Literal.create(Seq(create_row(1)), type4)
+    val input2 = Literal.create(Seq(create_row(null)), type3)
+    val input3 = Literal.create(Seq(null), type2)
+    val input4 = Literal.create(null, type1)
+
+    def getArrayStructFields(expr: Expression, fieldName: String): Expression = {
+      ExtractValue.apply(expr, Literal.create(fieldName, StringType), _ == _)
     }
 
-    checkEvaluation(getArrayStructFields(arrayStruct, "a"), Seq(1))
-    checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
+    checkEvaluation(getArrayStructFields(input1, "a"), Seq(1))
+    checkEvaluation(getArrayStructFields(input2, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input3, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input4, "a"), null)
   }
 
   test("SPARK-32167: nullability of GetArrayStructFields") {
@@ -465,5 +471,19 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     CreateNamedStruct(Seq("a", "x", "b", 2.0)).genCode(ctx)
     assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-33338: semanticEquals should handle static GetMapValue correctly") {
+    val keys = new Array[UTF8String](1)
+    val values = new Array[UTF8String](1)
+    keys(0) = UTF8String.fromString("key")
+    values(0) = UTF8String.fromString("value")
+
+    val d1 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
+    val d2 = new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
+    val m1 = GetMapValue(Literal.create(d1, MapType(StringType, StringType)), Literal("a"))
+    val m2 = GetMapValue(Literal.create(d2, MapType(StringType, StringType)), Literal("a"))
+
+    assert(m1.semanticEquals(m2))
   }
 }

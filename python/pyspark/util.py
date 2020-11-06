@@ -23,7 +23,7 @@ import traceback
 
 from py4j.clientserver import ClientServer
 
-__all__ = []
+__all__ = []  # type: ignore
 
 
 def print_exec(stream):

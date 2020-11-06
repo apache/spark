@@ -338,10 +338,27 @@ NULL
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
 #'               percent_rank = over(percent_rank(), ws),
-#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws),
+#'               nth_value = over(nth_value(df$mpg, 3), ws))
 #' # Get ntile group id (1-4) for hp
 #' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
+NULL
+
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(select(df, vector_to_array(df$features)))
+#' }
 NULL
 
 #' @details
@@ -806,6 +823,57 @@ setMethod("xxhash64",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg)) {
+                stopifnot(length(errMsg) == 1)
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x)) {
+              stopifnot(length(x) == 1)
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
@@ -1417,8 +1485,10 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{percentile_approx} Returns the approximate percentile value of
-#' numeric column at the given percentage.
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
 #'
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
@@ -2286,7 +2356,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05).
+#' @param rsd maximum relative standard deviation allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approx_count_distinct,Column-method
@@ -3293,6 +3363,37 @@ setMethod("lead",
 
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lead", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
             column(jc)
           })
 
@@ -4380,7 +4481,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4396,7 +4498,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
@@ -4405,5 +4508,42 @@ setMethod("current_timestamp",
           signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
+            column(jc)
+          })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float64", "float32")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
+            )
             column(jc)
           })

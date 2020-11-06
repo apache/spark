@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  * optimization to prune data. During physical planning, redundant project nodes can be removed
  * to simplify the query plan.
  */
-case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
+object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan
@@ -62,7 +62,9 @@ case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
         val keepOrdering = a.aggregateExpressions
           .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
         a.mapChildren(removeProject(_, keepOrdering))
-      case g: GenerateExec => g.mapChildren(removeProject(_, false))
+      // GenerateExec requires column ordering since it binds input rows directly with its
+      // requiredChildOutput without using child's output schema.
+      case g: GenerateExec => g.mapChildren(removeProject(_, true))
       // JoinExec ordering requirement will inherit from its parent. If there is no ProjectExec in
       // its ancestors, JoinExec should require output columns to be ordered.
       case o => o.mapChildren(removeProject(_, requireOrdering))

@@ -27,8 +27,8 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
-import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -524,7 +524,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
 
-    // Stage 0 becomes unschedulable due to blacklisting
+    // Stage 0 becomes unschedulable due to excludeOnFailure
     post(SparkListenerUnschedulableTaskSetAdded(0, 0))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
@@ -580,7 +580,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskEnd(0, 0, null, Success, t2Info, new ExecutorMetrics, null))
     post(SparkListenerStageCompleted(createStageInfo(0, 2)))
 
-    // Stage 1 and 2 becomes unschedulable now due to blacklisting
+    // Stage 1 and 2 becomes unschedulable now due to excludeOnFailure
     post(SparkListenerUnschedulableTaskSetAdded(1, 0))
     post(SparkListenerUnschedulableTaskSetAdded(2, 0))
 
@@ -637,7 +637,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     (0 to 3).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString)) }
     (0 to 3).foreach { i => onExecutorRemoved(manager, i.toString) }
 
-    // Now due to blacklisting, the task becomes unschedulable
+    // Now due to executor being excluded, the task becomes unschedulable
     post(SparkListenerUnschedulableTaskSetAdded(0, 0))
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
@@ -1665,10 +1665,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
       .set(config.DYN_ALLOCATION_TESTING, true)
-      // SPARK-22864: effectively disable the allocation schedule by setting the period to a
-      // really long value.
-      .set(TEST_SCHEDULE_INTERVAL, 30000L)
-      .set(WORKER_DECOMMISSION_ENABLED, decommissioningEnabled)
+      // SPARK-22864/SPARK-32287: effectively disable the allocation schedule for the tests so that
+      // we won't result in the race condition between thread "spark-dynamic-executor-allocation"
+      // and thread "pool-1-thread-1-ScalaTest-running".
+      .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
+      .set(DECOMMISSION_ENABLED, decommissioningEnabled)
     sparkConf
   }
 

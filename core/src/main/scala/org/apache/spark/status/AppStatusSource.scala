@@ -59,9 +59,25 @@ private[spark] class AppStatusSource extends Source {
 
   val SKIPPED_TASKS = getCounter("tasks", "skippedTasks")
 
+  // This is the count of how many executors have been blacklisted at the application level,
+  // does not include stage level blacklisting.
+  // this is private but user visible from metrics so just deprecate
+  @deprecated("use excludedExecutors instead", "3.1.0")
   val BLACKLISTED_EXECUTORS = getCounter("tasks", "blackListedExecutors")
 
+  // This is the count of how many executors have been unblacklisted at the application level,
+  // does not include stage level unblacklisting.
+  @deprecated("use unexcludedExecutors instead", "3.1.0")
   val UNBLACKLISTED_EXECUTORS = getCounter("tasks", "unblackListedExecutors")
+
+  // This is the count of how many executors have been excluded at the application level,
+  // does not include stage level exclusion.
+  val EXCLUDED_EXECUTORS = getCounter("tasks", "excludedExecutors")
+
+  // This is the count of how many executors have been unexcluded at the application level,
+  // does not include stage level unexclusion.
+  val UNEXCLUDED_EXECUTORS = getCounter("tasks", "unexcludedExecutors")
+
 }
 
 private[spark] object AppStatusSource {

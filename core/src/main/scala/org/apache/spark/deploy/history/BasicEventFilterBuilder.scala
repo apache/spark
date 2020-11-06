@@ -160,6 +160,8 @@ private[spark] class BasicEventFilter(
     case e: SparkListenerExecutorRemoved => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorBlacklisted => liveExecutors.contains(e.executorId)
     case e: SparkListenerExecutorUnblacklisted => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorExcluded => liveExecutors.contains(e.executorId)
+    case e: SparkListenerExecutorUnexcluded => liveExecutors.contains(e.executorId)
     case e: SparkListenerStageExecutorMetrics => liveExecutors.contains(e.execId)
     case e: SparkListenerBlockManagerAdded => acceptBlockManagerEvent(e.blockManagerId)
     case e: SparkListenerBlockManagerRemoved => acceptBlockManagerEvent(e.blockManagerId)

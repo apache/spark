@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -284,7 +285,7 @@ object ScalaReflection extends ScalaReflection {
 
       // We serialize a `Set` to Catalyst array. When we deserialize a Catalyst array
       // to a `Set`, if there are duplicated elements, the elements will be de-duplicated.
-      case t if isSubtype(t, localTypeOf[Seq[_]]) ||
+      case t if isSubtype(t, localTypeOf[scala.collection.Seq[_]]) ||
           isSubtype(t, localTypeOf[scala.collection.Set[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, elementNullable) = schemaFor(elementType)
@@ -377,6 +378,23 @@ object ScalaReflection extends ScalaReflection {
           expressions.Literal.create(null, ObjectType(cls)),
           newInstance
         )
+
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        // package example
+        // object Foo extends Enumeration {
+        //  type Foo = Value
+        //  val E1, E2 = Value
+        // }
+        // the fullName of tpe is example.Foo.Foo, but we need example.Foo so that
+        // we can call example.Foo.withName to deserialize string to enumeration.
+        val parent = t.asInstanceOf[TypeRef].pre.typeSymbol.asClass
+        val cls = mirror.runtimeClass(parent)
+        StaticInvoke(
+          cls,
+          ObjectType(getClassFromType(t)),
+          "withName",
+          createDeserializerForString(path, false) :: Nil,
+          returnNullable = false)
     }
   }
 
@@ -448,10 +466,9 @@ object ScalaReflection extends ScalaReflection {
       // Since List[_] also belongs to localTypeOf[Product], we put this case before
       // "case t if definedByConstructorParams(t)" to make sure it will match to the
       // case "localTypeOf[Seq[_]]"
-      case t if isSubtype(t, localTypeOf[Seq[_]]) =>
+      case t if isSubtype(t, localTypeOf[scala.collection.Seq[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         toCatalystArray(inputObject, elementType)
-
       case t if isSubtype(t, localTypeOf[Array[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         toCatalystArray(inputObject, elementType)
@@ -561,6 +578,14 @@ object ScalaReflection extends ScalaReflection {
           (fieldName, serializerFor(fieldValue, fieldType, newPath, seenTypeSet + t))
         }
         createSerializerForObject(inputObject, fields)
+
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        createSerializerForString(
+          Invoke(
+            inputObject,
+            "toString",
+            ObjectType(classOf[java.lang.String]),
+            returnNullable = false))
 
       case _ =>
         throw new UnsupportedOperationException(
@@ -686,7 +711,7 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
-      case t if isSubtype(t, localTypeOf[Seq[_]]) =>
+      case t if isSubtype(t, localTypeOf[scala.collection.Seq[_]]) =>
         val TypeRef(_, _, Seq(elementType)) = t
         val Schema(dataType, nullable) = schemaFor(elementType)
         Schema(ArrayType(dataType, containsNull = nullable), nullable = true)
@@ -739,6 +764,8 @@ object ScalaReflection extends ScalaReflection {
             val Schema(dataType, nullable) = schemaFor(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        Schema(StringType, nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }

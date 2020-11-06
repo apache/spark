@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.time.Instant
+
 import io.fabric8.kubernetes.api.model.{DoneablePod, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -27,10 +29,11 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.internal.config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 import org.apache.spark.util.ManualClock
 
@@ -47,11 +50,16 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .endMetadata()
     .build()
 
-  private val conf = new SparkConf().set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
+  private val conf = new SparkConf()
+    .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
+    .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s")
 
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-  private val podCreationTimeout = math.max(podAllocationDelay * 5, 60000L)
+  private val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
+  private val podCreationTimeout = math.max(podAllocationDelay * 5,
+    conf.get(KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT))
+
   private val secMgr = new SecurityManager(conf)
 
   private var waitForExecutorPodsClock: ManualClock = _
@@ -159,6 +167,9 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
       .thenReturn(podOperations)
 
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
     // Target 1 executor, make sure it's requested, even with an empty initial snapshot.
     podsAllocatorUnderTest.setTotalExpectedExecutors(1)
     verify(podOperations).create(podWithAttachedContainerForId(1))
@@ -184,6 +195,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations, never()).delete()
 
     // Scale down to 1. Pending executors (both acknowledged and not) should be deleted.
+    waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
     podsAllocatorUnderTest.setTotalExpectedExecutors(1)
     snapshotsStore.notifySubscribers()
     verify(podOperations, times(4)).create(any())
@@ -202,9 +214,84 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!podsAllocatorUnderTest.isDeleted("4"))
   }
 
-  private def executorPodAnswer(): Answer[SparkPod] =
+  test("SPARK-33099: Respect executor idle timeout configuration") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(5)
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+    verify(podOperations).create(podWithAttachedContainerForId(3))
+    verify(podOperations).create(podWithAttachedContainerForId(4))
+    verify(podOperations).create(podWithAttachedContainerForId(5))
+    verify(podOperations, times(5)).create(any())
+
+    snapshotsStore.updatePod(pendingExecutor(1))
+    snapshotsStore.updatePod(pendingExecutor(2))
+
+    // Newly created executors (both acknowledged and not) are protected by executorIdleTimeout
+    podsAllocatorUnderTest.setTotalExpectedExecutors(0)
+    snapshotsStore.notifySubscribers()
+    verify(podOperations, never()).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2", "3", "4", "5")
+    verify(podOperations, never()).delete()
+
+    // Newly created executors (both acknowledged and not) are cleaned up.
+    waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
+    snapshotsStore.notifySubscribers()
+    verify(podOperations).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2", "3", "4", "5")
+    verify(podOperations).delete()
+  }
+
+  test("SPARK-33262: pod allocator does not stall with pending pods") {
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1"))
+      .thenReturn(labeledPods)
+    when(podOperations
+      .withLabelIn(SPARK_EXECUTOR_ID_LABEL, "2", "3", "4", "5", "6"))
+      .thenReturn(podOperations)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(6)
+    // Initial request of pods
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+    verify(podOperations).create(podWithAttachedContainerForId(3))
+    verify(podOperations).create(podWithAttachedContainerForId(4))
+    verify(podOperations).create(podWithAttachedContainerForId(5))
+    // 4 come up, 1 pending
+    snapshotsStore.updatePod(pendingExecutor(1))
+    snapshotsStore.updatePod(runningExecutor(2))
+    snapshotsStore.updatePod(runningExecutor(3))
+    snapshotsStore.updatePod(runningExecutor(4))
+    snapshotsStore.updatePod(runningExecutor(5))
+    // We move forward one allocation cycle
+    waitForExecutorPodsClock.setTime(podAllocationDelay + 1)
+    snapshotsStore.notifySubscribers()
+    // We request pod 6
+    verify(podOperations).create(podWithAttachedContainerForId(6))
+  }
+
+  private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
     (invocation: InvocationOnMock) => {
       val k8sConf: KubernetesExecutorConf = invocation.getArgument(0)
-      executorPodWithId(k8sConf.executorId.toInt)
+      KubernetesExecutorSpec(executorPodWithId(k8sConf.executorId.toInt), Seq.empty)
   }
 }

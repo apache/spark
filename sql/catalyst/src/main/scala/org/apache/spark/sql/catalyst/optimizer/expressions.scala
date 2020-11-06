@@ -177,7 +177,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenAdd(
     expression: Expression,
     groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Add(l, r) if !groupSet.contains(expr) =>
+    case expr @ Add(l, r, _) if !groupSet.contains(expr) =>
       flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
     case other => other :: Nil
   }
@@ -185,7 +185,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenMultiply(
     expression: Expression,
     groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Multiply(l, r) if !groupSet.contains(expr) =>
+    case expr @ Multiply(l, r, _) if !groupSet.contains(expr) =>
       flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
     case other => other :: Nil
   }
@@ -201,23 +201,24 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // We have to respect aggregate expressions which exists in grouping expressions when plan
       // is an Aggregate operator, otherwise the optimized expression could not be derived from
       // grouping expressions.
+      // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
       val groupingExpressionSet = collectGroupingExpressions(q)
       q transformExpressionsDown {
-      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+      case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
           val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y, f)), c, f)
         } else {
           a
         }
-      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+      case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
           val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y, f)), c, f)
         } else {
           m
         }
@@ -463,6 +464,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(Literal(null, _), _, falseValue) => falseValue
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
+      case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
+      case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
+      case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
+      case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
@@ -620,70 +625,104 @@ object NullPropagation extends Rule[LogicalPlan] {
  */
 object FoldablePropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    var foldableMap = AttributeMap(plan.flatMap {
-      case Project(projectList, _) => projectList.collect {
-        case a: Alias if a.child.foldable => (a.toAttribute, a)
-      }
-      case _ => Nil
-    })
-    val replaceFoldable: PartialFunction[Expression, Expression] = {
-      case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
-    }
+    CleanupAliases(propagateFoldables(plan)._1)
+  }
 
+  private def propagateFoldables(plan: LogicalPlan): (LogicalPlan, AttributeMap[Alias]) = {
+    plan match {
+      case p: Project =>
+        val (newChild, foldableMap) = propagateFoldables(p.child)
+        val newProject =
+          replaceFoldable(p.withNewChildren(Seq(newChild)).asInstanceOf[Project], foldableMap)
+        val newFoldableMap = collectFoldables(newProject.projectList)
+        (newProject, newFoldableMap)
+
+      case a: Aggregate =>
+        val (newChild, foldableMap) = propagateFoldables(a.child)
+        val newAggregate =
+          replaceFoldable(a.withNewChildren(Seq(newChild)).asInstanceOf[Aggregate], foldableMap)
+        val newFoldableMap = collectFoldables(newAggregate.aggregateExpressions)
+        (newAggregate, newFoldableMap)
+
+      // We can not replace the attributes in `Expand.output`. If there are other non-leaf
+      // operators that have the `output` field, we should put them here too.
+      case e: Expand =>
+        val (newChild, foldableMap) = propagateFoldables(e.child)
+        val expandWithNewChildren = e.withNewChildren(Seq(newChild)).asInstanceOf[Expand]
+        val newExpand = if (foldableMap.isEmpty) {
+          expandWithNewChildren
+        } else {
+          val newProjections = expandWithNewChildren.projections.map(_.map(_.transform {
+            case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+          }))
+          if (newProjections == expandWithNewChildren.projections) {
+            expandWithNewChildren
+          } else {
+            expandWithNewChildren.copy(projections = newProjections)
+          }
+        }
+        (newExpand, foldableMap)
+
+      case u: UnaryNode if canPropagateFoldables(u) =>
+        val (newChild, foldableMap) = propagateFoldables(u.child)
+        val newU = replaceFoldable(u.withNewChildren(Seq(newChild)), foldableMap)
+        (newU, foldableMap)
+
+      // Join derives the output attributes from its child while they are actually not the
+      // same attributes. For example, the output of outer join is not always picked from its
+      // children, but can also be null. We should exclude these miss-derived attributes when
+      // propagating the foldable expressions.
+      // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
+      // of outer join.
+      case j: Join =>
+        val (newChildren, foldableMaps) = j.children.map(propagateFoldables).unzip
+        val foldableMap = AttributeMap(
+          foldableMaps.foldLeft(Iterable.empty[(Attribute, Alias)])(_ ++ _.baseMap.values).toSeq)
+        val newJoin =
+          replaceFoldable(j.withNewChildren(newChildren).asInstanceOf[Join], foldableMap)
+        val missDerivedAttrsSet: AttributeSet = AttributeSet(newJoin.joinType match {
+          case _: InnerLike | LeftExistence(_) => Nil
+          case LeftOuter => newJoin.right.output
+          case RightOuter => newJoin.left.output
+          case FullOuter => newJoin.left.output ++ newJoin.right.output
+        })
+        val newFoldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
+          case (attr, _) => missDerivedAttrsSet.contains(attr)
+        }.toSeq)
+        (newJoin, newFoldableMap)
+
+      // For other plans, they are not safe to apply foldable propagation, and they should not
+      // propagate foldable expressions from children.
+      case o =>
+        val newOther = o.mapChildren(propagateFoldables(_)._1)
+        (newOther, AttributeMap.empty)
+    }
+  }
+
+  private def replaceFoldable(plan: LogicalPlan, foldableMap: AttributeMap[Alias]): plan.type = {
     if (foldableMap.isEmpty) {
       plan
     } else {
-      CleanupAliases(plan.transformUp {
-        // We can only propagate foldables for a subset of unary nodes.
-        case u: UnaryNode if foldableMap.nonEmpty && canPropagateFoldables(u) =>
-          u.transformExpressions(replaceFoldable)
-
-        // Join derives the output attributes from its child while they are actually not the
-        // same attributes. For example, the output of outer join is not always picked from its
-        // children, but can also be null. We should exclude these miss-derived attributes when
-        // propagating the foldable expressions.
-        // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
-        // of outer join.
-        case j @ Join(left, right, joinType, _, _) if foldableMap.nonEmpty =>
-          val newJoin = j.transformExpressions(replaceFoldable)
-          val missDerivedAttrsSet: AttributeSet = AttributeSet(joinType match {
-            case _: InnerLike | LeftExistence(_) => Nil
-            case LeftOuter => right.output
-            case RightOuter => left.output
-            case FullOuter => left.output ++ right.output
-          })
-          foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
-            case (attr, _) => missDerivedAttrsSet.contains(attr)
-          }.toSeq)
-          newJoin
-
-        // We can not replace the attributes in `Expand.output`. If there are other non-leaf
-        // operators that have the `output` field, we should put them here too.
-        case expand: Expand if foldableMap.nonEmpty =>
-          expand.copy(projections = expand.projections.map { projection =>
-            projection.map(_.transform(replaceFoldable))
-          })
-
-        // For other plans, they are not safe to apply foldable propagation, and they should not
-        // propagate foldable expressions from children.
-        case other if foldableMap.nonEmpty =>
-          val childrenOutputSet = AttributeSet(other.children.flatMap(_.output))
-          foldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
-            case (attr, _) => childrenOutputSet.contains(attr)
-          }.toSeq)
-          other
-      })
+      plan transformExpressions {
+        case a: AttributeReference if foldableMap.contains(a) => foldableMap(a)
+      }
     }
+  }
+
+  private def collectFoldables(expressions: Seq[NamedExpression]) = {
+    AttributeMap(expressions.collect {
+      case a: Alias if a.child.foldable => (a.toAttribute, a)
+    })
   }
 
   /**
    * List of all [[UnaryNode]]s which allow foldable propagation.
    */
   private def canPropagateFoldables(u: UnaryNode): Boolean = u match {
-    case _: Project => true
+    // Handling `Project` is moved to `propagateFoldables`.
     case _: Filter => true
     case _: SubqueryAlias => true
-    case _: Aggregate => true
+    // Handling `Aggregate` is moved to `propagateFoldables`.
     case _: Window => true
     case _: Sample => true
     case _: GlobalLimit => true

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
+import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -56,17 +55,10 @@ object JdbcUtils extends Logging {
     val driverClass: String = options.driverClass
     () => {
       DriverRegistry.register(driverClass)
-      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
-        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
-        case d if d.getClass.getCanonicalName == driverClass => d
-      }.getOrElse {
-        throw new IllegalStateException(
-          s"Did not find registered driver with class $driverClass")
-      }
-      val connection = ConnectionProvider.create(driver, options).getConnection()
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection = ConnectionProvider.create(driver, options.parameters)
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
-
       connection
     }
   }
@@ -903,11 +895,12 @@ object JdbcUtils extends Logging {
       changes: Seq[TableChange],
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
+    val metaData = conn.getMetaData
     if (changes.length == 1) {
-      executeStatement(conn, options, dialect.alterTable(tableName, changes)(0))
+      executeStatement(conn, options, dialect.alterTable(tableName, changes,
+        metaData.getDatabaseMajorVersion)(0))
     } else {
-      val metadata = conn.getMetaData
-      if (!metadata.supportsTransactions) {
+      if (!metaData.supportsTransactions) {
         throw new SQLFeatureNotSupportedException("The target JDBC server does not support " +
           "transaction and can only support ALTER TABLE with a single action.")
       } else {
@@ -915,7 +908,7 @@ object JdbcUtils extends Logging {
         val statement = conn.createStatement
         try {
           statement.setQueryTimeout(options.queryTimeout)
-          for (sql <- dialect.alterTable(tableName, changes)) {
+          for (sql <- dialect.alterTable(tableName, changes, metaData.getDatabaseMajorVersion)) {
             statement.executeUpdate(sql)
           }
           conn.commit()

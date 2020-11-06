@@ -24,10 +24,10 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
+import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -38,6 +38,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * defined in the Catalyst module.
  */
 class SparkSqlParserSuite extends AnalysisTest {
+  import org.apache.spark.sql.catalyst.dsl.expressions._
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -157,6 +158,15 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
     intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
+  }
+
+  test("SPARK-33118 CREATE TMEPORARY TABLE with LOCATION") {
+    assertEqual("CREATE TEMPORARY TABLE t USING parquet OPTIONS (path '/data/tmp/testspark1')",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+        Map("path" -> "/data/tmp/testspark1")))
+    assertEqual("CREATE TEMPORARY TABLE t USING parquet LOCATION '/data/tmp/testspark1'",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+        Map("path" -> "/data/tmp/testspark1")))
   }
 
   private def createTableUsing(
@@ -330,4 +340,82 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("ADD FILE /path with space/abc.txt", AddFileCommand("/path with space/abc.txt"))
     assertEqual("ADD JAR /path with space/abc.jar", AddJarCommand("/path with space/abc.jar"))
   }
+
+  test("SPARK-32608: script transform with row format delimit") {
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY ','
+        |  COLLECTION ITEMS TERMINATED BY '#'
+        |  MAP KEYS TERMINATED BY '@'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+      """.stripMargin,
+    ScriptTransformation(
+      Seq('a, 'b, 'c),
+      "cat",
+      Seq(AttributeReference("a", StringType)(),
+        AttributeReference("b", StringType)(),
+        AttributeReference("c", StringType)()),
+      UnresolvedRelation(TableIdentifier("testData")),
+      ScriptInputOutputSchema(
+        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+          ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+          ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+          ("TOK_TABLEROWFORMATNULL", "null"),
+          ("TOK_TABLEROWFORMATLINES", "\n")),
+        Seq(("TOK_TABLEROWFORMATFIELD", ","),
+          ("TOK_TABLEROWFORMATCOLLITEMS", "#"),
+          ("TOK_TABLEROWFORMATMAPKEYS", "@"),
+          ("TOK_TABLEROWFORMATNULL", "NULL"),
+          ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
+        List.empty, List.empty, None, None, false)))
+  }
+
+  test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
+    " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
+
+      // test input format TOK_TABLEROWFORMATLINES
+      intercept(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY ','
+             |  LINES TERMINATED BY '@'
+             |  NULL DEFINED AS 'null'
+             |  USING 'cat' AS (value)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |  LINES TERMINATED BY '\n'
+             |  NULL DEFINED AS 'NULL'
+             |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now")
+
+    // test output format TOK_TABLEROWFORMATLINES
+    intercept(
+      s"""
+         |SELECT TRANSFORM(a, b, c, d, e)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY ','
+         |  LINES TERMINATED BY '\n'
+         |  NULL DEFINED AS 'null'
+         |  USING 'cat' AS (value)
+         |  ROW FORMAT DELIMITED
+         |  FIELDS TERMINATED BY '&'
+         |  LINES TERMINATED BY '@'
+         |  NULL DEFINED AS 'NULL'
+         |FROM v
+        """.stripMargin,
+      "LINES TERMINATED BY only supports newline '\\n' right now")
+    }
 }

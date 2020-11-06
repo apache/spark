@@ -96,7 +96,7 @@ case class GenerateExec(
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
-            outputRows.map(joinedRow.withRight)
+            outputRows.toIterator.map(joinedRow.withRight)
           }
         } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output

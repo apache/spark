@@ -423,7 +423,7 @@ package object config {
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
       .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
-        "a migratable shuffle resolver (like sort based shuffe)")
+        "a migratable shuffle resolver (like sort based shuffle)")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -722,74 +722,83 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
-  // Blacklist confs
-  private[spark] val BLACKLIST_ENABLED =
-    ConfigBuilder("spark.blacklist.enabled")
-      .version("2.1.0")
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.enabled")
       .booleanConf
       .createOptional
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
-    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
-      .version("2.1.0")
+    ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
-    ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
-      .version("2.1.0")
+    ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
-    ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
-      .version("2.2.0")
+    ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
-    ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
-      .version("2.1.0")
+    ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
-    ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
-      .version("2.2.0")
+    ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
-    ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
-      .version("2.1.0")
+    ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
 
-  private[spark] val BLACKLIST_TIMEOUT_CONF =
-    ConfigBuilder("spark.blacklist.timeout")
-      .version("2.1.0")
+  private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
+    ConfigBuilder("spark.excludeOnFailure.timeout")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val BLACKLIST_KILL_ENABLED =
-    ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
-      .version("2.2.0")
+  private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.killBlacklistedExecutors")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val BLACKLIST_LEGACY_TIMEOUT_CONF =
-    ConfigBuilder("spark.scheduler.executorTaskBlacklistTime")
+  private[spark] val EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF =
+    ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
-      .version("1.0.0")
+      .version("3.1.0")
+      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val BLACKLIST_FETCH_FAILURE_ENABLED =
-    ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
-      .version("2.3.0")
+  private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
-  // End blacklist confs
 
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
@@ -1415,10 +1424,9 @@ package object config {
 
   private[spark] val SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED =
     ConfigBuilder("spark.shuffle.readHostLocalDisk")
-      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled and external " +
-        s"shuffle `${SHUFFLE_SERVICE_ENABLED.key}` is enabled), shuffle " +
-        "blocks requested from those block managers which are running on the same host are read " +
-        "from the disk directly instead of being fetched as remote blocks over the network.")
+      .doc(s"If enabled (and `${SHUFFLE_USE_OLD_FETCH_PROTOCOL.key}` is disabled, shuffle " +
+        "blocks requested from those block managers which are running on the same host are " +
+        "read from the disk directly instead of being fetched as remote blocks over the network.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -1454,10 +1462,12 @@ package object config {
       .createWithDefaultString("365d")
 
   private[spark] val UNSCHEDULABLE_TASKSET_TIMEOUT =
-    ConfigBuilder("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
+    ConfigBuilder("spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout")
       .doc("The timeout in seconds to wait to acquire a new executor and schedule a task " +
-        "before aborting a TaskSet which is unschedulable because of being completely blacklisted.")
-      .version("2.4.1")
+        "before aborting a TaskSet which is unschedulable because all executors are " +
+        "excluded due to failures.")
+      .version("3.1.0")
+      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
@@ -1865,6 +1875,19 @@ package object config {
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
+
+  private[spark] val DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.decommission.enabled")
+      .doc("When decommission enabled, Spark will try its best to shutdown the executor " +
+        s"gracefully. Spark will try to migrate all the RDD blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key}) and shuffle blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
+        s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
+        s"With decommission enabled, Spark will also decommission an executor instead of " +
+        s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")

@@ -176,7 +176,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param newIdent the new table identifier of the table
    * @throws NoSuchTableException If the table to rename doesn't exist or is a view
    * @throws TableAlreadyExistsException If the new table name already exists or is a view
-   * @throws UnsupportedOperationException If the namespaces of old and new identiers do not
+   * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
    *                                       match (optional)
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)

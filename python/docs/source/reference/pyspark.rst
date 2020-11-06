@@ -39,6 +39,7 @@ Public Classes
     RDDBarrier
     BarrierTaskContext
     BarrierTaskInfo
+    InheritableThread
 
 
 Spark Context APIs
@@ -63,6 +64,7 @@ Spark Context APIs
     SparkContext.defaultParallelism
     SparkContext.dump_profiles
     SparkContext.emptyRDD
+    SparkContext.getCheckpointDir
     SparkContext.getConf
     SparkContext.getLocalProperty
     SparkContext.getOrCreate

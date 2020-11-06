@@ -262,7 +262,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      val (_, _, _, options, _, _) = visitCreateTableClauses(ctx.createTableClauses())
+      val (_, _, _, options, location, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx))
       val schema = Option(ctx.colTypeList()).map(createSchema)
@@ -271,7 +271,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
       val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
+      val optionsWithLocation = location.map(l => options + ("path" -> l)).getOrElse(options)
+      CreateTempViewUsing(table, schema, replace = false, global = false, provider,
+        optionsWithLocation)
     }
   }
 
@@ -654,10 +656,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitRowFormatDelimited(
       ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
-    // Collect the entries if any.
-    def entry(key: String, value: Token): Seq[(String, String)] = {
-      Option(value).toSeq.map(x => key -> string(x))
-    }
     // TODO we need proper support for the NULL format.
     val entries =
       entry("field.delim", ctx.fieldsTerminatedBy) ++
@@ -756,14 +754,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // expects a seq of pairs in which the old parsers' token names are used as keys.
         // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
         // retrieving the key value pairs ourselves.
-        def entry(key: String, value: Token): Seq[(String, String)] = {
-          Option(value).map(t => key -> t.getText).toSeq
-        }
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
-          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs) ++
+          Option(c.linesSeparatedBy).toSeq.map { token =>
+            val value = string(token)
+            validate(
+              value == "\n",
+              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+              c)
+            "TOK_TABLEROWFORMATLINES" -> value
+          }
 
         (entries, None, Seq.empty, None)
 
@@ -783,7 +785,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // Use default (serde) format.
         val name = conf.getConfString("hive.script.serde",
           "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq("field.delim" -> "\t")
+        val props = Seq(
+          "field.delim" -> "\t",
+          "serialization.last.column.takes.rest" -> "true")
         val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
         (Nil, Option(name), props, recordHandler)
     }

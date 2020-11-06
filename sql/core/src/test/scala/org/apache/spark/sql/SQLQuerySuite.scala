@@ -3468,7 +3468,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     // problem before the fix.
     withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
       val cloned = spark.cloneSession()
-      SparkSession.setActiveSession(cloned)
+      SparkSession.setActiveSessionInternal(cloned)
       assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
@@ -3494,6 +3494,108 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df4 = sql("SELECT randn(1L)")
     assert(df4.schema.head.name === "randn(1)")
     checkIfSeedExistsInExplain(df2)
+  }
+
+  test("SPARK-31670: Trim unnecessary Struct field alias in Aggregate/GroupingSets") {
+    withTempView("t") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t(a, b, c) AS
+          |SELECT * FROM VALUES
+          |('A', 1, NAMED_STRUCT('row_id', 1, 'json_string', '{"i": 1}')),
+          |('A', 2, NAMED_STRUCT('row_id', 2, 'json_string', '{"i": 1}')),
+          |('A', 2, NAMED_STRUCT('row_id', 2, 'json_string', '{"i": 2}')),
+          |('B', 1, NAMED_STRUCT('row_id', 3, 'json_string', '{"i": 1}')),
+          |('C', 3, NAMED_STRUCT('row_id', 4, 'json_string', '{"i": 1}'))
+        """.stripMargin)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |""".stripMargin),
+        Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", "{\"i\": 1}", 1) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) :: Row("A", null, 5) ::
+          Row("B", "{\"i\": 1}", 1) :: Row("B", null, 1) ::
+          Row("C", "{\"i\": 1}", 3) :: Row("C", null, 3) ::
+          Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, get_json_object(c.json_string, '$.i'), SUM(b)
+            |FROM t
+            |GROUP BY a, get_json_object(c.json_string, '$.i')
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", "1", 3) :: Row("A", "2", 2) :: Row("A", null, 5) ::
+          Row("B", "1", 1) :: Row("B", null, 1) ::
+          Row("C", "1", 3) :: Row("C", null, 3) ::
+          Row(null, "1", 7) :: Row(null, "2", 2) :: Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string AS json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string as js, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH CUBE
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Row(null, "{\"i\": 1}", 7) :: Row(null, "{\"i\": 2}", 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string as js, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |WITH ROLLUP
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) ::
+          Row(null, null, 9) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, c.json_string, SUM(b)
+            |FROM t
+            |GROUP BY a, c.json_string
+            |GROUPING sets((a),(a, c.json_string))
+            |""".stripMargin),
+        Row("A", null, 5) :: Row("A", "{\"i\": 1}", 3) :: Row("A", "{\"i\": 2}", 2) ::
+          Row("B", null, 1) :: Row("B", "{\"i\": 1}", 1) ::
+          Row("C", null, 3) :: Row("C", "{\"i\": 1}", 3) :: Nil)
+    }
   }
 
   test("SPARK-31761: test byte, short, integer overflow for (Divide) integral type") {
@@ -3581,6 +3683,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       .createOrReplaceTempView("C")
     checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
       "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+  }
+
+  test("SPARK-32788: non-partitioned table scan should not have partition filter") {
+    withTable("t") {
+      spark.range(1).write.saveAsTable("t")
+      checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
+    }
+  }
+
+  test("SPARK-33306: Timezone is needed when cast Date to String") {
+    withTempView("t1", "t2") {
+      spark.sql("select to_date(concat('2000-01-0', id)) as d from range(1, 2)")
+        .createOrReplaceTempView("t1")
+      spark.sql("select concat('2000-01-0', id) as d from range(1, 2)")
+        .createOrReplaceTempView("t2")
+      val result = Date.valueOf("2000-01-01")
+
+      checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      }
+    }
+  }
+
+  test("SPARK-33338: GROUP BY using literal map should not fail") {
+    withTempDir { dir =>
+      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+      Seq(
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+        checkAnswer(sql(statement), Row("v1"))
+      }
+    }
   }
 }
 

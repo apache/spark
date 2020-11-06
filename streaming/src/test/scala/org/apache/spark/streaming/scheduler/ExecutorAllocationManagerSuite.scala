@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
@@ -25,9 +25,8 @@ import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
-import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config.{DECOMMISSION_ENABLED, DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
@@ -56,7 +55,7 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
   def basicTest(decommissioning: Boolean): Unit = {
     // Test that adding batch processing time info to allocation manager
     // causes executors to be requested and killed accordingly
-    conf.set(WORKER_DECOMMISSION_ENABLED, decommissioning)
+    conf.set(DECOMMISSION_ENABLED, decommissioning)
 
     // There is 1 receiver, and exec 1 has been allocated to it
     withAllocationManager(numReceivers = 1, conf = conf) {
@@ -99,15 +98,15 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       /** Verify that a particular executor was scaled down. */
       def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
         if (expectedExec.nonEmpty) {
-          val decomInfo = ExecutorDecommissionInfo("spark scale down", false)
+          val decomInfo = ExecutorDecommissionInfo("spark scale down", None)
           if (decommissioning) {
             verify(allocationClient, times(1)).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true))
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
             verify(allocationClient, never).killExecutor(meq(expectedExec.get))
           } else {
             verify(allocationClient, times(1)).killExecutor(meq(expectedExec.get))
             verify(allocationClient, never).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true))
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
           }
         } else {
           if (decommissioning) {

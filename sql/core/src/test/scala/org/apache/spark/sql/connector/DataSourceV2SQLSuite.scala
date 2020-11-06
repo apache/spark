@@ -171,7 +171,31 @@ class DataSourceV2SQLSuite
       Array("Provider", "foo", ""),
       Array(TableCatalog.PROP_OWNER.capitalize, defaultUser, ""),
       Array("Table Properties", "[bar=baz]", "")))
+  }
 
+  test("Describe column is not supported for v2 catalog") {
+    withTable("testcat.tbl") {
+      spark.sql("CREATE TABLE testcat.tbl (id bigint) USING foo")
+      val ex = intercept[AnalysisException] {
+        spark.sql("DESCRIBE testcat.tbl id")
+      }
+      assert(ex.message.contains("Describing columns is not supported for v2 tables"))
+    }
+  }
+
+  test("SPARK-33004: Describe column should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2 as i")
+        sql("USE testcat.ns")
+        checkAnswer(
+          sql("DESCRIBE t i"),
+          Seq(Row("col_name", "i"),
+            Row("data_type", "int"),
+            Row("comment", "NULL")))
+      }
+    }
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
@@ -723,10 +747,33 @@ class DataSourceV2SQLSuite
   }
 
   test("DropTable: if exists") {
-    intercept[NoSuchTableException] {
-      sql(s"DROP TABLE testcat.db.notbl")
+    val ex = intercept[AnalysisException] {
+      sql("DROP TABLE testcat.db.notbl")
     }
-    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
+    sql("DROP TABLE IF EXISTS testcat.db.notbl")
+  }
+
+  test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        // Check the temporary view 't' exists.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Seq(Row("", "t", true)),
+          expectV2Catalog = false)
+        sql("DROP TABLE t")
+        // Verify that the temporary view 't' is resolved first and dropped.
+        runShowTablesSql(
+          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
+          Nil,
+          expectV2Catalog = false)
+      }
+    }
   }
 
   test("Relation: basic") {
@@ -761,8 +808,9 @@ class DataSourceV2SQLSuite
 
   test("Relation: view text") {
     val t1 = "testcat.ns1.ns2.tbl"
+    val v1 = "view1"
     withTable(t1) {
-      withView("view1") { v1: String =>
+      withView(v1) {
         sql(s"CREATE TABLE $t1 USING foo AS SELECT id, data FROM source")
         sql(s"CREATE VIEW $v1 AS SELECT * from $t1")
         checkAnswer(sql(s"TABLE $v1"), spark.table("source"))
@@ -1731,6 +1779,23 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-32990: REFRESH TABLE should resolve to a temporary view first") {
+    withTable("testcat.ns.t") {
+      withTempView("t") {
+        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql("USE testcat.ns")
+
+        val testCatalog = catalog("testcat").asTableCatalog.asInstanceOf[InMemoryTableCatalog]
+        val identifier = Identifier.of(Array("ns"), "t")
+
+        assert(!testCatalog.isTableInvalidated(identifier))
+        sql("REFRESH TABLE t")
+        assert(!testCatalog.isTableInvalidated(identifier))
+      }
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1948,8 +2013,8 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
-      testV1CommandSupportingTempView("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
     }
   }
 
@@ -2635,6 +2700,13 @@ class DataSourceV2SQLSuite
         verifyTable(t1, expected)
       }
     }
+  }
+
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

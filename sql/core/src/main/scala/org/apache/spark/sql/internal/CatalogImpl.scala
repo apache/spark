@@ -315,6 +315,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * (Scala-specific)
+   * Creates a table based on the dataset in a data source and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 3.1.0
+   */
+  override def createTable(
+      tableName: String,
+      source: String,
+      description: String,
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, new StructType, description, options)
+  }
+
+  /**
+   * (Scala-specific)
    * Creates a table based on the dataset in a data source, a schema and a set of options.
    * Then, returns the corresponding DataFrame.
    *
@@ -325,6 +341,29 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       schema: StructType,
+      options: Map[String, String]): DataFrame = {
+    createTable(
+      tableName = tableName,
+      source = source,
+      schema = schema,
+      description = "",
+      options = options
+    )
+  }
+
+  /**
+   * (Scala-specific)
+   * Creates a table based on the dataset in a data source, a schema and a set of options.
+   * Then, returns the corresponding DataFrame.
+   *
+   * @group ddl_ops
+   * @since 3.1.0
+   */
+  override def createTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      description: String,
       options: Map[String, String]): DataFrame = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val storage = DataSource.buildStorageFormatFromOptions(options)
@@ -338,7 +377,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableType = tableType,
       storage = storage,
       schema = schema,
-      provider = Some(source)
+      provider = Some(source),
+      comment = { if (description.isEmpty) None else Some(description) }
     )
     val plan = CreateTable(tableDesc, SaveMode.ErrorIfExists, None)
     sparkSession.sessionState.executePlan(plan).toRdd
@@ -464,6 +504,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * If this table is cached as an InMemoryRelation, drop the original cached version and make the
    * new version cached lazily.
    *
+   * In addition, refreshing a table also invalidate all caches that have reference to the table
+   * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
+   *
    * @group cachemgmt
    * @since 2.0.0
    */
@@ -484,13 +527,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
     val cache = sparkSession.sharedState.cacheManager.lookupCachedData(table)
+
+    // uncache the logical plan.
+    // note this is a no-op for the table itself if it's not cached, but will invalidate all
+    // caches referencing this table.
+    sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
+
     if (cache.nonEmpty) {
       // save the cache name and cache level for recreation
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-
-      // uncache the logical plan.
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
 
       // recache with the same name and cache level.
       sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)

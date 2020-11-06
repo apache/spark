@@ -113,6 +113,8 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
+    log.debug("Writing shuffle index file for mapId {} with length {}", mapId,
+        partitionLengths.length);
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
     return MapOutputCommitMessage.of(partitionLengths);
   }
@@ -211,14 +213,14 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
   private class PartitionWriterStream extends OutputStream {
     private final int partitionId;
-    private int count = 0;
+    private long count = 0;
     private boolean isClosed = false;
 
     PartitionWriterStream(int partitionId) {
       this.partitionId = partitionId;
     }
 
-    public int getCount() {
+    public long getCount() {
       return count;
     }
 
