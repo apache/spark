@@ -205,7 +205,10 @@ abstract class JdbcDialect extends Serializable {
    * @param changes Changes to apply to the table.
    * @return The SQL statements to use for altering the table.
    */
-  def alterTable(tableName: String, changes: Seq[TableChange]): Array[String] = {
+  def alterTable(
+      tableName: String,
+      changes: Seq[TableChange],
+      dbMajorVersion: Int): Array[String] = {
     val updateClause = ArrayBuilder.make[String]
     for (change <- changes) {
       change match {
@@ -215,7 +218,7 @@ abstract class JdbcDialect extends Serializable {
           updateClause += getAddColumnQuery(tableName, name(0), dataType)
         case rename: RenameColumn if rename.fieldNames.length == 1 =>
           val name = rename.fieldNames
-          updateClause += getRenameColumnQuery(tableName, name(0), rename.newName)
+          updateClause += getRenameColumnQuery(tableName, name(0), rename.newName, dbMajorVersion)
         case delete: DeleteColumn if delete.fieldNames.length == 1 =>
           val name = delete.fieldNames
           updateClause += getDeleteColumnQuery(tableName, name(0))
@@ -237,7 +240,11 @@ abstract class JdbcDialect extends Serializable {
   def getAddColumnQuery(tableName: String, columnName: String, dataType: String): String =
     s"ALTER TABLE $tableName ADD COLUMN ${quoteIdentifier(columnName)} $dataType"
 
-  def getRenameColumnQuery(tableName: String, columnName: String, newName: String): String =
+  def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String,
+      dbMajorVersion: Int): String =
     s"ALTER TABLE $tableName RENAME COLUMN ${quoteIdentifier(columnName)} TO" +
       s" ${quoteIdentifier(newName)}"
 

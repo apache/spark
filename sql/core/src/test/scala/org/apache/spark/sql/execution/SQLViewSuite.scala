@@ -175,7 +175,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e2.contains("SHOW CREATE TABLE is not supported on a temporary view"))
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      val e3 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      }.getMessage
+      assert(e3.contains(s"$viewName is a temp view not table or permanent view"))
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
   }

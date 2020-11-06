@@ -1117,7 +1117,7 @@ val staticDf = spark.read. ...
 val streamingDf = spark.readStream. ...
 
 streamingDf.join(staticDf, "type")          // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  // right outer join with a static DF  
+streamingDf.join(staticDf, "type", "left_outer")  // left outer join with a static DF
 
 {% endhighlight %}
 
@@ -1128,7 +1128,7 @@ streamingDf.join(staticDf, "type", "right_join")  // right outer join with a sta
 Dataset<Row> staticDf = spark.read(). ...;
 Dataset<Row> streamingDf = spark.readStream(). ...;
 streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join");  // right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer");  // left outer join with a static DF
 {% endhighlight %}
 
 
@@ -1139,7 +1139,7 @@ streamingDf.join(staticDf, "type", "right_join");  // right outer join with a st
 staticDf = spark.read. ...
 streamingDf = spark.readStream. ...
 streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  # right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1151,10 +1151,10 @@ staticDf <- read.df(...)
 streamingDf <- read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
 joined <- join(
+            streamingDf,
             staticDf,
-            streamingDf, 
             streamingDf$value == staticDf$value,
-            "right_outer")  # right outer join with a static DF
+            "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>

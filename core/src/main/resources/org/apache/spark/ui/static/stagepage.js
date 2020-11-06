@@ -433,7 +433,7 @@ $(document).ready(function () {
                         {data : "failedTasks"},
                         {data : "killedTasks"},
                         {data : "succeededTasks"},
-                        {data : "isBlacklistedForStage"},
+                        {data : "isExcludedForStage"},
                         {
                             data : function (row, type) {
                                 return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : "";

@@ -248,6 +248,77 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
+  test("SPARK-33136: output resolved on complex types for V2 write commands") {
+    def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
+      val table = TestRelation(StructType(Seq(StructField("a", toType))).toAttributes)
+      val query = TestRelation(StructType(Seq(StructField("a", fromType))).toAttributes)
+      val parsedPlan = byName(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+
+    // The major difference between `from` and `to` is that `from` is a complex type
+    // with non-nullable, whereas `to` is same data type with flipping nullable.
+
+    // nested struct type
+    val fromStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType, nullable = false),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType, nullable = false))))))
+
+    val toStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType))))))
+
+    assertTypeCompatibility("struct", fromStructType, toStructType)
+
+    // array type
+    assertTypeCompatibility("array", ArrayType(LongType, containsNull = false),
+      ArrayType(LongType, containsNull = true))
+
+    // array type with struct type
+    val fromArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      containsNull = false)
+
+    val toArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType))),
+      containsNull = true)
+
+    assertTypeCompatibility("array_struct", fromArrayWithStructType, toArrayWithStructType)
+
+    // map type
+    assertTypeCompatibility("map", MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(IntegerType, StringType, valueContainsNull = true))
+
+    // map type with struct type
+    val fromMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      valueContainsNull = false)
+
+    val toMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType))),
+      valueContainsNull = true)
+
+    assertTypeCompatibility("map_struct", fromMapWithStructType, toMapWithStructType)
+  }
+
+  test("skipSchemaResolution should still require query to be resolved") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType),
+      StructField("b", DoubleType))).toAttributes)
+    val query = UnresolvedRelation(Seq("t"))
+    val parsedPlan = byName(table, query)
+    assertNotResolved(parsedPlan)
+  }
+
   test("byName: basic behavior") {
     val query = TestRelation(table.schema.toAttributes)
 

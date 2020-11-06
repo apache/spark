@@ -454,7 +454,7 @@ object TypeCoercion {
         s.withNewChildren(Seq(Cast(e, DoubleType)))
       case s @ StddevSamp(e @ StringType(), _) =>
         s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
+      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
       case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
       case v @ VariancePop(e @ StringType(), _) =>
         v.withNewChildren(Seq(Cast(e, DoubleType)))
@@ -698,8 +698,8 @@ object TypeCoercion {
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+      case d @ Divide(left, right, _) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        d.withNewChildren(Seq(Cast(left, DoubleType), Cast(right, DoubleType)))
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
@@ -715,8 +715,8 @@ object TypeCoercion {
   object IntegralDivision extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
-      case d @ IntegralDivide(left, right) =>
-        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+      case d @ IntegralDivide(left, right, _) =>
+        d.withNewChildren(Seq(mayCastToLong(left), mayCastToLong(right)))
     }
 
     private def mayCastToLong(expr: Expression): Expression = expr.dataType match {

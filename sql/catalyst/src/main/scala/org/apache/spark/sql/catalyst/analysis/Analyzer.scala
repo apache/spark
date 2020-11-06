@@ -307,35 +307,35 @@ class Analyzer(
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan => p.transformExpressionsUp {
-        case a @ Add(l, r) if a.childrenResolved => (l.dataType, r.dataType) match {
+        case a @ Add(l, r, f) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => a
-          case (DateType, CalendarIntervalType) => DateAddInterval(l, r)
+          case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType) => Cast(TimeAdd(l, r), l.dataType)
-          case (CalendarIntervalType, DateType) => DateAddInterval(r, l)
+          case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
           case (CalendarIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
           case _ => a
         }
-        case s @ Subtract(l, r) if s.childrenResolved => (l.dataType, r.dataType) match {
+        case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (CalendarIntervalType, CalendarIntervalType) => s
           case (DateType, CalendarIntervalType) =>
-            DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r)))
+            DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
           case (_, CalendarIntervalType) =>
-            Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r))), l.dataType)
+            Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
           case (TimestampType, _) => SubtractTimestamps(l, r)
           case (_, TimestampType) => SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
           case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
         }
-        case m @ Multiply(l, r) if m.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => MultiplyInterval(l, r)
-          case (_, CalendarIntervalType) => MultiplyInterval(r, l)
+        case m @ Multiply(l, r, f) if m.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _) => MultiplyInterval(l, r, f)
+          case (_, CalendarIntervalType) => MultiplyInterval(r, l, f)
           case _ => m
         }
-        case d @ Divide(l, r) if d.childrenResolved => (l.dataType, r.dataType) match {
-          case (CalendarIntervalType, _) => DivideInterval(l, r)
+        case d @ Divide(l, r, f) if d.childrenResolved => (l.dataType, r.dataType) match {
+          case (CalendarIntervalType, _) => DivideInterval(l, r, f)
           case _ => d
         }
       }
@@ -865,9 +865,14 @@ class Analyzer(
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
         }
         u
-      case u @ UnresolvedTableOrView(ident) =>
+      case u @ UnresolvedTableOrView(ident, allowTempView) =>
         lookupTempView(ident)
-          .map(_ => ResolvedView(ident.asIdentifier, isTemp = true))
+          .map { _ =>
+            if (!allowTempView) {
+              u.failAnalysis(s"${ident.quoted} is a temp view not table or permanent view.")
+            }
+            ResolvedView(ident.asIdentifier, isTemp = true)
+          }
           .getOrElse(u)
     }
 
@@ -926,7 +931,7 @@ class Analyzer(
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1026,7 +1031,7 @@ class Analyzer(
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier) =>
+      case u @ UnresolvedTableOrView(identifier, _) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
@@ -1458,7 +1463,7 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      // SPARK-31607: Resolve Struct field in groupByExpressions and aggregateExpressions
+      // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
       // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
       // different ExprId. This cause aggregateExpressions can't be replaced by expanded
       // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
@@ -1482,7 +1487,7 @@ class Analyzer(
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
-      // SPARK-31607: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+      // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
       // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
       // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
       // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
@@ -1502,7 +1507,8 @@ class Analyzer(
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
-      case o: OverwriteByExpression if !o.outputResolved =>
+      case o: OverwriteByExpression
+          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
         // do not resolve expression attributes until the query attributes are resolved against the
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o
@@ -3040,40 +3046,15 @@ class Analyzer(
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case append @ AppendData(table, query, _, isByName)
-          if table.resolved && query.resolved && !append.outputResolved =>
+      case v2Write: V2WriteCommand
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          append.copy(query = projection)
+        val projection = TableOutputResolver.resolveOutputColumns(
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+        if (projection != v2Write.query) {
+          v2Write.withNewQuery(projection)
         } else {
-          append
-        }
-
-      case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
-        }
-
-      case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
+          v2Write
         }
     }
   }
