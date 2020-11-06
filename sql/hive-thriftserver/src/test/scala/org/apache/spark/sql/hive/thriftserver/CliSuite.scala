@@ -571,4 +571,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     // the date formatter for `java.sql.LocalDate` must output negative years with sign.
     runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
   }
+
+  test("SPARK-33358 CLI should break when have command failed") {
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("AnalysisException"))(
+      "select * from nonexistent_table;" +
+        "select 1;"
+        -> "Error in query: Table or view not found: nonexistent_table;"
+    )
+  }
 }
