@@ -31,7 +31,7 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
-    assert(expected === df.collect())
+    assert(df.collect() === expected)
   }
 
   test("show an existing table") {

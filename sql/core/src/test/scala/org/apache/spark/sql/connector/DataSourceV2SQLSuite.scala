@@ -898,39 +898,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowTables: using v1 catalog") {
-    runShowTablesSql(
-      "SHOW TABLES FROM default",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-  }
-
-  test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
-    // 'db' and there is no default catalog set.
-    val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
-    }
-
-    assert(exception.getMessage.contains("Database 'db' not found"))
-  }
-
-  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
-    val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
-    }
-
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
-  }
-
-  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW TABLES FROM a.b")
-    }
-
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
-  }
-
   test("ShowViews: using v2 catalog, command not supported.") {
     val exception = intercept[AnalysisException] {
       sql("SHOW VIEWS FROM testcat")

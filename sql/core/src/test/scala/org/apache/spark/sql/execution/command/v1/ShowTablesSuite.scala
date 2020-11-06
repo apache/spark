@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
@@ -54,5 +54,40 @@ class ShowTablesSuite extends CommonShowTablesSuite {
       checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
     }.getMessage
     assert(msg.contains("Database 'bad_test' not found"))
+  }
+
+  test("ShowTables: using v1 catalog") {
+    withTable("source", "source2") {
+      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+      df.createOrReplaceTempView("source")
+      val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+      df2.createOrReplaceTempView("source2")
+      runShowTablesSql(
+        "SHOW TABLES FROM default",
+        Seq(Row("", "source", true), Row("", "source2", true)))
+    }
+  }
+
+  test("ShowTables: using v1 catalog, db doesn't exist ") {
+    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
+    // 'db' and there is no default catalog set.
+    val exception = intercept[NoSuchDatabaseException] {
+      runShowTablesSql("SHOW TABLES FROM db", Seq())
+    }
+    assert(exception.getMessage.contains("Database 'db' not found"))
+  }
+
+  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW TABLES FROM a.b", Seq())
+    }
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW TABLES FROM a.b")
+    }
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 }
