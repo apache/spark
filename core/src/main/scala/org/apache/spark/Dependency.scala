@@ -24,7 +24,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -96,16 +95,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
-
-  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle is enabled
-  private[spark] var shuffleMergeEnabled =
-    Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
-
-  def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
-    this.shuffleMergeEnabled = shuffleMergeEnabled
-  }
-
-  def isShuffleMergeEnabled : Boolean = shuffleMergeEnabled
 
   /**
    * Stores the location of the list of chosen external shuffle services for handling the

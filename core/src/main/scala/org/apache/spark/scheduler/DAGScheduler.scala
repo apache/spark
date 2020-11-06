@@ -249,6 +249,8 @@ private[spark] class DAGScheduler(
   private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -1271,7 +1273,6 @@ private[spark] class DAGScheduler(
       logInfo("Shuffle merge enabled for %s (%s) with %d merger locations"
         .format(stage, stage.name, stage.shuffleDep.getMergerLocs.size))
     } else {
-      stage.shuffleDep.setShuffleMergeEnabled(false)
       logInfo("Shuffle merge disabled for %s (%s)".format(stage, stage.name))
     }
 
@@ -1311,7 +1312,7 @@ private[spark] class DAGScheduler(
         // Only generate merger location for a given shuffle dependency once. This way, even if
         // this stage gets retried, it would still be merging blocks using the same set of
         // shuffle services.
-        if (s.shuffleDep.isShuffleMergeEnabled) {
+        if (pushBasedShuffleEnabled) {
           prepareShuffleServicesForShuffleMapStage(s)
         }
       case s: ResultStage =>
