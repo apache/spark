@@ -62,4 +62,3 @@ SELECT course, year FROM courseSales GROUP BY CUBE(course, year) ORDER BY groupi
 SELECT a + b AS k1, b AS k2, SUM(a - b) FROM testData GROUP BY CUBE(k1, k2);
 SELECT a + b AS k, b, SUM(a - b) FROM testData GROUP BY ROLLUP(k, b);
 SELECT a + b, b AS k, SUM(a - b) FROM testData GROUP BY a + b, k GROUPING SETS(k)
-
