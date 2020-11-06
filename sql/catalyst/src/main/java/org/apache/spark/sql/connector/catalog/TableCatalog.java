@@ -168,7 +168,7 @@ public interface TableCatalog extends CatalogPlugin {
    * If the catalog supports views and contains a view for the identifier and not a table, this
    * must not drop the view and must return false.
    * <p>
-   * If the catalog supports the option to purge a table, this method must be overwritten.
+   * If the catalog supports the option to purge a table, this method must be overridden.
    * The default implementation falls back to {@link #dropTable(Identifier)} dropTable} if the
    * purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
    *
