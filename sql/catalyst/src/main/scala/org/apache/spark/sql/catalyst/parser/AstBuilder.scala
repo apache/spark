@@ -51,10 +51,10 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
+class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import ParserUtils._
 
-  def this() = this(new SQLConf())
+  protected def conf: SQLConf = SQLConf.get
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]

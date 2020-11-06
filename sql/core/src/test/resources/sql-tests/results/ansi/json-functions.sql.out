@@ -170,9 +170,23 @@ Invalid number of arguments for function from_json. Expected: one of 2 and 3; Fo
 -- !query
 select from_json('{"create":1}', 'create INT')
 -- !query schema
-struct<from_json({"create":1}):struct<create:int>>
+struct<>
 -- !query output
-{"create":1}
+org.apache.spark.sql.AnalysisException
+Cannot parse the data type: 
+no viable alternative at input 'create'(line 1, pos 0)
+
+== SQL ==
+create INT
+^^^
+
+Failed fallback parsing: 
+no viable alternative at input 'create'(line 1, pos 0)
+
+== SQL ==
+create INT
+^^^
+;; line 1 pos 7
 
 
 -- !query

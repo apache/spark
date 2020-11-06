@@ -14,13 +14,16 @@ select to_json();
 
 -- from_json
 select from_json('{"a":1}', 'a INT');
-select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
+select from_json('{"t":"26/08/2015"}', 't Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
 -- Check if errors handled
 select from_json('{"a":1}', 1);
 select from_json('{"a":1}', 'a InvalidType');
 select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_json('{"a":1}', 'a INT', map('mode', 1));
 select from_json();
+-- Use keywords as attribute names
+select from_json('{"create":1}', 'create INT');
+select from_json('{"cube":1}', 'cube INT');
 -- json_tuple
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a');
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
