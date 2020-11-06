@@ -1016,7 +1016,9 @@ class Analyzer(override val catalogManager: CatalogManager)
               s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
               "around this.")
           }
-          executeSameContext(child)
+          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewQuerySQLConfigs)) {
+            executeSameContext(child)
+          }
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>

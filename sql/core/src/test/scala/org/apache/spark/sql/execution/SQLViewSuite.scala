@@ -21,7 +21,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
@@ -751,6 +751,79 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
         sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
         checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
+      }
+    }
+  }
+
+  test("SPARK-33141: view should be parsed and analyzed with configs set when creating") {
+    withTable("t33141") {
+      withView("v33141", "v33141_1", "v33141_2", "v33141_3", "v33141_4") {
+        Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t33141")
+        sql("CREATE VIEW v33141 (c1) AS SELECT C1 FROM t33141")
+        sql("CREATE VIEW v33141_1 (c1) AS SELECT c1 FROM t33141 ORDER BY 1 ASC, c1 DESC")
+        sql("CREATE VIEW v33141_2 (c1, count) AS SELECT c1, count(c1) FROM t33141 GROUP BY 1")
+        sql("CREATE VIEW v33141_3 (a, count) AS SELECT c1 as a, count(c1) FROM t33141 GROUP BY a")
+        sql("CREATE VIEW v33141_4 (c1) AS SELECT 1/0")
+
+        withSQLConf(CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v33141"), Seq(Row(2), Row(3), Row(1)))
+        }
+        withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v33141_1"), Seq(Row(1), Row(2), Row(3)))
+        }
+        withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v33141_2"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+        }
+        withSQLConf(GROUP_BY_ALIASES.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v33141_3"),
+            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+        }
+        withSQLConf(ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v33141_4"), Seq(Row(null)))
+        }
+
+        withSQLConf(APPLY_VIEW_SQL_CONFIGS.key -> "false") {
+          withSQLConf(CASE_SENSITIVE.key -> "true") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v33141")
+            }.getMessage
+            assert(e.contains("cannot resolve '`C1`' given input columns: " +
+              "[spark_catalog.default.t33141.c1]"))
+          }
+          withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
+            checkAnswer(sql("SELECT * FROM v33141_1"), Seq(Row(3), Row(2), Row(1)))
+          }
+          withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v33141_2")
+            }.getMessage
+            assert(e.contains("expression 'spark_catalog.default.t33141.`c1`' is neither present " +
+              "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
+              "first() (or first_value) if you don't care which value you get."))
+          }
+          withSQLConf(GROUP_BY_ALIASES.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT * FROM v33141_3")
+            }.getMessage
+            assert(e.contains("cannot resolve '`a`' given input columns: " +
+              "[spark_catalog.default.t33141.c1]"))
+          }
+          withSQLConf(ANSI_ENABLED.key -> "true") {
+            val e = intercept[ArithmeticException] {
+              sql("SELECT * FROM v33141_4").collect()
+            }.getMessage
+            assert(e.contains("divide by zero"))
+          }
+        }
+
+        withSQLConf(ANSI_ENABLED.key -> "true") {
+          sql("ALTER VIEW v33141 AS SELECT 1/0")
+        }
+        val e = intercept[ArithmeticException] {
+          sql("SELECT * FROM v33141").collect()
+        }.getMessage
+        assert(e.contains("divide by zero"))
       }
     }
   }

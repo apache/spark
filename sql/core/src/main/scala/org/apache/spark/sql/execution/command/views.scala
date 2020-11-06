@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
 
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
@@ -27,9 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.JsonProtocol
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -334,6 +337,21 @@ case class ShowViewsCommand(
 
 object ViewHelper {
 
+  private val configPrefixBlacklist = Seq(
+    SQLConf.MAX_NESTED_VIEW_DEPTH.key,
+    "spark.sql.optimizer.",
+    "spark.sql.codegen.",
+    "spark.sql.execution.",
+    "spark.sql.shuffle.",
+    "spark.sql.adaptive.")
+
+  private def isConfigBlacklisted(key: String): Boolean = {
+    for (prefix <- configPrefixBlacklist if key.startsWith(prefix)) {
+       return true
+    }
+    false
+  }
+
   import CatalogTable._
 
   /**
@@ -362,10 +380,37 @@ object ViewHelper {
   }
 
   /**
+   * Convert the view query SQL configs in `properties`.
+   */
+  private def generateQuerySQLConfigs(conf: SQLConf): Map[String, String] = {
+    val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
+      conf.isModifiable(k) && !isConfigBlacklisted(k)
+    }
+    val props = new mutable.HashMap[String, String]
+    if (modifiedConfs.nonEmpty) {
+      val confJson = compact(render(JsonProtocol.mapToJson(modifiedConfs)))
+      props.put(VIEW_QUERY_SQL_CONFIGS, confJson)
+    }
+    props.toMap
+  }
+
+  /**
+   * Remove the view query SQL configs in `properties`.
+   */
+  private def removeQuerySQLConfigs(properties: Map[String, String]): Map[String, String] = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    properties.filterNot { case (key, _) =>
+      key == VIEW_QUERY_SQL_CONFIGS
+    }
+  }
+
+  /**
    * Generate the view properties in CatalogTable, including:
    * 1. view default database that is used to provide the default database name on view resolution.
    * 2. the output column names of the query that creates a view, this is used to map the output of
    *    the view child to the view output during view resolution.
+   * 3. the SQL configs when creating the view.
    *
    * @param properties the `properties` in CatalogTable.
    * @param session the spark session.
@@ -380,16 +425,19 @@ object ViewHelper {
     // for createViewCommand queryOutput may be different from fieldNames
     val queryOutput = analyzedPlan.schema.fieldNames
 
+    val conf = SQLConf.get
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
     SchemaUtils.checkColumnNameDuplication(
-      fieldNames, "in the view definition", session.sessionState.conf.resolver)
+      fieldNames, "in the view definition", conf.resolver)
 
     // Generate the view default catalog and namespace.
     val manager = session.sessionState.catalogManager
-    removeQueryColumnNames(properties) ++
+    removeQuerySQLConfigs(removeQueryColumnNames(properties)) ++
       catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
-      generateQueryColumnNames(queryOutput)
+      generateQueryColumnNames(queryOutput) ++
+      generateQuerySQLConfigs(conf)
   }
 
   /**

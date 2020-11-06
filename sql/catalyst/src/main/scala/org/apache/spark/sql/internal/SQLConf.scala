@@ -1448,6 +1448,15 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
+  val APPLY_VIEW_SQL_CONFIGS =
+    buildConf("spark.sql.legacy.view.applySQLConfigs")
+      .internal()
+      .doc("When true, captured SQL Configs will be applied during the parsing and analysis " +
+        "phases of the view resolution.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .version("2.1.0")
@@ -3384,6 +3393,8 @@ class SQLConf extends Serializable with Logging {
   def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def applyViewSQLConfigs: Boolean = getConf(SQLConf.APPLY_VIEW_SQL_CONFIGS)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
