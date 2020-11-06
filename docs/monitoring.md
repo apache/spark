@@ -1155,6 +1155,11 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=executor
+  - **note:** These metrics are available in the driver in local mode only.
+  - A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+    
 - namespace=ExecutorMetrics
   - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
@@ -1167,8 +1172,7 @@ This is the component with the largest amount of instrumented metrics
   custom plugins into Spark.
 
 ### Component instance = Executor
-These metrics are exposed by Spark executors. Note, currently they are not available
-when running in local mode.
+These metrics are exposed by Spark executors. 
  
 - namespace=executor (metrics are of type counter or gauge)
   - bytesRead.count

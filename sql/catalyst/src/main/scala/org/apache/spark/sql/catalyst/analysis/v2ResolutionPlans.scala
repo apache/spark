@@ -46,7 +46,9 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
-case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTableOrView(
+    multipartIdentifier: Seq[String],
+    allowTempView: Boolean = true) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
