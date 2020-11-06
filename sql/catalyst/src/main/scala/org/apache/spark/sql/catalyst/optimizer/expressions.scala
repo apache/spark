@@ -511,8 +511,9 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
 
-      case EqualTo(CaseWhen(branches, elseValue), right)
-          if right.isInstanceOf[Literal] && branches.forall(_._2.isInstanceOf[Literal]) =>
+      case EqualTo(c @ CaseWhen(branches, elseValue), right)
+          if c.deterministic &&
+            right.isInstanceOf[Literal] &&branches.forall(_._2.isInstanceOf[Literal]) =>
         (branches.filter(_._2.equals(right)).map(_._1) ++
           elseValue.map(e => EqualTo(e, right))).reduceLeftOption(Or) match {
           case Some(value) => value

@@ -224,5 +224,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       EqualTo(caseWhen, NonFoldableLiteral(true)))
     val nonFoldable = CaseWhen(Seq(normalBranch, (a, b)), None)
     assertEquivalent(EqualTo(nonFoldable, Literal(1)), EqualTo(nonFoldable, Literal(1)))
+
+    // Do not simplify if it contains non-deterministic expressions.
+    val nonDeterministic = CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(b))
+    assert(!nonDeterministic.deterministic)
+    assertEquivalent(EqualTo(nonDeterministic, Literal(1)), EqualTo(nonDeterministic, Literal(1)))
   }
 }
