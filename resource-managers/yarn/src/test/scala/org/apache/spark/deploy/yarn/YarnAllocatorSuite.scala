@@ -660,7 +660,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
       val memory = defaultResource.getMemory
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN)
+        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
