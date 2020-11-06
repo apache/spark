@@ -751,6 +751,17 @@ class DataSourceV2SQLSuite
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
+  test("DropTable: purge option") {
+    withTable("testcat.ns.t") {
+      sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+      val ex = intercept[UnsupportedOperationException] {
+        sql ("DROP TABLE testcat.ns.t PURGE")
+      }
+      // The default TableCatalog.dropTable implementation doesn't support the purge option.
+      assert(ex.getMessage.contains("Purge option is not supported"))
+    }
+  }
+
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {
@@ -2010,8 +2021,8 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
-      testV1CommandSupportingTempView("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS")
+      testNotSupportedV2Command("ANALYZE TABLE", s"$t COMPUTE STATISTICS FOR ALL COLUMNS")
     }
   }
 
@@ -2604,6 +2615,13 @@ class DataSourceV2SQLSuite
         verifyTable(t1, expected)
       }
     }
+  }
+
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(s"$sqlCommand $sqlParams")
+    }
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

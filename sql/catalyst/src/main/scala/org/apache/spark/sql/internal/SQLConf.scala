@@ -2765,18 +2765,6 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val LEGACY_SCRIPT_TRANSFORM_PAD_NULL =
-    buildConf("spark.sql.legacy.transformationPadNullWhenValueLessThenSchema")
-      .internal()
-      .doc("Whether pad null value when transformation output's value size less then " +
-        "schema size in default-serde mode(script transformation with row format of " +
-        "`ROW FORMAT DELIMITED`)." +
-        "When true, Spark will pad NULL value to keep same behavior with hive." +
-        "When false, Spark keep original behavior to throw `ArrayIndexOutOfBoundsException`")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
     buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
       .internal()
@@ -3504,9 +3492,6 @@ class SQLConf extends Serializable with Logging {
 
   def legacyAllowModifyActiveSession: Boolean =
     getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
-
-  def legacyPadNullWhenValueLessThenSchema: Boolean =
-    getConf(SQLConf.LEGACY_SCRIPT_TRANSFORM_PAD_NULL)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

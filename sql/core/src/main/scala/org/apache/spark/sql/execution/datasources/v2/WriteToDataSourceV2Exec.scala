@@ -66,7 +66,7 @@ case class CreateTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    ifNotExists: Boolean) extends TableWriteExec {
+    ifNotExists: Boolean) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -100,7 +100,7 @@ case class AtomicCreateTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    ifNotExists: Boolean) extends TableWriteExec {
+    ifNotExists: Boolean) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -134,7 +134,7 @@ case class ReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExec {
+    orCreate: Boolean) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -176,7 +176,7 @@ case class AtomicReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExec {
+    orCreate: Boolean) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val schema = query.schema.asNullable
@@ -432,7 +432,7 @@ object DataWritingSparkTask extends Logging {
   }
 }
 
-private[v2] trait TableWriteExec extends V2TableWriteExec with SupportsV1Write {
+private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1Write {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
   protected def writeToTable(

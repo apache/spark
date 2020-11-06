@@ -15,12 +15,9 @@
 # limitations under the License.
 #
 import os
-import shutil
-import tempfile
 import time
 import unittest
 
-from pyspark.sql import Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 
@@ -114,25 +111,6 @@ class MapInPandasTests(ReusedSQLTestCase):
         actual = df.mapInPandas(func, 'id long').mapInPandas(func, 'id long').collect()
         expected = df.collect()
         self.assertEquals(actual, expected)
-
-    # SPARK-33277
-    def test_map_in_pandas_with_column_vector(self):
-        path = tempfile.mkdtemp()
-        shutil.rmtree(path)
-
-        try:
-            self.spark.range(0, 200000, 1, 1).write.parquet(path)
-
-            def func(iterator):
-                for pdf in iterator:
-                    yield pd.DataFrame({'id': [0] * len(pdf)})
-
-            for offheap in ["true", "false"]:
-                with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
-                        self.spark.read.parquet(path).mapInPandas(func, 'id long').head(), Row(0))
-        finally:
-            shutil.rmtree(path)
 
 
 if __name__ == "__main__":

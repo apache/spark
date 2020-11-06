@@ -327,7 +327,7 @@ object WindowFunctionType {
   }
 }
 
-trait OffsetWindowSpec extends Expression {
+trait OffsetWindowFunction extends WindowFunction {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
    * the value and sign of the offset) the starting row (current row if isRelative=true, or the
@@ -356,23 +356,21 @@ trait OffsetWindowSpec extends Expression {
   val ignoreNulls: Boolean
 
   /**
-   * Whether the offset is starts with the current row. If `isRelative` is true, `offset` means
-   * the offset is start with the current row. otherwise, the offset is starts with the first
-   * row of the entire window frame.
+   * A fake window frame which is used to hold the offset information. It's used as a key to group
+   * by offset window functions in `WindowExecBase.windowFrameExpressionFactoryPairs`, as offset
+   * window functions with the same offset and same window frame can be evaluated together.
    */
-  val isRelative: Boolean
-
   lazy val fakeFrame = SpecifiedWindowFrame(RowFrame, offset, offset)
 }
 
 /**
  * A frameless offset window function is a window function that cannot specify window frame and
- * returns the value of the input column offset by a number of rows within the partition.
- * For instance: a FrameLessOffsetWindowFunction for value x with offset -2, will get the value of
- * x 2 rows back in the partition.
+ * returns the value of the input column offset by a number of rows according to the current row
+ * within the partition. For instance: a FrameLessOffsetWindowFunction for value x with offset -2,
+ * will get the value of x 2 rows back from the current row in the partition.
  */
 abstract class FrameLessOffsetWindowFunction
-  extends WindowFunction with OffsetWindowSpec with Unevaluable with ImplicitCastInputTypes {
+  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -390,8 +388,6 @@ abstract class FrameLessOffsetWindowFunction
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
   override val ignoreNulls = false
-
-  override val isRelative = true
 
   override lazy val frame: WindowFrame = fakeFrame
 
@@ -630,13 +626,11 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
-    extends AggregateWindowFunction with OffsetWindowSpec with ImplicitCastInputTypes {
+    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 
   override lazy val default = Literal.create(null, input.dataType)
-
-  override val isRelative = false
 
   override def children: Seq[Expression] = input :: offset :: Nil
 
