@@ -58,10 +58,11 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @since("1.3.0")
     def setStages(self, value):
         """
         Set pipeline stages.
+
+        .. versionadded:: 1.3.0
 
         Parameters
         ----------
@@ -118,10 +119,11 @@ class Pipeline(Estimator, MLReadable, MLWritable):
                 transformers.append(stage)
         return PipelineModel(transformers)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -325,10 +327,11 @@ class PipelineModel(Model, MLReadable, MLWritable):
             dataset = t.transform(dataset)
         return dataset
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
+
+        .. versionadded:: 1.4.0
 
         :param extra: extra parameters
         :returns: new instance
