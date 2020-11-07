@@ -95,6 +95,9 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     }
   }
 
+  // The test fails for V1 catalog with the error:
+  // org.apache.spark.sql.AnalysisException:
+  //   The namespace in session catalog must have exactly one name part: spark_catalog.ns1.ns2.tbl
   test("SHOW TABLE EXTENDED not valid v1 database") {
     def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
       val e = intercept[AnalysisException] {
