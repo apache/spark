@@ -49,12 +49,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     super.afterAll()
   }
 
-  test("show an existing table in V1 catalog") {
-    val tables = sql(s"SHOW TABLES IN $catalog.test")
-    assert(tables.schema.fieldNames.toSet === Set(namespaceColumn, tableColumn, "isTemporary"))
-    checkAnswer(tables.select("isTemporary"), Row(false))
-  }
-
   // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {
