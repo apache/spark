@@ -40,6 +40,16 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
     assert(df.collect() === getRows(expected))
   }
 
+  protected def withSourceViews(f: => Unit): Unit = {
+    withTable("source", "source2") {
+      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+      df.createOrReplaceTempView("source")
+      val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+      df2.createOrReplaceTempView("source2")
+      f
+    }
+  }
+
   test("show an existing table") {
     runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
   }
@@ -75,6 +85,25 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
           s"SHOW TABLES FROM $catalog.db LIKE '*2'",
           Seq(ShowRow("db", "table_name_2", false)))
       }
+    }
+  }
+
+  test("SHOW TABLE EXTENDED for default") {
+    withSourceViews {
+      val expected = Seq(Row("", "source", true), Row("", "source2", true))
+      val schema = new StructType()
+        .add("database", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+        .add("isTemporary", BooleanType, nullable = false)
+        .add("information", StringType, nullable = false)
+
+      val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
+      val result = df.collect()
+      val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
+
+      assert(df.schema === schema)
+      assert(resultWithoutInfo === expected)
+      result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
     }
   }
 }
