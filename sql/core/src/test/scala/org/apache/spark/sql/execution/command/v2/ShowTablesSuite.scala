@@ -46,7 +46,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     sql(s"CREATE DATABASE $catalog.$namespace")
-    sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) USING PARQUET")
+    sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) $defaultUsing")
   }
 
   protected override def afterAll(): Unit = {
@@ -61,14 +61,14 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
 
   test("ShowTables: using v2 catalog") {
     withTable(s"$catalog.db.table_name") {
-      spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.db",
         Seq(ShowRow("db", "table_name", false)))
     }
 
     withTable(s"$catalog.n1.n2.db") {
-      spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
         Seq(ShowRow("n1.n2.db", "table_name", false)))
@@ -85,7 +85,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
 
   test("ShowTables: using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
-      spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
       runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(ShowRow("", "table", false)))
     }
   }
@@ -93,7 +93,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
       withTable(s"$catalog.table") {
-        spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
+        spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
         // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
         runShowTablesSql("SHOW TABLES", Seq(ShowRow("", "table", false)))
       }
@@ -112,7 +112,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     val table = "tbl"
     withTable(s"$namespace.$table") {
       sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
-        s"USING foo PARTITIONED BY (id)")
+        s"$defaultUsing PARTITIONED BY (id)")
 
       testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
         namespace)
