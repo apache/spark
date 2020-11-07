@@ -59,14 +59,10 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
   }
 
-  test("ShowTables: using v2 catalog") {
-    withTable(s"$catalog.db.table_name") {
-      spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) $defaultUsing")
-      runShowTablesSql(
-        s"SHOW TABLES FROM $catalog.db",
-        Seq(ShowRow("db", "table_name", false)))
-    }
-
+  // The test fails for V1 catalog with the error:
+  // org.apache.spark.sql.AnalysisException:
+  //   The namespace in session catalog must have exactly one name part: spark_catalog.n1.n2.db
+  test("show tables in nested namespaces") {
     withTable(s"$catalog.n1.n2.db") {
       spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
