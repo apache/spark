@@ -56,7 +56,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   }
 
   test("show table in a not existing namespace") {
-    checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
+    runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
   }
 
   test("ShowTables: using v2 catalog") {
@@ -73,10 +73,6 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
         s"SHOW TABLES FROM $catalog.n1.n2.db",
         Seq(ShowRow("n1.n2.db", "table_name", false)))
     }
-  }
-
-  test("ShowTables: using v2 catalog, namespace doesn't exist") {
-    runShowTablesSql(s"SHOW TABLES FROM $catalog.unknown", Seq())
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {

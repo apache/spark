@@ -57,9 +57,9 @@ class ShowTablesSuite extends CommonShowTablesSuite {
 
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {
-      checkAnswer(sql(s"SHOW TABLES IN $catalog.bad_test"), Seq())
+      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
     }.getMessage
-    assert(msg.contains("Database 'bad_test' not found"))
+    assert(msg.contains("Database 'unknown' not found"))
   }
 
   private def withSourceViews(f: => Unit): Unit = {
@@ -78,15 +78,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
         "SHOW TABLES FROM default",
         Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
     }
-  }
-
-  test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
-    // 'db' and there is no default catalog set.
-    val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq())
-    }
-    assert(exception.getMessage.contains("Database 'db' not found"))
   }
 
   test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
