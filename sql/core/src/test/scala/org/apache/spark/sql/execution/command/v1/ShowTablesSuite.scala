@@ -24,6 +24,7 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
   override def catalog: String = "spark_catalog"
+  override protected def defaultUsing: String = "USING parquet"
   override protected def showSchema: StructType = {
     new StructType()
       .add("database", StringType, nullable = false)

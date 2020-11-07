@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def catalog: String
+  protected def defaultUsing: String
   protected def namespaceColumn: String = "database"
   protected def namespace: String = "test"
   protected def tableColumn: String = "tableName"
@@ -41,5 +42,39 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
 
   test("show an existing table") {
     runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
+  }
+
+  test("show tables with a pattern") {
+    withDatabase(s"$catalog.db", s"$catalog.db2") {
+      sql(s"CREATE DATABASE $catalog.db")
+      sql(s"CREATE DATABASE $catalog.db2")
+      withTable(
+        s"$catalog.db.table",
+        s"$catalog.db.table_name_1",
+        s"$catalog.db.table_name_2",
+        s"$catalog.db2.table_name_2") {
+        sql(s"CREATE TABLE $catalog.db.table (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.db.table_name_1 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.db.table_name_2 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.db2.table_name_2 (id bigint, data string) $defaultUsing")
+
+        runShowTablesSql(
+          s"SHOW TABLES FROM $catalog.db",
+          Seq(
+            ShowRow("db", "table", false),
+            ShowRow("db", "table_name_1", false),
+            ShowRow("db", "table_name_2", false)))
+
+        runShowTablesSql(
+          s"SHOW TABLES FROM $catalog.db LIKE '*name*'",
+          Seq(
+            ShowRow("db", "table_name_1", false),
+            ShowRow("db", "table_name_2", false)))
+
+        runShowTablesSql(
+          s"SHOW TABLES FROM $catalog.db LIKE '*2'",
+          Seq(ShowRow("db", "table_name_2", false)))
+      }
+    }
   }
 }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
 
 class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
   override def catalog: String = "test_catalog_v2"
+  override protected def defaultUsing: String = "USING foo"
   override protected def namespaceColumn: String = "namespace"
   override protected def showSchema: StructType = {
     new StructType()
@@ -71,36 +72,6 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
         Seq(ShowRow("n1.n2.db", "table_name", false)))
-    }
-  }
-
-  test("ShowTables: using v2 catalog with a pattern") {
-    withTable(
-      s"$catalog.db.table",
-      s"$catalog.db.table_name_1",
-      s"$catalog.db.table_name_2",
-      s"$catalog.db2.table_name_2") {
-      spark.sql(s"CREATE TABLE $catalog.db.table (id bigint, data string) USING foo")
-      spark.sql(s"CREATE TABLE $catalog.db.table_name_1 (id bigint, data string) USING foo")
-      spark.sql(s"CREATE TABLE $catalog.db.table_name_2 (id bigint, data string) USING foo")
-      spark.sql(s"CREATE TABLE $catalog.db2.table_name_2 (id bigint, data string) USING foo")
-
-      runShowTablesSql(
-        s"SHOW TABLES FROM $catalog.db",
-        Seq(
-          ShowRow("db", "table", false),
-          ShowRow("db", "table_name_1", false),
-          ShowRow("db", "table_name_2", false)))
-
-      runShowTablesSql(
-        s"SHOW TABLES FROM $catalog.db LIKE '*name*'",
-        Seq(
-          ShowRow("db", "table_name_1", false),
-          ShowRow("db", "table_name_2", false)))
-
-      runShowTablesSql(
-        s"SHOW TABLES FROM $catalog.db LIKE '*2'",
-        Seq(ShowRow("db", "table_name_2", false)))
     }
   }
 
