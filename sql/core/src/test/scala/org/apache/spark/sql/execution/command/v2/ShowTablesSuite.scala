@@ -72,14 +72,6 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     }
   }
 
-  test("ShowViews: using v2 catalog, command not supported.") {
-    val exception = intercept[AnalysisException] {
-      sql(s"SHOW VIEWS FROM $catalog")
-    }
-    assert(exception.getMessage.contains(s"Catalog $catalog doesn't support SHOW VIEWS," +
-      " only SessionCatalog supports this command."))
-  }
-
   test("ShowTables: using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")

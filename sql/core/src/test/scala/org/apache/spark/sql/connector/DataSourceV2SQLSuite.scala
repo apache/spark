@@ -898,6 +898,15 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW VIEWS FROM testcat")
+    }
+
+    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
+  }
+
   test("ShowTables: change current catalog and namespace with USE statements") {
     sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
 
