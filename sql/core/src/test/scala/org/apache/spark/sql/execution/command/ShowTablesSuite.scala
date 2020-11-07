@@ -24,10 +24,6 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def catalog: String
   protected def defaultUsing: String
-  protected def namespaceColumn: String = "database"
-  protected def namespace: String = "test"
-  protected def tableColumn: String = "tableName"
-  protected def table: String = "people"
 
   case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
 
@@ -50,20 +46,16 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    sql(s"CREATE DATABASE $catalog.$namespace")
-    sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) $defaultUsing")
-  }
-
-  protected override def afterAll(): Unit = {
-    sql(s"DROP TABLE $catalog.$namespace.$table")
-    sql(s"DROP DATABASE $catalog.$namespace")
-    super.afterAll()
-  }
-
   test("show an existing table") {
-    runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
+    val namespace = "test"
+    val table = "people"
+    withDatabase(s"$catalog.$namespace") {
+      sql(s"CREATE DATABASE $catalog.$namespace")
+      withTable(s"$catalog.$namespace.$table") {
+        sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) $defaultUsing")
+        runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
+      }
+    }
   }
 
   test("show tables with a pattern") {
