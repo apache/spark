@@ -1233,55 +1233,6 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
   }
 
-  test("show tables") {
-    comparePlans(
-      parsePlan("SHOW TABLES"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW TABLES '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-  }
-
-  test("show table extended") {
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
-      ShowTableStatement(None, "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
-      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-  }
-
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
