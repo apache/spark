@@ -73,7 +73,7 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
-  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
+  test("namespace not specified and default v2 catalog not set - fallback to v1") {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES",
