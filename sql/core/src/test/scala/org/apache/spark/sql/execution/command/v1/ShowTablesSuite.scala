@@ -30,6 +30,11 @@ class ShowTablesSuite extends CommonShowTablesSuite {
       .add("tableName", StringType, nullable = false)
       .add("isTemporary", BooleanType, nullable = false)
   }
+  override protected def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
+    showRows.map {
+      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
+    }
+  }
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -70,7 +75,7 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
-        Seq(Row("", "source", true), Row("", "source2", true)))
+        Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
     }
   }
 
@@ -99,8 +104,13 @@ class ShowTablesSuite extends CommonShowTablesSuite {
 
   test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
     withSourceViews {
-      runShowTablesSql("SHOW TABLES", Seq(Row("", "source", true), Row("", "source2", true)))
-      runShowTablesSql("SHOW TABLES LIKE '*2'", Seq(Row("", "source2", true)))
+      runShowTablesSql(
+        "SHOW TABLES",
+        Seq(ShowRow("", "source", true),
+            ShowRow("", "source2", true)))
+      runShowTablesSql(
+        "SHOW TABLES LIKE '*2'",
+        Seq(ShowRow("", "source2", true)))
     }
   }
 

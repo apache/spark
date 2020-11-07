@@ -33,6 +33,11 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       .add("namespace", StringType, nullable = false)
       .add("tableName", StringType, nullable = false)
   }
+  override protected def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
+    showRows.map {
+      case ShowRow(namespace, table, _) => Row(namespace, table)
+    }
+  }
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
@@ -56,14 +61,16 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   test("ShowTables: using v2 catalog") {
     withTable(s"$catalog.db.table_name") {
       spark.sql(s"CREATE TABLE $catalog.db.table_name (id bigint, data string) USING foo")
-      runShowTablesSql(s"SHOW TABLES FROM $catalog.db", Seq(Row("db", "table_name")))
+      runShowTablesSql(
+        s"SHOW TABLES FROM $catalog.db",
+        Seq(ShowRow("db", "table_name", false)))
     }
 
     withTable(s"$catalog.n1.n2.db") {
       spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) USING foo")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
-        Seq(Row("n1.n2.db", "table_name")))
+        Seq(ShowRow("n1.n2.db", "table_name", false)))
     }
   }
 
@@ -81,17 +88,19 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.db",
         Seq(
-          Row("db", "table"),
-          Row("db", "table_name_1"),
-          Row("db", "table_name_2")))
+          ShowRow("db", "table", false),
+          ShowRow("db", "table_name_1", false),
+          ShowRow("db", "table_name_2", false)))
 
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.db LIKE '*name*'",
-        Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
+        Seq(
+          ShowRow("db", "table_name_1", false),
+          ShowRow("db", "table_name_2", false)))
 
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.db LIKE '*2'",
-        Seq(Row("db", "table_name_2")))
+        Seq(ShowRow("db", "table_name_2", false)))
     }
   }
 
@@ -110,7 +119,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
   test("ShowTables: using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
-      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table")))
+      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(ShowRow("", "table", false)))
     }
   }
 
@@ -119,7 +128,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       withTable(s"$catalog.table") {
         spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
         // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
-        runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
+        runShowTablesSql("SHOW TABLES", Seq(ShowRow("", "table", false)))
       }
     }
   }

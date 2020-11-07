@@ -27,16 +27,19 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def namespace: String = "test"
   protected def tableColumn: String = "tableName"
   protected def table: String = "people"
+
+  case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
+
   protected def showSchema: StructType
-  protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
+  protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
+
+  protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
-    assert(df.collect() === expected)
+    assert(df.collect() === getRows(expected))
   }
 
   test("show an existing table") {
-    val tables = sql(s"SHOW TABLES IN $catalog.test")
-    checkAnswer(tables.select(namespaceColumn), Row(namespace))
-    checkAnswer(tables.select(tableColumn), Row(table))
+    runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
   }
 }
