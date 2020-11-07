@@ -65,11 +65,8 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES",
-        Seq(ShowRow("", "source", true),
-            ShowRow("", "source2", true)))
-      runShowTablesSql(
-        "SHOW TABLES LIKE '*2'",
-        Seq(ShowRow("", "source2", true)))
+        Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
+      runShowTablesSql("SHOW TABLES LIKE '*2'", Seq(ShowRow("", "source2", true)))
     }
   }
 }
