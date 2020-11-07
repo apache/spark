@@ -111,4 +111,21 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
         namespace)
     }
   }
+
+  // The test fails with the error in V1 session catalog:
+  // org.apache.spark.sql.AnalysisException:
+  // The namespace in session catalog must have exactly one name part: spark_catalog.ns1.ns2.table
+  test("change current catalog and namespace with USE statements") {
+    withTable(s"$catalog.ns1.ns2.table") {
+      sql(s"CREATE TABLE $catalog.ns1.ns2.table (id bigint) $defaultUsing")
+
+      // Update the current catalog, and no table is matched since the current namespace is Array().
+      sql(s"USE $catalog")
+      runShowTablesSql("SHOW TABLES", Seq())
+
+      // Update the current namespace to match ns1.ns2.table.
+      sql(s"USE $catalog.ns1.ns2")
+      runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns1.ns2", "table", false)))
+    }
+  }
 }
