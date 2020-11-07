@@ -57,7 +57,8 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     assert(msg.contains("Database 'unknown' not found"))
   }
 
-  test("ShowTables: using v1 catalog") {
+  // `SHOW TABLES` from v2 catalog returns empty result.
+  test("show views from v1 catalog") {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
@@ -65,7 +66,7 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 
-  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+  test("using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     val exception = intercept[AnalysisException] {
       runShowTablesSql("SHOW TABLES FROM a.b", Seq())
     }
