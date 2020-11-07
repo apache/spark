@@ -50,6 +50,18 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    sql(s"CREATE DATABASE $catalog.$namespace")
+    sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) $defaultUsing")
+  }
+
+  protected override def afterAll(): Unit = {
+    sql(s"DROP TABLE $catalog.$namespace.$table")
+    sql(s"DROP DATABASE $catalog.$namespace")
+    super.afterAll()
+  }
+
   test("show an existing table") {
     runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
   }

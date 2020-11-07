@@ -37,18 +37,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    sql(s"CREATE DATABASE $namespace")
-    sql(s"CREATE TABLE $namespace.$table (name STRING, id INT) USING PARQUET")
-  }
-
-  protected override def afterAll(): Unit = {
-    sql(s"DROP TABLE $namespace.$table")
-    sql(s"DROP DATABASE $namespace")
-    super.afterAll()
-  }
-
   // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {
