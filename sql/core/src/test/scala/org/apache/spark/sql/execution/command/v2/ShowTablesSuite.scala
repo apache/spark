@@ -55,6 +55,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     super.afterAll()
   }
 
+  // The test fails with the exception `NoSuchDatabaseException` in V1 catalog.
   test("show table in a not existing namespace") {
     runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
   }
