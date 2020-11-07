@@ -21,6 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -110,6 +111,16 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
       runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table")))
+    }
+  }
+
+  test("ShowTables: namespace is not specified and default v2 catalog is set") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
+      withTable(s"$catalog.table") {
+        spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
+        // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
+        runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
+      }
     }
   }
 }

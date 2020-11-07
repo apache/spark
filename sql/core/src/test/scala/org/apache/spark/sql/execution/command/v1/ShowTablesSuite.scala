@@ -90,4 +90,15 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
+
+  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
+    withTable("source", "source2") {
+      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+      df.createOrReplaceTempView("source")
+      val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+      df2.createOrReplaceTempView("source2")
+      runShowTablesSql("SHOW TABLES", Seq(Row("", "source", true), Row("", "source2", true)))
+      runShowTablesSql("SHOW TABLES LIKE '*2'", Seq(Row("", "source2", true)))
+    }
+  }
 }
