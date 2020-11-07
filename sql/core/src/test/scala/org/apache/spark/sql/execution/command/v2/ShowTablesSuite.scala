@@ -72,7 +72,10 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     }
   }
 
-  test("ShowTables: using v2 catalog with empty namespace") {
+  // The test fails for V1 catalog with the error:
+  // org.apache.spark.sql.AnalysisException:
+  //   The namespace in session catalog must have exactly one name part: spark_catalog.table
+  test("using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
       runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(ShowRow("", "table", false)))
