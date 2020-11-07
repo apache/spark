@@ -123,4 +123,31 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       }
     }
   }
+
+  test("SHOW TABLE EXTENDED not valid v1 database") {
+    def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
+      val e = intercept[AnalysisException] {
+        sql(sqlCommand)
+      }
+      assert(e.message.contains(s"The database name is not valid: ${namespace}"))
+    }
+
+    val namespace = s"$catalog.ns1.ns2"
+    val table = "tbl"
+    withTable(s"$namespace.$table") {
+      sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
+        s"USING foo PARTITIONED BY (id)")
+
+      testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
+        namespace)
+      testV1CommandNamespace(s"SHOW TABLE EXTENDED IN $namespace LIKE 'tb*'",
+        namespace)
+      testV1CommandNamespace("SHOW TABLE EXTENDED " +
+        s"FROM $namespace LIKE 'tb*' PARTITION(id=1)",
+        namespace)
+      testV1CommandNamespace("SHOW TABLE EXTENDED " +
+        s"IN $namespace LIKE 'tb*' PARTITION(id=1)",
+        namespace)
+    }
+  }
 }
