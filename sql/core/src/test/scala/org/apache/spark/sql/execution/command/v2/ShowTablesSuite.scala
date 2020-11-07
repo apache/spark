@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -96,5 +96,20 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
 
   test("ShowTables: using v2 catalog, namespace doesn't exist") {
     runShowTablesSql(s"SHOW TABLES FROM $catalog.unknown", Seq())
+  }
+
+  test("ShowViews: using v2 catalog, command not supported.") {
+    val exception = intercept[AnalysisException] {
+      sql(s"SHOW VIEWS FROM $catalog")
+    }
+    assert(exception.getMessage.contains(s"Catalog $catalog doesn't support SHOW VIEWS," +
+      " only SessionCatalog supports this command."))
+  }
+
+  test("ShowTables: using v2 catalog with empty namespace") {
+    withTable(s"$catalog.table") {
+      spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) USING foo")
+      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table")))
+    }
   }
 }

@@ -898,20 +898,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowViews: using v2 catalog, command not supported.") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW VIEWS FROM testcat")
-    }
-
-    assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
-      " only SessionCatalog supports this command."))
-  }
-
-  test("ShowTables: using v2 catalog with empty namespace") {
-    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
-    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
-  }
-
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
     spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
     spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
