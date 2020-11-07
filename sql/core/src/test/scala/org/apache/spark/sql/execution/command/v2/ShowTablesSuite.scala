@@ -82,7 +82,10 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     }
   }
 
-  test("ShowTables: namespace is not specified and default v2 catalog is set") {
+  // The test fails for V1 catalog with the error:
+  // org.apache.spark.sql.AnalysisException:
+  //   The namespace in session catalog must have exactly one name part: spark_catalog.table
+  test("namespace is not specified and default v2 catalog is set") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
       withTable(s"$catalog.table") {
         spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
