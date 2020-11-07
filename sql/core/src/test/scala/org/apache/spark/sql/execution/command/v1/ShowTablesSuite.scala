@@ -73,13 +73,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
-  test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW TABLES FROM a.b")
-    }
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
-  }
-
   test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
     withSourceViews {
       runShowTablesSql(
