@@ -74,6 +74,9 @@ class ParamGridBuilder(object):
     r"""
     Builder for a param grid used in grid search-based model selection.
 
+
+    .. versionadded:: 1.4.0
+
     Examples
     --------
     >>> from pyspark.ml.classification import LogisticRegression
@@ -93,8 +96,6 @@ class ParamGridBuilder(object):
     True
     >>> all([m in expected for m in output])
     True
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
@@ -251,6 +252,8 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
     test set exactly once.
 
+    .. versionadded:: 1.4.0
+
     Examples
     --------
     >>> from pyspark.ml.classification import LogisticRegression
@@ -285,8 +288,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     0.8333...
     >>> evaluator.evaluate(cvModelRead.transform(dataset))
     0.8333...
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -440,12 +441,14 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
         return datasets
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
+
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -546,7 +549,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -554,6 +556,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
         It does not copy the extra Params into the subModels.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -683,6 +687,8 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     validation sets, and uses evaluation metric on the validation set to select the best model.
     Similar to :class:`CrossValidator`, but only splits the set once.
 
+    .. versionadded:: 2.0.0
+
     Examples
     --------
     >>> from pyspark.ml.classification import LogisticRegression
@@ -717,9 +723,6 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     0.833...
     >>> evaluator.evaluate(tvsModelRead.transform(dataset))
     0.833...
-
-    .. versionadded:: 2.0.0
-
     """
 
     @keyword_only
@@ -828,12 +831,13 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         bestModel = est.fit(dataset, epm[bestIndex])
         return self._copyValues(TrainValidationSplitModel(bestModel, metrics, subModels))
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -928,7 +932,6 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -937,6 +940,8 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         copies the embedded and extra parameters over.
         And, this creates a shallow copy of the validationMetrics.
         It does not copy the extra Params into the subModels.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
