@@ -15,14 +15,15 @@
 # limitations under the License.
 #
 
-from pyspark import since, SparkContext
+from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
 
 
-@since("3.0.0")
 def vector_to_array(col, dtype="float64"):
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
+
+    .. versionadded:: 3.0.0
 
     Parameters
     ----------
