@@ -136,6 +136,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     * L1 (Lasso)
     * L2 + L1 (elastic net)
 
+    .. versionadded:: 1.4.0
+
     Notes
     -----
     Fitting with huber loss only supports none and L2 regularization.
@@ -199,8 +201,6 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     >>> model.numFeatures
     1
     >>> model.write().format("pmml").save(model_path + "_2")
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -360,10 +360,11 @@ class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, Gener
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
-    @since("2.0.0")
     def evaluate(self, dataset):
         """
         Evaluates the model on a test dataset.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -498,7 +499,7 @@ class LinearRegressionSummary(JavaWrapper):
         versions.
 
         See also `Wikipedia coefficient of determination \
-        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
         """
         return self._call_java("r2")
 
@@ -682,6 +683,8 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
 
+    .. versionadded:: 1.6.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -715,8 +718,6 @@ class IsotonicRegression(JavaEstimator, _IsotonicRegressionParams, HasWeightCol,
     True
     >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
-
-    .. versionadded:: 1.6.0
     """
     @keyword_only
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -869,6 +870,8 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
+    .. versionadded:: 1.4.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -928,8 +931,6 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
     >>> model3 = dt3.fit(df3)
     >>> print(model3.toDebugString)
     DecisionTreeRegressionModel...depth=1, numNodes=3...
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -1075,7 +1076,6 @@ class DecisionTreeRegressionModel(
         return self._set(varianceCol=value)
 
     @property
-    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -1088,6 +1088,8 @@ class DecisionTreeRegressionModel(
           - importance(feature j) = sum (over nodes which split on feature j) of the gain,
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
+
+        .. versionadded:: 2.0.0
 
         Notes
         -----
@@ -1121,6 +1123,8 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
+
+    .. versionadded:: 1.4.0
 
     Examples
     --------
@@ -1176,8 +1180,6 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
     True
     >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -1339,7 +1341,6 @@ class RandomForestRegressionModel(
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
-    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -1348,6 +1349,8 @@ class RandomForestRegressionModel(
         The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
+
+        .. versionadded:: 2.0.0
 
         Examples
         --------
@@ -1392,6 +1395,8 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
+
+    .. versionadded:: 1.4.0
 
     Examples
     --------
@@ -1456,8 +1461,6 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
     'validationIndicator'
     >>> gbt.getValidationTol()
     0.01
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -1638,7 +1641,6 @@ class GBTRegressionModel(
     """
 
     @property
-    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -1647,6 +1649,8 @@ class GBTRegressionModel(
         The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
         (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
         and follows the implementation from scikit-learn.
+
+        .. versionadded:: 2.0.0
 
         Examples
         --------
@@ -1660,10 +1664,11 @@ class GBTRegressionModel(
         """Trees in this ensemble. Warning: These have null parent Estimators."""
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
-    @since("2.4.0")
     def evaluateEachIteration(self, dataset, loss):
         """
         Method to compute error or loss for every iteration of gradient boosting.
+
+        .. versionadded:: 2.4.0
 
         Parameters
         ----------
@@ -2043,6 +2048,7 @@ class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionPa
     * "tweedie"  -> power link function specified through "linkPower". \
                     The default link power in the tweedie family is 1 - variancePower.
 
+    .. versionadded:: 2.0.0
 
     Notes
     -----
@@ -2100,8 +2106,6 @@ class GeneralizedLinearRegression(_JavaRegressor, _GeneralizedLinearRegressionPa
     True
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -2279,10 +2283,11 @@ class GeneralizedLinearRegressionModel(_JavaRegressionModel, _GeneralizedLinearR
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
 
-    @since("2.0.0")
     def evaluate(self, dataset):
         """
         Evaluates the model on a test dataset.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -2360,10 +2365,11 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("residualDegreeOfFreedomNull")
 
-    @since("2.0.0")
     def residuals(self, residualsType="deviance"):
         """
         Get the residuals of the fitted model by type.
+
+        .. versionadded:: 2.0.0
 
         Parameters
         ----------
@@ -2541,6 +2547,8 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     * gd (normal mini-batch gradient descent)
     * adamW (default)
 
+    .. versionadded:: 3.0.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -2588,8 +2596,6 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     DenseMatrix(1, 2, [0.0173, 0.0021], 1)
     >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
     True
-
-    .. versionadded:: 3.0.0
     """
 
     @keyword_only
