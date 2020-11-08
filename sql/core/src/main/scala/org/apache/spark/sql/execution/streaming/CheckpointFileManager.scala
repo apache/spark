@@ -164,7 +164,8 @@ object CheckpointFileManager extends Logging {
           underlyingStream.close()
         } catch {
           case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $finalPath", e)
+            logWarning(s"Error cancelling write to $finalPath, " +
+              s"continuing to delete temp path $tempPath", e)
         }
         fm.delete(tempPath)
       } catch {
