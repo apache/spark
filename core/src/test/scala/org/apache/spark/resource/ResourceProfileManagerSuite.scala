@@ -24,7 +24,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 
 class ResourceProfileManagerSuite extends SparkFunSuite {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {
@@ -32,7 +32,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     }
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {

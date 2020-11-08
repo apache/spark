@@ -208,7 +208,7 @@ private[storage] class BlockManagerDecommissioner(
   private val shuffleBlockMigrationRefreshRunnable = new Runnable {
     val sleepInterval = conf.get(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
-    override def run() {
+    override def run(): Unit = {
       assert(conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
       while (!stopped && !stoppedShuffle && !Thread.interrupted()) {
         try {
