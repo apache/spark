@@ -57,10 +57,11 @@ class Evaluator(Params, metaclass=ABCMeta):
         """
         raise NotImplementedError()
 
-    @since("1.4.0")
     def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
+
+        .. versionadded:: 1.4.0
 
         Parameters
         ----------
@@ -132,6 +133,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
+    .. versionadded:: 1.4.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -163,8 +166,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.82...
     >>> evaluator.getNumBins()
     1000
-
-    .. versionadded:: 1.4.0
     """
 
     metricName = Param(Params._dummy(), "metricName",
@@ -257,6 +258,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     Evaluator for Regression, which expects input columns prediction, label
     and an optional weight column.
 
+    .. versionadded:: 1.4.0
+
     Examples
     --------
     >>> scoreAndLabels = [(-28.98343821, -27.0), (20.21491975, 21.5),
@@ -286,8 +289,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol, HasWeigh
     2.740...
     >>> evaluator.getThroughOrigin()
     False
-
-    .. versionadded:: 1.4.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
@@ -383,6 +384,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     Evaluator for Multiclass Classification, which expects input
     columns: prediction, label, weight (optional) and probabilityCol (only for logLoss).
 
+    .. versionadded:: 1.5.0
+
     Examples
     --------
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
@@ -428,8 +431,6 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     MulticlassClassificationEvaluator...
     >>> evaluator.evaluate(dataset)
     0.9682...
-
-    .. versionadded:: 1.5.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
@@ -573,6 +574,8 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     Evaluator for Multilabel Classification, which expects two input
     columns: prediction and label.
 
+    .. versionadded:: 3.0.0
+
     Notes
     -----
     Experimental
@@ -596,8 +599,6 @@ class MultilabelClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator2 = MultilabelClassificationEvaluator.load(mlce_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
-
-    .. versionadded:: 3.0.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
@@ -693,6 +694,8 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWe
     1 means that the points in a cluster are close to the other points
     in the same cluster and far from the points of the other clusters.
 
+    .. versionadded:: 2.3.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -723,8 +726,6 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol, HasWe
     >>> evaluator2 = ClusteringEvaluator.load(ce_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
-
-    .. versionadded:: 2.3.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (silhouette)",
@@ -814,6 +815,8 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     Evaluator for Ranking, which expects two input
     columns: prediction and label.
 
+    .. versionadded:: 3.0.0
+
     Notes
     -----
     Experimental
@@ -838,8 +841,6 @@ class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     >>> evaluator2 = RankingEvaluator.load(ranke_path)
     >>> str(evaluator2.getPredictionCol())
     'prediction'
-
-    .. versionadded:: 3.0.0
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
