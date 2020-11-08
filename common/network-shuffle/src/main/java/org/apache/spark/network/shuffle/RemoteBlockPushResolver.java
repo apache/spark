@@ -17,11 +17,10 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.BufferedOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -419,7 +418,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     appsPathInfo.computeIfAbsent(appId, id -> new AppPathsInfo(appId, executorInfo.localDirs,
       executorInfo.subDirsPerLocalDir));
   }
-
   private static String generateFileName(AppShuffleId appShuffleId, int reduceId) {
     return String.format("mergedShuffle_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
       reduceId);
@@ -746,12 +744,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // Bitmap tracking which mapper's blocks have been merged for this shuffle partition
     private RoaringBitmap mapTracker;
     // The index file for a particular merged shuffle contains the chunk offsets.
-    private FileChannel indexChannel;
-    private DataOutputStream indexWriteStream;
+    private RandomAccessFile indexFile;
     // The meta file for a particular merged shuffle contains all the map indices that belong to
     // every chunk. The entry per chunk is a serialized bitmap.
-    private FileChannel metaChannel;
-    private DataOutputStream metaWriteStream;
+    private RandomAccessFile metaFile;
     // The offset for the last chunk tracked in the index file for this shuffle partition
     private long lastChunkOffset;
     private int lastMergedMapIndex = -1;
@@ -767,12 +763,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.appShuffleId = Preconditions.checkNotNull(appShuffleId, "app shuffle id");
       this.reduceId = reduceId;
       this.dataChannel = new FileOutputStream(dataFile).getChannel();
-      FileOutputStream indexOutStream = new FileOutputStream(indexFile);
-      this.indexChannel = indexOutStream.getChannel();
-      this.indexWriteStream = new DataOutputStream(new BufferedOutputStream(indexOutStream));
-      FileOutputStream metaOutStream = new FileOutputStream(metaFile);
-      this.metaChannel = metaOutStream.getChannel();
-      this.metaWriteStream = new DataOutputStream(new BufferedOutputStream(metaOutStream));
+      this.indexFile = new RandomAccessFile(indexFile, "rw");
+      this.metaFile = new RandomAccessFile(metaFile, "rw");
       this.currentMapIndex = -1;
       // Writing 0 offset so that we can reuse ShuffleIndexInformation.getIndex()
       updateChunkInfo(0L, -1);
@@ -837,17 +829,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       try {
         // update the chunk tracker to meta file before index file
         writeChunkTracker(mapIndex);
-        idxStartPos = indexChannel.position();
+        idxStartPos = indexFile.getFilePointer();
         logger.trace("{} shuffleId {} reduceId {} updated index current {} updated {}",
           appShuffleId.appId, appShuffleId.shuffleId, reduceId, this.lastChunkOffset,
           chunkOffset);
-        indexWriteStream.writeLong(chunkOffset);
+        indexFile.writeLong(chunkOffset);
       } catch (IOException ioe) {
         if (idxStartPos != -1) {
           // reset the position to avoid corrupting index files during exception.
           logger.warn("{} shuffleId {} reduceId {} reset index to position {}",
             appShuffleId.appId, appShuffleId.shuffleId, reduceId, idxStartPos);
-          indexChannel.position(idxStartPos);
+          indexFile.seek(idxStartPos);
         }
         throw ioe;
       }
@@ -859,15 +851,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         return;
       }
       chunkTracker.add(mapIndex);
-      long metaStartPos = metaChannel.position();
+      long metaStartPos = metaFile.getFilePointer();
       try {
         logger.trace("{} shuffleId {} reduceId {} mapIndex {} write chunk to meta file",
           appShuffleId.appId, appShuffleId.shuffleId, reduceId, mapIndex);
-        chunkTracker.serialize(metaWriteStream);
+        chunkTracker.serialize(metaFile);
       } catch (IOException ioe) {
         logger.warn("{} shuffleId {} reduceId {} mapIndex {} reset position of meta file to {}",
           appShuffleId.appId, appShuffleId.shuffleId, reduceId, mapIndex, metaStartPos);
-        metaChannel.position(metaStartPos);
+        metaFile.seek(metaStartPos);
         throw ioe;
       }
     }
@@ -883,27 +875,25 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           dataChannel = null;
         }
       }
-      if (metaWriteStream != null) {
+      if (metaFile != null) {
         try {
           // if the stream is closed, channel get's closed as well.
-          metaWriteStream.close();
+          metaFile.close();
         } catch (IOException ioe) {
-          logger.warn("Error closing meta stream for {} shuffleId {} reduceId {}",
+          logger.warn("Error closing meta file for {} shuffleId {} reduceId {}",
             appShuffleId.appId, appShuffleId.shuffleId, reduceId);
         } finally {
-          metaWriteStream = null;
-          metaChannel = null;
+          metaFile = null;
         }
       }
-      if (indexWriteStream != null) {
+      if (indexFile != null) {
         try {
-          indexWriteStream.close();
+          indexFile.close();
         } catch (IOException ioe) {
-          logger.warn("Error closing index stream for {} shuffleId {} reduceId {}",
+          logger.warn("Error closing index file for {} shuffleId {} reduceId {}",
             appShuffleId.appId, appShuffleId.shuffleId, reduceId);
         } finally {
-          indexWriteStream = null;
-          indexChannel = null;
+          indexFile = null;
         }
       }
     }
