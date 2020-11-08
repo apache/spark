@@ -228,6 +228,8 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     While this process is generally guaranteed to converge, it is not guaranteed
     to find a global optimum.
 
+    .. versionadded:: 2.0.0
+
     Notes
     -----
     For high-dimensional data (with many features), this algorithm may perform poorly.
@@ -333,8 +335,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     True
     >>> gm2.setWeightCol("weight")
     GaussianMixture...
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -583,6 +583,8 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
 
+    .. versionadded:: 1.5.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -640,8 +642,6 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     array([ True,  True], dtype=bool)
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
-
-    .. versionadded:: 1.5.0
     """
 
     @keyword_only
@@ -857,6 +857,8 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     If bisecting all divisible clusters on the bottom level would result more than `k` leaf
     clusters, larger clusters get higher priority.
 
+    .. versionadded:: 2.0.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors
@@ -921,8 +923,6 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     array([ True,  True], dtype=bool)
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -1309,11 +1309,12 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("logPrior")
 
-    @since("2.0.0")
     def getCheckpointFiles(self):
         """
         If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
         be saved checkpoint files.  This method is provided so that users can manage those files.
+
+        .. versionadded:: 2.0.0
 
         Returns
         -------
@@ -1362,6 +1363,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     :py:class:`pyspark.ml.feature.Tokenizer` and :py:class:`pyspark.ml.feature.CountVectorizer`
     can be useful for converting text to word count vectors.
 
+    .. versionadded:: 2.0.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import Vectors, SparseVector
@@ -1407,8 +1410,6 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     >>> sameLocalModel = LocalLDAModel.load(local_model_path)
     >>> model.transform(df).take(1) == sameLocalModel.transform(df).take(1)
     True
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -1681,6 +1682,8 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
 
+    .. versionadded:: 2.4.0
+
     Notes
     -----
     See `Wikipedia on Spectral clustering <http://en.wikipedia.org/wiki/Spectral_clustering>`_
@@ -1718,8 +1721,6 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     40
     >>> pic2.assignClusters(df).take(6) == assignments.take(6)
     True
-
-    .. versionadded:: 2.4.0
     """
 
     @keyword_only
