@@ -216,6 +216,7 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     indicated user preferences rather than explicit ratings given to
     items.
 
+    .. versionadded:: 1.4.0
 
     Notes
     -----
@@ -296,8 +297,6 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     True
     >>> model.transform(test).take(1) == model2.transform(test).take(1)
     True
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -535,10 +534,11 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("itemFactors")
 
-    @since("2.2.0")
     def recommendForAllUsers(self, numItems):
         """
         Returns top `numItems` items recommended for each user, for all users.
+
+        .. versionadded:: 2.2.0
 
         Parameters
         ----------
@@ -553,10 +553,11 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForAllUsers", numItems)
 
-    @since("2.2.0")
     def recommendForAllItems(self, numUsers):
         """
         Returns top `numUsers` users recommended for each item, for all items.
+
+        .. versionadded:: 2.2.0
 
         Parameters
         ----------
@@ -571,12 +572,13 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForAllItems", numUsers)
 
-    @since("2.3.0")
     def recommendForUserSubset(self, dataset, numItems):
         """
         Returns top `numItems` items recommended for each user id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
+
+        .. versionadded:: 2.3.0
 
         Parameters
         ----------
@@ -593,12 +595,13 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
-    @since("2.3.0")
     def recommendForItemSubset(self, dataset, numUsers):
         """
         Returns top `numUsers` users recommended for each item id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
+
+        .. versionadded:: 2.3.0
 
         Parameters
         ----------
