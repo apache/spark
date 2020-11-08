@@ -36,11 +36,11 @@ class ChiSquareTest(object):
 
     """
     @staticmethod
-    @since("2.2.0")
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a Pearson's independence test using dataset.
 
+        .. versionadded:: 2.2.0
         .. versionchanged:: 3.1.0
            Added optional ``flatten`` argument.
 
@@ -114,10 +114,11 @@ class Correlation(object):
     to avoid recomputing the common lineage.
     """
     @staticmethod
-    @since("2.2.0")
     def corr(dataset, column, method="pearson"):
         """
         Compute the correlation matrix with specified method using dataset.
+
+        .. versionadded:: 2.2.0
 
         Parameters
         ----------
@@ -134,8 +135,7 @@ class Correlation(object):
         Returns
         -------
         A DataFrame that contains the correlation matrix of the column of vectors. This
-        DataFrame contains a single row and a single column of name
-        '$METHODNAME($COLUMN)'.
+        DataFrame contains a single row and a single column of name `METHODNAME(COLUMN)`.
 
         Examples
         --------
@@ -178,13 +178,13 @@ class KolmogorovSmirnovTest(object):
 
     """
     @staticmethod
-    @since("2.4.0")
     def test(dataset, sampleCol, distName, *params):
         """
         Conduct a one-sample, two-sided Kolmogorov-Smirnov test for probability distribution
         equality. Currently supports the normal distribution, taking as parameters the mean and
         standard deviation.
 
+        .. versionadded:: 2.4.0
 
         Parameters
         ----------
@@ -238,6 +238,8 @@ class Summarizer(object):
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
     This class lets users pick the statistics they would like to extract for a given column.
 
+    .. versionadded:: 2.4.0
+
     Examples
     --------
     >>> from pyspark.ml.stat import Summarizer
@@ -274,9 +276,6 @@ class Summarizer(object):
     |[1.0,1.5,2.0] |
     +--------------+
     <BLANKLINE>
-
-    .. versionadded:: 2.4.0
-
     """
     @staticmethod
     @since("2.4.0")
@@ -373,7 +372,6 @@ class Summarizer(object):
                                                 col._jc, weightCol._jc))
 
     @staticmethod
-    @since("2.4.0")
     def metrics(*metrics):
         """
         Given a list of metrics, provides a builder that it turns computes metrics from a column.
@@ -392,6 +390,7 @@ class Summarizer(object):
          - normL2: the Euclidean norm for each coefficient.
          - normL1: the L1 norm of each coefficient (sum of the absolute values).
 
+        .. versionadded:: 2.4.0
 
         Notes
         -----
@@ -426,11 +425,12 @@ class SummaryBuilder(JavaWrapper):
     def __init__(self, jSummaryBuilder):
         super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
-    @since("2.4.0")
     def summary(self, featuresCol, weightCol=None):
         """
         Returns an aggregate object that contains the summary of the column with the requested
         metrics.
+
+        .. versionadded:: 2.4.0
 
         Parameters
         ----------
@@ -452,6 +452,8 @@ class SummaryBuilder(JavaWrapper):
 class MultivariateGaussian(object):
     """Represents a (mean, cov) tuple
 
+    .. versionadded:: 3.0.0
+
     Examples
     --------
     >>> from pyspark.ml.linalg import DenseMatrix, Vectors
@@ -459,9 +461,6 @@ class MultivariateGaussian(object):
     >>> (m.mean, m.cov.toArray())
     (DenseVector([11.0, 12.0]), array([[ 1.,  5.],
            [ 3.,  2.]]))
-
-    .. versionadded:: 3.0.0
-
     """
     def __init__(self, mean, cov):
         self.mean = mean
@@ -475,10 +474,11 @@ class ANOVATest(object):
     .. versionadded:: 3.1.0
     """
     @staticmethod
-    @since("3.1.0")
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform an ANOVA test using dataset.
+
+        .. versionadded:: 3.1.0
 
         Parameters
         ----------
@@ -548,10 +548,11 @@ class FValueTest(object):
     .. versionadded:: 3.1.0
     """
     @staticmethod
-    @since("3.1.0")
     def test(dataset, featuresCol, labelCol, flatten=False):
         """
         Perform a F Regression test using dataset.
+
+        .. versionadded:: 3.1.0
 
         Parameters
         ----------
