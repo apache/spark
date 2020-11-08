@@ -140,20 +140,34 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
 
 class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     r"""
-    A parallel FP-growth algorithm to mine frequent itemsets. The algorithm is described in
-    Li et al., PFP: Parallel FP-Growth for Query Recommendation [LI2008]_.
-    PFP distributes computation in such a way that each worker executes an
-    independent group of mining tasks. The FP-Growth algorithm is described in
-    Han et al., Mining frequent patterns without candidate generation [HAN2000]_
+    A parallel FP-growth algorithm to mine frequent itemsets.
 
-    .. [LI2008] https://doi.org/10.1145/1454008.1454027
-    .. [HAN2000] https://doi.org/10.1145/335191.335372
+    .. versionadded:: 2.2.0
 
     Notes
     -----
-    null values in the feature column are ignored during fit().
+
+    The algorithm is described in
+    Li et al., PFP: Parallel FP-Growth for Query Recommendation [1]_.
+    PFP distributes computation in such a way that each worker executes an
+    independent group of mining tasks. The FP-Growth algorithm is described in
+    Han et al., Mining frequent patterns without candidate generation [2]_
+
+    NULL values in the feature column are ignored during `fit()`.
 
     Internally `transform` `collects` and `broadcasts` association rules.
+
+
+    .. [1] Haoyuan Li, Yi Wang, Dong Zhang, Ming Zhang, and Edward Y. Chang. 2008.
+        Pfp: parallel fp-growth for query recommendation.
+        In Proceedings of the 2008 ACM conference on Recommender systems (RecSys '08).
+        Association for Computing Machinery, New York, NY, USA, 107–114.
+        DOI: https://doi.org/10.1145/1454008.1454027
+    .. [2] Jiawei Han, Jian Pei, and Yiwen Yin. 2000.
+        Mining frequent patterns without candidate generation.
+        SIGMOD Rec. 29, 2 (June 2000), 1–12.
+        DOI: https://doi.org/10.1145/335191.335372
+
 
     Examples
     --------
@@ -209,8 +223,6 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> model2 = FPGrowthModel.load(model_path)
     >>> fpm.transform(data).take(1) == model2.transform(data).take(1)
     True
-
-    .. versionadded:: 2.2.0
     """
     @keyword_only
     def __init__(self, *, minSupport=0.3, minConfidence=0.8, itemsCol="items",
@@ -278,6 +290,8 @@ class PrefixSpan(JavaParams):
     This class is not yet an Estimator/Transformer, use :py:func:`findFrequentSequentialPatterns`
     method to run the PrefixSpan algorithm.
 
+    .. versionadded:: 2.4.0
+
     Notes
     -----
     See `Sequential Pattern Mining (Wikipedia) \
@@ -311,8 +325,6 @@ class PrefixSpan(JavaParams):
     |[[3]]     |2   |
     +----------+----+
     ...
-
-    .. versionadded:: 2.4.0
     """
 
     minSupport = Param(Params._dummy(), "minSupport", "The minimal support level of the " +
@@ -417,10 +429,11 @@ class PrefixSpan(JavaParams):
         """
         return self.getOrDefault(self.sequenceCol)
 
-    @since("2.4.0")
     def findFrequentSequentialPatterns(self, dataset):
         """
         Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
+
+        .. versionadded:: 2.4.0
 
         Parameters
         ----------
@@ -436,8 +449,6 @@ class PrefixSpan(JavaParams):
 
             - `sequence: ArrayType(ArrayType(T))` (T is the item type)
             - `freq: Long`
-
-        .. versionadded:: 2.4.0
         """
 
         self._transfer_params_to_java()
