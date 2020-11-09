@@ -36,7 +36,8 @@ case class DropTableExec(
   override def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
-      session.sharedState.cacheManager.uncacheV2Table(table)
+      val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+      session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
       catalog.dropTable(ident, purge)
     } else if (!ifExists) {
       throw new NoSuchTableException(ident)
