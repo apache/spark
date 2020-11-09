@@ -57,7 +57,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBloc
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockResolver, ShuffleManager}
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -1975,7 +1975,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {
-    import org.apache.spark.shuffle.ShuffleBlockInfo
     val blocks: Seq[ShuffleBlockInfo] = Seq(
       ShuffleBlockInfo(1, 0L),
       ShuffleBlockInfo(0, 1L),
