@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, First, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -725,6 +725,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysisError(
       windowExpr.as("rn") :: Nil,
       "window expressions are not allowed in observed metrics, but found")
+  }
+
+  test("check WindowFirstSubstitution") {
+    val a = testRelation.output.head
+    val inputPlan = testRelation.select(
+      WindowExpression(
+        First(a, false).toAggregateExpression(),
+        WindowSpecDefinition(Nil, a.asc :: Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("window"))
+    val inputPlan2 = testRelation.select(
+      WindowExpression(
+        NthValue(a, Literal(1), false),
+        WindowSpecDefinition(Nil, a.asc :: Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("window"))
+    val analyzer = getAnalyzer
+    val actualPlan = analyzer.execute(inputPlan)
+    val expectedPlan = analyzer.execute(inputPlan2)
+    comparePlans(actualPlan, expectedPlan)
   }
 
   test("check CollectMetrics duplicates") {
