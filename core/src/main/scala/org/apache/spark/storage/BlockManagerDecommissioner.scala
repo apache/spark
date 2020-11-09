@@ -248,6 +248,7 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
     val newShufflesToMigrate = (localShuffles.diff(migratingShuffles)).toSeq
+      .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
