@@ -737,13 +737,10 @@ object DateTimeUtils {
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
     level match {
-      case TRUNC_TO_MICROSECOND => micros
-      case TRUNC_TO_MILLISECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_MILLIS)
-      case TRUNC_TO_SECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE =>
-        micros - Math.floorMod(micros, MICROS_PER_MINUTE)
+      case TRUNC_TO_MICROSECOND => truncToUnit(micros, zoneId, ChronoUnit.MICROS)
+      case TRUNC_TO_MILLISECOND => truncToUnit(micros, zoneId, ChronoUnit.MILLIS)
+      case TRUNC_TO_SECOND => truncToUnit(micros, zoneId, ChronoUnit.SECONDS)
+      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ => // Try to truncate date levels

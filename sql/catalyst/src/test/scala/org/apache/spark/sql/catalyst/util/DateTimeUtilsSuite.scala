@@ -571,14 +571,19 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         val inputTS4 = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("2015-03-29T02:32:05.359"), defaultZoneId)
         val inputTS5 = DateTimeUtils.stringToTimestamp(
-          UTF8String.fromString("1999-03-29T01:02:03.456789"), defaultZoneId)
+          UTF8String.fromString("1769-10-17 17:10:02.123456"), defaultZoneId)
 
         testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "2015-01-01T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "2015-03-01T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_DAY, "2015-03-05T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T09:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:32:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS5.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:05", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "1769-10-17T17:10:02", inputTS5.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "1769-10-17T17:10:02.123", inputTS5.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "1769-10-17T17:10:02.123456",
+          inputTS5.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-02T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS1.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", inputTS2.get, zid)
