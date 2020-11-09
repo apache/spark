@@ -57,7 +57,7 @@ class ShowTablesSuite extends CommonShowTablesSuite {
   }
 
   // `SHOW TABLES` from v2 catalog returns empty result.
-  test("show views from v1 catalog") {
+  test("v1 SHOW TABLES list the temp views") {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
