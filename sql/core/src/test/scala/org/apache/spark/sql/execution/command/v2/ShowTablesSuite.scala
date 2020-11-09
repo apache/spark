@@ -43,6 +43,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
 
   // The test fails with the exception `NoSuchDatabaseException` in V1 catalog.
+  // TODO(SPARK-33394): Throw `NoSuchDatabaseException` for not existing namespace
   test("show table in a not existing namespace") {
     runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
   }
