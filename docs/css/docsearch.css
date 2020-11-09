@@ -30,3 +30,7 @@
 .algolia-autocomplete .algolia-docsearch-suggestion--highlight {
     color: blue;
 }
+
+#docsearch-input {
+    margin-top: 10px;
+}
