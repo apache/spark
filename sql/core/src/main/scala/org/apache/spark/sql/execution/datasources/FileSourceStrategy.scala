@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -93,6 +94,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         getBucketSetFromIterable(a, hset)
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
         getBucketSetFromValue(a, null)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == FloatType =>
+        getBucketSetFromValue(a, Float.NaN)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == DoubleType =>
+        getBucketSetFromValue(a, Double.NaN)
       case expressions.And(left, right) =>
         getExpressionBuckets(left, bucketColumnName, numBuckets) &
           getExpressionBuckets(right, bucketColumnName, numBuckets)
