@@ -36,8 +36,8 @@ class _FitMultipleIterator(object):
 
     Parameters
     ----------
-    fitSingleModel
-        Callable[[int], Transformer]which fits an estimator to a dataset.
+    fitSingleModel : function
+        Callable[[int], Transformer] which fits an estimator to a dataset.
         `fitSingleModel` may be called up to `numModels` times, with a unique index each time.
         Each call to `fitSingleModel` with an index should return the Model associated with
         that index.
