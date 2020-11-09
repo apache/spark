@@ -270,7 +270,7 @@ struct<lead((ten * 2), 1, -1) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIR
 -- !query
 SELECT first(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10
 -- !query schema
-struct<first(ten) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
+struct<nth_value(ten, 1) OVER (PARTITION BY four ORDER BY ten ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int,ten:int,four:int>
 -- !query output
 0	0	0
 0	0	0
