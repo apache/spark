@@ -579,15 +579,12 @@ class SparkSession private(
    *                  If a database is specified, it identifies the table/view from the database.
    *                  Otherwise, it first attempts to find a temporary view with the given name
    *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
+   *                  Note that, the global temporary view database is also valid here. Also, all
+   *                  the temporary views mentioned here include both batch and streaming plans.
    * @since 2.0.0
    */
   def table(tableName: String): DataFrame = {
     read.table(tableName)
-  }
-
-  private[sql] def table(multipartIdentifier: Seq[String]): DataFrame = {
-    Dataset.ofRows(self, UnresolvedRelation(multipartIdentifier))
   }
 
   private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
