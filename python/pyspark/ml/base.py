@@ -91,7 +91,7 @@ class Estimator(Params, metaclass=ABCMeta):
         Parameters
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
-            input dataset, which is an instance of :py:class:`pyspark.sql.DataFrame`
+            input dataset
 
         Returns
         -------
@@ -181,7 +181,7 @@ class Transformer(Params, metaclass=ABCMeta):
         Parameters
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
-            input dataset
+            input dataset.
 
         Returns
         -------
