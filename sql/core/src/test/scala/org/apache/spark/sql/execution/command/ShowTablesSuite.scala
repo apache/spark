@@ -90,24 +90,4 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
-
-  // TODO(SPARK-33393): Support SHOW TABLE EXTENDED in DSv2
-  test("SHOW TABLE EXTENDED for default") {
-    withSourceViews {
-      val expected = Seq(Row("", "source", true), Row("", "source2", true))
-      val schema = new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-        .add("information", StringType, nullable = false)
-
-      val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
-      val result = df.collect()
-      val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
-
-      assert(df.schema === schema)
-      assert(resultWithoutInfo === expected)
-      result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
-    }
-  }
 }

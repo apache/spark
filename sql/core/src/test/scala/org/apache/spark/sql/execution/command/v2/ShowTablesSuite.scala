@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
   override def catalog: String = "test_catalog_v2"
@@ -127,6 +128,18 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
       // Update the current namespace to match ns1.ns2.table.
       sql(s"USE $catalog.ns1.ns2")
       runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns1.ns2", "table", false)))
+    }
+  }
+
+  // TODO(SPARK-33393): Support SHOW TABLE EXTENDED in DSv2
+  test("SHOW TABLE EXTENDED: an existing table") {
+    val table = "people"
+    withTable(s"$catalog.$table") {
+      sql(s"CREATE TABLE $catalog.$table (name STRING, id INT) $defaultUsing")
+      val errMsg = intercept[NoSuchDatabaseException] {
+        sql(s"SHOW TABLE EXTENDED FROM $catalog LIKE '*$table*'").collect()
+      }.getMessage
+      assert(errMsg.contains(s"Database '$catalog' not found"))
     }
   }
 }
