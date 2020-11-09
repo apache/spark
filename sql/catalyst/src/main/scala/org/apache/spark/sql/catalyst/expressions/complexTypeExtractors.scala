@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -222,9 +223,14 @@ case class GetArrayStructFields(
  *
  * We need to do type checking here as `ordinal` expression maybe unresolved.
  */
-case class GetArrayItem(child: Expression, ordinal: Expression)
+case class GetArrayItem(
+    child: Expression,
+    ordinal: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue
   with NullIntolerant {
+
+  def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -240,7 +246,13 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.numElements() || index < 0 || baseValue.isNullAt(index)) {
+    if (index >= baseValue.numElements() || index < 0) {
+      if (failOnError) {
+        throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+      } else {
+        null
+      }
+    } else if (baseValue.isNullAt(index)) {
       null
     } else {
       baseValue.get(index, dataType)
@@ -255,9 +267,18 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
       } else {
         ""
       }
+
+      val failOnErrorBranch = if (failOnError) {
+        s"""throw new ArrayIndexOutOfBoundsException("Invalid index: " + $index);""".stripMargin
+      } else {
+        s"${ev.isNull} = true;"
+      }
+
       s"""
         final int $index = (int) $eval2;
-        if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
+        if ($index >= $eval1.numElements() || $index < 0) {
+          $failOnErrorBranch
+        } else if (false$nullCheck) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};

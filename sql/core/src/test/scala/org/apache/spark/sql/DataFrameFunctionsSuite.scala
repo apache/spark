@@ -3621,6 +3621,25 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(map(map_entries($"m"), lit(1))),
       Row(Map(Seq(Row(1, "a")) -> 1)))
   }
+
+  test("SPARK-33391: element_at ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val df = sql("select element_at(array(1, 2, 3), 5)")
+        if (ansiEnabled) {
+          val ex = intercept[Exception] {
+            df.collect()
+          }
+          assert(ex.getMessage.contains("Invalid index: 5"))
+        } else {
+          checkAnswer(
+            df,
+            Row(null)
+          )
+        }
+      }
+    }
+  }
 }
 
 object DataFrameFunctionsSuite {

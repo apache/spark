@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -239,7 +240,11 @@ case class ConcatWs(children: Seq[Expression])
   """,
   since = "2.0.0")
 // scalastyle:on line.size.limit
-case class Elt(children: Seq[Expression]) extends Expression {
+case class Elt(
+    children: Seq[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression {
+
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   private lazy val indexExpr = children.head
   private lazy val inputExprs = children.tail.toArray
@@ -275,7 +280,11 @@ case class Elt(children: Seq[Expression]) extends Expression {
     } else {
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
-        null
+        if (failOnError) {
+          throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+        } else {
+          null
+        }
       } else {
         inputExprs(index - 1).eval(input)
       }
@@ -323,6 +332,16 @@ case class Elt(children: Seq[Expression]) extends Expression {
          """.stripMargin
       }.mkString)
 
+    val failOnErrorBranch = if (failOnError) {
+      s"""
+         |if (!$indexMatched) {
+         |  throw new ArrayIndexOutOfBoundsException("Invalid index: " + ${index.value});
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     ev.copy(
       code"""
          |${index.code}
@@ -332,6 +351,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
          |do {
          |  $codes
          |} while (false);
+         |$failOnErrorBranch
          |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)

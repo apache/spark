@@ -1919,8 +1919,13 @@ case class ArrayPosition(left: Expression, right: Expression)
        b
   """,
   since = "2.4.0")
-case class ElementAt(left: Expression, right: Expression)
+case class ElementAt(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -2008,7 +2013,11 @@ case class ElementAt(left: Expression, right: Expression)
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          null
+          if (failOnError) {
+            throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+          } else {
+            null
+          }
         } else {
           val idx = if (index == 0) {
             throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
@@ -2042,10 +2051,17 @@ case class ElementAt(left: Expression, right: Expression)
           } else {
             ""
           }
+
+          val failOnErrorBranch = if (failOnError) {
+            s"""throw new ArrayIndexOutOfBoundsException("Invalid index: " + $index);""".stripMargin
+          } else {
+            s"${ev.isNull} = true;"
+          }
+
           s"""
              |int $index = (int) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
-             |  ${ev.isNull} = true;
+             |  $failOnErrorBranch
              |} else {
              |  if ($index == 0) {
              |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");

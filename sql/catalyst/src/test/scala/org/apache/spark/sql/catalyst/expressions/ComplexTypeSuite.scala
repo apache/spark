@@ -62,6 +62,24 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
   }
 
+  test("SPARK-33391: GetArrayItem ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val typeA = ArrayType(StringType)
+        val array = Literal.create(Seq("a", "b"), typeA)
+
+        if (ansiEnabled) {
+          val ex = intercept[Exception] {
+            checkEvaluation(GetArrayItem(array, Literal(5)), null)
+          }
+          assert(stackTraceToString(ex).contains("Invalid index: 5"))
+        } else {
+          checkEvaluation(GetArrayItem(array, Literal(5)), null)
+        }
+      }
+    }
+  }
+
   test("SPARK-26637 handles GetArrayItem nullability correctly when input array size is constant") {
     // CreateArray case
     val a = AttributeReference("a", IntegerType, nullable = false)()

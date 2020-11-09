@@ -617,4 +617,23 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
   }
+
+  test("SPARK-33391: elt ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val df = sql("select elt(4, '123', '456')")
+        if (ansiEnabled) {
+          val ex = intercept[Exception] {
+            df.collect()
+          }
+          assert(ex.getMessage.contains("Invalid index: 4"))
+        } else {
+          checkAnswer(
+            df,
+            Row(null)
+          )
+        }
+      }
+    }
+  }
 }
