@@ -18,13 +18,13 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
   override def catalog: String = "test_catalog_v2"
@@ -71,14 +71,10 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     }
   }
 
-  // The test fails for V1 catalog with the error:
-  // org.apache.spark.sql.AnalysisException:
-  //   The namespace in session catalog must have exactly one name part: spark_catalog.table
-  test("namespace is not specified and default v2 catalog is set") {
+  test("namespace is not specified and the default catalog is set") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
-      withTable(s"$catalog.table") {
-        spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
-        // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
+      withTable("table") {
+        spark.sql(s"CREATE TABLE table (id bigint, data string) $defaultUsing")
         runShowTablesSql("SHOW TABLES", Seq(ShowRow("", "table", false)))
       }
     }

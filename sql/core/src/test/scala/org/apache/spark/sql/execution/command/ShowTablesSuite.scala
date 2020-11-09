@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def catalog: String
