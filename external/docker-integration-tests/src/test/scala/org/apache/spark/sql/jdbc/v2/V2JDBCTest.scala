@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.jdbc.v2
 
+import org.apache.log4j.Level
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
+
+  def notSupportsTableComment: Boolean = false
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
@@ -45,6 +49,16 @@ trait V2JDBCTest extends SharedSparkSession {
     }.getMessage
     assert(msg.contains("Cannot update missing field bad_column"))
   }
+
+  def testRenameColumn(tbl: String): Unit = {
+    sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
+    val t = spark.table(s"$tbl")
+    val expectedSchema = new StructType().add("RENAMED", StringType, nullable = true)
+      .add("ID1", StringType, nullable = true).add("ID2", StringType, nullable = true)
+    assert(t.schema === expectedSchema)
+  }
+
+  def testCreateTableWithProperty(tbl: String): Unit = {}
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
@@ -110,6 +124,24 @@ trait V2JDBCTest extends SharedSparkSession {
     assert(msg.contains("Table not found"))
   }
 
+  test("SPARK-33034: ALTER TABLE ... rename column") {
+    withTable(s"$catalogName.alt_table") {
+      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL," +
+        s" ID1 STRING NOT NULL, ID2 STRING NOT NULL) USING _")
+      testRenameColumn(s"$catalogName.alt_table")
+      // Rename to already existing column
+      val msg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalogName.alt_table RENAME COLUMN ID1 TO ID2")
+      }.getMessage
+      assert(msg.contains("Cannot rename column, because ID2 already exists"))
+    }
+    // Rename a column in a not existing table
+    val msg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalogName.not_existing_table RENAME COLUMN ID TO C")
+    }.getMessage
+    assert(msg.contains("Table not found"))
+  }
+
   test("SPARK-33034: ALTER TABLE ... update column nullability") {
     withTable(s"$catalogName.alt_table") {
       testUpdateColumnNullability(s"$catalogName.alt_table")
@@ -120,4 +152,29 @@ trait V2JDBCTest extends SharedSparkSession {
     }.getMessage
     assert(msg.contains("Table not found"))
   }
+
+  test("CREATE TABLE with table comment") {
+    withTable(s"$catalogName.new_table") {
+      val logAppender = new LogAppender("table comment")
+      withLogAppender(logAppender) {
+        sql(s"CREATE TABLE $catalogName.new_table(i INT) USING _ COMMENT 'this is a comment'")
+      }
+      val createCommentWarning = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getRenderedMessage)
+        .exists(_.contains("Cannot create JDBC table comment"))
+      assert(createCommentWarning === notSupportsTableComment)
+    }
+  }
+
+  test("CREATE TABLE with table property") {
+    withTable(s"$catalogName.new_table") {
+      val m = intercept[AnalysisException] {
+        sql(s"CREATE TABLE $catalogName.new_table (i INT) USING _ TBLPROPERTIES('a'='1')")
+      }.message
+      assert(m.contains("Failed table creation"))
+      testCreateTableWithProperty(s"$catalogName.new_table")
+    }
+  }
 }
+

@@ -2878,11 +2878,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropTableStatement]] command.
+   * Create a [[DropTable]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
+    // DROP TABLE works with either a table or a temporary view.
+    DropTable(
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -3215,7 +3216,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AnalyzeTableStatement]], or an [[AnalyzeColumnStatement]].
+   * Create an [[AnalyzeTable]], or an [[AnalyzeColumn]].
    * Example SQL for analyzing a table or a set of partitions :
    * {{{
    *   ANALYZE TABLE multi_part_name [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
@@ -3248,18 +3249,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
     if (ctx.ALL() != null) {
       checkPartitionSpec()
-      AnalyzeColumnStatement(tableName, None, allColumns = true)
+      AnalyzeColumn(UnresolvedTableOrView(tableName), None, allColumns = true)
     } else if (ctx.identifierSeq() == null) {
       val partitionSpec = if (ctx.partitionSpec != null) {
         visitPartitionSpec(ctx.partitionSpec)
       } else {
         Map.empty[String, Option[String]]
       }
-      AnalyzeTableStatement(tableName, partitionSpec, noScan = ctx.identifier != null)
+      AnalyzeTable(
+        UnresolvedTableOrView(tableName, allowTempView = false),
+        partitionSpec,
+        noScan = ctx.identifier != null)
     } else {
       checkPartitionSpec()
-      AnalyzeColumnStatement(
-        tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
+      AnalyzeColumn(
+        UnresolvedTableOrView(tableName),
+        Option(visitIdentifierSeq(ctx.identifierSeq())),
+        allColumns = false)
     }
   }
 

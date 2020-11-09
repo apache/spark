@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
@@ -82,15 +83,14 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
-  @transient private val removeRedundantProjects = RemoveRedundantProjects
-  @transient private val ensureRequirements = EnsureRequirements
-
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    removeRedundantProjects,
-    ensureRequirements
+    RemoveRedundantProjects,
+    RemoveRedundantSorts,
+    EnsureRequirements,
+    DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -123,8 +123,10 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(
-    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 

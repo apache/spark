@@ -1020,7 +1020,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
  * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the child is already sorted
+ * 2) if the Sort operator is a local sort and the child is already sorted
  * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators
  * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
@@ -1031,12 +1031,18 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  *    function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
-      if (newOrders.isEmpty) child else s.copy(order = newOrders)
-    case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
-      child
+      if (newOrders.isEmpty) {
+        applyLocally.lift(child).getOrElse(child)
+      } else {
+        s.copy(order = newOrders)
+      }
+    case Sort(orders, false, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
+      applyLocally.lift(child).getOrElse(child)
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))

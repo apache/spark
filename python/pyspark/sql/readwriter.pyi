@@ -41,7 +41,7 @@ class DataFrameReader(OptionUtils):
         self,
         path: Optional[PathOrPaths] = ...,
         format: Optional[str] = ...,
-        schema: Optional[StructType] = ...,
+        schema: Optional[Union[StructType, str]] = ...,
         **options: OptionalPrimitiveType
     ) -> DataFrame: ...
     def json(
@@ -66,7 +66,9 @@ class DataFrameReader(OptionUtils):
         dropFieldIfAllNull: Optional[Union[bool, str]] = ...,
         encoding: Optional[str] = ...,
         locale: Optional[str] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
+        allowNonNumericNumbers: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def table(self, tableName: str) -> DataFrame: ...
     def parquet(self, *paths: str, **options: OptionalPrimitiveType) -> DataFrame: ...
@@ -75,7 +77,8 @@ class DataFrameReader(OptionUtils):
         paths: PathOrPaths,
         wholetext: bool = ...,
         lineSep: Optional[str] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def csv(
         self,
@@ -96,9 +99,9 @@ class DataFrameReader(OptionUtils):
         negativeInf: Optional[str] = ...,
         dateFormat: Optional[str] = ...,
         timestampFormat: Optional[str] = ...,
-        maxColumns: Optional[int] = ...,
-        maxCharsPerColumn: Optional[int] = ...,
-        maxMalformedLogPerPartition: Optional[int] = ...,
+        maxColumns: Optional[Union[int, str]] = ...,
+        maxCharsPerColumn: Optional[Union[int, str]] = ...,
+        maxMalformedLogPerPartition: Optional[Union[int, str]] = ...,
         mode: Optional[str] = ...,
         columnNameOfCorruptRecord: Optional[str] = ...,
         multiLine: Optional[Union[bool, str]] = ...,
@@ -108,12 +111,15 @@ class DataFrameReader(OptionUtils):
         emptyValue: Optional[str] = ...,
         locale: Optional[str] = ...,
         lineSep: Optional[str] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def orc(
         self,
         path: PathOrPaths,
         mergeSchema: Optional[bool] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     @overload
     def jdbc(
@@ -125,8 +131,8 @@ class DataFrameReader(OptionUtils):
         url: str,
         table: str,
         column: str,
-        lowerBound: int,
-        upperBound: int,
+        lowerBound: Union[int, str],
+        upperBound: Union[int, str],
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = ...
@@ -166,7 +172,7 @@ class DataFrameWriter(OptionUtils):
         path: Optional[str] = ...,
         format: Optional[str] = ...,
         mode: Optional[str] = ...,
-        partitionBy: Optional[List[str]] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
         **options: OptionalPrimitiveType
     ) -> None: ...
     def insertInto(self, tableName: str, overwrite: Optional[bool] = ...) -> None: ...
@@ -175,7 +181,7 @@ class DataFrameWriter(OptionUtils):
         name: str,
         format: Optional[str] = ...,
         mode: Optional[str] = ...,
-        partitionBy: Optional[List[str]] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
         **options: OptionalPrimitiveType
     ) -> None: ...
     def json(
@@ -187,13 +193,13 @@ class DataFrameWriter(OptionUtils):
         timestampFormat: Optional[str] = ...,
         lineSep: Optional[str] = ...,
         encoding: Optional[str] = ...,
-        ignoreNullFields: Optional[bool] = ...,
+        ignoreNullFields: Optional[Union[bool, str]] = ...,
     ) -> None: ...
     def parquet(
         self,
         path: str,
         mode: Optional[str] = ...,
-        partitionBy: Optional[List[str]] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
         compression: Optional[str] = ...,
     ) -> None: ...
     def text(
@@ -224,7 +230,7 @@ class DataFrameWriter(OptionUtils):
         self,
         path: str,
         mode: Optional[str] = ...,
-        partitionBy: Optional[List[str]] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
         compression: Optional[str] = ...,
     ) -> None: ...
     def jdbc(

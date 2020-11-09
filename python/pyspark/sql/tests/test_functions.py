@@ -265,6 +265,41 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertRaises(ValueError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
         self.assertRaises(ValueError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
 
+    def test_sorting_functions_with_column(self):
+        from pyspark.sql import functions
+        from pyspark.sql.column import Column
+
+        funs = [
+            functions.asc_nulls_first, functions.asc_nulls_last,
+            functions.desc_nulls_first, functions.desc_nulls_last
+        ]
+        exprs = [col("x"), "x"]
+
+        for fun in funs:
+            for expr in exprs:
+                res = fun(expr)
+                self.assertIsInstance(res, Column)
+                self.assertIn(
+                    f"""'x {fun.__name__.replace("_", " ").upper()}'""",
+                    str(res)
+                )
+
+        for expr in exprs:
+            res = functions.asc(expr)
+            self.assertIsInstance(res, Column)
+            self.assertIn(
+                """'x ASC NULLS FIRST'""",
+                str(res)
+            )
+
+        for expr in exprs:
+            res = functions.desc(expr)
+            self.assertIsInstance(res, Column)
+            self.assertIn(
+                """'x DESC NULLS LAST'""",
+                str(res)
+            )
+
     def test_sort_with_nulls_order(self):
         from pyspark.sql import functions
 

@@ -113,7 +113,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   //   2) Verify the final result is the same as the expected one
   private def checkPrunedAnswers(
       bucketSpec: BucketSpec,
-      bucketValues: Seq[Integer],
+      bucketValues: Seq[Any],
       filterCondition: Column,
       originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
@@ -190,7 +190,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Case 4: InSet
       val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
@@ -242,6 +242,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues = null :: Nil,
         filterCondition = $"j" <=> null,
         nullDF)
+    }
+  }
+
+  test("bucket pruning support IsNaN") {
+    withTable("bucketed_table") {
+      val numBuckets = NumBucketsForPruningNullDf
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      // json does not support predicate push-down, and thus json is used here
+      naNDF.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Double.NaN :: Nil,
+        filterCondition = $"j".isNaN,
+        naNDF)
     }
   }
 

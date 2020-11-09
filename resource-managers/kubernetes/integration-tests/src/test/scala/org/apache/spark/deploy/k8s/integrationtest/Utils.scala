@@ -60,15 +60,15 @@ object Utils extends Logging {
       val openLatch: CountDownLatch = new CountDownLatch(1)
       val closeLatch: CountDownLatch = new CountDownLatch(1)
 
-      override def onOpen(response: Response) {
+      override def onOpen(response: Response): Unit = {
         openLatch.countDown()
       }
 
-      override def onClose(a: Int, b: String) {
+      override def onClose(a: Int, b: String): Unit = {
         closeLatch.countDown()
       }
 
-      override def onFailure(e: Throwable, r: Response) {
+      override def onFailure(e: Throwable, r: Response): Unit = {
       }
 
       def waitForInputStreamToConnect(): Unit = {

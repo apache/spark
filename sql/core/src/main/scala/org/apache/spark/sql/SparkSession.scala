@@ -94,7 +94,7 @@ class SparkSession private(
    * since that would cause every new session to reinvoke Spark Session Extensions on the currently
    * running extensions.
    */
-  private[sql] def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) = {
     this(sc, None, None,
       SparkSession.applyExtensions(
         sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
@@ -600,7 +600,7 @@ class SparkSession private(
 
   /**
    * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * The dialect that is used for SQL parsing can be configured with 'spark.sql.dialect'.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @since 2.0.0
    */

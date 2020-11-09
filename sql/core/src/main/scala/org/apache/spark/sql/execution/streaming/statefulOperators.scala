@@ -247,7 +247,7 @@ case class StateStoreRestoreExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    child.execute().mapPartitionsWithStateStore(
+    child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,

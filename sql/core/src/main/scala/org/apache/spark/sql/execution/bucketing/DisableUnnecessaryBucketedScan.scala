@@ -101,7 +101,9 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
       case scan: FileSourceScanExec =>
         if (isBucketedScanWithoutFilter(scan)) {
           if (!withInterestingPartition || (withExchange && withAllowedNode)) {
-            scan.copy(disableBucketedScan = true)
+            val nonBucketedScan = scan.copy(disableBucketedScan = true)
+            scan.logicalLink.foreach(nonBucketedScan.setLogicalLink)
+            nonBucketedScan
           } else {
             scan
           }

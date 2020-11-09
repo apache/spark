@@ -32,24 +32,28 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, Struct
 trait V2WriteCommand extends Command {
   def table: NamedRelation
   def query: LogicalPlan
+  def isByName: Boolean
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = outputResolved
+  override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
+    assert(table.resolved && query.resolved,
+      "`outputResolved` can only be called when `table` and `query` are both resolved.")
     // If the table doesn't require schema match, we don't need to resolve the output columns.
-    table.skipSchemaResolution || {
-      table.resolved && query.resolved && query.output.size == table.output.size &&
-        query.output.zip(table.output).forall {
-          case (inAttr, outAttr) =>
-            // names and types must match, nullability must be compatible
-            inAttr.name == outAttr.name &&
-              DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
-              (outAttr.nullable || !inAttr.nullable)
-        }
-    }
+    table.skipSchemaResolution || (query.output.size == table.output.size &&
+      query.output.zip(table.output).forall {
+        case (inAttr, outAttr) =>
+          // names and types must match, nullability must be compatible
+          inAttr.name == outAttr.name &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
+            (outAttr.nullable || !inAttr.nullable)
+      })
   }
+
+  def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
+  def withNewTable(newTable: NamedRelation): V2WriteCommand
 }
 
 /**
@@ -59,7 +63,10 @@ case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
+    isByName: Boolean) extends V2WriteCommand {
+  override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
+  override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
+}
 
 object AppendData {
   def byName(
@@ -86,7 +93,15 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
-  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+  override lazy val resolved: Boolean = {
+    table.resolved && query.resolved && outputResolved && deleteExpr.resolved
+  }
+  override def withNewQuery(newQuery: LogicalPlan): OverwriteByExpression = {
+    copy(query = newQuery)
+  }
+  override def withNewTable(newTable: NamedRelation): OverwriteByExpression = {
+    copy(table = newTable)
+  }
 }
 
 object OverwriteByExpression {
@@ -114,7 +129,14 @@ case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand
+    isByName: Boolean) extends V2WriteCommand {
+  override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
+    copy(query = newQuery)
+  }
+  override def withNewTable(newTable: NamedRelation): OverwritePartitionsDynamic = {
+    copy(table = newTable)
+  }
+}
 
 object OverwritePartitionsDynamic {
   def byName(
@@ -388,9 +410,16 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
  * The logical plan of the DROP TABLE command that works for v2 tables.
  */
 case class DropTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    ifExists: Boolean) extends Command
+    child: LogicalPlan,
+    ifExists: Boolean,
+    purge: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan for handling non-existing table for DROP TABLE command.
+ */
+case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command that works for v2 tables.
@@ -559,4 +588,26 @@ case class ShowFunctions(
     systemScope: Boolean,
     pattern: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
+}
+
+/**
+ * The logical plan of the ANALYZE TABLE command that works for v2 catalogs.
+ */
+case class AnalyzeTable(
+    child: LogicalPlan,
+    partitionSpec: Map[String, Option[String]],
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ANALYZE TABLE FOR COLUMNS command that works for v2 catalogs.
+ */
+case class AnalyzeColumn(
+    child: LogicalPlan,
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends Command {
+  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
+    "mutually exclusive. Only one of them should be specified.")
+  override def children: Seq[LogicalPlan] = child :: Nil
 }
