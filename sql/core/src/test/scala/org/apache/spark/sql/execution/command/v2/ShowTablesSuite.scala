@@ -75,6 +75,7 @@ class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowT
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
       withTable("table") {
         spark.sql(s"CREATE TABLE table (id bigint, data string) $defaultUsing")
+        // TODO(SPARK-33403): DSv2 SHOW TABLES doesn't show `default`
         runShowTablesSql("SHOW TABLES", Seq(ShowRow("", "table", false)))
       }
     }
