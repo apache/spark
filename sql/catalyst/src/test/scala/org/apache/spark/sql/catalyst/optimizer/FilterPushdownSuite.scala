@@ -1212,28 +1212,22 @@ class FilterPushdownSuite extends PlanTest {
   test("push down predicate through expand") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val query =
-      Aggregate(
-        Seq('a, 'b),
-        Seq(sum('c).as("sum")),
         Filter('a > 1,
           Expand(
             Seq(
               Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
               Seq('a, 'b, 'c, 'a, 2)),
             Seq('a, 'b, 'c),
-            input))).analyze
+            input)).analyze
     val optimized = Optimize.execute(query)
 
     val expected =
-      Aggregate(
-        Seq('a, 'b),
-        Seq(sum('c).as("sum")),
         Expand(
           Seq(
             Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
             Seq('a, 'b, 'c, 'a, 2)),
           Seq('a, 'b, 'c),
-          Filter('a > 1, input))).analyze
+          Filter('a > 1, input)).analyze
 
     comparePlans(optimized, expected)
   }
