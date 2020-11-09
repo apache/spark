@@ -239,6 +239,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('\n'), "\n")
   }
 
+  test("SPARK-33390: Make Literal support char array") {
+    checkEvaluation(Literal(Array('h', 'e', 'l', 'l', 'o')), "hello")
+    checkEvaluation(Literal(Array("hello".toCharArray)), Array("hello"))
+  }
+
   test("construct literals from java.time.LocalDate") {
     Seq(
       LocalDate.of(1, 1, 1),
