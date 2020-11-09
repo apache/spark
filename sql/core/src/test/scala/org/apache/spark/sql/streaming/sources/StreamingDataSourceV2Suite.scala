@@ -213,7 +213,6 @@ class FakeWriteSupportingExternalMetadata
       tableSchema: StructType,
       partitioning: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    LastWriteOptions.options = new CaseInsensitiveStringMap(properties)
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = tableSchema
