@@ -175,8 +175,8 @@ private[spark] abstract class YarnSchedulerBackend(
   override def getShufflePushMergerLocations(
       numPartitions: Int,
       resourceProfileId: Int): Seq[BlockManagerId] = {
-    // Currently this is naive way of calculating numMergersNeeded for a stage. In future,
-    // we can use better heuristics to calculate numMergersNeeded for a stage.
+    // Currently this is naive way of calculating numMergersDesired for a stage. In future,
+    // we can use better heuristics to calculate numMergersDesired for a stage.
     val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
       maxNumExecutors
     } else {
@@ -184,14 +184,17 @@ private[spark] abstract class YarnSchedulerBackend(
     }
     val tasksPerExecutor = sc.resourceProfileManager
       .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
-    val numMergersNeeded = math.min(
+    val numMergersDesired = math.min(
       math.max(1, math.ceil(numPartitions / tasksPerExecutor).toInt), maxExecutors)
-    val minMergersThreshold = math.max(minMergersStaticThreshold,
-      math.floor(numMergersNeeded * minMergersThresholdRatio).toInt)
+    val minMergersNeeded = math.max(minMergersStaticThreshold,
+      math.floor(numMergersDesired * minMergersThresholdRatio).toInt)
+
+    // Request for numMergersDesired shuffle mergers to BlockManagerMasterEndpoint
+    // and if its less than minMergersNeeded, we disable push based shuffle.
     val mergerLocations = blockManagerMaster
-      .getShufflePushMergerLocations(numMergersNeeded, scheduler.nodeBlacklist())
+      .getShufflePushMergerLocations(numMergersDesired, scheduler.nodeBlacklist())
     logDebug(s"Num merger locations available ${mergerLocations.length}")
-    if (mergerLocations.size < numMergersNeeded && mergerLocations.size < minMergersThreshold) {
+    if (mergerLocations.size < numMergersDesired && mergerLocations.size < minMergersNeeded) {
       Seq.empty[BlockManagerId]
     } else {
       mergerLocations
