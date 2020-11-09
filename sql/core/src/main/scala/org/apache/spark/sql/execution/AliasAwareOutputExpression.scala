@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 
 /**
@@ -25,20 +25,14 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  protected def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
+  lazy val aliasMap = AttributeMap(outputExpressions.collect {
+    case a @ Alias(child: AttributeReference, _) => (child, a.toAttribute)
+  })
 
-  protected def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map {
-      case a: AttributeReference => replaceAlias(a).getOrElse(a)
-      case other => other
-    }
-  }
+  protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   protected def replaceAlias(attr: AttributeReference): Option[Attribute] = {
-    outputExpressions.collectFirst {
-      case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
-        a.toAttribute
-    }
+    aliasMap.get(attr)
   }
 }
 
@@ -48,13 +42,13 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
  */
 trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias) {
-      child.outputPartitioning match {
-        case h: HashPartitioning => h.copy(expressions = replaceAliases(h.expressions))
-        case other => other
-      }
-    } else {
-      child.outputPartitioning
+    child.outputPartitioning match {
+      case e: Expression if hasAlias =>
+        val normalizedExp = e.transformDown {
+          case attr: AttributeReference => replaceAlias(attr).getOrElse(attr)
+        }
+        normalizedExp.asInstanceOf[Partitioning]
+      case other => other
     }
   }
 }
