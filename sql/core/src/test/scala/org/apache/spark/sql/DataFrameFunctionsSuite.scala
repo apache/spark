@@ -1401,6 +1401,40 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e3.message.contains(errorMsg3))
   }
 
+  test("SPARK-33391: element_at with CreateArray") {
+    // element_at should use one-based index and support negative index.
+    // valid index for array(1, 2, 3) should be 1,2,3,-1,-2,-3
+    var df = OneRowRelation().selectExpr("element_at(array(1, 2, 3), 1)")
+    assert(!df.schema.head.nullable)
+    checkAnswer(
+      df,
+      Seq(Row(1))
+    )
+
+    df = OneRowRelation().selectExpr("element_at(array(1, 2, 3), -1)")
+    assert(!df.schema.head.nullable)
+    checkAnswer(
+      df,
+      Seq(Row(3))
+    )
+
+    df = OneRowRelation().selectExpr("element_at(array(1, 2, 3), 3)")
+    assert(!df.schema.head.nullable)
+    checkAnswer(
+      df,
+      Seq(Row(3))
+    )
+
+    // 0 is not a valid index, return default nullable which is 'TRUE'.
+    df = OneRowRelation().selectExpr("element_at(array(1, 2, 3), 0)")
+    assert(df.schema.head.nullable)
+
+    val ex = intercept[ArrayIndexOutOfBoundsException] {
+      df.collect()
+    }
+    assert(ex.getMessage.contains("SQL array indices start at 1"))
+  }
+
   test("array_union functions") {
     val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
     val ans1 = Row(Seq(1, 2, 3, 4))
