@@ -108,7 +108,7 @@ class EquivalentExpressions {
 
   // For some special expressions we cannot just recurse into all of its children, but we can
   // recursively add the common expressions shared between all of its children.
-  def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
+  private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
     case i: If => Seq(Seq(i.trueValue, i.falseValue))
     case c: CaseWhen =>
       val conditions = c.branches.tail.map(_._1)
