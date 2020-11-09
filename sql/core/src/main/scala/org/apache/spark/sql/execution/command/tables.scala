@@ -130,7 +130,7 @@ case class CreateTableLikeCommand(
       case MANAGED | EXTERNAL =>
         properties
       case VIEW =>
-        // For view, we just use new properties
+        // For view, we just use the new properties
         properties
       case other =>
         throw new IllegalArgumentException(
