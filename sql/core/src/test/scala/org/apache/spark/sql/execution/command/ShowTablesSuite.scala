@@ -143,6 +143,7 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession with AnalysisTes
     }
   }
 
+  // TODO(SPARK-33393): Support SHOW TABLE EXTENDED in DSv2
   test("SHOW TABLE EXTENDED for default") {
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
