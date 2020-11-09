@@ -39,6 +39,16 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 
+  private def withSourceViews(f: => Unit): Unit = {
+    withTable("source", "source2") {
+      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+      df.createOrReplaceTempView("source")
+      val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
+      df2.createOrReplaceTempView("source2")
+      f
+    }
+  }
+
   // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchDatabaseException] {

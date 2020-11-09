@@ -35,16 +35,6 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
     assert(df.collect() === getRows(expected))
   }
 
-  protected def withSourceViews(f: => Unit): Unit = {
-    withTable("source", "source2") {
-      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-      df.createOrReplaceTempView("source")
-      val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
-      df2.createOrReplaceTempView("source2")
-      f
-    }
-  }
-
   test("show an existing table") {
     val namespace = "test"
     val table = "people"
