@@ -2986,7 +2986,8 @@ class Analyzer(
    */
   object WindowFirstSubstitution extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), _) =>
+      case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), spec)
+        if !spec.orderSpec.isEmpty =>
         we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
       case other => other
     }
