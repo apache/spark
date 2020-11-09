@@ -20,12 +20,13 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
-import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 
 class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+  import CatalogV2Implicits._
+  import DataSourceV2Implicits._
 
 
   test("ALTER TABLE RECOVER PARTITIONS") {

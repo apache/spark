@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, Identifier, Table}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
@@ -26,7 +26,7 @@ class DatasourceV2SQLBase
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with AlterTableTests {
 
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+  import CatalogV2Implicits._
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
