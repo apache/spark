@@ -190,7 +190,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Case 4: InSet
       val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
