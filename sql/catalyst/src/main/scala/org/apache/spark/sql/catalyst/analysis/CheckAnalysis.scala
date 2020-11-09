@@ -108,6 +108,11 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
         u.failAnalysis(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
