@@ -394,7 +394,7 @@ class Summarizer(object):
 
         Notes
         -----
-        Currently, the performance of this interface is about 2x~3x slower then using the RDD
+        Currently, the performance of this interface is about 2x~3x slower than using the RDD
         interface.
 
         Examples

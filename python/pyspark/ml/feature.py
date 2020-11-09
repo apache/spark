@@ -296,7 +296,7 @@ class _LSHModel(JavaModel, _LSHParams):
         ----------
         datasetA : :py:class:`pyspark.sql.DataFrame`
             One of the datasets to join.
-        datasetA : :py:class:`pyspark.sql.DataFrame`
+        datasetB : :py:class:`pyspark.sql.DataFrame`
             Another dataset to join.
         threshold : float
             The threshold for the distance of row pairs.
