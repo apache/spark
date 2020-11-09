@@ -75,7 +75,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
   val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  var defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -114,6 +114,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
+    // different spark confs means we need to reinit the default profile
+    ResourceProfile.clearDefaultProfile()
+    defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
     val allocator = new YarnAllocator(
       "not used",

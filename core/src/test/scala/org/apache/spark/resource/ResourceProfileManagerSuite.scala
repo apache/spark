@@ -47,8 +47,8 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rpmanager = new ResourceProfileManager(conf, listenerBus)
     val defaultProf = rpmanager.defaultResourceProfile
     assert(defaultProf.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(defaultProf.executorResources.size === 2,
-      "Executor resources should contain cores and memory by default")
+    assert(defaultProf.executorResources.size === 3,
+      "Executor resources should contain cores, heap and offheap memory by default")
     assert(defaultProf.executorResources(ResourceProfile.CORES).amount === 4,
       s"Executor resources should have 4 cores")
   }

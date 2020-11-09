@@ -43,14 +43,16 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("Default ResourceProfile") {
     val rprof = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
     assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(rprof.executorResources.size === 2,
-      "Executor resources should contain cores and memory by default")
+    assert(rprof.executorResources.size === 3,
+      "Executor resources should contain cores, heap and offheap memory by default")
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
       "Executor resources should have 1 core")
     assert(rprof.getExecutorCores.get === 1,
       "Executor resources should have 1 core")
     assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 1024,
       "Executor resources should have 1024 memory")
+    assert(rprof.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 0,
+      "Executor resources should have 0 offheap memory")
     assert(rprof.executorResources.get(ResourceProfile.PYSPARK_MEM) == None,
       "pyspark memory empty if not specified")
     assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
