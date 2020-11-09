@@ -45,5 +45,5 @@
 
   cat("\nSparkSession Web UI available at", SparkR::sparkR.uiWebUrl())
   cat("\nSparkSession available as 'spark'(master = ", unlist(SparkR::sparkR.conf("spark.master")),
-    ", app id = ",unlist(SparkR::sparkR.conf("spark.app.id")), ").", "\n", sep="")
+    ", app id = ", unlist(SparkR::sparkR.conf("spark.app.id")), ").", "\n", sep = "")
 }
