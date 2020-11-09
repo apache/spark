@@ -327,9 +327,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       def getTable: Table = {
         // If the source accepts external table metadata, here we pass the schema of input query
         // and the user-specified partitioning to `getTable`. This is for avoiding
-        // schema/partitioning inference, which can be very expensive. If the
-        // query schema is not compatible with the existing data, the write can still success but
-        // following reads would fail.
+        // schema/partitioning inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        // For example, writing file source will success but the following reads will fail.
         if (provider.supportsExternalMetadata()) {
           provider.getTable(
             df.schema.asNullable,
