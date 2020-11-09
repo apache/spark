@@ -239,7 +239,7 @@ case class ReplaceTableAsSelect(
 }
 
 /**
- * The logical plan of the CREATE NAMESPACE command that works for v2 catalogs.
+ * The logical plan of the CREATE NAMESPACE command.
  */
 case class CreateNamespace(
     catalog: SupportsNamespaces,
@@ -248,7 +248,7 @@ case class CreateNamespace(
     properties: Map[String, String]) extends Command
 
 /**
- * The logical plan of the DROP NAMESPACE command that works for v2 catalogs.
+ * The logical plan of the DROP NAMESPACE command.
  */
 case class DropNamespace(
     namespace: LogicalPlan,
@@ -258,7 +258,7 @@ case class DropNamespace(
 }
 
 /**
- * The logical plan of the DESCRIBE NAMESPACE command that works for v2 catalogs.
+ * The logical plan of the DESCRIBE NAMESPACE command.
  */
 case class DescribeNamespace(
     namespace: LogicalPlan,
@@ -274,7 +274,7 @@ case class DescribeNamespace(
 
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
- * command that works for v2 catalogs.
+ * command.
  */
 case class AlterNamespaceSetProperties(
     namespace: LogicalPlan,
@@ -283,8 +283,7 @@ case class AlterNamespaceSetProperties(
 }
 
 /**
- * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION
- * command that works for v2 catalogs.
+ * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command.
  */
 case class AlterNamespaceSetLocation(
     namespace: LogicalPlan,
@@ -293,7 +292,7 @@ case class AlterNamespaceSetLocation(
 }
 
 /**
- * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
+ * The logical plan of the SHOW NAMESPACES command.
  */
 case class ShowNamespaces(
     namespace: LogicalPlan,
@@ -327,7 +326,7 @@ case class DescribeColumn(
 }
 
 /**
- * The logical plan of the DELETE FROM command that works for v2 tables.
+ * The logical plan of the DELETE FROM command.
  */
 case class DeleteFromTable(
     table: LogicalPlan,
@@ -336,7 +335,7 @@ case class DeleteFromTable(
 }
 
 /**
- * The logical plan of the UPDATE TABLE command that works for v2 tables.
+ * The logical plan of the UPDATE TABLE command.
  */
 case class UpdateTable(
     table: LogicalPlan,
@@ -346,7 +345,7 @@ case class UpdateTable(
 }
 
 /**
- * The logical plan of the MERGE INTO command that works for v2 tables.
+ * The logical plan of the MERGE INTO command.
  */
 case class MergeIntoTable(
     targetTable: LogicalPlan,
@@ -400,7 +399,7 @@ case class DropTable(
 case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
 
 /**
- * The logical plan of the ALTER TABLE command that works for v2 tables.
+ * The logical plan of the ALTER TABLE command.
  */
 case class AlterTable(
     catalog: TableCatalog,
@@ -432,7 +431,7 @@ case class AlterTable(
 }
 
 /**
- * The logical plan of the ALTER TABLE RENAME command that works for v2 tables.
+ * The logical plan of the ALTER TABLE RENAME command.
  */
 case class RenameTable(
     catalog: TableCatalog,
@@ -469,7 +468,7 @@ case class ShowViews(
 }
 
 /**
- * The logical plan of the USE/USE NAMESPACE command that works for v2 catalogs.
+ * The logical plan of the USE/USE NAMESPACE command.
  */
 case class SetCatalogAndNamespace(
     catalogManager: CatalogManager,
@@ -484,7 +483,7 @@ case class RefreshTable(child: LogicalPlan) extends Command {
 }
 
 /**
- * The logical plan of the SHOW CURRENT NAMESPACE command that works for v2 catalogs.
+ * The logical plan of the SHOW CURRENT NAMESPACE command.
  */
 case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command {
   override val output: Seq[Attribute] = Seq(
