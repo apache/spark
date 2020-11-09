@@ -1966,7 +1966,20 @@ case class ElementAt(left: Expression, right: Expression)
   }
 
   override def nullable: Boolean = left.dataType match {
-    case _: ArrayType => computeNullabilityFromArray(left, right, isOneBasedIndex = true)
+    case _: ArrayType =>
+      def specialNormalizeIndex: (Int, Int) => Int = {
+        (arrayLength: Int, index: Int) => {
+          if (index < 0) {
+            arrayLength + index
+          } else if (index == 0) {
+            // make it default TRUE.
+            arrayLength
+          } else {
+            index - 1
+          }
+        }
+      }
+      computeNullabilityFromArray(left, right, normalizeIndex = specialNormalizeIndex)
     case _: MapType => true
   }
 

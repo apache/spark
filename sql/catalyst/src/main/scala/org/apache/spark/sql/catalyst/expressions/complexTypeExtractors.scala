@@ -276,36 +276,16 @@ trait GetArrayItemUtil {
   protected def computeNullabilityFromArray(
       child: Expression,
       ordinal: Expression,
-      isOneBasedIndex: Boolean = false): Boolean = {
-
-    def isValidOrdinal(input: Int, arraySize: Int): Boolean = {
-      if (isOneBasedIndex) {
-        input != 0 && math.abs(input) <= arraySize
-      } else {
-        input >= 0 && input < arraySize
-      }
-    }
-
-    def zeroBasedOrdinal(input: Int, arraySize: Int): Int = {
-      if (isOneBasedIndex) {
-        if (input < 0) {
-          arraySize + input
-        } else {
-          input - 1
-        }
-      } else {
-        input
-      }
-    }
+      normalizeIndex: (Int, Int) => Int = (_: Int, index: Int) => index): Boolean = {
 
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
-        case CreateArray(ar, _) if isValidOrdinal(intOrdinal, ar.length) =>
-          ar(zeroBasedOrdinal(intOrdinal, ar.size)).nullable
+        case CreateArray(ar, _) if normalizeIndex(ar.length, intOrdinal) < ar.length =>
+          ar(normalizeIndex(ar.length, intOrdinal)).nullable
         case GetArrayStructFields(CreateArray(elements, _), field, _, _, _)
-          if isValidOrdinal(intOrdinal, elements.length) =>
-          elements(zeroBasedOrdinal(intOrdinal, elements.size)).nullable || field.nullable
+          if normalizeIndex(elements.length, intOrdinal) < elements.length =>
+          elements(normalizeIndex(elements.size, intOrdinal)).nullable || field.nullable
         case _ =>
           true
       }
