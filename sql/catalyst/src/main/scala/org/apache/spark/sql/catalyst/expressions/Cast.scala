@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.Cast.{canCast, forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
@@ -258,13 +259,18 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   def dataType: DataType
 
+  /**
+   * Returns true iff we can cast `from` type to `to` type.
+   */
+  def canCast(from: DataType, to: DataType): Boolean
+
   override def toString: String = {
     val ansi = if (ansiEnabled) "ansi_" else ""
     s"${ansi}cast($child as ${dataType.simpleString})"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (Cast.canCast(child.dataType, dataType)) {
+    if (canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
@@ -1753,6 +1759,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     copy(timeZoneId = Option(timeZoneId))
 
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+
+  override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
+    AnsiCast.canCast(from, to)
+  } else {
+    Cast.canCast(from, to)
+  }
 }
 
 /**
@@ -1770,6 +1782,64 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
     copy(timeZoneId = Option(timeZoneId))
 
   override protected val ansiEnabled: Boolean = true
+
+  override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
+}
+
+object AnsiCast {
+  def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if fromType == toType => true
+
+    case (NullType, _) => true
+
+    case (_: NumericType, _: NumericType) => true
+    case (StringType, _: NumericType) => true
+    case (BooleanType, _: NumericType) => true
+
+    case (_: NumericType, StringType) => true
+    case (_: DateType, StringType) => true
+    case (_: TimestampType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
+    case (BooleanType, StringType) => true
+    case (BinaryType, StringType) => true
+
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
+
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+
+    case (StringType, _: CalendarIntervalType) => true
+
+    case (StringType, BooleanType) => true
+    case (_: NumericType, BooleanType) => true
+
+    case (StringType, _: BinaryType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case _ => false
+  }
 }
 
 /**

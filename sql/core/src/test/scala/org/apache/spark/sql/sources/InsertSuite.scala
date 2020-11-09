@@ -756,6 +756,47 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, t timestamp) using parquet")
+        val msg = intercept[AnalysisException] {
+          sql("insert into t values (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
+        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+      }
+
+      withTable("t") {
+        sql("create table t(i int, d date) using parquet")
+        val msg = intercept[AnalysisException] {
+          sql("insert into t values (date('2010-09-02'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': date to int"))
+        assert(msg.contains("Cannot safely cast 'd': int to date"))
+      }
+
+      withTable("t") {
+        sql("create table t(b boolean, t timestamp) using parquet")
+        val msg = intercept[AnalysisException] {
+          sql("insert into t values (TIMESTAMP('2010-09-02 14:10:10'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
+        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+      }
+
+      withTable("t") {
+        sql("create table t(b boolean, d date) using parquet")
+        val msg = intercept[AnalysisException] {
+          sql("insert into t values (date('2010-09-02'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
+        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
+      }
+    }
+  }
+
   test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
     SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
       withSQLConf(
