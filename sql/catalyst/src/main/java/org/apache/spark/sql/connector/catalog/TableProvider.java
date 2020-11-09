@@ -80,7 +80,8 @@ public interface TableProvider {
    * tables. The external table metadata includes:
    *   1. For table reader: user-specified schema from `DataFrameReader`/`DataStreamReader` and
    *      schema/partitioning stored in Spark catalog.
-   *   2. For table writer: the schema of the input `Dataframe` of `DataframeWriter`.
+   *   2. For table writer: the schema of the input `Dataframe` of
+   *      `DataframeWriter`/`DataStreamWriter`.
    * <p>
    * By default this method returns false, which means the schema and partitioning passed to
    * `getTable` are from the infer methods. Please override it if this source has expensive

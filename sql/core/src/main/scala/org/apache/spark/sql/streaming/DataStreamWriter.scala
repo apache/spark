@@ -386,8 +386,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
           optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+        val outputSchema = if (provider.supportsExternalMetadata()) {
+          Some(df.schema)
+        } else {
+          None
+        }
         val table = DataSourceV2Utils.getTableFromProvider(
-          provider, dsOptions, userSpecifiedSchema = None)
+          provider, dsOptions, userSpecifiedSchema = outputSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
