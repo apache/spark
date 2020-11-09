@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
-  override def catalog: String = "spark_catalog"
+  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override protected def defaultUsing: String = "USING parquet"
   override protected def showSchema: StructType = {
     new StructType()
