@@ -22,27 +22,18 @@ import org.mockito.Mockito.mock
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{
-  Attribute,
-  AttributeMap,
-  AttributeReference,
-  Literal
-}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
+
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
-  val colStat = ColumnStat(
-    distinctCount = Some(10),
-    min = Some(1),
-    max = Some(10),
-    nullCount = Some(0),
-    avgLen = Some(4),
-    maxLen = Some(4))
+  val colStat = ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(10),
+    nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
   val plan = StatsTestPlan(
     outputList = Seq(attribute),
@@ -53,48 +44,35 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with positive step") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(
-      sizeInBytes = 4 * 8,
-      rowCount = Some(4),
-      attributeStats = AttributeMap(
-        range.output.map(
-          attr =>
-            (
-              attr,
-              ColumnStat(
-                distinctCount = Some(4),
-                min = Some(1),
-                max = Some(4),
-                nullCount = Some(0),
-                maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8, rowCount = Some(4),
+      attributeStats = AttributeMap(range.output.map(attr => (attr, ColumnStat(
+        distinctCount = Some(4), min = Some(1), max = Some(4), nullCount = Some(0),
+        maxLen = Some(LongType.defaultSize), avgLen = Some(LongType.defaultSize))))))
+    checkStats(
+      range,
+      expectedStatsCboOn = rangeStats,
+      expectedStatsCboOff = rangeStats)
   }
 
   test("range with negative step") {
     val range = Range(-10, -20, -2, None)
-    val rangeStats = Statistics(
-      sizeInBytes = 5 * 8,
-      rowCount = Some(5),
-      attributeStats = AttributeMap(
-        range.output.map(
-          attr =>
-            (
-              attr,
-              ColumnStat(
-                distinctCount = Some(5),
-                min = Some(-18),
-                max = Some(-10),
-                nullCount = Some(0),
-                maxLen = Some(LongType.defaultSize),
-                avgLen = Some(LongType.defaultSize))))))
-    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+    val rangeStats = Statistics(sizeInBytes = 5 * 8, rowCount = Some(5),
+      attributeStats = AttributeMap(range.output.map(attr => (attr, ColumnStat(
+        distinctCount = Some(5), min = Some(-18), max = Some(-10), nullCount = Some(0),
+        maxLen = Some(LongType.defaultSize), avgLen = Some(LongType.defaultSize))))))
+    checkStats(
+      range,
+      expectedStatsCboOn = rangeStats,
+      expectedStatsCboOff = rangeStats)
   }
 
   test("windows") {
     val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
-    checkStats(windows, expectedStatsCboOn = windowsStats, expectedStatsCboOff = windowsStats)
+    checkStats(
+      windows,
+      expectedStatsCboOn = windowsStats,
+      expectedStatsCboOff = windowsStats)
   }
 
   test("limit estimation: limit < child's rowCount") {
@@ -138,40 +116,27 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       Statistics(
         sizeInBytes = 40,
         rowCount = Some(10),
-        attributeStats = AttributeMap(
-          Seq(
-            AttributeReference("c1", IntegerType)() -> ColumnStat(
-              distinctCount = Some(10),
-              min = Some(1),
-              max = Some(10),
-              nullCount = Some(0),
-              avgLen = Some(4),
-              maxLen = Some(4)))))
+        attributeStats = AttributeMap(Seq(
+          AttributeReference("c1", IntegerType)() -> ColumnStat(distinctCount = Some(10),
+            min = Some(1), max = Some(10),
+            nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))))
     val expectedCboStats =
       Statistics(
         sizeInBytes = 4,
         rowCount = Some(1),
-        attributeStats = AttributeMap(
-          Seq(
-            AttributeReference("c1", IntegerType)() -> ColumnStat(
-              distinctCount = Some(10),
-              min = Some(5),
-              max = Some(5),
-              nullCount = Some(0),
-              avgLen = Some(4),
-              maxLen = Some(4)))))
+        attributeStats = AttributeMap(Seq(
+          AttributeReference("c1", IntegerType)() -> ColumnStat(distinctCount = Some(10),
+            min = Some(5), max = Some(5),
+            nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))))
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(
-      plan,
-      expectedStatsCboOn = expectedCboStats,
-      expectedStatsCboOff = expectedDefaultStats)
+      plan, expectedStatsCboOn = expectedCboStats, expectedStatsCboOff = expectedDefaultStats)
   }
 
   test("command should report a dummy stats") {
     val plan = CommentOnNamespace(
-      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")),
-      "comment")
+      ResolvedNamespace(mock(classOf[SupportsNamespaces]), Array("ns")), "comment")
     checkStats(
       plan,
       expectedStatsCboOn = Statistics.DUMMY,
@@ -204,8 +169,10 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
  * This class is used for unit-testing the cbo switch, it mimics a logical plan which computes
  * a simple statistics or a cbo estimated statistics based on the conf.
  */
-private case class DummyLogicalPlan(defaultStats: Statistics, cboStats: Statistics)
-    extends LeafNode {
+private case class DummyLogicalPlan(
+    defaultStats: Statistics,
+    cboStats: Statistics)
+  extends LeafNode {
 
   override def output: Seq[Attribute] = Nil
 
