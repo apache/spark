@@ -102,8 +102,8 @@ package object dsl {
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
-    def likeAll(others: Expression*): Expression = LikeAll(expr +: others)
-    def notLikeAll(others: Expression*): Expression = NotLikeAll(expr +: others)
+    def likeAll(others: Literal*): Expression = LikeAll(expr, others.map(_.eval(EmptyRow)))
+    def notLikeAll(others: Literal*): Expression = NotLikeAll(expr, others.map(_.eval(EmptyRow)))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.text.StringEscapeUtils
@@ -179,140 +180,78 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-abstract class LikeAllBase extends Expression with ImplicitCastInputTypes {
-  def value: Expression = children.head
-  def list: Seq[Expression] = children.tail
-  protected def isNot: Boolean
+abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = {
-    StringType +: Seq.fill(children.size - 1)(StringType)
-  }
+  protected def patterns: Seq[Any]
+
+  protected def isNotDefined: Boolean
+
+  override def inputTypes: Seq[DataType] = StringType :: Nil
 
   override def dataType: DataType = BooleanType
 
-  override def foldable: Boolean = children.forall(_.foldable)
-
   override def nullable: Boolean = true
 
-  private def escape(v: String): String = StringUtils.escapeLikeRegex(v, '\\')
+  private lazy val hasNull: Boolean = patterns.contains(null)
 
-  private def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+  private lazy val cache = patterns.filterNot(_ == null)
+    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
 
   override def eval(input: InternalRow): Any = {
-    val evaluatedValue = value.eval(input)
-    if (evaluatedValue == null) {
+    if (hasNull) {
       null
     } else {
-      var hasNull = false
-      var allMatched = true
-      list.foreach { e =>
-        if (allMatched) {
-          val str = e.eval(input)
-          if (str == null) {
-            hasNull = true
-          } else {
-            val regex = Pattern.compile(escape(str.asInstanceOf[UTF8String].toString))
-            val matched = matches(regex, evaluatedValue.asInstanceOf[UTF8String].toString)
-            if ((isNot && matched) || !(isNot || matched)) {
-              allMatched = false
-            }
-          }
-        }
-      }
-      if (allMatched && hasNull) {
-        null
+      val str = child.eval(input).toString
+      if (isNotDefined) {
+        !cache.exists(p => p.matcher(str).matches())
       } else {
-        allMatched
+        cache.forall(p => p.matcher(str).matches())
       }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
     val patternClass = classOf[Pattern].getName
-    val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
-    val javaDataType = CodeGenerator.javaType(value.dataType)
-    val valueGen = value.genCode(ctx)
-    val listGen = list.map(_.genCode(ctx))
+    val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
-    val rightStr = ctx.freshName("rightStr")
-    val escapedEscapeChar = StringEscapeUtils.escapeJava("\\")
-    val hasNull = ctx.freshName("hasNull")
+    val returnNull = ctx.freshName("returnNull")
     val allMatched = ctx.freshName("allMatched")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.freshName("patternCache")
-    // If some regex expression is foldable, we don't want to re-evaluate the pattern again.
-    val cacheCode = list.zipWithIndex.collect { case (x, i) if x.foldable =>
-      (x.eval(), i)
-    }.filterNot(_._1 == null).map { kv =>
-      val regex = StringEscapeUtils.escapeJava(escape(kv._1.asInstanceOf[UTF8String].toString()))
-      s"""$patternCache[${kv._2}] = $patternClass.compile("$regex");"""
-    }.mkString("\n")
+    val patternHasNull = ctx.addReferenceObj("hasNull", hasNull)
+    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
 
-    val listCode = listGen.zipWithIndex.map { case (x, i) =>
-      s"""
-         |${x.code}
-         |if (${x.isNull}) {
-         |  $hasNull = true; // ${ev.isNull} = true;
-         |} else if ($allMatched) {
-         |  $patternClass $pattern = $patternCache[$i];
-         |  if ($pattern == null) {
-         |    String $rightStr = ${x.value}.toString();
-         |    $pattern = $patternClass.compile($escapeFunc($rightStr, '$escapedEscapeChar'));
-         |  }
-         |  if ($isNot && $pattern.matcher($valueArg.toString()).matches()) {
-         |    $allMatched = false;
-         |  } else if (!$isNot && !$pattern.matcher($valueArg.toString()).matches()) {
-         |    $allMatched = false;
-         |  }
-         |}
-       """.stripMargin
-    }
-
-    val resultType = CodeGenerator.javaType(dataType)
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = listCode,
-      funcName = "likeAll",
-      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BOOLEAN, hasNull) ::
-        (resultType, allMatched) :: Nil,
-      returnType = resultType,
-      makeSplitFunction = body =>
-        s"""
-           |if ($allMatched) {
-           |  $body;
-           |}
-         """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |if ($allMatched) {
-           |  $funcCall;
-           |}
-         """.stripMargin
-      }.mkString("\n"))
     ev.copy(code =
       code"""
-            |${valueGen.code}
-            |$patternClass[] $patternCache = new $patternClass[${list.length}];
-            |boolean $hasNull = false;
+            |${eval.code}
+            |boolean $returnNull = false;
             |boolean $allMatched = true;
-            |if (${valueGen.isNull}) {
-            |  $hasNull = true;
+            |if (${eval.isNull} || $patternHasNull) {
+            |  $returnNull = true;
             |} else {
-            |  $javaDataType $valueArg = ${valueGen.value};
-            |  $cacheCode
-            |  $codes
+            |  $javaDataType $valueArg = ${eval.value};
+            |  for ($patternClass $pattern: $patternCache) {
+            |    if ($isNotDefined && $pattern.matcher($valueArg.toString()).matches()) {
+            |      $allMatched = false;
+            |      break;
+            |    } else if (!$isNotDefined && !$pattern.matcher($valueArg.toString()).matches()) {
+            |      $allMatched = false;
+            |      break;
+            |    }
+            |  }
             |}
-            |final boolean ${ev.isNull} = $allMatched && $hasNull;
+            |final boolean ${ev.isNull} = $returnNull;
             |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }
 }
 
-case class LikeAll(children: Seq[Expression]) extends LikeAllBase {
-  override def isNot: Boolean = false
+case class LikeAll(child: Expression, patterns: Seq[Any]) extends LikeAllBase {
+  override def isNotDefined: Boolean = false
 }
 
-case class NotLikeAll(children: Seq[Expression]) extends LikeAllBase {
-  override def isNot: Boolean = true
+case class NotLikeAll(child: Expression, patterns: Seq[Any]) extends LikeAllBase {
+  override def isNotDefined: Boolean = true
 }
 
 // scalastyle:off line.contains.tab
