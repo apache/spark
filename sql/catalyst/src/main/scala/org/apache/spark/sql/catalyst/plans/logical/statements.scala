@@ -348,16 +348,6 @@ case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
- * A LOAD DATA INTO TABLE statement, as parsed from SQL
- */
-case class LoadDataStatement(
-    tableName: Seq[String],
-    path: String,
-    isLocal: Boolean,
-    isOverwrite: Boolean,
-    partition: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
  * A SHOW CREATE TABLE statement, as parsed from SQL.
  */
 case class ShowCreateTableStatement(

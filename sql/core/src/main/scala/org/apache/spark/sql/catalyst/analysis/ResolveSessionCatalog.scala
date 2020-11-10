@@ -312,8 +312,8 @@ class ResolveSessionCatalog(
           ignoreIfExists = c.ifNotExists)
       }
 
-    case RefreshTable(r @ ResolvedTable(_, _, _: V1Table)) if isSessionCatalog(r.catalog) =>
-      RefreshTableCommand(r.identifier.asTableIdentifier)
+    case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
+      RefreshTableCommand(ident.asTableIdentifier)
 
     case RefreshTable(r: ResolvedView) =>
       RefreshTableCommand(r.identifier.asTableIdentifier)
@@ -358,9 +358,8 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
-    case DropTable(
-        r @ ResolvedTable(_, _, _: V1Table), ifExists, purge) if isSessionCatalog(r.catalog) =>
-      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
+      DropTableCommand(ident.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     // v1 DROP TABLE supports temp view.
     case DropTable(r: ResolvedView, ifExists, purge) =>
@@ -427,10 +426,9 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "MSCK REPAIR TABLE")
 
-    case LoadDataStatement(tbl, path, isLocal, isOverwrite, partition) =>
-      val v1TableName = parseV1Table(tbl, "LOAD DATA")
+    case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         path,
         isLocal,
         isOverwrite,
@@ -573,9 +571,8 @@ class ResolveSessionCatalog(
             "SHOW VIEWS, only SessionCatalog supports this command.")
       }
 
-    case ShowTableProperties(
-        r @ ResolvedTable(_, _, _: V1Table), propertyKey) if isSessionCatalog(r.catalog) =>
-      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
+    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey) =>
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
 
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
@@ -696,9 +693,16 @@ class ResolveSessionCatalog(
       }
   }
 
-  object ResolvedV1TableOrViewIdentifier {
+  object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case _ => None
+    }
+  }
+
+  object ResolvedV1TableOrViewIdentifier {
+    def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
+      case ResolvedV1TableIdentifier(ident) => Some(ident)
       case ResolvedView(ident, _) => Some(ident)
       case _ => None
     }

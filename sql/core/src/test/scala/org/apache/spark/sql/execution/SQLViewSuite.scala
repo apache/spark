@@ -168,17 +168,20 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
-      assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
-      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
       val e2 = intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
+      }.getMessage
+      assert(e2.contains(s"$viewName is a temp view not table"))
+      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
+      val e3 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e2.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(e3.contains("SHOW CREATE TABLE is not supported on a temporary view"))
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      val e3 = intercept[AnalysisException] {
+      val e4 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       }.getMessage
-      assert(e3.contains(s"$viewName is a temp view not table or permanent view"))
+      assert(e4.contains(s"$viewName is a temp view not table or permanent view"))
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
   }
@@ -208,7 +211,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`testview`"))
+      assert(e.contains("default.testView is a view not table"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
