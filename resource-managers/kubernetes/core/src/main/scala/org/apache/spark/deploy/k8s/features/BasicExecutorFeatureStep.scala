@@ -176,13 +176,10 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    // TODO - we need to remove any resources from the template when not using the
     if (!isDefaultProfile) {
-      logDebug("NOT using the default profile so removing template resources")
       if (pod.container != null && pod.container.getResources() != null) {
-        logWarning("show resources: " + pod.container.getResources())
+        logDebug("NOT using the default profile and removing template resources")
         pod.container.setResources(new ResourceRequirements())
-        logWarning("after removal  resources: " + pod.container.getResources())
       }
     }
 
