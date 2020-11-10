@@ -331,7 +331,7 @@ trait BasicIn extends Predicate {
   def hset: Set[Any] = Set.empty
   def optimized: Boolean
 
-  require(list != null, "list should not be null")
+  require(list != null && hset != null, "list should not be null")
 
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
