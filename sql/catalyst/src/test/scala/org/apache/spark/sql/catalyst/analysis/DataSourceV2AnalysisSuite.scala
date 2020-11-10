@@ -668,9 +668,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
         Alias(Cast(a, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(b, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
         query),
-      LessThanOrEqual(
-        AttributeReference("x", DoubleType, nullable = false)(x.exprId),
-        Literal(15.0d)))
+      LessThanOrEqual(x, Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan)
