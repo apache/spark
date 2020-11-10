@@ -499,10 +499,9 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartition(r @ ResolvedTable(_, _, _: V1Table), partSpecsAndLocs, ifNotExists)
-        if isSessionCatalog(r.catalog) =>
+    case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
-        r.identifier.asTableIdentifier,
+        ident.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
@@ -514,10 +513,9 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartition(
-        r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
-        if isSessionCatalog(r.catalog) =>
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
-        r.identifier.asTableIdentifier,
+        ident.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,

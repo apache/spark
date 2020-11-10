@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
 
 /**
- * Analyze PartitionSpecs in datasource v2 commands.
+ * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
  */
 object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
