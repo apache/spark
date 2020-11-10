@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
