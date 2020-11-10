@@ -114,6 +114,11 @@ class EquivalentExpressions {
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
     case i: If => Seq(Seq(i.trueValue, i.falseValue))
     case c: CaseWhen =>
+      // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
+      // because a subexpression in conditions will be run no matter which condition is matched
+      // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,
+      // a subexpression among values doesn't need to be in conditions because no matter which
+      // condition is true, it will be evaluated.
       val conditions = c.branches.tail.map(_._1)
       val values = c.branches.map(_._2) ++ c.elseValue
       Seq(conditions, values)
