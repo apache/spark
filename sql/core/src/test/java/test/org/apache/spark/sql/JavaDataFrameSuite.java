@@ -527,9 +527,9 @@ public class JavaDataFrameSuite {
   @Test
   public void testEnumDataFrame() {
     BeanWithEnum v = new BeanWithEnum(TestEnum.ENUM_VALUE);
-    Dataset<Row> dataFrame = spark.createDataFrame(Collections.singletonList(v), BeanWithEnum.class);
+    Dataset<Row> df = spark.createDataFrame(Collections.singletonList(v), BeanWithEnum.class);
 
-    dataFrame.createOrReplaceTempView("enum");
+    df.createOrReplaceTempView("enum");
 
     List<Row> expectedResult = Collections.singletonList(RowFactory.create("ENUM_VALUE"));
 
