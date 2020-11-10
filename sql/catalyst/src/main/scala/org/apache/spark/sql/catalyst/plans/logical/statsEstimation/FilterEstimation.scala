@@ -173,7 +173,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         evaluateInSet(ar, HashSet() ++ hSet, update)
 
       case InSet(ar: Attribute, set) =>
-        evaluateInSet(ar, set, update)
+        evaluateInSet(ar, HashSet() ++ set.map(e => e.eval(EmptyRow)), update)
 
       // In current stage, we don't have advanced statistics such as sketches or histograms.
       // As a result, some operator can't estimate `nullCount` accurately. E.g. left outer join

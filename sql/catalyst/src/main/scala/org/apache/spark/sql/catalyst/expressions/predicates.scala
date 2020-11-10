@@ -324,7 +324,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
 
-abstract class BasicIn extends Predicate {
+trait BasicIn extends Predicate {
 
   def value: Expression
   def list: Seq[Expression]
@@ -332,22 +332,10 @@ abstract class BasicIn extends Predicate {
 
   require(list != null, "list should not be null")
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
-      ignoreNullability = true))
-    if (mismatchOpt.isDefined) {
-      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
-    } else {
-      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-    }
-  }
-
-  override def children: Seq[Expression] = value +: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
-  override def nullable: Boolean = children.exists(_.nullable) || hasNull
+  override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   lazy val hset = if (optimized) {
@@ -368,9 +356,9 @@ abstract class BasicIn extends Predicate {
     Set.empty
   }
 
-  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+  @transient protected[this] lazy val hasNull: Boolean = hset.contains(null)
 
-  lazy val notNullEval: (Any, InternalRow) => Boolean = if (optimized) {
+  lazy val nullSafeEval: (Any, InternalRow) => Any = if (optimized) {
     (value: Any, _: InternalRow) =>
       if (set.contains(value)) {
         true
@@ -406,14 +394,13 @@ abstract class BasicIn extends Predicate {
     if (evaluatedValue == null) {
       null
     } else {
-      notNullEval(value, input)
+      nullSafeEval(evaluatedValue, input)
     }
   }
 
   def genCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaDataType = CodeGenerator.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
-    val listGen = list.map(_.genCode(ctx))
     // inTmpResult has 3 possible values:
     // -1 means no matches found and there is at least one value in the list evaluated to null
     val HAS_NULL = -1
@@ -423,39 +410,63 @@ abstract class BasicIn extends Predicate {
     val MATCHED = 1
     val tmpResult = ctx.freshName("inTmpResult")
     val valueArg = ctx.freshName("valueArg")
-    // All the blocks are meant to be inside a do { ... } while (false); loop.
-    // The evaluation of variables can be stopped when we find a matching value.
-    val listCode = listGen.map(x =>
-      s"""
-         |${x.code}
-         |if (${x.isNull}) {
-         |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
-         |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-         |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
-         |  continue;
-         |}
-       """.stripMargin)
+    val setTerm = ctx.addReferenceObj("set", set)
 
-    val codes = ctx.splitExpressionsWithCurrentInputs(
-      expressions = listCode,
-      funcName = "valueIn",
-      extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
-      returnType = CodeGenerator.JAVA_BYTE,
-      makeSplitFunction = body =>
+    val codegenBody = if (optimized) {
+      val setIsNull = if (hasNull) {
+        s"$tmpResult = $HAS_NULL;"
+      } else {
+        ""
+      }
+      s"""
+         |if ($setTerm.contains($valueArg)) {
+         |  $tmpResult = $MATCHED;
+         |} else {
+         |  $setIsNull
+         |}
+      """.stripMargin
+    } else {
+      val listGen = list.map(_.genCode(ctx))
+      // All the blocks are meant to be inside a do { ... } while (false); loop.
+      // The evaluation of variables can be stopped when we find a matching value.
+      val listCode = listGen.map(x =>
         s"""
-           |do {
-           |  $body
-           |} while (false);
-           |return $tmpResult;
-         """.stripMargin,
-      foldFunctions = _.map { funcCall =>
-        s"""
-           |$tmpResult = $funcCall;
-           |if ($tmpResult == $MATCHED) {
+           |${x.code}
+           |if (${x.isNull}) {
+           |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+           |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+           |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
            |  continue;
            |}
+       """.stripMargin)
+
+      val codes = ctx.splitExpressionsWithCurrentInputs(
+        expressions = listCode,
+        funcName = "valueIn",
+        extraArguments = (javaDataType, valueArg) :: (CodeGenerator.JAVA_BYTE, tmpResult) :: Nil,
+        returnType = CodeGenerator.JAVA_BYTE,
+        makeSplitFunction = body =>
+          s"""
+             |do {
+             |  $body
+             |} while (false);
+             |return $tmpResult;
+         """.stripMargin,
+        foldFunctions = _.map { funcCall =>
+          s"""
+             |$tmpResult = $funcCall;
+             |if ($tmpResult == $MATCHED) {
+             |  continue;
+             |}
          """.stripMargin
-      }.mkString("\n"))
+        }.mkString("\n"))
+
+      s"""
+         |  do {
+         |    $codes
+         |  } while (false);
+      """.stripMargin
+    }
 
     ev.copy(code =
       code"""
@@ -464,9 +475,7 @@ abstract class BasicIn extends Predicate {
             |if (!${valueGen.isNull}) {
             |  $tmpResult = $NOT_MATCHED;
             |  $javaDataType $valueArg = ${valueGen.value};
-            |  do {
-            |    $codes
-            |  } while (false);
+            |  $codegenBody
             |}
             |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
             |final boolean ${ev.value} = ($tmpResult == $MATCHED);
@@ -474,12 +483,9 @@ abstract class BasicIn extends Predicate {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (optimized) {
-      if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
-        genCodeWithSwitch(ctx, ev)
-      } else {
-        genCodeWithSet(ctx, ev)
-      }
+    if (optimized && canBeComputedUsingSwitch &&
+      hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+      genCodeWithSwitch(ctx, ev)
     } else {
       genCode(ctx, ev)
     }
@@ -491,18 +497,20 @@ abstract class BasicIn extends Predicate {
   }
 
   private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val setTerm = ctx.addReferenceObj("set", set)
-      val setIsNull = if (hasNull) {
-        s"${ev.isNull} = !${ev.value};"
-      } else {
-        ""
-      }
-      s"""
-         |${ev.value} = $setTerm.contains($c);
-         |$setIsNull
+    val setTerm = ctx.addReferenceObj("set", set)
+    val valueGen = value.genCode(ctx)
+    val setIsNull = if (hasNull) {
+      s"${ev.isNull} = !${ev.value};"
+    } else {
+      ""
+    }
+    ev.copy(code =
+      code"""
+            |${valueGen.code}
+            |${ev.value} = $setTerm.contains(${valueGen.value});
+            |$setIsNull
        """.stripMargin
-    })
+    )
   }
 
   // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
@@ -541,7 +549,6 @@ abstract class BasicIn extends Predicate {
        """)
   }
 
-
   override def sql: String = {
     val valueSQL = value.sql
     val listSQL = list.map(_.sql).mkString(", ")
@@ -575,6 +582,18 @@ abstract class BasicIn extends Predicate {
 case class In(value: Expression, list: Seq[Expression]) extends BasicIn {
 
   override def optimized: Boolean = false
+  override def children: Seq[Expression] = value +: list
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
+      ignoreNullability = true))
+    if (mismatchOpt.isDefined) {
+      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+        s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
+    } else {
+      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+    }
+  }
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 }
@@ -586,8 +605,14 @@ case class In(value: Expression, list: Seq[Expression]) extends BasicIn {
 case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
 
   override def optimized: Boolean = true
-
+  override def children: Seq[Expression] = value :: Nil
   override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
+  override def foldable: Boolean = value.foldable
+  override def nullable: Boolean = value.nullable || hasNull
+
+  override def withNewChildren(newChildren: Seq[Expression]): Expression = {
+    InSet(newChildren.head, list)
+  }
 
   override def sql: String = {
     val valueSQL = value.sql
@@ -596,6 +621,11 @@ case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
+}
+
+object InSet {
+  def apply(value: Expression, list: Set[_]): InSet =
+    new InSet(value, list.map(Literal.create(_)).toSeq)
 }
 
 @ExpressionDescription(
