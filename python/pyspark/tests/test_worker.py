@@ -96,7 +96,8 @@ class WorkerTests(ReusedPySparkTestCase):
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_non_exception_error(self):
-        def raise_SystemExit(_):
+        # SPARK-33339: Pyspark application will hang due to non Exception
+        def raise_system_exit(_):
             raise SystemExit()
         rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
