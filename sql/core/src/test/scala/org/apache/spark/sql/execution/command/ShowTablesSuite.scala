@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuite extends QueryTest with SharedSparkSession {
+trait ShowTablesSuite extends SharedSparkSession {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
