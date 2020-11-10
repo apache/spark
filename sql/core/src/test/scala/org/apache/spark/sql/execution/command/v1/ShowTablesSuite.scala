@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTabl
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
+  override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultNamespace: Seq[String] = Seq("default")
   override protected def defaultUsing: String = "USING parquet"

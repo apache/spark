@@ -26,7 +26,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class ShowTablesSuite extends QueryTest with SharedSparkSession with CommonShowTablesSuite {
-  override def catalog: String = "test_catalog_v2"
+  override def version: String = "V2"
+  override def catalog: String = "test_catalog"
   override def defaultNamespace: Seq[String] = Nil
   override protected def defaultUsing: String = "USING _"
   override protected def showSchema: StructType = {

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -24,6 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
+  protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
@@ -36,6 +40,11 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
     assert(df.collect() === getRows(expected))
+  }
+
+  override def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
+    super.test(s"SHOW TABLES $version: " + testName, testTags: _*)(testFun)
   }
 
   test("show an existing table") {
