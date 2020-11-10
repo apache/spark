@@ -2121,8 +2121,6 @@ class DataSourceV2SQLSuite
       val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
       assert(partMetadata.containsKey("location"))
       assert(partMetadata.get("location") == "loc")
-
-      partTable.clearPartitions()
     }
   }
 

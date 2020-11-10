@@ -20,11 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
@@ -93,43 +90,5 @@ object DataSourceV2Implicits {
 
     def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] =
       partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
-  }
-
-  implicit class TablePartitionSpecHelper(partSpec: TablePartitionSpec) {
-    def asPartitionIdentifier(partSchema: StructType): InternalRow = {
-      val conflictKeys = partSpec.keys.toSeq.diff(partSchema.map(_.name))
-      if (conflictKeys.nonEmpty) {
-        throw new AnalysisException(s"Partition key ${conflictKeys.mkString(",")} not exists")
-      }
-
-      val partValues = partSchema.map { part =>
-        val partValue = partSpec.get(part.name).orNull
-        if (partValue == null) {
-          null
-        } else {
-          // TODO: Support other datatypes, such as DateType
-          part.dataType match {
-            case _: ByteType =>
-              partValue.toByte
-            case _: ShortType =>
-              partValue.toShort
-            case _: IntegerType =>
-              partValue.toInt
-            case _: LongType =>
-              partValue.toLong
-            case _: FloatType =>
-              partValue.toFloat
-            case _: DoubleType =>
-              partValue.toDouble
-            case _: StringType =>
-              partValue
-            case _ =>
-              throw new AnalysisException(
-                s"Type ${part.dataType.typeName} is not supported for partition.")
-          }
-        }
-      }
-      InternalRow.fromSeq(partValues)
-    }
   }
 }
