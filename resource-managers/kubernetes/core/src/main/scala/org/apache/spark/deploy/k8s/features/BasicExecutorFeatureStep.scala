@@ -102,11 +102,6 @@ private[spark] class BasicExecutorFeatureStep(
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)
-
-    // TODO - we need to remove any resources from the template when not using the
-    if (isDefaultProfile) {
-      logWarning("default profile so pick up template stuff, otherwise remove extra resources")
-    }
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
 
@@ -181,7 +176,15 @@ private[spark] class BasicExecutorFeatureStep(
           .build()
       }
 
-    logWarning("k8s pod limits are: " + pod.container.getResources().getLimits())
+    // TODO - we need to remove any resources from the template when not using the
+    if (!isDefaultProfile) {
+      logDebug("NOT using the default profile so removing template resources")
+      if (pod.container != null && pod.container.getResources() != null) {
+        logWarning("show resources: " + pod.container.getResources())
+        pod.container.setResources(new ResourceRequirements())
+        logWarning("after removal  resources: " + pod.container.getResources())
+      }
+    }
 
     val executorContainer = new ContainerBuilder(pod.container)
       .withName(Option(pod.container.getName).getOrElse(DEFAULT_EXECUTOR_CONTAINER_NAME))
