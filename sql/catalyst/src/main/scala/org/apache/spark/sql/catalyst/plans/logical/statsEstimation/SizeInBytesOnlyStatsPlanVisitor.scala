@@ -94,8 +94,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     val leftSize = p.left.stats.sizeInBytes
     val rightSize = p.right.stats.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(
-      sizeInBytes = sizeInBytes)
+    Statistics(sizeInBytes = sizeInBytes)
   }
 
   override def visitJoin(p: Join): Statistics = {

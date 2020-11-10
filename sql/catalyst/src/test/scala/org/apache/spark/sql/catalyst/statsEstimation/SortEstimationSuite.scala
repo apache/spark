@@ -25,14 +25,22 @@ import org.apache.spark.sql.types.{BooleanType, ByteType}
 class SortEstimationSuite extends StatsEstimationTestBase {
 
   test("test row size and column stats estimation") {
-    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
-      AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = Some(2),
-        min = Some(false), max = Some(true),
-        nullCount = Some(0), avgLen = Some(1), maxLen = Some(1)),
-      AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = Some(2),
-        min = Some(1), max = Some(2),
-        nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))
-    ))
+    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+      Seq(
+        AttributeReference("cbool", BooleanType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(false),
+          max = Some(true),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1)),
+        AttributeReference("cbyte", ByteType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(1),
+          max = Some(2),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1))))
 
     val expectedSize = 16
     val child = StatsTestPlan(
@@ -43,8 +51,10 @@ class SortEstimationSuite extends StatsEstimationTestBase {
 
     val sortOrder = SortOrder(columnInfo.keys.head, Ascending)
     val sort = Sort(order = Seq(sortOrder), global = true, child = child)
-    val expectedStats = logical.Statistics(sizeInBytes = expectedSize,
-      rowCount = Some(2), attributeStats = columnInfo)
+    val expectedStats = logical.Statistics(
+      sizeInBytes = expectedSize,
+      rowCount = Some(2),
+      attributeStats = columnInfo)
     assert(sort.stats === expectedStats)
   }
 }

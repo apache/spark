@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Unio
 object UnionEstimation {
   import EstimationUtils._
 
-  def compare (a: Any, b: Any): Boolean = {
+  def compare(a: Any, b: Any): Boolean = {
     a match {
       case _: Int => a.asInstanceOf[Int] < b.asInstanceOf[Int]
       case _: Long => a.asInstanceOf[Long] < b.asInstanceOf[Long]
@@ -49,15 +49,15 @@ object UnionEstimation {
     val outputAttrStats = new ArrayBuffer[(Attribute, ColumnStat)]()
 
     union.children.map(_.output).transpose.zipWithIndex.foreach {
-      case(attrs, outputIndex) =>
+      case (attrs, outputIndex) =>
         val validStat = attrs.zipWithIndex.forall {
           case (attr, childIndex) =>
             val attrStats = union.children(childIndex).stats.attributeStats
             attrStats.get(attr).isDefined && attrStats(attr).hasMinMaxStats
         }
-        if(validStat) {
-          var min : Option[Any] = None
-          var max : Option[Any] = None
+        if (validStat) {
+          var min: Option[Any] = None
+          var max: Option[Any] = None
           attrs.zipWithIndex.foreach {
             case (attr, childIndex) =>
               val colStat = union.children(childIndex).stats.attributeStats(attr)
@@ -78,7 +78,10 @@ object UnionEstimation {
         }
     }
 
-    Some(Statistics(sizeInBytes = sizeInBytes, rowCount = outputRows,
-      attributeStats = AttributeMap(outputAttrStats)))
+    Some(
+      Statistics(
+        sizeInBytes = sizeInBytes,
+        rowCount = outputRows,
+        attributeStats = AttributeMap(outputAttrStats)))
   }
 }
