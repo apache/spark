@@ -1425,9 +1425,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(3))
     )
 
-    // 0 is not a valid index, return default nullable which is 'TRUE'.
+    // 0 is not a valid index, return nullable = false since it throws exception.
     df = OneRowRelation().selectExpr("element_at(array(1, 2, 3), 0)")
-    assert(df.schema.head.nullable)
+    assert(!df.schema.head.nullable)
 
     val ex = intercept[ArrayIndexOutOfBoundsException] {
       df.collect()

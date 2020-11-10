@@ -273,19 +273,15 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 trait GetArrayItemUtil {
 
   /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromArray(
-      child: Expression,
-      ordinal: Expression,
-      normalizeIndex: (Int, Int) => Int = (_: Int, index: Int) => index): Boolean = {
-
+  protected def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
-        case CreateArray(ar, _) if normalizeIndex(ar.length, intOrdinal) < ar.length =>
-          ar(normalizeIndex(ar.length, intOrdinal)).nullable
+        case CreateArray(ar, _) if intOrdinal < ar.length =>
+          ar(intOrdinal).nullable
         case GetArrayStructFields(CreateArray(elements, _), field, _, _, _)
-          if normalizeIndex(elements.length, intOrdinal) < elements.length =>
-          elements(normalizeIndex(elements.size, intOrdinal)).nullable || field.nullable
+          if intOrdinal < elements.length =>
+          elements(intOrdinal).nullable || field.nullable
         case _ =>
           true
       }
