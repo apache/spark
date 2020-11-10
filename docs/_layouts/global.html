@@ -179,12 +179,20 @@
         <script src="js/vendor/anchor.min.js"></script>
         <script src="js/main.js"></script>
         <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
-        <script type="text/javascript"> docsearch({
-            apiKey: 'b18ca3732c502995563043aa17bc6ecb',
-            indexName: 'apache_spark',
-            inputSelector: '#docsearch-input',
-            enhancedSearchInput: true,
-            debug: false // Set debug to true if you want to inspect the dropdown
+        <script type="text/javascript">
+            // DocSearch is entirely free and automated. DocSearch is built in two parts:
+            // 1. a crawler which we run on our own infrastructure every 24 hours. It follows every link
+            //    in your website and extract content from every page it traverses. It then pushes this
+            //    content to an Algolia index.
+            // 2. a JavaScript snippet to be inserted in your website that will bind this Algolia index
+            //    to your search input and display its results in a dropdown UI. If you want to find more
+            //    details on how works DocSearch, check the docs of DocSearch.
+            docsearch({
+                apiKey: 'b18ca3732c502995563043aa17bc6ecb',
+                indexName: 'apache_spark',
+                inputSelector: '#docsearch-input',
+                enhancedSearchInput: true,
+                debug: false // Set debug to true if you want to inspect the dropdown
         });
         </script>
 
