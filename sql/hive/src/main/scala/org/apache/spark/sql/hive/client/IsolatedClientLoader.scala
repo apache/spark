@@ -69,8 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
             val fallbackVersion = "2.7.4"
             logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
               s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
-              "again. Hadoop classes will not be shared between Spark and Hive metastore client. " +
-              "It is recommended to set jars used by Hive metastore client through " +
+              "again. It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             (downloadVersion(
               resolvedVersion, fallbackVersion, ivyPath, remoteRepos), fallbackVersion)
