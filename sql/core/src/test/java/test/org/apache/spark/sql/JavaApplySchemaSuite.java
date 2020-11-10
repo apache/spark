@@ -199,34 +199,4 @@ public class JavaApplySchemaSuite implements Serializable {
     List<Row> actual2 = spark.sql("select * from jsonTable2").collectAsList();
     Assert.assertEquals(expectedResult, actual2);
   }
-
-  @Test
-  public void testEnumDataFrame() {
-    WithEnum v = new WithEnum(TestEnum.ENUM_VALUE);
-    Dataset<Row> dataFrame = spark.createDataFrame(Collections.singletonList(v), WithEnum.class);
-
-    dataFrame.createOrReplaceTempView("enum");
-
-    List<Row> expectedResult = Collections.singletonList(RowFactory.create("ENUM_VALUE"));
-
-    List<Row> actual = spark.sql("select * from enum").collectAsList();
-
-    Assert.assertEquals(expectedResult, actual);
-  }
-
-  enum TestEnum {
-    ENUM_VALUE
-  }
-
-  public static class WithEnum {
-    TestEnum value;
-
-    public WithEnum(TestEnum value) {
-      this.value = value;
-    }
-
-    public TestEnum getValue() {
-      return value;
-    }
-  }
 }

@@ -523,4 +523,34 @@ public class JavaDataFrameSuite {
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assert.assertArrayEquals(expected, result);
   }
+
+  @Test
+  public void testEnumDataFrame() {
+    BeanWithEnum v = new BeanWithEnum(TestEnum.ENUM_VALUE);
+    Dataset<Row> dataFrame = spark.createDataFrame(Collections.singletonList(v), BeanWithEnum.class);
+
+    dataFrame.createOrReplaceTempView("enum");
+
+    List<Row> expectedResult = Collections.singletonList(RowFactory.create("ENUM_VALUE"));
+
+    List<Row> actual = spark.sql("select * from enum").collectAsList();
+
+    Assert.assertEquals(expectedResult, actual);
+  }
+
+  enum TestEnum {
+    ENUM_VALUE
+  }
+
+  public static class BeanWithEnum {
+    TestEnum value;
+
+    public BeanWithEnum(TestEnum value) {
+      this.value = value;
+    }
+
+    public TestEnum getValue() {
+      return value;
+    }
+  }
 }
