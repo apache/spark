@@ -1965,6 +1965,36 @@ case class ElementAt(left: Expression, right: Expression)
     }
   }
 
+  private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    if (ordinal == 0) {
+      false
+    } else if (elements.length < math.abs(ordinal)) {
+      true
+    } else {
+      if (ordinal < 0) {
+        elements(elements.length + ordinal).nullable
+      } else {
+        elements(ordinal - 1).nullable
+      }
+    }
+  }
+
+  override def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
+    if (ordinal.foldable && !ordinal.nullable) {
+      val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
+      child match {
+        case CreateArray(ar, _) =>
+          nullability(ar, intOrdinal)
+        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _) =>
+          nullability(elements, intOrdinal) || field.nullable
+        case _ =>
+          true
+      }
+    } else {
+      true
+    }
+  }
+
   override def nullable: Boolean = left.dataType match {
     case _: ArrayType => computeNullabilityFromArray(left, right)
     case _: MapType => true

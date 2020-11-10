@@ -1605,15 +1605,15 @@ class DDLParserSuite extends AnalysisTest {
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", false, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, true, None))
 
     comparePlans(
       parsePlan(
@@ -1621,8 +1621,8 @@ class DDLParserSuite extends AnalysisTest {
            |LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c
            |PARTITION(ds='2017-06-10')
          """.stripMargin),
-      LoadDataStatement(
-        Seq("a", "b", "c"),
+      LoadData(
+        UnresolvedTable(Seq("a", "b", "c")),
         "filepath",
         true,
         true,

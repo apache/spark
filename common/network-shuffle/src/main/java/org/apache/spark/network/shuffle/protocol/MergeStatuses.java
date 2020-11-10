@@ -32,6 +32,8 @@ import org.apache.spark.network.protocol.Encoders;
  * the set of mapper partition blocks that are merged for a given reducer partition, an array
  * of reducer IDs, and an array of merged shuffle partition sizes. The 3 arrays list information
  * about all the reducer partitions merged by the ExternalShuffleService in the same order.
+ *
+ * @since 3.1.0
  */
 public class MergeStatuses extends BlockTransferMessage {
   /** Shuffle ID **/

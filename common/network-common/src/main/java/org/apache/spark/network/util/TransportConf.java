@@ -363,4 +363,39 @@ public class TransportConf {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
+  /**
+   * Class name of the implementation of MergedShuffleFileManager that merges the blocks
+   * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
+   * a cluster level because this configuration is set to
+   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   * To turn on push-based shuffle at a cluster level, set the configuration to
+   * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
+   */
+  public String mergedShuffleFileManagerImpl() {
+    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
+  }
+
+  /**
+   * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
+   * push-based shuffle.
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
+   * complete merged shuffle file in a single response increases the memory requirements for the
+   * clients. Instead of serving the entire merged file, the shuffle service serves the
+   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
+   * configuration controls how big a chunk can get. A corresponding index file for each merged
+   * shuffle file will be generated indicating chunk boundaries.
+   */
+  public int minChunkSizeInMergedShuffleFile() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+  }
+
+  /**
+   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
+   */
+  public long mergedIndexCacheSize() {
+    return JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+  }
 }

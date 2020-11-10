@@ -283,6 +283,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
+    case LoadData(_: ResolvedTable, _, _, _, _) =>
+      throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
+
     case _ => Nil
   }
 }
