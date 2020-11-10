@@ -71,14 +71,15 @@ class EquivalentExpressions {
    * the common expression `(c + 1)` will be added into `equivalenceMap`.
    */
   def addCommonExprs(exprs: Seq[Expression], addFunc: Expression => Boolean = addExpr): Unit = {
-    var exprSetForAll = ExpressionSet()
+    val exprSetForAll = mutable.Set[Expr]()
 
     addExprTree(exprs.head, (expr: Expression) => {
       if (expr.deterministic) {
-        if (exprSetForAll.contains(expr)) {
+        val e = Expr(expr)
+        if (exprSetForAll.contains(e)) {
           true
         } else {
-          exprSetForAll += expr
+          exprSetForAll.add(e)
           false
         }
       } else {
@@ -86,24 +87,26 @@ class EquivalentExpressions {
       }
     })
 
-    exprs.tail.foreach { expr =>
-      var exprSet = ExpressionSet()
-      addExprTree(expr, (expr: Expression) => {
-        if (expr.deterministic) {
-          if (exprSet.contains(expr)) {
+    val commonExprSet = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
+      val otherExprSet = mutable.Set[Expr]()
+
+      addExprTree(expr, (innerExpr: Expression) => {
+        if (innerExpr.deterministic) {
+          val e = Expr(innerExpr)
+          if (otherExprSet.contains(e)) {
             true
           } else {
-            exprSet += expr
+            otherExprSet.add(e)
             false
           }
         } else {
           false
         }
       })
-      exprSetForAll = exprSetForAll.intersect(exprSet)
+      exprSet.intersect(otherExprSet)
     }
 
-    exprSetForAll.foreach(addFunc)
+    commonExprSet.foreach(expr => addFunc(expr.e))
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can
