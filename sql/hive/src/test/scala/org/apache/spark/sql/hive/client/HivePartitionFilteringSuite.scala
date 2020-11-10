@@ -272,10 +272,6 @@ class HivePartitionFilteringSuite(version: String)
       day1 :: day2 :: Nil)
   }
 
-  test("create client with sharesHadoopClasses = false") {
-    buildClient(new Configuration(), sharesHadoopClasses = false)
-  }
-
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
       expectedDs: Seq[Int],
