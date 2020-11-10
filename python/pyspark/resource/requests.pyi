@@ -25,8 +25,8 @@ class ExecutorResourceRequest:
         self,
         resourceName: str,
         amount: int,
-        discoveryScript: str = ...,
-        vendor: str = ...,
+        discoveryScript: Optional[str] = ...,
+        vendor: Optional[str] = ...,
     ) -> None: ...
     @property
     def resourceName(self) -> str: ...
