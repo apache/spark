@@ -89,9 +89,12 @@ class SparkConf(object):
     spark.executorEnv.VAR3=value3
     spark.executorEnv.VAR4=value4
     spark.home=/path
-    >>> sorted(conf.getAll(), key=lambda p: p[0])
-    [('spark.executorEnv.VAR1', 'value1'), ('spark.executorEnv.VAR3', 'value3'), \
-    ('spark.executorEnv.VAR4', 'value4'), ('spark.home', '/path')]
+    >>> for p in sorted(conf.getAll(), key=lambda p: p[0]):
+    ...     print(p)
+    ('spark.executorEnv.VAR1', 'value1')
+    ('spark.executorEnv.VAR3', 'value3')
+    ('spark.executorEnv.VAR4', 'value4')
+    ('spark.home', '/path')
     >>> conf._jconf.setExecutorEnv("VAR5", "value5")
     JavaObject id...
     >>> print(conf.toDebugString())
