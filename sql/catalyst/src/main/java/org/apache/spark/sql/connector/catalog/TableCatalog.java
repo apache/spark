@@ -163,6 +163,29 @@ public interface TableCatalog extends CatalogPlugin {
   boolean dropTable(Identifier ident);
 
   /**
+   * Drop a table in the catalog with an option to purge.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must not drop the view and must return false.
+   * <p>
+   * If the catalog supports the option to purge a table, this method must be overridden.
+   * The default implementation falls back to {@link #dropTable(Identifier)} dropTable} if the
+   * purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
+   *
+   * @param ident a table identifier
+   * @param purge whether a table should be purged
+   * @return true if a table was deleted, false if no table exists for the identifier
+   *
+   * @since 3.1.0
+   */
+  default boolean dropTable(Identifier ident, boolean purge) {
+    if (purge) {
+      throw new UnsupportedOperationException("Purge option is not supported.");
+    }
+    return dropTable(ident);
+  }
+
+  /**
    * Renames a table in the catalog.
    * <p>
    * If the catalog supports views and contains a view for the old identifier and not a table, this

@@ -861,6 +861,17 @@ class Analyzer(
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand =>
+        write.table match {
+          case UnresolvedRelation(ident, _, false) =>
+            lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case _ => throw new AnalysisException("Cannot write into temp view " +
+                s"${ident.quoted} as it's not a data source v2 relation.")
+            }.getOrElse(write)
+          case _ => write
+        }
       case u @ UnresolvedTable(ident) =>
         lookupTempView(ident).foreach { _ =>
           u.failAnalysis(s"${ident.quoted} is a temp view not table.")
@@ -943,6 +954,18 @@ class Analyzer(
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand =>
+        write.table match {
+          case u: UnresolvedRelation if !u.isStreaming =>
+            lookupV2Relation(u.multipartIdentifier, u.options, false).map {
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case other => throw new IllegalStateException(
+                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
+            }.getOrElse(write)
+          case _ => write
+        }
+
       case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName)
           .map(rel => alter.copy(table = rel))
@@ -1018,6 +1041,24 @@ class Analyzer(
           case v: View =>
             table.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
           case other => i.copy(table = other)
+        }
+
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand =>
+        write.table match {
+          case u: UnresolvedRelation if !u.isStreaming =>
+            lookupRelation(u.multipartIdentifier, u.options, false)
+              .map(EliminateSubqueryAliases(_))
+              .map {
+                case v: View => write.failAnalysis(
+                  s"Writing into a view is not allowed. View: ${v.desc.identifier}.")
+                case u: UnresolvedCatalogRelation => write.failAnalysis(
+                  "Cannot write into v1 table: " + u.tableMeta.identifier)
+                case r: DataSourceV2Relation => write.withNewTable(r)
+                case other => throw new IllegalStateException(
+                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
+              }.getOrElse(write)
+          case _ => write
         }
 
       case u: UnresolvedRelation =>
@@ -1464,7 +1505,7 @@ class Analyzer(
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      // SPARK-31607: Resolve Struct field in groupByExpressions and aggregateExpressions
+      // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
       // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
       // different ExprId. This cause aggregateExpressions can't be replaced by expanded
       // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
@@ -1488,7 +1529,7 @@ class Analyzer(
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
-      // SPARK-31607: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+      // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
       // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
       // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
       // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
@@ -1508,7 +1549,8 @@ class Analyzer(
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
-      case o: OverwriteByExpression if !o.outputResolved =>
+      case o: OverwriteByExpression
+          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
         // do not resolve expression attributes until the query attributes are resolved against the
         // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
         o
@@ -3046,40 +3088,15 @@ class Analyzer(
    */
   object ResolveOutputRelation extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case append @ AppendData(table, query, _, isByName)
-          if table.resolved && query.resolved && !append.outputResolved =>
+      case v2Write: V2WriteCommand
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          append.copy(query = projection)
+        val projection = TableOutputResolver.resolveOutputColumns(
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
+        if (projection != v2Write.query) {
+          v2Write.withNewQuery(projection)
         } else {
-          append
-        }
-
-      case overwrite @ OverwriteByExpression(table, _, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
-        }
-
-      case overwrite @ OverwritePartitionsDynamic(table, query, _, isByName)
-          if table.resolved && query.resolved && !overwrite.outputResolved =>
-        validateStoreAssignmentPolicy()
-        val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
-
-        if (projection != query) {
-          overwrite.copy(query = projection)
-        } else {
-          overwrite
+          v2Write
         }
     }
   }

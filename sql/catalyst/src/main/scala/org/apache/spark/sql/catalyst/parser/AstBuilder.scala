@@ -3282,7 +3282,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[LoadDataStatement]].
+   * Create a [[LoadData]].
    *
    * For example:
    * {{{
@@ -3291,8 +3291,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadDataStatement(
-      tableName = visitMultipartIdentifier(ctx.multipartIdentifier),
+    LoadData(
+      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,

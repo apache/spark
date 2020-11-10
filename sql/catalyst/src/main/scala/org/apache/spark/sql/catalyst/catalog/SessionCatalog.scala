@@ -72,7 +72,7 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: SQLConf) {
+      conf: SQLConf) = {
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
@@ -84,7 +84,7 @@ class SessionCatalog(
   }
 
   // For testing only.
-  def this(externalCatalog: ExternalCatalog) {
+  def this(externalCatalog: ExternalCatalog) = {
     this(
       externalCatalog,
       new SimpleFunctionRegistry,

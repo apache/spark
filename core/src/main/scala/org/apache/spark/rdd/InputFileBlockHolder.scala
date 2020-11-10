@@ -34,7 +34,7 @@ private[spark] object InputFileBlockHolder {
    * @param length size of the block, in bytes, or -1 if not available.
    */
   private class FileBlock(val filePath: UTF8String, val startOffset: Long, val length: Long) {
-    def this() {
+    def this() = {
       this(UTF8String.fromString(""), -1, -1)
     }
   }

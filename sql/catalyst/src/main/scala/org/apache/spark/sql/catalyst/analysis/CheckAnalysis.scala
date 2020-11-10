@@ -109,6 +109,11 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
         u.failAnalysis(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
@@ -167,10 +172,10 @@ trait CheckAnalysis extends PredicateHelper {
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(_: FrameLessOffsetWindowFunction,
+          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
-            failAnalysis("An offset window function can only be evaluated in an ordered " +
+            failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
           case w @ WindowExpression(e, s) =>

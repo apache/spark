@@ -228,8 +228,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(_: ResolvedTable, _, _) =>
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
-    case DropTable(r: ResolvedTable, ifExists, _) =>
-      DropTableExec(r.catalog, r.identifier, ifExists) :: Nil
+    case DropTable(r: ResolvedTable, ifExists, purge) =>
+      DropTableExec(session, r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
 
     case _: NoopDropTable =>
       LocalTableScanExec(Nil, Nil) :: Nil
@@ -292,6 +292,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+
+    case LoadData(_: ResolvedTable, _, _, _, _) =>
+      throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
 
     case _ => Nil
   }

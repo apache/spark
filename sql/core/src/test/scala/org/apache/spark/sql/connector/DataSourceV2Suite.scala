@@ -157,6 +157,19 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  test("SPARK-33369: Skip schema inference in DataframeWriter.save() if table provider " +
+    "supports external metadata") {
+    withTempDir { dir =>
+      val cls = classOf[SupportsExternalMetadataWritableDataSource].getName
+      spark.range(10).select('id as 'i, -'id as 'j).write.format(cls)
+          .option("path", dir.getCanonicalPath).mode("append").save()
+      val schema = new StructType().add("i", "long").add("j", "long")
+        checkAnswer(
+          spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
+          spark.range(10).select('id, -'id))
+    }
+  }
+
   test("partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
     Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
@@ -768,6 +781,16 @@ class SimpleWriteOnlyDataSource extends SimpleWritableDataSource {
         throw new SchemaReadAttemptException("schema should not be read.")
       }
     }
+  }
+}
+
+class SupportsExternalMetadataWritableDataSource extends SimpleWritableDataSource {
+  override def supportsExternalMetadata(): Boolean = true
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    throw new IllegalArgumentException(
+      "Dataframe writer should not require inferring table schema the data source supports" +
+        " external metadata.")
   }
 }
 

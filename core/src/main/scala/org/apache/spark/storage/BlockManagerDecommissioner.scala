@@ -208,7 +208,7 @@ private[storage] class BlockManagerDecommissioner(
   private val shuffleBlockMigrationRefreshRunnable = new Runnable {
     val sleepInterval = conf.get(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
-    override def run() {
+    override def run(): Unit = {
       assert(conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
       while (!stopped && !stoppedShuffle && !Thread.interrupted()) {
         try {
@@ -248,6 +248,7 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
     val newShufflesToMigrate = (localShuffles.diff(migratingShuffles)).toSeq
+      .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +

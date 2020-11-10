@@ -108,7 +108,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
   private var containerId: String = _
   protected var jdbcUrl: String = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
@@ -174,7 +174,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     }
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       if (docker != null) {
         try {
