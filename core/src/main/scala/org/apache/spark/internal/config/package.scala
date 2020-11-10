@@ -1946,30 +1946,34 @@ package object config {
         "which needs to be set with the appropriate" +
         "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based" +
         "shuffle to be enabled")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val MAX_MERGER_LOCATIONS_CACHED =
+  private[spark] val SHUFFLE_MERGERS_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.retainedMergerLocations")
       .doc("Maximum number of shuffle push mergers locations cached for push based shuffle." +
         "Currently Shuffle push merger locations are nothing but shuffle services where an" +
         "executor is launched in the case of Push based shuffle.")
+      .version("3.1.0")
       .intConf
       .createWithDefault(500)
 
-  private[spark] val MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
+  private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
     ConfigBuilder("spark.shuffle.push.mergersMinThresholdRatio")
       .doc("Minimum percentage of shuffle push mergers locations required to enable push based" +
         "shuffle for the stage with respect to number of partitions of the child stage. This is" +
         " the number of unique Node Manager locations needed to enable push based shuffle.")
+      .version("3.1.0")
       .doubleConf
       .createWithDefault(0.05)
 
-  private[spark] val MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
+  private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
     ConfigBuilder("spark.shuffle.push.mergersMinStaticThreshold")
       .doc("Minimum static number of of shuffle push mergers locations should be available in" +
         " order to enable push based shuffle for a stage. Note this config works in" +
         " conjunction with spark.shuffle.push.mergersMinThresholdRatio")
+      .version("3.1.0")
       .doubleConf
       .createWithDefault(5)
 }

@@ -80,7 +80,7 @@ class BlockManagerMasterEndpoint(
   private val shuffleMergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
 
   // Maximum number of merger locations to cache
-  private val maxRetainedMergerLocations = conf.get(config.MAX_MERGER_LOCATIONS_CACHED)
+  private val maxRetainedMergerLocations = conf.get(config.SHUFFLE_MERGERS_MAX_RETAINED_LOCATIONS)
 
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
@@ -372,7 +372,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
-    if (!shuffleMergerLocations.contains(blockManagerId.host) && !blockManagerId.isDriver) {
+    if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
       val shuffleServerId = BlockManagerId(blockManagerId.executorId, blockManagerId.host,
         StorageUtils.externalShuffleServicePort(conf))
       if (shuffleMergerLocations.size >= maxRetainedMergerLocations) {
@@ -684,22 +684,25 @@ class BlockManagerMasterEndpoint(
   private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    val activeBlockManagers = blockManagerIdByExecutor.groupBy(_._2.host)
+    val blockManagersWithExecutors = blockManagerIdByExecutor.groupBy(_._2.host)
       .mapValues(_.head).values.map(_._2).toSet
-    val filteredActiveBlockManagers = activeBlockManagers
+    val filteredBlockManagersWithExecutors = blockManagersWithExecutors
       .filterNot(x => hostsToFilter.contains(x.host))
-    val filteredActiveMergers = filteredActiveBlockManagers.map(
+    val filteredMergersWithExecutors = filteredBlockManagersWithExecutors.map(
       x => BlockManagerId(x.executorId, x.host, StorageUtils.externalShuffleServicePort(conf)))
 
     // Enough mergers are available as part of active executors list
-    if (filteredActiveMergers.size >= numMergersNeeded) {
-      filteredActiveMergers.toSeq
+    if (filteredMergersWithExecutors.size >= numMergersNeeded) {
+      filteredMergersWithExecutors.toSeq
     } else {
       // Delta mergers added from inactive mergers list to the active mergers list
-      val filteredDeadMergers = shuffleMergerLocations.values
-        .filterNot(mergerHost => filteredActiveMergers.exists(x => x.host == mergerHost.host))
-      filteredActiveMergers.toSeq ++
-        filteredDeadMergers.toSeq.take(numMergersNeeded - filteredActiveMergers.size)
+      val filteredMergersWithExecutorsHosts = filteredMergersWithExecutors.map(_.host)
+      val filteredMergersWithoutExecutors = shuffleMergerLocations.values
+        .filterNot(
+          mergerHost => filteredMergersWithExecutorsHosts.contains(mergerHost.host))
+      filteredMergersWithExecutors.toSeq ++
+        filteredMergersWithoutExecutors.toSeq
+          .take(numMergersNeeded - filteredMergersWithExecutors.size)
     }
   }
 

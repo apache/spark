@@ -83,9 +83,11 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private val blockManagerMaster: BlockManagerMaster = sc.env.blockManager.master
 
-  private val minMergersThresholdRatio = conf.get(config.MERGER_LOCATIONS_MIN_THRESHOLD_RATIO)
+  private val minMergersThresholdRatio =
+    conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO)
 
-  private val minMergersStaticThreshold = conf.get(config.MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
+  private val minMergersStaticThreshold =
+    conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
 
   private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
 

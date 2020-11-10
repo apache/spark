@@ -103,7 +103,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[spark] var mergerLocs: Seq[BlockManagerId] = Nil
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
-    if (mergerLocs != null && mergerLocs.length > 0) {
+    if (mergerLocs != null) {
       this.mergerLocs = mergerLocs
     }
   }

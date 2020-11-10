@@ -1262,7 +1262,7 @@ private[spark] class DAGScheduler(
    * of available active executors, we would still be able to get sufficient shuffle service
    * locations for block push/merge by getting the historical locations of past executors.
    */
-  private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage) {
+  private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
     // TODO: Handle stage reuse/retry cases separately as without finalize changes we cannot
     // TODO: disable shuffle merge for the retry/reuse cases
     val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
