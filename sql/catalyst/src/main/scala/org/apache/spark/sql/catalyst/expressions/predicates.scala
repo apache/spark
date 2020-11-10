@@ -419,7 +419,6 @@ trait BasicIn extends Predicate {
         ""
       }
       if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
-        println("xxxx")
         // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
         // so the code size should not exceed 64KB
         val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
