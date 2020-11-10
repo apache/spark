@@ -27,14 +27,14 @@ class ShowTablesSuite extends CommonShowTablesSuite {
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultNamespace: Seq[String] = Seq("default")
-  override protected def defaultUsing: String = "USING parquet"
-  override protected def showSchema: StructType = {
+  override def defaultUsing: String = "USING parquet"
+  override def showSchema: StructType = {
     new StructType()
       .add("database", StringType, nullable = false)
       .add("tableName", StringType, nullable = false)
       .add("isTemporary", BooleanType, nullable = false)
   }
-  override protected def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
+  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
     showRows.map {
       case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
     }

@@ -18,24 +18,23 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
   override def version: String = "V2"
   override def catalog: String = "test_catalog"
   override def defaultNamespace: Seq[String] = Nil
-  override protected def defaultUsing: String = "USING _"
-  override protected def showSchema: StructType = {
+  override def defaultUsing: String = "USING _"
+  override def showSchema: StructType = {
     new StructType()
       .add("namespace", StringType, nullable = false)
       .add("tableName", StringType, nullable = false)
   }
-  override protected def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
+  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
     showRows.map {
       case ShowRow(namespace, table, _) => Row(namespace, table)
     }
