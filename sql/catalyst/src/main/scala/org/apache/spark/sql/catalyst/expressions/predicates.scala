@@ -327,7 +327,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 trait BasicIn extends Predicate {
 
   def value: Expression
-  def list: Seq[Expression]
+  def list: Seq[Expression] = Seq.empty[Expression]
+  def hset: Set[Any] = Set.empty
   def optimized: Boolean
 
   require(list != null, "list should not be null")
@@ -338,22 +339,12 @@ trait BasicIn extends Predicate {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  lazy val hset = if (optimized) {
-    HashSet() ++ list.map(e => e.eval(EmptyRow))
-  } else {
-    HashSet[Any]()
-  }
-
-  lazy val set: Set[Any] = if (optimized) {
-    value.dataType match {
-      case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
-      case _: NullType => hset
-      case _ =>
-        // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-        TreeSet.empty(TypeUtils.getInterpretedOrdering(value.dataType)) ++ (hset - null)
-    }
-  } else {
-    Set.empty
+  lazy val set: Set[Any] = value.dataType match {
+    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
+    case _: NullType => hset
+    case _ =>
+      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(value.dataType)) ++ (hset - null)
   }
 
   @transient protected[this] lazy val hasNull: Boolean = hset.contains(null)
@@ -511,42 +502,6 @@ trait BasicIn extends Predicate {
     case _ => false
   }
 
-  // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
-  // so the code size should not exceed 64KB
-  private def genCodeWithSwitch(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
-    val valueGen = value.genCode(ctx)
-
-    val caseBranches = caseValuesGen.map(literal =>
-      code"""
-        case ${literal.value}:
-          ${ev.value} = true;
-          break;
-       """)
-
-    val switchCode = if (caseBranches.size > 0) {
-      code"""
-        switch (${valueGen.value}) {
-          ${caseBranches.mkString("\n")}
-          default:
-            ${ev.isNull} = $hasNull;
-        }
-       """
-    } else {
-      s"${ev.isNull} = $hasNull;"
-    }
-
-    ev.copy(code =
-      code"""
-        ${valueGen.code}
-        ${CodeGenerator.JAVA_BOOLEAN} ${ev.isNull} = ${valueGen.isNull};
-        ${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = false;
-        if (!${valueGen.isNull}) {
-          $switchCode
-        }
-       """)
-  }
-
   override def sql: String = {
     val valueSQL = value.sql
     val listSQL = list.map(_.sql).mkString(", ")
@@ -577,7 +532,7 @@ trait BasicIn extends Predicate {
   """,
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends BasicIn {
+case class In(value: Expression, override val list: Seq[Expression]) extends BasicIn {
 
   override def optimized: Boolean = false
   override def children: Seq[Expression] = value +: list
@@ -600,7 +555,7 @@ case class In(value: Expression, list: Seq[Expression]) extends BasicIn {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
+case class InSet(value: Expression, override val hset: Set[Any]) extends BasicIn {
 
   override def optimized: Boolean = true
   override def children: Seq[Expression] = value :: Nil
@@ -609,7 +564,7 @@ case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
   override def nullable: Boolean = value.nullable || hasNull
 
   override def withNewChildren(newChildren: Seq[Expression]): Expression = {
-    InSet(newChildren.head, list)
+    InSet(newChildren.head, hset)
   }
 
   override def sql: String = {
@@ -619,11 +574,6 @@ case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
-}
-
-object InSet {
-  def apply(value: Expression, list: Set[_]): InSet =
-    new InSet(value, list.map(Literal.create(_)).toSeq)
 }
 
 @ExpressionDescription(

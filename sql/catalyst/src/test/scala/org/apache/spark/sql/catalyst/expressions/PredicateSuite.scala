@@ -130,7 +130,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkInAndInSet(in: In, expected: Any): Unit = {
     // expecting all in.list are Literal or NonFoldableLiteral.
     checkEvaluation(in, expected)
-    checkEvaluation(InSet(in.value, in.list), expected)
+    checkEvaluation(InSet(in.value, HashSet() ++ in.list.map(_.eval())), expected)
   }
 
   test("basic IN/INSET predicate test") {
