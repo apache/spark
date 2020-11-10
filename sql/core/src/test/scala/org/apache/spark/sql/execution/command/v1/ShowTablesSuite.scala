@@ -21,11 +21,11 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 class ShowTablesSuite extends CommonShowTablesSuite {
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
+  override def defaultNamespace: Seq[String] = Seq("default")
   override protected def defaultUsing: String = "USING parquet"
   override protected def showSchema: StructType = {
     new StructType()
@@ -57,15 +57,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     assert(msg.contains("Database 'unknown' not found"))
   }
 
-  test("namespace is not specified and the default catalog is set") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
-      withTable("table") {
-        spark.sql(s"CREATE TABLE table (id bigint, data string) $defaultUsing")
-        runShowTablesSql("SHOW TABLES", Seq(ShowRow("default", "table", false)))
-      }
-    }
-  }
-
   // `SHOW TABLES` from v2 catalog returns empty result.
   test("v1 SHOW TABLES list the temp views") {
     withSourceViews {
@@ -75,23 +66,14 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 
-  test("using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+  test("v1 SHOW TABLES only support single-level namespace") {
     val exception = intercept[AnalysisException] {
       runShowTablesSql("SHOW TABLES FROM a.b", Seq())
     }
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
-  test("namespace not specified and default v2 catalog not set - fallback to v1") {
-    withSourceViews {
-      runShowTablesSql(
-        "SHOW TABLES",
-        Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
-      runShowTablesSql("SHOW TABLES LIKE '*2'", Seq(ShowRow("", "source2", true)))
-    }
-  }
-
-  test("SHOW TABLE EXTENDED for default") {
+  test("SHOW TABLE EXTENDED from default") {
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
       val schema = new StructType()
