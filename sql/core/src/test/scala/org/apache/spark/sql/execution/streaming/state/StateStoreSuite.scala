@@ -958,7 +958,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     // two state stores
     val provider1 = newStoreProvider(storeId)
-    val restoreStore = provider1.getStore(1)
+    val restoreStore = provider1.getReadStore(1)
     val saveStore = provider1.getStore(1)
 
     put(saveStore, key, get(restoreStore, key).get + 1)
@@ -1034,7 +1034,7 @@ object StateStoreTestsHelper {
     store.put(stringToRow(key), intToRow(value))
   }
 
-  def get(store: StateStore, key: String): Option[Int] = {
+  def get(store: ReadStateStore, key: String): Option[Int] = {
     Option(store.get(stringToRow(key))).map(rowToInt)
   }
 

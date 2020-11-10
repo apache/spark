@@ -729,6 +729,17 @@ class DataSourceV2SQLSuite
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
+  test("DropTable: purge option") {
+    withTable("testcat.ns.t") {
+      sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
+      val ex = intercept[UnsupportedOperationException] {
+        sql ("DROP TABLE testcat.ns.t PURGE")
+      }
+      // The default TableCatalog.dropTable implementation doesn't support the purge option.
+      assert(ex.getMessage.contains("Purge option is not supported"))
+    }
+  }
+
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {
@@ -747,6 +758,22 @@ class DataSourceV2SQLSuite
           "SHOW TABLES FROM spark_catalog.default LIKE 't'",
           Nil,
           expectV2Catalog = false)
+      }
+    }
+  }
+
+  test("SPARK-33305: DROP TABLE should also invalidate cache") {
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+        sql(s"DROP TABLE $t")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
       }
     }
   }
@@ -2041,10 +2068,10 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      testV1Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
-      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
-      testV1Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
-      testV1Command("LOAD DATA",
+      testNotSupportedV2Command("LOAD DATA", s"INPATH 'filepath' INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA", s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t")
+      testNotSupportedV2Command("LOAD DATA",
         s"LOCAL INPATH 'filepath' OVERWRITE INTO TABLE $t PARTITION(id=1)")
     }
   }

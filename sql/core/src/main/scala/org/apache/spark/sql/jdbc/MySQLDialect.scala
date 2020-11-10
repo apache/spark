@@ -89,4 +89,9 @@ private case object MySQLDialect extends JdbcDialect {
       isNullable: Boolean): String = {
     throw new SQLFeatureNotSupportedException(s"UpdateColumnNullability is not supported")
   }
+
+  // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
+  override def getTableCommentQuery(table: String, comment: String): String = {
+    s"ALTER TABLE $table COMMENT = '$comment'"
+  }
 }

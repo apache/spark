@@ -49,7 +49,7 @@ private[sql] class AvroSerializer(
     nullable: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
 
-  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) {
+  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
     this(rootCatalystType, rootAvroType, nullable,
       LegacyBehaviorPolicy.withName(SQLConf.get.getConf(
         SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE)))

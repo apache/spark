@@ -45,77 +45,77 @@ public class OneForOneBlockPusherSuite {
   @Test
   public void testPushOne() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shuffle_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
+    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", "shuffle_0_0_0", 0)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0)));
 
-    verify(listener).onBlockFetchSuccess(eq("shuffle_0_0_0"), any());
+    verify(listener).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
   }
 
   @Test
   public void testPushThree() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("b2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("shufflePush_0_2_0", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-        new PushBlockStream("app-id", "b1", 1),
-        new PushBlockStream("app-id", "b2", 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 2, 0, 2)));
 
-    for (int i = 0; i < 3; i ++) {
-      verify(listener, times(1)).onBlockFetchSuccess(eq("b" + i), any());
-    }
+    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_2_0"), any());
   }
 
   @Test
   public void testServerFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
-    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-        new PushBlockStream("app-id", "b1", 1),
-        new PushBlockStream("app-id", "b2", 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("b0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
   }
 
   @Test
   public void testHandlingRetriableFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("b0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("b1", null);
-    blocks.put("b2", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shufflePush_0_1_0", null);
+    blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", "b0", 0),
-        new PushBlockStream("app-id", "b1", 1),
-        new PushBlockStream("app-id", "b2", 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("b0"), any());
-    verify(listener, times(0)).onBlockFetchSuccess(not(eq("b0")), any());
-    verify(listener, times(0)).onBlockFetchFailure(eq("b0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("b1"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("b2"), any());
+    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(0)).onBlockFetchSuccess(not(eq("shufflePush_0_0_0")), any());
+    verify(listener, times(0)).onBlockFetchFailure(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(2)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
   }
 
   /**

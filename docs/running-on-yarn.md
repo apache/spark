@@ -584,48 +584,48 @@ To use a custom metrics.properties for the application master and executors, upd
 <table class="table">
     <tr><th>Pattern</th><th>Meaning</th></tr>
     <tr>
-      <td>{{HTTP_SCHEME}}</td>
-      <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+      <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
+      <td><code>http://</code> or <code>https://</code> according to YARN HTTP policy. (Configured via <code>yarn.http.policy</code>)</td>
     </tr>
     <tr>
-      <td>{{NM_HOST}}</td>
+      <td>&#123;&#123;NM_HOST&#125;&#125;</td>
       <td>The "host" of node where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_PORT}}</td>
+      <td>&#123;&#123;NM_PORT&#125;&#125;</td>
       <td>The "port" of node manager where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_PORT}}</td>
+      <td>&#123;&#123;NM_HTTP_PORT&#125;&#125;</td>
       <td>The "port" of node manager's http server where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_ADDRESS}}</td>
+      <td>&#123;&#123;NM_HTTP_ADDRESS&#125;&#125;</td>
       <td>Http URI of the node on which the container is allocated.</td>
     </tr>
     <tr>
-      <td>{{CLUSTER_ID}}</td>
-      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+      <td>&#123;&#123;CLUSTER_ID&#125;&#125;</td>
+      <td>The cluster ID of Resource Manager. (Configured via <code>yarn.resourcemanager.cluster-id</code>)</td>
     </tr>
     <tr>
-      <td>{{CONTAINER_ID}}</td>
+      <td>&#123;&#123;CONTAINER_ID&#125;&#125;</td>
       <td>The ID of container.</td>
     </tr>
     <tr>
-      <td>{{USER}}</td>
-      <td>'SPARK_USER' on system environment.</td>
+      <td>&#123;&#123;USER&#125;&#125;</td>
+      <td><code>SPARK_USER</code> on system environment.</td>
     </tr>
     <tr>
-      <td>{{FILE_NAME}}</td>
-      <td>`stdout`, `stderr`.</td>
+      <td>&#123;&#123;FILE_NAME&#125;&#125;</td>
+      <td><code>stdout</code>, <code>stderr</code>.</td>
     </tr>
 </table>
 
 For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
 
- `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+<code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
 
- NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
 
 # Resource Allocation and Configuration Overview
 

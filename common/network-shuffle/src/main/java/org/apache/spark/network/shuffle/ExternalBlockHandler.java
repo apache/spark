@@ -68,7 +68,7 @@ public class ExternalBlockHandler extends RpcHandler {
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
-      new NoOpMergedShuffleFileManager());
+      new NoOpMergedShuffleFileManager(conf));
   }
 
   public ExternalBlockHandler(
@@ -89,7 +89,7 @@ public class ExternalBlockHandler extends RpcHandler {
   public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
-    this(streamManager, blockManager, new NoOpMergedShuffleFileManager());
+    this(streamManager, blockManager, new NoOpMergedShuffleFileManager(null));
   }
 
   /** Enables mocking out the StreamManager, BlockManager, and MergeManager. */
@@ -175,7 +175,7 @@ public class ExternalBlockHandler extends RpcHandler {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
-        mergeManager.registerExecutor(msg.appId, msg.executorInfo.localDirs);
+        mergeManager.registerExecutor(msg.appId, msg.executorInfo);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
       } finally {
         responseDelayContext.stop();
@@ -232,6 +232,7 @@ public class ExternalBlockHandler extends RpcHandler {
    */
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     blockManager.applicationRemoved(appId, cleanupLocalDirs);
+    mergeManager.applicationRemoved(appId, cleanupLocalDirs);
   }
 
   /**
@@ -430,8 +431,15 @@ public class ExternalBlockHandler extends RpcHandler {
   /**
    * Dummy implementation of merged shuffle file manager. Suitable for when push-based shuffle
    * is not enabled.
+   *
+   * @since 3.1.0
    */
-  private static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
+  public static class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
+
+    // This constructor is needed because we use this constructor to instantiate an implementation
+    // of MergedShuffleFileManager using reflection.
+    // See YarnShuffleService#newMergedShuffleFileManagerInstance.
+    public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
 
     @Override
     public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
@@ -444,18 +452,13 @@ public class ExternalBlockHandler extends RpcHandler {
     }
 
     @Override
-    public void registerApplication(String appId, String user) {
-      // No-op. Do nothing.
-    }
-
-    @Override
-    public void registerExecutor(String appId, String[] localDirs) {
+    public void registerExecutor(String appId, ExecutorShuffleInfo executorInfo) {
       // No-Op. Do nothing.
     }
 
     @Override
     public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
-      throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+      // No-Op. Do nothing.
     }
 
     @Override
