@@ -89,9 +89,8 @@ object FileSourceStrategy extends Strategy with Logging {
       case expressions.In(a: Attribute, list)
         if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
         getBucketSetFromIterable(a, list.map(e => e.eval(EmptyRow)))
-      case expressions.InSet(a: Attribute, hset)
-        if hset.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
-        getBucketSetFromIterable(a, hset.map(e => expressions.Literal(e).eval(EmptyRow)))
+      case expressions.InSet(a: Attribute, hset) if a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, hset)
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
         getBucketSetFromValue(a, null)
       case expressions.And(left, right) =>
