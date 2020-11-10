@@ -229,7 +229,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(r.catalog, r.identifier, ifExists, purge) :: Nil
+      DropTableExec(session, r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
 
     case _: NoopDropTable =>
       LocalTableScanExec(Nil, Nil) :: Nil

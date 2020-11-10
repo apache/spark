@@ -784,6 +784,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33305: DROP TABLE should also invalidate cache") {
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+        sql(s"DROP TABLE $t")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+      }
+    }
+  }
+
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
