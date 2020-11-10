@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
@@ -42,9 +42,24 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     // row count * (overhead + column size)
     size = Some(10 * (8 + 4)))
 
-  test("range") {
+  test("range with positive step") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(sizeInBytes = 4 * 8)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8, rowCount = Some(4),
+      attributeStats = AttributeMap(range.output.map(attr => (attr, ColumnStat(
+        distinctCount = Some(4), min = Some(1), max = Some(4), nullCount = Some(0),
+        maxLen = Some(LongType.defaultSize), avgLen = Some(LongType.defaultSize))))))
+    checkStats(
+      range,
+      expectedStatsCboOn = rangeStats,
+      expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with negative step") {
+    val range = Range(-10, -20, -2, None)
+    val rangeStats = Statistics(sizeInBytes = 5 * 8, rowCount = Some(5),
+      attributeStats = AttributeMap(range.output.map(attr => (attr, ColumnStat(
+        distinctCount = Some(5), min = Some(-18), max = Some(-10), nullCount = Some(0),
+        maxLen = Some(LongType.defaultSize), avgLen = Some(LongType.defaultSize))))))
     checkStats(
       range,
       expectedStatsCboOn = rangeStats,

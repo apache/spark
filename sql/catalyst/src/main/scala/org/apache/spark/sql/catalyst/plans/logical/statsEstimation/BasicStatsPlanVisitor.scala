@@ -69,7 +69,13 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitScriptTransform(p: ScriptTransformation): Statistics = fallback(p)
 
-  override def visitUnion(p: Union): Statistics = fallback(p)
+  override def visitUnion(p: Union): Statistics = {
+    UnionEstimation.estimate(p).getOrElse(fallback(p))
+  }
 
   override def visitWindow(p: Window): Statistics = fallback(p)
+
+  override def visitSort(p: Sort): Statistics = {
+    BasicStatsPlanVisitor.visit(p.child)
+  }
 }

@@ -545,7 +545,23 @@ case class Range(
   }
 
   override def computeStats(): Statistics = {
-    Statistics(sizeInBytes = LongType.defaultSize * numElements)
+    val minVal = if (step > 0) {
+      start
+    } else {
+      start + (numElements - 1) * step
+    }
+
+    val maxVal = if (step > 0) {
+      start + (numElements - 1) * step
+    } else {
+      start
+    }
+
+    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements),
+      attributeStats = AttributeMap(output.map(a => (a,
+        ColumnStat(distinctCount = Some(numElements), max = Some(maxVal), min = Some(minVal),
+          nullCount = Some(0), avgLen = Some(LongType.defaultSize),
+          maxLen = Some(LongType.defaultSize))))))
   }
 
   override def outputOrdering: Seq[SortOrder] = {
