@@ -274,10 +274,9 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    Amount of additional memory to be allocated per executor process in cluster mode, in MiB unless
-    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
-    other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
-    This option is currently supported on YARN and Kubernetes.
+    Amount of additional memory to be allocated per executor process, in MiB unless otherwise specified.
+    This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    This tends to grow with the executor size (typically 6-10%). This option is currently supported on YARN and Kubernetes.
     <br/>
     <em>Note:</em> Additional memory includes PySpark executor memory 
     (when <code>spark.executor.pyspark.memory</code> is not configured) and memory used by other
