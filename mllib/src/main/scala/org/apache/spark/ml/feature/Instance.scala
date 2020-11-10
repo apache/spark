@@ -102,6 +102,15 @@ private[spark] case class InstanceBlock(
 
 private[spark] object InstanceBlock {
 
+  /**
+   * Suggested value for BlockSizeInMB in Level-2 routine cases.
+   * According to performance tests of BLAS routine (see SPARK-31714) and
+   * LinearSVC (see SPARK-32907), 1.0 MB should be an acceptable value for
+   * linear models using Level-2 routine (GEMV) to perform prediction and
+   * gradient computation.
+   */
+  val DefaultBlockSizeInMB = 1.0
+
   private def getBlockMemUsage(
       numCols: Long,
       numRows: Long,
@@ -148,10 +157,9 @@ private[spark] object InstanceBlock {
     iterator.flatMap { instance =>
       if (numCols < 0L) numCols = instance.features.size
       require(numCols == instance.features.size)
-      val nnz = instance.features.numNonzeros
       buff += instance
       buffCnt += 1L
-      buffNnz += nnz
+      buffNnz += instance.features.numNonzeros
       buffUnitWeight &&= (instance.weight == 1)
 
       if (getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight) >= maxMemUsage) {
@@ -175,31 +183,6 @@ private[spark] object InstanceBlock {
       maxMemUsage: Long): RDD[InstanceBlock] = {
     require(maxMemUsage > 0)
     instances.mapPartitions(iter => blokifyWithMaxMemUsage(iter, maxMemUsage))
-  }
-
-
-  /**
-   * Suggested value for BlockSizeInMB, based on performance tests of BLAS operation.
-   *
-   * @param dim size of vector.
-   * @param avgNNZ average nnz of vectors.
-   * @param blasLevel level of BLAS operation.
-   */
-  def inferBlockSizeInMB(
-      dim: Int,
-      avgNNZ: Double,
-      blasLevel: Int = 2): Double = {
-    if (dim <= avgNNZ * 3) {
-      // When the dataset is relatively dense, Spark will use netlib-java for optimised numerical
-      // processing, which will try to use nativeBLAS implementations (like OpenBLAS, Intel MKL),
-      // and fallback to the Java implementation (f2jBLAS) if necessary.
-      // The suggested value for dense cases is 0.25.
-      0.25
-    } else {
-      // When the dataset is sparse, Spark will use its own Scala implementation.
-      // The suggested value for sparse cases is 64.0.
-      64.0
-    }
   }
 }
 

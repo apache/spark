@@ -179,11 +179,8 @@ class LinearSVC @Since("2.2.0") (
     val instances = extractInstances(dataset)
       .setName("training instances")
 
-    var actualBlockSizeInMB = $(blockSizeInMB)
-    var requestedMetrics = Seq("mean", "std", "count")
-    if (actualBlockSizeInMB == 0) requestedMetrics +:= "numNonZeros"
     val (summarizer, labelSummarizer) = Summarizer
-      .getClassificationSummarizers(instances, $(aggregationDepth), requestedMetrics)
+      .getClassificationSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -193,9 +190,10 @@ class LinearSVC @Since("2.2.0") (
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
     instr.logSumOfWeights(summarizer.weightSum)
+
+    var actualBlockSizeInMB = $(blockSizeInMB)
     if (actualBlockSizeInMB == 0) {
-      val avgNNZ = summarizer.numNonzeros.activeIterator.map(_._2 / summarizer.count).sum
-      actualBlockSizeInMB = InstanceBlock.inferBlockSizeInMB(numFeatures, avgNNZ)
+      actualBlockSizeInMB = InstanceBlock.DefaultBlockSizeInMB
       require(actualBlockSizeInMB > 0, "inferred actual BlockSizeInMB must > 0")
       instr.logNamedValue("actualBlockSizeInMB", actualBlockSizeInMB.toString)
     }
