@@ -136,7 +136,7 @@ class InheritableThread(threading.Thread):
     When the pinned thread mode is off, this works as :class:`threading.Thread`.
 
     .. versionadded:: 3.1.0
-    .. note:: Experimental    
+    .. note:: Experimental
     """
     def __init__(self, target, *args, **kwargs):
         from pyspark import SparkContext
