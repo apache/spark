@@ -559,13 +559,13 @@ case class InSet(value: Expression, override val hset: Set[Any]) extends BasicIn
 
   override def optimized: Boolean = true
   override def children: Seq[Expression] = value :: Nil
-  override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
-  override def foldable: Boolean = value.foldable
   override def nullable: Boolean = value.nullable || hasNull
 
   override def withNewChildren(newChildren: Seq[Expression]): Expression = {
     InSet(newChildren.head, hset)
   }
+
+  override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
 
   override def sql: String = {
     val valueSQL = value.sql
