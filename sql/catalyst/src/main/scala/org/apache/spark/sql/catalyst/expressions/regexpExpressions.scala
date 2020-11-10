@@ -221,6 +221,12 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     val patternHasNull = ctx.addReferenceObj("hasNull", hasNull)
     val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
 
+    val matchCode = if (isNotDefined) {
+      s"$pattern.matcher($valueArg.toString()).matches()"
+    } else {
+      s"!$pattern.matcher($valueArg.toString()).matches()"
+    }
+
     ev.copy(code =
       code"""
             |${eval.code}
@@ -231,10 +237,7 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
             |} else {
             |  $javaDataType $valueArg = ${eval.value};
             |  for ($patternClass $pattern: $patternCache) {
-            |    if ($isNotDefined && $pattern.matcher($valueArg.toString()).matches()) {
-            |      $allMatched = false;
-            |      break;
-            |    } else if (!$isNotDefined && !$pattern.matcher($valueArg.toString()).matches()) {
+            |    if ($matchCode) {
             |      $allMatched = false;
             |      break;
             |    }
