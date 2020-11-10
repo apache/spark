@@ -17,44 +17,18 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, Identifier, Table}
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DatasourceV2SQLBase
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with AlterTableTests {
-
-  import CatalogV2Implicits._
-
-  protected val v2Source = classOf[FakeV2Provider].getName
-  override protected val v2Format = v2Source
-  override protected val catalogAndNamespace = "testcat.ns1.ns2."
-  protected val defaultUser: String = Utils.getCurrentUserName()
+trait DatasourceV2SQLBase
+  extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
   protected def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
-  }
-
-  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
-    val tmpView = "tmp_view"
-    withTempView(tmpView) {
-      insert.createOrReplaceTempView(tmpView)
-      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
-      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
-    }
-  }
-
-  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
-    checkAnswer(spark.table(tableName), expected)
-  }
-
-  override def getTableMetadata(tableName: String): Table = {
-    val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    val v2Catalog = catalog(nameParts.head).asTableCatalog
-    val namespace = nameParts.drop(1).init.toArray
-    v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
 
   before {

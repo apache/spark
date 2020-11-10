@@ -1744,13 +1744,13 @@ class DDLParserSuite extends AnalysisTest {
     val parsed2 = parsePlan(sql2)
 
     val expected1 = AlterTableAddPartition(
-      UnresolvedTableOrView(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
     val expected2 = AlterTableAddPartition(
-      UnresolvedTableOrView(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
@@ -1817,7 +1817,7 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql2_view)
 
     val expected1_table = AlterTableDropPartition(
-      UnresolvedTableOrView(Seq("table_name")),
+      UnresolvedTable(Seq("table_name")),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -1833,7 +1833,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartition(
-      UnresolvedTableOrView(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,

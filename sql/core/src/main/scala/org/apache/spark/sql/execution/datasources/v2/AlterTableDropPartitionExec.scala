@@ -46,7 +46,7 @@ case class AlterTableDropPartitionExec(
       case Seq() => // Nothing will be done
       case Seq(partIdent) =>
         table.dropPartition(partIdent)
-      case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+      case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
         table.asAtomicPartitionable.dropPartitions(existsPartIdents.toArray)
       case _ =>
         throw new UnsupportedOperationException(

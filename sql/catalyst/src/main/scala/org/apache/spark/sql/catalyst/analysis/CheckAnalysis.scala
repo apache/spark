@@ -985,13 +985,16 @@ trait CheckAnalysis extends PredicateHelper {
     (table, parts) match {
       case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
         failAnalysis("PartitionSpecs are not resolved")
+
       case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
         failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
       // Skip atomic partition tables
       case (_: SupportsAtomicPartitionManagement, _) =>
       case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
         failAnalysis(
           s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
+
       case _ =>
     }
   }

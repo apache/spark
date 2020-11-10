@@ -55,7 +55,7 @@ case class UnresolvedTableOrView(
   override def output: Seq[Attribute] = Nil
 }
 
-trait PartitionSpec
+sealed trait PartitionSpec
 
 case class UnresolvedPartitionSpec(
     spec: TablePartitionSpec,

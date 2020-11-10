@@ -39,7 +39,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
   }
 
-  def resolvePartitionSpecs(
+  private def resolvePartitionSpecs(
       partSpecs: Seq[PartitionSpec], partSchema: StructType): Seq[ResolvedPartitionSpec] =
     partSpecs.map {
       case unresolvedPartSpec: UnresolvedPartitionSpec =>

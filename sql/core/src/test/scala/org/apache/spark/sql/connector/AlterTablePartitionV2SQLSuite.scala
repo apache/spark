@@ -53,8 +53,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
       assert(partMetadata.containsKey("location"))
       assert(partMetadata.get("location") == "loc")
-
-      partTable.clearPartitions()
     }
   }
 
@@ -77,8 +75,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val partMetadata1 = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(2)))
       assert(partMetadata1.containsKey("location"))
       assert(partMetadata1.get("location") == "loc1")
-
-      partTable.clearPartitions()
     }
   }
 
@@ -101,8 +97,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         " PARTITION (id=2) LOCATION 'loc1'")
       assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(partTable.partitionExists(InternalRow.fromSeq(Seq(2))))
-
-      partTable.clearPartitions()
     }
   }
 

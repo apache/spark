@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -603,6 +603,9 @@ case class AlterTableAddPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifNotExists: Boolean) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -621,5 +624,8 @@ case class AlterTableDropPartition(
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
   override def children: Seq[LogicalPlan] = child :: Nil
 }

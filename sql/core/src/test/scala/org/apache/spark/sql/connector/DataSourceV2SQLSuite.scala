@@ -38,10 +38,37 @@ import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructFiel
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-class DataSourceV2SQLSuite extends DatasourceV2SQLBase {
+class DataSourceV2SQLSuite
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
+  with AlterTableTests with DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+
+  private val v2Source = classOf[FakeV2Provider].getName
+  override protected val v2Format = v2Source
+  override protected val catalogAndNamespace = "testcat.ns1.ns2."
+  private val defaultUser: String = Utils.getCurrentUserName()
+
+  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+  }
+
+  override def getTableMetadata(tableName: String): Table = {
+    val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val v2Catalog = catalog(nameParts.head).asTableCatalog
+    val namespace = nameParts.drop(1).init.toArray
+    v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
+  }
 
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")

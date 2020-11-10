@@ -508,12 +508,6 @@ class ResolveSessionCatalog(
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableAddPartition(r: ResolvedView, partSpecsAndLocs, ifNotExists) =>
-      AlterTableAddPartitionCommand(
-        r.identifier.asTableIdentifier,
-        partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
-        ifNotExists)
-
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
       val v1TableName = parseV1Table(tbl, "ALTER TABLE RENAME PARTITION")
       AlterTableRenamePartitionCommand(
@@ -524,14 +518,6 @@ class ResolveSessionCatalog(
     case AlterTableDropPartition(
         r @ ResolvedTable(_, _, _: V1Table), specs, ifExists, purge, retainData)
         if isSessionCatalog(r.catalog) =>
-      AlterTableDropPartitionCommand(
-        r.identifier.asTableIdentifier,
-        specs.asUnresolvedPartitionSpecs.map(_.spec),
-        ifExists,
-        purge,
-        retainData)
-
-    case AlterTableDropPartition(r: ResolvedView, specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
         r.identifier.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),

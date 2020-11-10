@@ -49,7 +49,7 @@ case class AlterTableAddPartitionExec(
       case Seq(partitionSpec) =>
         val partProp = partitionSpec.location.map(loc => "location" -> loc).toMap
         table.createPartition(partitionSpec.spec, partProp.asJava)
-      case Seq(_ *) if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+      case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
         val partIdents = notExistsParts.map(_.spec)
         val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
         table.asAtomicPartitionable
