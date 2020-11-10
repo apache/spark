@@ -1127,6 +1127,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
     assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
 
+    // CreateArray case invalid indices
+    assert(!ElementAt(array, Literal(0)).nullable)
+    assert(ElementAt(array, Literal(4)).nullable)
+    assert(ElementAt(array, Literal(-4)).nullable)
+
     // GetArrayStructFields case
     val f1 = StructField("a", IntegerType, nullable = false)
     val f2 = StructField("b", IntegerType, nullable = true)
@@ -1148,6 +1153,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
     assert(ElementAt(stArray4, Literal(1)).nullable)
     assert(ElementAt(stArray4, Literal(2)).nullable)
+
+    // GetArrayStructFields case invalid indices
+    assert(!ElementAt(stArray3, Literal(0)).nullable)
+    assert(ElementAt(stArray3, Literal(4)).nullable)
+    assert(ElementAt(stArray3, Literal(-4)).nullable)
+
+    assert(ElementAt(stArray4, Literal(0)).nullable)
+    assert(ElementAt(stArray4, Literal(4)).nullable)
+    assert(ElementAt(stArray4, Literal(-4)).nullable)
   }
 
   test("Concat") {
