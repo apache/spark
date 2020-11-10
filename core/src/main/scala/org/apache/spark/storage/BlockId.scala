@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.util.UUID
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -81,9 +81,10 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) exten
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
+@Since("3.1.0")
 @DeveloperApi
 case class ShufflePushBlockId(shuffleId: Int, mapIndex: Integer, reduceId: Int) extends BlockId {
-  override def name: String = "shuffle_" + shuffleId + "_" + mapIndex + "_" + reduceId
+  override def name: String = "shufflePush_" + shuffleId + "_" + mapIndex + "_" + reduceId
 }
 
 @DeveloperApi

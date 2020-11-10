@@ -27,7 +27,8 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import com.google.common.base.Throwables
 
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
@@ -68,11 +69,9 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
     new BlockPushErrorHandler() {
-      /**
-       * For a connection exception against a particular host, we will stop pushing any
-       * blocks to just that host and continue push blocks to other hosts. So, here push of
-       * all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
-       */
+      // For a connection exception against a particular host, we will stop pushing any
+      // blocks to just that host and continue push blocks to other hosts. So, here push of
+      // all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
       override def shouldRetryError(t: Throwable): Boolean = {
         // If the block is too late, there is no need to retry it
         !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)
@@ -111,7 +110,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
 
     maxBytesInFlight = conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
     maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
-    maxBlocksInFlightPerAddress = conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
+    maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
 
     val requests = prepareBlockPushRequests(numPartitions, partitionId, dep.shuffleId, dataFile,
       partitionLengths, mergerLocs, transportConf, maxBlockSizeToPush, maxBlockBatchSize)
@@ -382,9 +381,9 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         // exceeds the max block size to push limit. This guarantees that each PushReqeust
         // represents continuous blocks in the shuffle file to be pushed to the same shuffle
         // service, and does not go beyond existing limitations.
-        if (currentReqSize + blockSize <= maxBlockBatchSize &&
-            blocks.size < maxBlocksInFlightPerAddress &&
-            mergerId == currentMergerId && blockSize <= maxBlockSizeToPush) {
+        if (currentReqSize + blockSize <= maxBlockBatchSize
+          && blocks.size < maxBlocksInFlightPerAddress
+          && mergerId == currentMergerId && blockSize <= maxBlockSizeToPush) {
           // Add current block to current batch
           currentReqSize += blockSize
         } else {
@@ -442,6 +441,7 @@ private[spark] object ShuffleWriter {
    * @param reqBuffer a chunk of data in the shuffle data file corresponding to the continuous
    *                  blocks represented in this request
    */
+  @Since("3.1.0")
   case class PushRequest(
       address: BlockManagerId,
       blocks: Seq[(BlockId, Long)],
@@ -454,6 +454,7 @@ private[spark] object ShuffleWriter {
    * @param blockId blockId
    * @param failure exception if the push was unsuccessful; null otherwise;
    */
+  @Since("3.1.0")
   private case class PushResult(
       blockId: String,
       failure: Throwable
