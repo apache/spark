@@ -401,8 +401,12 @@ object ResourceProfile extends Logging {
         ResourceProfile.MEMORY_OVERHEAD_MIN))
   }
 
-  // Returns the resources from the execResources passed in or if not specified it
-  // returns the resource defaults. Custom resources do not use the default settings.
+  /**
+   * Gets the full list of resources to allow a cluster manager to request the appropriate
+   * container. If the resource profile is not the default one we either get the resources
+   * specified in the profile or fall back to the default profile resource size for everything
+   * except for custom resources.
+   */
   private[spark] def getResourcesForClusterManager(
       rpId: Int,
       execResources: Map[String, ExecutorResourceRequest],
