@@ -101,7 +101,7 @@ class WorkerTests(ReusedPySparkTestCase):
             raise SystemExit()
         rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: rdd.foreach(raise_SystemExit))
+            self.assertRaises(Exception, lambda: rdd.foreach(raise_system_exit))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_jvm_exception(self):
