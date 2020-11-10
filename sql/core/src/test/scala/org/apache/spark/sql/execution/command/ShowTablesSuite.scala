@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def catalog: String
+  protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
   case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
   protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
@@ -36,47 +39,74 @@ trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   }
 
   test("show an existing table") {
-    val namespace = "test"
-    val table = "people"
-    withDatabase(s"$catalog.$namespace") {
-      sql(s"CREATE DATABASE $catalog.$namespace")
-      withTable(s"$catalog.$namespace.$table") {
-        sql(s"CREATE TABLE $catalog.$namespace.$table (name STRING, id INT) $defaultUsing")
-        runShowTablesSql(s"SHOW TABLES IN $catalog.test", Seq(ShowRow(namespace, table, false)))
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      withTable(s"$catalog.ns.table") {
+        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
+        runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
       }
     }
   }
 
   test("show tables with a pattern") {
-    withDatabase(s"$catalog.db", s"$catalog.db2") {
-      sql(s"CREATE DATABASE $catalog.db")
-      sql(s"CREATE DATABASE $catalog.db2")
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE NAMESPACE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
       withTable(
-        s"$catalog.db.table",
-        s"$catalog.db.table_name_1",
-        s"$catalog.db.table_name_2",
-        s"$catalog.db2.table_name_2") {
-        sql(s"CREATE TABLE $catalog.db.table (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.db.table_name_1 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.db.table_name_2 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.db2.table_name_2 (id bigint, data string) $defaultUsing")
+        s"$catalog.ns1.table",
+        s"$catalog.ns1.table_name_1",
+        s"$catalog.ns1.table_name_2",
+        s"$catalog.ns2.table_name_2") {
+        sql(s"CREATE TABLE $catalog.ns1.table (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_1 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_2 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns2.table_name_2 (id bigint, data string) $defaultUsing")
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.db",
+          s"SHOW TABLES FROM $catalog.ns1",
           Seq(
-            ShowRow("db", "table", false),
-            ShowRow("db", "table_name_1", false),
-            ShowRow("db", "table_name_2", false)))
+            ShowRow("ns1", "table", false),
+            ShowRow("ns1", "table_name_1", false),
+            ShowRow("ns1", "table_name_2", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.db LIKE '*name*'",
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
           Seq(
-            ShowRow("db", "table_name_1", false),
-            ShowRow("db", "table_name_2", false)))
+            ShowRow("ns1", "table_name_1", false),
+            ShowRow("ns1", "table_name_2", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.db LIKE '*2'",
-          Seq(ShowRow("db", "table_name_2", false)))
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2'",
+          Seq(ShowRow("ns1", "table_name_2", false)))
+      }
+    }
+  }
+
+  test("show tables with current catalog and namespace") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
+      val tblName = (catalog +: defaultNamespace :+ "table").quoted
+      withTable(tblName) {
+        sql(s"CREATE TABLE $tblName (name STRING, id INT) $defaultUsing")
+        val ns = defaultNamespace.mkString(".")
+        runShowTablesSql("SHOW TABLES", Seq(ShowRow(ns, "table", false)))
+      }
+    }
+  }
+
+  test("change current catalog and namespace with USE statements") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      withTable(s"$catalog.ns.table") {
+        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
+
+        sql(s"USE $catalog")
+        // No table is matched since the current namespace is not ["ns"]
+        assert(defaultNamespace != Seq("ns"))
+        runShowTablesSql("SHOW TABLES", Seq())
+
+        // Update the current namespace to match "ns.tbl".
+        sql(s"USE $catalog.ns")
+        runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
       }
     }
   }
