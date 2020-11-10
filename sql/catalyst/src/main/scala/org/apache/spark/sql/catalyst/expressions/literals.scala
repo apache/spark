@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Boolean => JavaBoolean}
 import java.lang.{Byte => JavaByte}
+import java.lang.{Character => JavaChar}
 import java.lang.{Double => JavaDouble}
 import java.lang.{Float => JavaFloat}
 import java.lang.{Integer => JavaInteger}
@@ -103,6 +104,7 @@ object Literal {
     case JavaByte.TYPE => ByteType
     case JavaFloat.TYPE => FloatType
     case JavaBoolean.TYPE => BooleanType
+    case JavaChar.TYPE => StringType
 
     // java classes
     case _ if clz == classOf[LocalDate] => DateType
