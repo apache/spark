@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{ElementAt, Expression, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
-class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper{
   import testImplicits._
 
   test("array with column name") {
@@ -3625,18 +3625,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-33391: element_at ArrayIndexOutOfBoundsException") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        val df = sql("select element_at(array(1, 2, 3), 5)")
+        var df = sql("select element_at(array(1, 2, 3), 5)")
+        val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
         if (ansiEnabled) {
-          val ex = intercept[Exception] {
-            df.collect()
-          }
-          assert(ex.getMessage.contains("Invalid index: 5"))
+          val errMsg = "Invalid index: 5"
+          val ex = intercept[Exception](df.collect())
+          assert(ex.getMessage.contains(errMsg))
+          checkExceptionInExpression[Exception](ElementAt(array, Literal(5)), errMsg)
         } else {
-          checkAnswer(
-            df,
-            Row(null)
-          )
+          checkAnswer(df, Row(null))
         }
+
+        df = sql("select element_at(array(1, 2, 3), -5)")
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -5"
+          val ex = intercept[Exception](df.collect())
+          assert(ex.getMessage.contains(errMsg))
+          checkExceptionInExpression[Exception](ElementAt(array, Literal(-5)), errMsg)
+        } else {
+          checkAnswer(df, Row(null))
+        }
+
+        // SQL array indices start at 1 exception throws for both mode.
+        val errMsg = "SQL array indices start at 1"
+        df = sql("select element_at(array(1, 2, 3), 0)")
+        val ex = intercept[Exception](df.collect())
+        assert(ex.getMessage.contains(errMsg))
+        checkExceptionInExpression[Exception](ElementAt(array, Literal(0)), errMsg)
       }
     }
   }

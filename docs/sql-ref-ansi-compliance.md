@@ -111,6 +111,8 @@ SELECT * FROM t;
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `size`: This function returns null for null input under ANSI mode.
+  - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices under ANSI mode.
+  - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices under ANSI mode.
 
 ### SQL Keywords
 

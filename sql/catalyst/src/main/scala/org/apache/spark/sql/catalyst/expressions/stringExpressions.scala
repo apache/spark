@@ -232,7 +232,11 @@ case class ConcatWs(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.",
+  usage = """
+    _FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+    If the index exceeds the length of the array, Returns NULL if Ansi mode is off;
+    Throws ArrayIndexOutOfBoundsException when Ansi mode is on.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');

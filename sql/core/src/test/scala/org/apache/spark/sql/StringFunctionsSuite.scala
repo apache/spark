@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Elt, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 
-class StringFunctionsSuite extends QueryTest with SharedSparkSession {
+class StringFunctionsSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
   import testImplicits._
 
   test("string concat") {
@@ -621,17 +622,40 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-33391: elt ArrayIndexOutOfBoundsException") {
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        val df = sql("select elt(4, '123', '456')")
+        var df = sql("select elt(4, '123', '456')")
         if (ansiEnabled) {
-          val ex = intercept[Exception] {
-            df.collect()
-          }
-          assert(ex.getMessage.contains("Invalid index: 4"))
+          val errMsg = "Invalid index: 4"
+          val ex = intercept[Exception](df.collect())
+          assert(ex.getMessage.contains(errMsg))
+          checkExceptionInExpression[Exception](
+            Elt(Seq(Literal(4), Literal("123"), Literal("456"))),
+            errMsg)
         } else {
-          checkAnswer(
-            df,
-            Row(null)
-          )
+          checkAnswer(df, Row(null))
+        }
+
+        df = sql("select elt(0, '123', '456')")
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 0"
+          val ex = intercept[Exception](df.collect())
+          assert(ex.getMessage.contains(errMsg))
+          checkExceptionInExpression[Exception](
+            Elt(Seq(Literal(0), Literal("123"), Literal("456"))),
+            errMsg)
+        } else {
+          checkAnswer(df, Row(null))
+        }
+
+        df = sql("select elt(-1, '123', '456')")
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -1"
+          val ex = intercept[Exception](df.collect())
+          assert(ex.getMessage.contains(errMsg))
+          checkExceptionInExpression[Exception](
+            Elt(Seq(Literal(-1), Literal("123"), Literal("456"))),
+            errMsg)
+        } else {
+          checkAnswer(df, Row(null))
         }
       }
     }
