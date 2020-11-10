@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.immutable.TreeSet
+import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
@@ -324,31 +324,11 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
 
+abstract class BasicIn extends Predicate {
 
-/**
- * Evaluates to `true` if `list` contains `value`.
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
-  arguments = """
-    Arguments:
-      * expr1, expr2, expr3, ... - the arguments must be same type.
-  """,
-  examples = """
-    Examples:
-      > SELECT 1 _FUNC_(1, 2, 3);
-       true
-      > SELECT 1 _FUNC_(2, 3, 4);
-       false
-      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 1), named_struct('a', 1, 'b', 3));
-       false
-      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
-       true
-  """,
-  since = "1.0.0")
-// scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+  def value: Expression
+  def list: Seq[Expression]
+  def optimized: Boolean
 
   require(list != null, "list should not be null")
 
@@ -367,34 +347,70 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
-  override def nullable: Boolean = children.exists(_.nullable)
+  override def nullable: Boolean = children.exists(_.nullable) || hasNull
   override def foldable: Boolean = children.forall(_.foldable)
 
-  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+  lazy val hset = if (optimized) {
+    HashSet() ++ list.map(e => e.eval(EmptyRow))
+  } else {
+    HashSet[Any]()
+  }
+
+  lazy val set: Set[Any] = if (optimized) {
+    value.dataType match {
+      case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
+      case _: NullType => hset
+      case _ =>
+        // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
+        TreeSet.empty(TypeUtils.getInterpretedOrdering(value.dataType)) ++ (hset - null)
+    }
+  } else {
+    Set.empty
+  }
+
+  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
+
+  lazy val notNullEval: (Any, InternalRow) => Boolean = if (optimized) {
+    (value: Any, _: InternalRow) =>
+      if (set.contains(value)) {
+        true
+      } else if (hasNull) {
+        null
+      } else {
+        false
+      }
+  } else {
+    (value: Any, input: InternalRow) =>
+      var hasNull = false
+      var result = false
+      val iterator = list.iterator
+      while (!result && iterator.hasNext) {
+        val v = iterator.next().eval(input)
+        if (v == null) {
+          hasNull = true
+        } else if (ordering.equiv(v, value)) {
+          result = true
+        }
+      }
+      if (result) {
+        true
+      } else if (hasNull) {
+        null
+      } else {
+        false
+      }
+  }
 
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
     if (evaluatedValue == null) {
       null
     } else {
-      var hasNull = false
-      list.foreach { e =>
-        val v = e.eval(input)
-        if (v == null) {
-          hasNull = true
-        } else if (ordering.equiv(v, evaluatedValue)) {
-          return true
-        }
-      }
-      if (hasNull) {
-        null
-      } else {
-        false
-      }
+      notNullEval(value, input)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  def genCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaDataType = CodeGenerator.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
@@ -443,68 +459,33 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
     ev.copy(code =
       code"""
-         |${valueGen.code}
-         |byte $tmpResult = $HAS_NULL;
-         |if (!${valueGen.isNull}) {
-         |  $tmpResult = $NOT_MATCHED;
-         |  $javaDataType $valueArg = ${valueGen.value};
-         |  do {
-         |    $codes
-         |  } while (false);
-         |}
-         |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
-         |final boolean ${ev.value} = ($tmpResult == $MATCHED);
+            |${valueGen.code}
+            |byte $tmpResult = $HAS_NULL;
+            |if (!${valueGen.isNull}) {
+            |  $tmpResult = $NOT_MATCHED;
+            |  $javaDataType $valueArg = ${valueGen.value};
+            |  do {
+            |    $codes
+            |  } while (false);
+            |}
+            |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
+            |final boolean ${ev.value} = ($tmpResult == $MATCHED);
        """.stripMargin)
   }
 
-  override def sql: String = {
-    val valueSQL = value.sql
-    val listSQL = list.map(_.sql).mkString(", ")
-    s"($valueSQL IN ($listSQL))"
-  }
-}
-
-/**
- * Optimized version of In clause, when all filter values of In clause are
- * static.
- */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
-
-  require(hset != null, "hset could not be null")
-
-  override def toString: String = s"$child INSET ${hset.mkString("(", ",", ")")}"
-
-  @transient private[this] lazy val hasNull: Boolean = hset.contains(null)
-
-  override def nullable: Boolean = child.nullable || hasNull
-
-  protected override def nullSafeEval(value: Any): Any = {
-    if (set.contains(value)) {
-      true
-    } else if (hasNull) {
-      null
-    } else {
-      false
-    }
-  }
-
-  @transient lazy val set: Set[Any] = child.dataType match {
-    case t: AtomicType if !t.isInstanceOf[BinaryType] => hset
-    case _: NullType => hset
-    case _ =>
-      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
-      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ (hset - null)
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
-      genCodeWithSwitch(ctx, ev)
+    if (optimized) {
+      if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+        genCodeWithSwitch(ctx, ev)
+      } else {
+        genCodeWithSet(ctx, ev)
+      }
     } else {
-      genCodeWithSet(ctx, ev)
+      genCode(ctx, ev)
     }
   }
 
-  private def canBeComputedUsingSwitch: Boolean = child.dataType match {
+  private def canBeComputedUsingSwitch: Boolean = value.dataType match {
     case ByteType | ShortType | IntegerType | DateType => true
     case _ => false
   }
@@ -528,7 +509,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   // so the code size should not exceed 64KB
   private def genCodeWithSwitch(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
-    val valueGen = child.genCode(ctx)
+    val valueGen = value.genCode(ctx)
 
     val caseBranches = caseValuesGen.map(literal =>
       code"""
@@ -560,10 +541,58 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
        """)
   }
 
+
   override def sql: String = {
-    val valueSQL = child.sql
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
+}
+
+/**
+ * Evaluates to `true` if `list` contains `value`.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
+  arguments = """
+    Arguments:
+      * expr1, expr2, expr3, ... - the arguments must be same type.
+  """,
+  examples = """
+    Examples:
+      > SELECT 1 _FUNC_(1, 2, 3);
+       true
+      > SELECT 1 _FUNC_(2, 3, 4);
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 1), named_struct('a', 1, 'b', 3));
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
+       true
+  """,
+  since = "1.0.0")
+// scalastyle:on line.size.limit
+case class In(value: Expression, list: Seq[Expression]) extends BasicIn {
+
+  override def optimized: Boolean = false
+
+  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+}
+
+/**
+ * Optimized version of In clause, when all filter values of In clause are
+ * static.
+ */
+case class InSet(value: Expression, list: Seq[Expression]) extends BasicIn {
+
+  override def optimized: Boolean = true
+
+  override def toString: String = s"$value INSET ${hset.mkString("(", ",", ")")}"
+
+  override def sql: String = {
+    val valueSQL = value.sql
     val listSQL = hset.toSeq
-      .map(elem => Literal(elem, child.dataType).sql)
+      .map(elem => Literal(elem, value.dataType).sql)
       .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
