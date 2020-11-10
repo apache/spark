@@ -816,7 +816,7 @@ class HiveDDLSuite
   }
 
   private def assertAnalysisError(sqlText: String, message: String): Unit = {
-    val e = intercept[AnalysisException](sql(query))
+    val e = intercept[AnalysisException](sql(sqlText))
     assert(e.message.contains(message))
   }
 
