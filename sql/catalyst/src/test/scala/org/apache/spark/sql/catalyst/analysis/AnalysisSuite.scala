@@ -967,4 +967,41 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
     }
   }
+
+  test("Resolve referenced alias") {
+    val a = testRelation.output.head
+    checkAnalysis(
+      testRelation.select((a + 1).as("a_alias"), ($"a_alias" + 1).as("a_alias_ref")),
+      testRelation.select((a + 1).as("a_alias"), (a + 1 + 1).as("a_alias_ref")))
+    checkAnalysis(
+      testRelation.groupBy(a.as("a1"))(
+        (min(a) + 1).as("min_a_alias"), ($"min_a_alias" + 1).as("min_a_alias_ref")),
+      testRelation.groupBy(a)(
+        (min(a) + 1).as("min_a_alias"), ((min(a) + 1) + 1).as("min_a_alias_ref")))
+    checkAnalysis(
+      testRelation.select((a + 1).as("a_alias"),
+        CaseWhen(Seq((Literal(true), Symbol("a_alias").attr)), Symbol("a")).as("a_alias_ref")),
+      testRelation.select((a + 1).as("a_alias"),
+        CaseWhen(Seq((Literal(true), a + 1)), a).as("a_alias_ref")))
+
+    val inputPlan = testRelation.select((a + 1).as("a_alias"), $"A_ALIAS" + 1)
+    Seq(false, true).foreach { caseSensitive =>
+      if (caseSensitive) {
+        assertAnalysisError(inputPlan, "cannot resolve '`A_ALIAS`'" :: Nil, caseSensitive)
+      } else {
+        assertAnalysisSuccess(inputPlan, caseSensitive)
+      }
+    }
+
+    assertAnalysisError(
+      testRelation.select(a.as("a_alias"), a.as("a_alias"), $"a_alias" + 1),
+      "Found duplicate alias when resolving 'a_alias'" :: Nil)
+
+    assertAnalysisError(
+      testRelation.select((a + 1).as("a_alias"), $"non_exist_alias" + 1),
+      "cannot resolve '`non_exist_alias`'" :: Nil)
+    assertAnalysisError(
+      testRelation.groupBy(a.as("a1"))((min(a) + 1).as("min_a_alias"), $"non_exist_alias" + 1),
+      "cannot resolve '`non_exist_alias`'" :: Nil)
+  }
 }
