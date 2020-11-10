@@ -398,7 +398,7 @@ trait BasicIn extends Predicate {
     }
   }
 
-  def genCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaDataType = CodeGenerator.javaType(value.dataType)
     val valueGen = value.genCode(ctx)
     // inTmpResult has 3 possible values:
@@ -418,13 +418,38 @@ trait BasicIn extends Predicate {
       } else {
         ""
       }
-      s"""
-         |if ($setTerm.contains($valueArg)) {
-         |  $tmpResult = $MATCHED;
-         |} else {
-         |  $setIsNull
-         |}
+      if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
+        println("xxxx")
+        // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
+        // so the code size should not exceed 64KB
+        val caseValuesGen = hset.filter(_ != null).map(Literal(_).genCode(ctx))
+        val caseBranches = caseValuesGen.map(literal =>
+          code"""
+        case ${literal.value}:
+          ${tmpResult} = $MATCHED;
+          break;
+       """)
+
+        if (caseBranches.size > 0) {
+          code"""
+        switch ($valueArg) {
+          ${caseBranches.mkString("\n")}
+          default:
+            $setIsNull
+        }
+       """
+        } else {
+          s"$setIsNull"
+        }
+      } else {
+        s"""
+           |if ($setTerm.contains($valueArg)) {
+           |  $tmpResult = $MATCHED;
+           |} else {
+           |  $setIsNull
+           |}
       """.stripMargin
+      }
     } else {
       val listGen = list.map(_.genCode(ctx))
       // All the blocks are meant to be inside a do { ... } while (false); loop.
@@ -482,35 +507,9 @@ trait BasicIn extends Predicate {
        """.stripMargin)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (optimized && canBeComputedUsingSwitch &&
-      hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
-      genCodeWithSwitch(ctx, ev)
-    } else {
-      genCode(ctx, ev)
-    }
-  }
-
   private def canBeComputedUsingSwitch: Boolean = value.dataType match {
     case ByteType | ShortType | IntegerType | DateType => true
     case _ => false
-  }
-
-  private def genCodeWithSet(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val setTerm = ctx.addReferenceObj("set", set)
-    val valueGen = value.genCode(ctx)
-    val setIsNull = if (hasNull) {
-      s"${ev.isNull} = !${ev.value};"
-    } else {
-      ""
-    }
-    ev.copy(code =
-      code"""
-            |${valueGen.code}
-            |${ev.value} = $setTerm.contains(${valueGen.value});
-            |$setIsNull
-       """.stripMargin
-    )
   }
 
   // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
