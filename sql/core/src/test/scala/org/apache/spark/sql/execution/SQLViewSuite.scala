@@ -176,7 +176,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e3 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e3.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(e3.contains(s"$viewName is a temp view not table or permanent view"))
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
       val e4 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
