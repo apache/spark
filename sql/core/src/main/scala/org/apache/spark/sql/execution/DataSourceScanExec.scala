@@ -379,12 +379,12 @@ case class FileSourceScanExec(
       case (key, _) if (key.equals("Location")) =>
         val location = relation.location
         val numPaths = location.rootPaths.length
-        val abbreviatedLoaction = if (numPaths <= 1) {
+        val abbreviatedLocation = if (numPaths <= 1) {
           location.rootPaths.mkString("[", ", ", "]")
         } else {
           "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
         }
-        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLocation)}"
       case (key, value) => s"$key: ${redact(value)}"
     }
 
