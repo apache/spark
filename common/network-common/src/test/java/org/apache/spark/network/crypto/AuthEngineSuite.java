@@ -150,8 +150,8 @@ public class AuthEngineSuite {
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);
       TransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(buf);
-      while (emsg.transfered() < emsg.count()) {
-        emsg.transferTo(channel, emsg.transfered());
+      while (emsg.transferred() < emsg.count()) {
+        emsg.transferTo(channel, emsg.transferred());
       }
       assertEquals(data.length, channel.length());
     } finally {
@@ -196,9 +196,9 @@ public class AuthEngineSuite {
       TransportCipher.EncryptedMessage emsg = handler.createEncryptedMessage(region);
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(testDataLength);
       // "transferTo" should act correctly when the underlying FileRegion transfers 0 bytes.
-      assertEquals(0L, emsg.transferTo(channel, emsg.transfered()));
-      assertEquals(testDataLength, emsg.transferTo(channel, emsg.transfered()));
-      assertEquals(emsg.transfered(), emsg.count());
+      assertEquals(0L, emsg.transferTo(channel, emsg.transferred()));
+      assertEquals(testDataLength, emsg.transferTo(channel, emsg.transferred()));
+      assertEquals(emsg.transferred(), emsg.count());
       assertEquals(4, channel.length());
     } finally {
       client.close();
