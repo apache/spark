@@ -1208,18 +1208,14 @@ ansiNonReserved
 strictNonReserved
     : ANTI
     | CROSS
-    | EXCEPT
     | FULL
     | INNER
-    | INTERSECT
     | JOIN
     | LEFT
     | NATURAL
     | ON
     | RIGHT
     | SEMI
-    | SETMINUS
-    | UNION
     | USING
     ;
 

@@ -1031,4 +1031,15 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c;;;", table("db", "c").select('a, 'b))
     assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
   }
+
+  test("SPARK-33128: Remove EXCEPT, INTERSECT, MINUS, UNION from strictNonReserved") {
+    assertEqual("SELECT 1 EXCEPT SELECT 1",
+      OneRowRelation().select(1).except(OneRowRelation().select(1), false))
+    assertEqual("SELECT 1 INTERSECT SELECT 1",
+      OneRowRelation().select(1).intersect(OneRowRelation().select(1), false))
+    assertEqual("SELECT 1 MINUS SELECT 1",
+      OneRowRelation().select(1).except(OneRowRelation().select(1), false))
+    assertEqual("SELECT 1 UNION SELECT 1",
+      Distinct(OneRowRelation().select(1).union(OneRowRelation().select(1))))
+  }
 }
