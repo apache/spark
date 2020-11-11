@@ -116,7 +116,7 @@ makeSplits <- function(numSerializedSlices, length) {
 #' This change affects both createDataFrame and spark.lapply.
 #' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
 #' always been kept at the default of 1. In the case the object is large, we are explicitly setting
-#' the parallism to numSlices (which is still 1).
+#' the parallelism to numSlices (which is still 1).
 #'
 #' Specifically, we are changing to split positions to match the calculation in positions() of
 #' ParallelCollectionRDD in Spark.
