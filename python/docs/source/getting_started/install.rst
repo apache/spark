@@ -126,7 +126,7 @@ Manually Downloading
 --------------------
 
 PySpark is included in the distributions available at the `Apache Spark website <https://spark.apache.org/downloads.html>`_.
-You can download a distribution you want from the site. After that, uncompress the tar file into the directoy where you want
+You can download a distribution you want from the site. After that, uncompress the tar file into the directory where you want
 to install Spark, for example, as below:
 
 .. code-block:: bash
