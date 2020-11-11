@@ -117,7 +117,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Traverses the supplied input plan in a bottem-up fashion does the following :
+   * Traverses the supplied input plan in a bottom-up fashion does the following :
    *    1. produces a map : operator identifier -> operator
    *    2. Records the operator id via setting a tag in the operator.
    * Note :
