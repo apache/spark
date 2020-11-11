@@ -755,9 +755,9 @@ class AdaptiveQueryExecSuite
         Utils.deleteRecursively(tableDir)
         df1.write.parquet(tableDir.getAbsolutePath)
 
-        val agged = spark.table("bucketed_table").groupBy("i").count()
+        val aggregated = spark.table("bucketed_table").groupBy("i").count()
         val error = intercept[Exception] {
-          agged.count()
+          aggregated.count()
         }
         assert(error.getCause().toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
