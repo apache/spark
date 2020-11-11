@@ -1261,7 +1261,7 @@ def spark_partition_id():
 
     Notes
     -----
-    This is indeterministic because it depends on data partitioning and task scheduling.
+    This is non deterministic because it depends on data partitioning and task scheduling.
 
     Examples
     --------
