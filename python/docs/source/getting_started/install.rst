@@ -105,7 +105,7 @@ Now activate the newly created environment with the following command:
     conda activate pyspark_env
 
 You can install pyspark by `Using PyPI <#using-pypi>`_ to install PySpark in the newly created
-environment, for example as below. It will install PySpark under the new virtual environemnt
+environment, for example as below. It will install PySpark under the new virtual environment
 ``pyspark_env`` created above.
 
 .. code-block:: bash
