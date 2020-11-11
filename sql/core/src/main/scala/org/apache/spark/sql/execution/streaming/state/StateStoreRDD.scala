@@ -29,7 +29,6 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-// This doesn't directly override RDD methods as MiMa complains it.
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     checkpointLocation: String,
@@ -45,16 +44,13 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
-  /** Implementations can simply call this method in getPreferredLocations. */
-  protected def _getPartitions: Array[Partition] = dataRDD.partitions
-
   /**
    * Set the preferred location of each partition using the executor that has the related
    * [[StateStoreProvider]] already loaded.
    *
    * Implementations can simply call this method in getPreferredLocations.
    */
-  protected def _getPreferredLocations(partition: Partition): Seq[String] = {
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
     val stateStoreProviderId = getStateProviderId(partition)
     storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
   }
@@ -87,10 +83,7 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
 
-  override protected def getPartitions: Array[Partition] = _getPartitions
-
-  override def getPreferredLocations(partition: Partition): Seq[String] =
-    _getPreferredLocations(partition)
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
@@ -124,10 +117,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
   extends BaseStateStoreRDD[T, U](dataRDD, checkpointLocation, queryRunId, operatorId,
     sessionState, storeCoordinator, extraOptions) {
 
-  override protected def getPartitions: Array[Partition] = _getPartitions
-
-  override def getPreferredLocations(partition: Partition): Seq[String] =
-    _getPreferredLocations(partition)
+  override protected def getPartitions: Array[Partition] = dataRDD.partitions
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[U] = {
     val storeProviderId = getStateProviderId(partition)
