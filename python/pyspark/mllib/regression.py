@@ -739,7 +739,7 @@ class StreamingLinearAlgorithm(object):
                 "dstream should be a DStream object, got %s" % type(dstream))
         if not self._model:
             raise ValueError(
-                "Model must be intialized using setInitialWeights")
+                "Model must be initialized using setInitialWeights")
 
     @since("1.5.0")
     def predictOn(self, dstream):
