@@ -4601,7 +4601,7 @@ def years(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4625,7 +4625,7 @@ def months(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4649,7 +4649,7 @@ def days(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4673,7 +4673,7 @@ def hours(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
