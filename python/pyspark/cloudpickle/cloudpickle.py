@@ -88,7 +88,7 @@ else:
 DEFAULT_PROTOCOL = pickle.HIGHEST_PROTOCOL
 
 # Track the provenance of reconstructed dynamic classes to make it possible to
-# recontruct instances from the matching singleton class definition when
+# reconstruct instances from the matching singleton class definition when
 # appropriate and preserve the usual "isinstance" semantics of Python objects.
 _DYNAMIC_CLASS_TRACKER_BY_CLASS = weakref.WeakKeyDictionary()
 _DYNAMIC_CLASS_TRACKER_BY_ID = weakref.WeakValueDictionary()
