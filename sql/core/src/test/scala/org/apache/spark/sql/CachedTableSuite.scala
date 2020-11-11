@@ -835,7 +835,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-19993 nested subquery caching and scalar + predicate subqueris") {
+  test("SPARK-19993 nested subquery caching and scalar + predicate subqueries") {
     withTempView("t1", "t2", "t3", "t4") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
