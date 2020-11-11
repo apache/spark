@@ -539,7 +539,7 @@ class KafkaTestUtils(
   }
 
   /** Call `f` with a `KafkaProducer` that has initialized transactions. */
-  def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
+  def withTransactionalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
     props.put("transactional.id", UUID.randomUUID().toString)
     val producer = new KafkaProducer[String, String](props)
