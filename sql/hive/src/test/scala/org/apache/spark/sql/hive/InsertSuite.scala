@@ -763,7 +763,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       val path = dir.toURI.getPath
 
       val e = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE nonexistent")
       }.getMessage
       assert(e.contains("Table or view not found"))
     }

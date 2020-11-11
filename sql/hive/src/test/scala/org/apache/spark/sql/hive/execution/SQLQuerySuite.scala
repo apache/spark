@@ -768,7 +768,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("SELECT * FROM nested").collect().toSeq)
 
         intercept[AnalysisException] {
-          sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+          sql("CREATE TABLE test_ctas_1234 AS SELECT * from nonexistent").collect()
         }
       }
     }
