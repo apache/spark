@@ -895,31 +895,30 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("No extra exchanges in case of [Inner Join -> Project with aliases -> Inner join]") {
+  test("SPARK-33399: aliases should be handled properly in PartitioningCollection output" +
+    " partitioning") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-        withTempView("t1", "t2", "t3") {
-          spark.range(10).repartition($"id").createTempView("t1")
-          spark.range(20).repartition($"id").createTempView("t2")
-          spark.range(30).repartition($"id").createTempView("t3")
-          val planned = sql(
-            """
-              |SELECT t2id, t3.id as t3id
-              |FROM (
-              |    SELECT t1.id as t1id, t2.id as t2id
-              |    FROM t1, t2
-              |    WHERE t1.id = t2.id
-              |) t12, t3
-              |WHERE t1id = t3.id
-            """.stripMargin).queryExecution.executedPlan
-          val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
-          assert(exchanges.size == 3)
-        }
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t1id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 3)
       }
     }
   }
 
-  test("No extra exchanges in case of [LeftSemi Join -> Project with aliases -> Inner join]") {
+  test("SPARK-33399: aliases should be handled properly in HashPartitioning") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("t1", "t2", "t3") {
         spark.range(10).repartition($"id").createTempView("t1")
@@ -941,7 +940,31 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("No extra exchanges in case of [Inner Join -> Project with aliases -> HashAggregate]") {
+  test("SPARK-33399: alias handling should happen properly for RangePartitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      // Plan for this will be Range -> ProjectWithAlias -> HashAggregate -> HashAggregate
+      // if Project normalizes alias in its Range outputPartitioning, then no Exchange should come
+      // in between HashAggregates
+      val planned = df.queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+    }
+  }
+
+  test("SPARK-33399: alias handling should happen properly for SinglePartition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100, 1, 1)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      val planned = df.queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+    }
+  }
+
+  test("SPARK-33399: No extra exchanges in case of" +
+    " [Inner Join -> Project with aliases -> HashAggregate]") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("t1", "t2") {
         spark.range(10).repartition($"id").createTempView("t1")

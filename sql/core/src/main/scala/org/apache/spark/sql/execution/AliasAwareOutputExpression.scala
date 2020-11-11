@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  lazy val aliasMap = AttributeMap(outputExpressions.collect {
+  private lazy val aliasMap = AttributeMap(outputExpressions.collect {
     case a @ Alias(child: AttributeReference, _) => (child, a.toAttribute)
   })
 
@@ -42,13 +42,17 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
  */
 trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    child.outputPartitioning match {
-      case e: Expression if hasAlias =>
-        val normalizedExp = e.transformDown {
-          case attr: AttributeReference => replaceAlias(attr).getOrElse(attr)
-        }
-        normalizedExp.asInstanceOf[Partitioning]
-      case other => other
+    if (hasAlias) {
+      child.outputPartitioning match {
+        case e: Expression =>
+          val normalizedExpr = e.transform {
+            case attr: AttributeReference => replaceAlias(attr).getOrElse(attr)
+          }
+          normalizedExpr.asInstanceOf[Partitioning]
+        case other => other
+      }
+    } else {
+      child.outputPartitioning
     }
   }
 }
