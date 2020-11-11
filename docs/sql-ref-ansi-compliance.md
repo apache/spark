@@ -117,7 +117,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
 ### SQL Operators
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
-  - `GetArrayItem`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+  - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
 
 ### SQL Keywords
 
