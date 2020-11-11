@@ -712,7 +712,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_multi_insert_common_distinct",
     "groupby_multi_single_reducer2",
     "groupby_multi_single_reducer3",
-    "groupby_mutli_insert_common_distinct",
+    "groupby_multi_insert_common_distinct",
     "groupby_neg_float",
     "groupby_ppd",
     "groupby_ppr",
