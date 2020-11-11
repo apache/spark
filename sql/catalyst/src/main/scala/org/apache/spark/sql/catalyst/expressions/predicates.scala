@@ -324,18 +324,22 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
 
-trait BasicIn extends Predicate {
+/**
+ * Base class of In and optimized InSet.
+ */
+trait BaseIn extends Predicate {
 
   def value: Expression
   def list: Seq[Expression] = Seq.empty[Expression]
   def hset: Set[Any] = Set.empty
-  def optimized: Boolean
+  def optimized: Boolean = false
 
   require(list != null && hset != null, "list should not be null")
 
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
+  override def children: Seq[Expression] = value +: list
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -380,6 +384,11 @@ trait BasicIn extends Predicate {
       }
   }
 
+  private def canBeComputedUsingSwitch: Boolean = value.dataType match {
+    case ByteType | ShortType | IntegerType | DateType => true
+    case _ => false
+  }
+
   override def eval(input: InternalRow): Any = {
     val evaluatedValue = value.eval(input)
     if (evaluatedValue == null) {
@@ -403,12 +412,13 @@ trait BasicIn extends Predicate {
     val valueArg = ctx.freshName("valueArg")
     val setTerm = ctx.addReferenceObj("set", set)
 
-    val codegenBody = if (optimized) {
+    val nullSafeEval = if (optimized) {
       val setIsNull = if (hasNull) {
         s"$tmpResult = $HAS_NULL;"
       } else {
         ""
       }
+
       if (canBeComputedUsingSwitch && hset.size <= SQLConf.get.optimizerInSetSwitchThreshold) {
         // spark.sql.optimizer.inSetSwitchThreshold has an appropriate upper limit,
         // so the code size should not exceed 64KB
@@ -490,22 +500,11 @@ trait BasicIn extends Predicate {
             |if (!${valueGen.isNull}) {
             |  $tmpResult = $NOT_MATCHED;
             |  $javaDataType $valueArg = ${valueGen.value};
-            |  $codegenBody
+            |  $nullSafeEval
             |}
             |final boolean ${ev.isNull} = ($tmpResult == $HAS_NULL);
             |final boolean ${ev.value} = ($tmpResult == $MATCHED);
        """.stripMargin)
-  }
-
-  private def canBeComputedUsingSwitch: Boolean = value.dataType match {
-    case ByteType | ShortType | IntegerType | DateType => true
-    case _ => false
-  }
-
-  override def sql: String = {
-    val valueSQL = value.sql
-    val listSQL = list.map(_.sql).mkString(", ")
-    s"($valueSQL IN ($listSQL))"
   }
 }
 
@@ -532,10 +531,7 @@ trait BasicIn extends Predicate {
   """,
   since = "1.0.0")
 // scalastyle:on line.size.limit
-case class In(value: Expression, override val list: Seq[Expression]) extends BasicIn {
-
-  override def optimized: Boolean = false
-  override def children: Seq[Expression] = value +: list
+case class In(value: Expression, override val list: Seq[Expression]) extends BaseIn {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
@@ -549,13 +545,19 @@ case class In(value: Expression, override val list: Seq[Expression]) extends Bas
   }
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+
+  override def sql: String = {
+    val valueSQL = value.sql
+    val listSQL = list.map(_.sql).mkString(", ")
+    s"($valueSQL IN ($listSQL))"
+  }
 }
 
 /**
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(value: Expression, override val hset: Set[Any]) extends BasicIn {
+case class InSet(value: Expression, override val hset: Set[Any]) extends BaseIn {
 
   override def optimized: Boolean = true
   override def children: Seq[Expression] = value :: Nil
