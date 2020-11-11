@@ -407,7 +407,7 @@ def _class_reduce(obj):
 
 
 def _function_setstate(obj, state):
-    """Update the state of a dynaamic function.
+    """Update the state of a dynamic function.
 
     As __closure__ and __globals__ are readonly attributes of a function, we
     cannot rely on the native setstate routine of pickle.load_build, that calls
