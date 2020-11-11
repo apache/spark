@@ -1739,12 +1739,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |SELECT 'blarr'
          """.stripMargin)
 
-      // project list is the same order of paritioning columns in table definition
+      // project list is the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
         Row("a", "b", "c", "d", "e", "blarr") :: Nil)
 
-      // project list does not have the same order of paritioning columns in table definition
+      // project list does not have the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
         Row("b", "c", "d", "a", "e", "blarr") :: Nil)
