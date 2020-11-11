@@ -103,8 +103,8 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark.sql.    key" -> Some("-1"))))
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
-      "'SET key=value'. If you want to include special characters in key, " +
-      "please use quotes, e.g., SET `ke y`=value."
+      "'SET key=value'. If you want to include special characters in key or semicolon is value," +
+      " please use quotes, e.g., SET `ke y`=`value`."
     intercept("SET spark.sql.key value", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
@@ -139,6 +139,41 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("RESET spark.sql:   key", expectedErrMsg)
     intercept("RESET spark.sql   .key", expectedErrMsg)
     intercept("RESET spark.sql :  key", expectedErrMsg)
+  }
+
+  test("Semicolon handling in SET command") {
+    assertEqual("SET spark.sql.shuffle.partitions=1;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1"))))
+    assertEqual("SET spark.sql.shuffle.partitions=1;;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1"))))
+
+    assertEqual("SET spark.sql.shuffle.partitions=`1`;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1"))))
+    assertEqual("SET spark.sql.shuffle.partitions=`1;`",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1;"))))
+    assertEqual("SET spark.sql.shuffle.partitions=`1;`;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1;"))))
+
+    assertEqual("SET `spark.sql.shuffle.partitions`=1;;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1"))))
+    assertEqual("SET `spark.sql.shuffle.partitions`=`1;`",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1;"))))
+
+    assertEqual("SET spark.sql.shuffle.partitions=`1;`",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1;"))))
+
+    assertEqual("SET spark.sql.shuffle.partitions=1;;",
+      SetCommand(Some("spark.sql.shuffle.partitions" -> Some("1"))))
+
+    val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
+      "'SET key=value'. If you want to include special characters in key or semicolon is value," +
+      " please use quotes, e.g., SET `ke y`=`value`."
+
+    intercept("SET spark.sql.shuffle.partitions=1; SELECT 1", expectedErrMsg)
+    intercept("SET spark.sql.shuffle.partitions=1;2;;", expectedErrMsg)
+    intercept("SET `spark.sql.shuffle.partitions`=1;2;;",
+      "'1;2;;' is an invalid property value, please use quotes, e.g." +
+        " SET `spark.sql.shuffle.partitions`=`1;2;;`")
   }
 
   test("refresh resource") {

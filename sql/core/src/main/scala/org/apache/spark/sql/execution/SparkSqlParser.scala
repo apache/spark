@@ -58,8 +58,9 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
-  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configValueDef = """([^;]*);*""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -79,20 +80,30 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case s if s.isEmpty =>
         SetCommand(None)
       case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-        "'SET key=value'. If you want to include special characters in key, " +
-        "please use quotes, e.g., SET `ke y`=value.", ctx)
+        "'SET key=value'. If you want to include special characters in key or semicolon is value," +
+        " please use quotes, e.g., SET `ke y`=`value`.", ctx)
     }
   }
 
-  override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
-    : LogicalPlan = withOrigin(ctx) {
-    val keyStr = ctx.configKey().getText
-    if (ctx.EQ() != null) {
-      SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
-    } else {
-      SetCommand(Some(keyStr -> None))
+  override def visitSetQuotedConfiguration(
+      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+      if (ctx.configValue() != null && ctx.configKey() != null) {
+        SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+      } else if (ctx.configValue() != null) {
+        SetCommand(Some(ctx.anything.getText -> Option(ctx.configValue().getText)))
+      } else {
+        val keyStr = ctx.configKey().getText
+        if (ctx.EQ() != null) {
+          remainder(ctx.EQ().getSymbol).trim match {
+            case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
+            case other => throw new ParseException(s"'$other' is an invalid property value," +
+              s" please use quotes, e.g. SET `$keyStr`=`$other`", ctx)
+          }
+        } else {
+          SetCommand(Some(keyStr -> None))
+        }
+      }
     }
-  }
 
   /**
    * Create a [[ResetCommand]] logical plan.
