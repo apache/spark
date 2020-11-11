@@ -420,7 +420,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_FILE_UPLOAD_PATH =
     ConfigBuilder("spark.kubernetes.file.upload.path")
       .doc("Hadoop compatible file system path where files from the local file system " +
-        "will be uploded to in cluster mode.")
+        "will be uploaded to in cluster mode.")
       .version("3.0.0")
       .stringConf
       .createOptional
