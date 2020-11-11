@@ -1067,20 +1067,20 @@ private[spark] object Utils extends Logging {
     }
     // checks if the hostport contains IPV6 ip and parses the host, port
     if (hostPort != null && hostPort.split(":").length > 2) {
-      val indx: Int = hostPort.lastIndexOf("]:")
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf("]:")
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 2).trim()
-      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 2).trim()
+      val retval = (hostPort.substring(0, index + 1).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     } else {
-      val indx: Int = hostPort.lastIndexOf(':')
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf(':')
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 1).trim()
-      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 1).trim()
+      val retval = (hostPort.substring(0, index).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
