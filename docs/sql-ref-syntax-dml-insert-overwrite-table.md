@@ -100,7 +100,7 @@ SELECT * FROM persons;
 +-------------+-------------------------+---------+
 |Dora Williams|134 Forest Ave, Melo Park|123456789|
 +-------------+-------------------------+---------+
-|  Eddie Davis|   245 Market St,Milpitas|345678901|
+|  Eddie Davis|  245 Market St, Milpitas|345678901|
 +-------------+-------------------------+---------+
 
 INSERT OVERWRITE students PARTITION (student_id = 222222)

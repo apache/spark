@@ -69,11 +69,11 @@ INSERT INTO students VALUES
     ('Amy Smith', '123 Park Ave, San Jose', 111111);
 
 SELECT * FROM students;
-+---------+---------------------+----------+
-|     name|              address|student_id|
-+---------+---------------------+----------+
-|Amy Smith|123 Park Ave,San Jose|    111111|
-+---------+---------------------+----------+
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Amy Smith|123 Park Ave, San Jose|    111111|
++---------+----------------------+----------+
 ```
 
 #### Multi-Row Insert Using a VALUES Clause
@@ -144,7 +144,7 @@ SELECT * FROM students;
 +-------------+-------------------------+----------+
 |         name|                  address|student_id|
 +-------------+-------------------------+----------+
-|    Amy Smith|    123 Park Ave,San Jose|    111111|
+|    Amy Smith|   123 Park Ave, San Jose|    111111|
 +-------------+-------------------------+----------+
 |    Bob Brown| 456 Taylor St, Cupertino|    222222|
 +-------------+-------------------------+----------+
