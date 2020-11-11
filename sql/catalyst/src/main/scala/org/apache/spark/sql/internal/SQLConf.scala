@@ -1386,7 +1386,11 @@ object SQLConf {
     buildConf("spark.sql.streaming.statefulOperator.correctnessCheck")
       .internal()
       .doc("When true, the stateful operators for streaming query will be checked for possible " +
-        "correctness issue. Once the issue is detected, Spark will throw analysis exception. " +
+        "correctness issue due to global watermark. The correctness issue comes from queries " +
+        "containing stateful operation which can emit rows older than the current watermark " +
+        "plus allowed late record delay, which are \"late rows\" in downstream stateful " +
+        "operations and these rows can be discarded. Please refer the programming guide doc for " +
+        "more details. Once the issue is detected, Spark will throw analysis exception. " +
         "When this config is disabled, Spark will just print warning message for users. " +
         "Prior to Spark 3.1.0, the behavior is disabling this config.")
       .version("3.1.0")
