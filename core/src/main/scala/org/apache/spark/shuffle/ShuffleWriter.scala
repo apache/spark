@@ -389,7 +389,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         } else {
           if (blocks.nonEmpty) {
             // Convert the previous batch into a PushRequest
-            requests += PushRequest(mergerLocs(currentMergerId), blocks,
+            requests += PushRequest(mergerLocs(currentMergerId), blocks.toSeq,
               createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
           }
           // Start a new batch
@@ -416,10 +416,10 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     }
     // Add in the final request
     if (blocks.nonEmpty) {
-      requests += PushRequest(mergerLocs(currentMergerId), blocks,
+      requests += PushRequest(mergerLocs(currentMergerId), blocks.toSeq,
         createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
     }
-    requests
+    requests.toSeq
   }
 
   // Visible for testing
