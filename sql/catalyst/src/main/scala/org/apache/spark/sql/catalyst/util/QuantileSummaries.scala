@@ -173,7 +173,7 @@ class QuantileSummaries(
       // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
       // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
       // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
-      // maximum additional uncertainty over samples comming from `b` is `max(g_a + delta_a) =
+      // maximum additional uncertainty over samples coming from `b` is `max(g_a + delta_a) =
       // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
       // `floor(2 * eps_b * n_b)`.
       // Only samples that interleave the other side are affected. That means that samples from
