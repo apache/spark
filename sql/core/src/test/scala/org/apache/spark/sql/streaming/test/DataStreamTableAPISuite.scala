@@ -213,7 +213,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("write: write to non-exist table with custom catalog") {
-    val tableIdentifier = "testcat.nonexisttable"
+    val tableIdentifier = "testcat.nonexistenttable"
 
     withTable(tableIdentifier) {
       runTestWithStreamAppend(tableIdentifier)
