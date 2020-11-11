@@ -301,7 +301,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Unsupported underscore syntax.
     "inputddl5",
 
-    // Thift is broken...
+    // Thrift is broken...
     "inputddl8",
 
     // Hive changed ordering of ddl:
