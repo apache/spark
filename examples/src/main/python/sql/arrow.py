@@ -285,7 +285,7 @@ if __name__ == "__main__":
     ser_to_frame_pandas_udf_example(spark)
     print("Running pandas_udf example: Series to Series")
     ser_to_ser_pandas_udf_example(spark)
-    print("Running pandas_udf example: Iterator of Series to Iterator of Seires")
+    print("Running pandas_udf example: Iterator of Series to Iterator of Series")
     iter_ser_to_iter_ser_pandas_udf_example(spark)
     print("Running pandas_udf example: Iterator of Multiple Series to Iterator of Series")
     iter_sers_to_iter_ser_pandas_udf_example(spark)
