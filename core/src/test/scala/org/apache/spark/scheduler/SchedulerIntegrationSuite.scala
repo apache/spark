@@ -372,7 +372,7 @@ private[spark] abstract class MockBackend(
 
   /**
    * Accessed by both scheduling and backend thread, so should be protected by this.
-   * Most likely the only thing that needs to be protected are the inidividual ExecutorTaskStatus,
+   * Most likely the only thing that needs to be protected are the individual ExecutorTaskStatus,
    * but for simplicity in this mock just lock the whole backend.
    */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
