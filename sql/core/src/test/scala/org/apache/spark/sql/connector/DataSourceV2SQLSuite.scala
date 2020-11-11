@@ -925,71 +925,9 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowTables: using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
-
-    runShowTablesSql("SHOW TABLES FROM testcat.db", Seq(Row("db", "table_name")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.n1.n2.db",
-      Seq(Row("n1.n2.db", "table_name")))
-  }
-
-  test("ShowTables: using v2 catalog with a pattern") {
-    spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
-    spark.sql("CREATE TABLE testcat.db2.table_name_2 (id bigint, data string) USING foo")
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db",
-      Seq(
-        Row("db", "table"),
-        Row("db", "table_name_1"),
-        Row("db", "table_name_2")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db LIKE '*name*'",
-      Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
-
-    runShowTablesSql(
-      "SHOW TABLES FROM testcat.db LIKE '*2'",
-      Seq(Row("db", "table_name_2")))
-  }
-
-  test("ShowTables: using v2 catalog, namespace doesn't exist") {
-    runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
-  }
-
-  test("ShowTables: using v1 catalog") {
-    runShowTablesSql(
-      "SHOW TABLES FROM default",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-  }
-
-  test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
-    // 'db' and there is no default catalog set.
-    val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
-    }
-
-    assert(exception.getMessage.contains("Database 'db' not found"))
-  }
-
-  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
-    val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
-    }
-
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
-  }
-
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     val exception = intercept[AnalysisException] {
-      sql("SHOW TABLES FROM a.b")
+      sql("SHOW VIEWS FROM a.b")
     }
 
     assert(exception.getMessage.contains("The database name is not valid: a.b"))
@@ -1002,48 +940,6 @@ class DataSourceV2SQLSuite
 
     assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
       " only SessionCatalog supports this command."))
-  }
-
-  test("ShowTables: using v2 catalog with empty namespace") {
-    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
-    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
-  }
-
-  test("ShowTables: namespace is not specified and default v2 catalog is set") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
-
-    // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
-    runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
-  }
-
-  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
-    runShowTablesSql(
-      "SHOW TABLES",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-
-    runShowTablesSql(
-      "SHOW TABLES LIKE '*2'",
-      Seq(Row("", "source2", true)),
-      expectV2Catalog = false)
-  }
-
-  test("ShowTables: change current catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the v2 session catalog (current catalog) is used.
-    runShowTablesSql(
-      "SHOW TABLES", Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
-
-    // Update the current catalog, and no table is matched since the current namespace is Array().
-    sql("USE testcat")
-    runShowTablesSql("SHOW TABLES", Seq())
-
-    // Update the current namespace to match ns1.ns2.table.
-    sql("USE testcat.ns1.ns2")
-    runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
   }
 
   private def runShowTablesSql(
@@ -1064,50 +960,6 @@ class DataSourceV2SQLSuite
     val df = spark.sql(sqlText)
     assert(df.schema === schema)
     assert(expected === df.collect())
-  }
-
-  test("SHOW TABLE EXTENDED not valid v1 database") {
-    def testV1CommandNamespace(sqlCommand: String, namespace: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(sqlCommand)
-      }
-      assert(e.message.contains(s"The database name is not valid: ${namespace}"))
-    }
-
-    val namespace = "testcat.ns1.ns2"
-    val table = "tbl"
-    withTable(s"$namespace.$table") {
-      sql(s"CREATE TABLE $namespace.$table (id bigint, data string) " +
-        s"USING foo PARTITIONED BY (id)")
-
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED FROM $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace(s"SHOW TABLE EXTENDED IN $namespace LIKE 'tb*'",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"FROM $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-      testV1CommandNamespace("SHOW TABLE EXTENDED " +
-        s"IN $namespace LIKE 'tb*' PARTITION(id=1)",
-        namespace)
-    }
-  }
-
-  test("SHOW TABLE EXTENDED valid v1") {
-    val expected = Seq(Row("", "source", true), Row("", "source2", true))
-    val schema = new StructType()
-      .add("database", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
-      .add("information", StringType, nullable = false)
-
-    val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
-    val result = df.collect()
-    val resultWithoutInfo = result.map{ case Row(db, table, temp, _) => Row(db, table, temp)}
-
-    assert(df.schema === schema)
-    assert(resultWithoutInfo === expected)
-    result.foreach{ case Row(_, _, _, info: String) => assert(info.nonEmpty)}
   }
 
   test("CreateNameSpace: basic tests") {
