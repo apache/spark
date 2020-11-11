@@ -2034,7 +2034,7 @@ object SQLConf {
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
       .doc("When true (default), establishing the result type of an arithmetic operation " +
-        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, i.e. rounding the " +
         "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
         "is returned in those cases, as previously.")
       .version("2.3.1")
