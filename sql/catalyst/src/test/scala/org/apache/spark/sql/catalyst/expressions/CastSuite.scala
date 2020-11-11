@@ -41,8 +41,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   // Whether this test suite is for checking AnsiCast or default Cast.
   protected def isAnsiCast: Boolean
 
-  // Whether it is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  protected val requiredAnsiEnabledForOverflowTestCases: Boolean = !isAnsiCast
+  // For default `Cast`, we need to set `SQLConf.ANSI_ENABLED` as true to for testing runtime
+  // exception on numeric overflow.
+  // As for `AnsiCast`, we set `SQLConf.ANSI_ENABLED` as false to verify that it throws runtime
+  // exception on numeric overflow by default.
+  protected val ansiConfForExceptionOnOverflow = SQLConf.ANSI_ENABLED.key -> (!isAnsiCast).toString
 
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
 
@@ -600,7 +603,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
     import DataTypeTestUtils.numericTypes
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       checkInvalidCastFromNumericType(TimestampType)
       val timestampLiteral = Literal(1L, TimestampType)
       numericTypes.foreach { numericType =>
@@ -611,7 +614,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       checkInvalidCastFromNumericType(DateType)
       val dateLiteral = Literal(1, DateType)
       numericTypes.foreach { numericType =>
@@ -622,7 +625,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
     import DataTypeTestUtils.numericTypes
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       checkInvalidCastFromNumericType(BinaryType)
       val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
       numericTypes.foreach { numericType =>
@@ -632,7 +635,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       val timestampLiteral = Literal(1L, TimestampType)
       assert(cast(timestampLiteral, BooleanType).checkInputDataTypes().isFailure)
       val dateLiteral = Literal(1, DateType)
@@ -645,7 +648,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ANSI mode: disallow casting complex types as String type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
       assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
       assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
@@ -764,7 +767,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       checkExceptionInExpression[ArithmeticException](
         cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
@@ -820,7 +823,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       testIntMaxAndMin(ByteType)
       Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
@@ -841,7 +844,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       testIntMaxAndMin(ShortType)
       Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
         checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
@@ -862,7 +865,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       testIntMaxAndMin(IntegerType)
       testLongMaxAndMin(IntegerType)
 
@@ -878,7 +881,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
+    withSQLConf(ansiConfForExceptionOnOverflow) {
       testLongMaxAndMin(LongType)
 
       Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
