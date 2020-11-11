@@ -179,7 +179,7 @@ class QuantileSummaries(
       // Only samples that interleave the other side are affected. That means that samples from
       // one side that are lesser (or greater) than all samples from the other side are just copied
       // unmodifed.
-      // If the merging instances have different `relativeError`, the resulting instance will cary
+      // If the merging instances have different `relativeError`, the resulting instance will carry
       // the largest one: `eps_ab = max(eps_a, eps_b)`.
       // The main invariant of the GK algorithm is kept:
       // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
