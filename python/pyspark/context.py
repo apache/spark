@@ -601,7 +601,7 @@ class SparkContext(object):
                     tempFile.close()
                 return reader_func(tempFile.name)
             finally:
-                # we eagerily reads the file so we can delete right after.
+                # we eagerly reads the file so we can delete right after.
                 os.unlink(tempFile.name)
 
     def pickleFile(self, name, minPartitions=None):
