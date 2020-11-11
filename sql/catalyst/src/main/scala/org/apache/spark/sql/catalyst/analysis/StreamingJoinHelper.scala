@@ -55,7 +55,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
    * given the join condition and the event time watermark. This is how it works.
    * - The condition is split into conjunctive predicates, and we find the predicates of the
    *   form `leftTime + c1 < rightTime + c2`   (or <=, >, >=).
-   * - We canoncalize the predicate and solve it with the event time watermark value to find the
+   * - We canonicalize the predicate and solve it with the event time watermark value to find the
    *  value of the state watermark.
    * This function is supposed to make best-effort attempt to get the state watermark. If there is
    * any error, it will return None.
