@@ -1907,7 +1907,7 @@ case class ArrayPosition(left: Expression, right: Expression)
   usage = """
     _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
       accesses elements from the last to the first. If the index exceeds the length of the array,
-      Returns NULL if Ansi mode is off; Throws ArrayIndexOutOfBoundsException when Ansi mode is on.
+      Returns NULL if ANSI mode is off; Throws ArrayIndexOutOfBoundsException when ANSI mode is on.
 
     _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
   """,
@@ -1974,7 +1974,7 @@ case class ElementAt(
     if (ordinal == 0) {
       false
     } else if (elements.length < math.abs(ordinal)) {
-      if (failOnError) false else true
+      !failOnError
     } else {
       if (ordinal < 0) {
         elements(elements.length + ordinal).nullable

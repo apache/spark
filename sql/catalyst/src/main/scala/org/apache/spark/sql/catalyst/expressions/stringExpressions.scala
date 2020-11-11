@@ -234,8 +234,8 @@ case class ConcatWs(children: Seq[Expression])
 @ExpressionDescription(
   usage = """
     _FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
-    If the index exceeds the length of the array, Returns NULL if Ansi mode is off;
-    Throws ArrayIndexOutOfBoundsException when Ansi mode is on.
+    If the index exceeds the length of the array, Returns NULL if ANSI mode is off;
+    Throws ArrayIndexOutOfBoundsException when ANSI mode is on.
   """,
   examples = """
     Examples:

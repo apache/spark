@@ -263,7 +263,10 @@ case class GetArrayItem(
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
-        s" || $eval1.isNullAt($index)"
+        s"""else if ($eval1.isNullAt($index)) {
+               ${ev.isNull} = true;
+            }
+         """
       } else {
         ""
       }
@@ -278,9 +281,7 @@ case class GetArrayItem(
         final int $index = (int) $eval2;
         if ($index >= $eval1.numElements() || $index < 0) {
           $failOnErrorBranch
-        } else if (false$nullCheck) {
-          ${ev.isNull} = true;
-        } else {
+        } $nullCheck else {
           ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
         }
       """

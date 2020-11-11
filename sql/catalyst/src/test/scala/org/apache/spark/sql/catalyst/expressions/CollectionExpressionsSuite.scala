@@ -1133,13 +1133,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
         // CreateArray case invalid indices
         assert(!ElementAt(array, Literal(0)).nullable)
-        if (ansiEnabled) {
-          assert(!ElementAt(array, Literal(4)).nullable)
-          assert(!ElementAt(array, Literal(-4)).nullable)
-        } else {
-          assert(ElementAt(array, Literal(4)).nullable)
-          assert(ElementAt(array, Literal(-4)).nullable)
-        }
+        assert(ElementAt(array, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(array, Literal(-4)).nullable == !ansiEnabled)
 
         // GetArrayStructFields case
         val f1 = StructField("a", IntegerType, nullable = false)
@@ -1171,13 +1166,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
         // GetArrayStructFields case invalid indices
         assert(!ElementAt(stArray3, Literal(0)).nullable)
-        if (ansiEnabled) {
-          assert(!ElementAt(stArray3, Literal(4)).nullable)
-          assert(!ElementAt(stArray3, Literal(-4)).nullable)
-        } else {
-          assert(ElementAt(stArray3, Literal(4)).nullable)
-          assert(ElementAt(stArray3, Literal(-4)).nullable)
-        }
+        assert(ElementAt(stArray3, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(stArray3, Literal(-4)).nullable == !ansiEnabled)
 
         assert(ElementAt(stArray4, Literal(0)).nullable)
         assert(ElementAt(stArray4, Literal(4)).nullable)
@@ -1896,5 +1886,33 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal(Date.valueOf("2018-01-01")),
       Literal(stringToInterval("interval 1 year"))),
       Seq(Date.valueOf("2018-01-01")))
+  }
+
+  test("SPARK-33391: element_at ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+        var expr: Expression = ElementAt(array, Literal(5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 5"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = ElementAt(array, Literal(-5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -5"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        // SQL array indices start at 1 exception throws for both mode.
+        expr = ElementAt(array, Literal(0))
+        val errMsg = "SQL array indices start at 1"
+        checkExceptionInExpression[Exception](expr, errMsg)
+      }
+    }
   }
 }
