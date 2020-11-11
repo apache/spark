@@ -676,7 +676,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
   }
 
   protected def testNotResolvedOverwriteByExpression(): Unit = {
-    val xRequiredTable = TestRelation(StructType(Seq(
+    val table = TestRelation(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
       StructField("y", DoubleType))).toAttributes)
 
@@ -685,10 +685,19 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       StructField("b", DoubleType))).toAttributes)
 
     // the write is resolved (checked above). this test plan is not because of the expression.
-    val parsedPlan = OverwriteByExpression.byPosition(xRequiredTable, query,
+    val parsedPlan = OverwriteByExpression.byPosition(table, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
+
+    val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("x", DoubleType, nullable = false),
+      StructField("y", DoubleType))).toAttributes)
+
+    val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
+      LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
+    assertNotResolved(parsedPlan2)
+    assertAnalysisError(parsedPlan2, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
   }
 }
