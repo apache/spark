@@ -85,7 +85,7 @@ outputResult <- function(serializer, output, outputCon) {
 }
 
 # Constants
-specialLengths <- list(END_OF_STERAM = 0L, TIMING_DATA = -1L)
+specialLengths <- list(END_OF_STREAM = 0L, TIMING_DATA = -1L)
 
 # Timing R process boot
 bootTime <- currentTimeSecs()
@@ -285,7 +285,7 @@ SparkR:::writeDouble(outputCon, computeInputElapsDiff)    # compute
 SparkR:::writeDouble(outputCon, outputComputeElapsDiff)   # output
 
 # End of output
-SparkR:::writeInt(outputCon, specialLengths$END_OF_STERAM)
+SparkR:::writeInt(outputCon, specialLengths$END_OF_STREAM)
 
 close(outputCon)
 close(inputCon)
