@@ -3666,7 +3666,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     }
 
     # Computes the arithmetic mean of the second column by grouping
-    # on the first and third columns. Output the groupping value and the average.
+    # on the first and third columns. Output the grouping value and the average.
     schema <-  structType(structField("a", "integer"), structField("c", "string"),
                           structField("avg", "double"))
     df3 <- gapply(
