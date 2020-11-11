@@ -569,7 +569,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val rows = spark.table("kafkaWatermark").collect()
     assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
     val row = rows(0)
-    // We cannot check the exact window start time as it depands on the time that messages were
+    // We cannot check the exact window start time as it depends on the time that messages were
     // inserted by the producer. So here we just use a low bound to make sure the internal
     // conversion works.
     assert(
