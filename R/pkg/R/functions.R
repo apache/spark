@@ -2879,7 +2879,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
