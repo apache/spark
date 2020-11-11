@@ -1512,7 +1512,7 @@ setMethod("glom",
 #'
 #' @param x An RDD.
 #' @param y An RDD.
-#' @return a new RDD created by performing the simple union (witout removing
+#' @return a new RDD created by performing the simple union (without removing
 #' duplicates) of two input RDDs.
 #' @examples
 #'\dontrun{
