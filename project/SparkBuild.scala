@@ -327,7 +327,7 @@ object SparkBuild extends PomBuild {
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
 
-    // To prevent intermittent compliation failures, see also SPARK-33297
+    // To prevent intermittent compilation failures, see also SPARK-33297
     // Apparently we can remove this when we use JDK 11.
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
   )
