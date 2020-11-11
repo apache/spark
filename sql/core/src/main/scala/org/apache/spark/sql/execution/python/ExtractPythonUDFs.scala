@@ -102,7 +102,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
           case p: PythonUDF =>
             // This is just a sanity check, the rule PullOutNondeterministic should
             // already pull out those nondeterministic expressions.
-            assert(p.udfDeterministic, "Non-determinstic PythonUDFs should not appear " +
+            assert(p.udfDeterministic, "Non-deterministic PythonUDFs should not appear " +
               "in grouping expression")
             val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
             if (attributeMap.contains(canonicalized)) {
