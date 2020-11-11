@@ -492,7 +492,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_filter2",
     "drop_partitions_filter3",
 
-    // The following failes due to truncate table
+    // The following fails due to truncate table
     "truncate_table",
 
     // We do not support DFS command.
