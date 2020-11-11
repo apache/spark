@@ -114,7 +114,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     |    |-- col1: string (nullable = true)
     |    |-- col2: long (nullable = true)
 
-    In the following sections, it describes the cominations of the supported type hints. For
+    In the following sections, it describes the combinations of the supported type hints. For
     simplicity, `pandas.DataFrame` variant is omitted.
 
     * Series to Series
