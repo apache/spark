@@ -1758,7 +1758,7 @@
         <scope>${hive.deps.scope}</scope>
         <exclusions>
 
-          <!-- pull this in when needed; the explicit definition culls the surplis-->
+          <!-- pull this in when needed; the explicit definition culls the surplus-->
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-metastore</artifactId>
