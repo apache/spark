@@ -539,6 +539,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES =
+    buildConf("spark.sql.subexpressionElimination.cache.maxEntries")
+      .internal()
+      .doc("The maximum entries of the cache used for interpreted subexpression elimination.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
+      .createWithDefault(100)
+
   val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -3213,6 +3222,9 @@ class SQLConf extends Serializable with Logging {
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+
+  def subexpressionEliminationCacheMaxEntries: Int =
+    getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
