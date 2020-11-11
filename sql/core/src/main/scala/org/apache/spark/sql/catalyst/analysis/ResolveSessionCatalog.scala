@@ -434,13 +434,12 @@ class ResolveSessionCatalog(
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
-      val name = parseTempViewOrV1Table(tbl, "SHOW CREATE TABLE")
-      ShowCreateTableCommand(name.asTableIdentifier)
-
-    case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
-      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
-      ShowCreateTableAsSerdeCommand(v1TableName.asTableIdentifier)
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+      if (asSerde) {
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+      } else {
+        ShowCreateTableCommand(ident.asTableIdentifier)
+      }
 
     case CacheTableStatement(tbl, plan, isLazy, options) =>
       val name = if (plan.isDefined) {

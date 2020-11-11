@@ -1583,7 +1583,13 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTableStatement(Seq("a", "b", "c")))
+      ShowCreateTable(UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false)))
+
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
+      ShowCreateTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        asSerde = true))
   }
 
   test("CACHE TABLE") {
