@@ -2772,7 +2772,7 @@ setMethod("merge",
 #' Creates a list of columns by replacing the intersected ones with aliases
 #'
 #' Creates a list of columns by replacing the intersected ones with aliases.
-#' The name of the alias column is formed by concatanating the original column name and a suffix.
+#' The name of the alias column is formed by concatenating the original column name and a suffix.
 #'
 #' @param x a SparkDataFrame
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
