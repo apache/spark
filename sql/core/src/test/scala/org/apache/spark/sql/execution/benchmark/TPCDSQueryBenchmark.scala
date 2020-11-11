@@ -90,11 +90,16 @@ object TPCDSQueryBenchmark extends Logging {
     }
   }
 
-  def filterQueries(
+  private def filterQueries(
       origQueries: Seq[String],
-      args: TPCDSQueryBenchmarkArguments): Seq[String] = {
-    if (args.queryFilter.nonEmpty) {
-      origQueries.filter(args.queryFilter.contains)
+      queryFilter: Set[String],
+      nameSuffix: String = ""): Seq[String] = {
+    if (queryFilter.nonEmpty) {
+      if (nameSuffix.nonEmpty) {
+        origQueries.filter { name => queryFilter.contains(s"$name$nameSuffix") }
+      } else {
+        origQueries.filter(queryFilter.contains)
+      }
     } else {
       origQueries
     }
@@ -117,6 +122,7 @@ object TPCDSQueryBenchmark extends Logging {
       "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
     // This list only includes TPC-DS v2.7 queries that are different from v1.4 ones
+    val nameSuffixForQueriesV2_7 = "-v2.7"
     val tpcdsQueriesV2_7 = Seq(
       "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
       "q20", "q22", "q22a", "q24", "q27a", "q34", "q35", "q35a", "q36a", "q47", "q49",
@@ -124,8 +130,9 @@ object TPCDSQueryBenchmark extends Logging {
       "q80a", "q86a", "q98")
 
     // If `--query-filter` defined, filters the queries that this option selects
-    val queriesV1_4ToRun = filterQueries(tpcdsQueries, benchmarkArgs)
-    val queriesV2_7ToRun = filterQueries(tpcdsQueriesV2_7, benchmarkArgs)
+    val queriesV1_4ToRun = filterQueries(tpcdsQueries, benchmarkArgs.queryFilter)
+    val queriesV2_7ToRun = filterQueries(tpcdsQueriesV2_7, benchmarkArgs.queryFilter,
+      nameSuffix = nameSuffixForQueriesV2_7)
 
     if ((queriesV1_4ToRun ++ queriesV2_7ToRun).isEmpty) {
       throw new RuntimeException(
@@ -135,6 +142,6 @@ object TPCDSQueryBenchmark extends Logging {
     val tableSizes = setupTables(benchmarkArgs.dataLocation)
     runTpcdsQueries(queryLocation = "tpcds", queries = queriesV1_4ToRun, tableSizes)
     runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
-      nameSuffix = "-v2.7")
+      nameSuffix = nameSuffixForQueriesV2_7)
   }
 }
