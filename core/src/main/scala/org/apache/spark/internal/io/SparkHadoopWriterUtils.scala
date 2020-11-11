@@ -17,7 +17,8 @@
 
 package org.apache.spark.internal.io
 
-import java.util.Date
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale}
 
 import scala.util.{DynamicVariable, Random}
 
@@ -59,16 +60,12 @@ object SparkHadoopWriterUtils {
    * @return a string for a job ID
    */
   def createJobTrackerID(time: Date): String = {
+    val base = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(time)
     var l1 = RAND.nextLong()
     if (l1 < 0) {
       l1 = -l1
     }
-    var l2 = RAND.nextLong()
-    if (l2 < 0) {
-      l2 = -l2
-    }
-    // use leading zeros to ensure the id is always at least four digits long
-    f"$l1%04d$l2"
+    base + l1
   }
 
   def createPathFromString(path: String, conf: JobConf): Path = {
