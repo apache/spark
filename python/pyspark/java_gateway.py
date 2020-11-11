@@ -208,7 +208,7 @@ def local_connect_and_auth(port, auth_secret):
             return (sockfile, sock)
         except socket.error as e:
             emsg = str(e)
-            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
+            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
             sock.close()
             sock = None
     raise Exception("could not open socket: %s" % errors)
