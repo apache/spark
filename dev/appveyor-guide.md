@@ -33,22 +33,22 @@ Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor
     
   <img width="379" alt="2016-09-04 11 07 58" src="https://cloud.githubusercontent.com/assets/6477701/18228810/2f674e5e-7299-11e6-929d-5c2dff269ddc.png">
 
-- Click "Github".
+- Click "GitHub".
 
   <img width="360" alt="2016-09-04 11 08 10" src="https://cloud.githubusercontent.com/assets/6477701/18228811/344263a0-7299-11e6-90b7-9b1c7b6b8b01.png">
 
 
-#### After signing up, go to profile to link Github and AppVeyor.
+#### After signing up, go to profile to link GitHub and AppVeyor.
 
 - Click your account and then click "Profile".
 
   <img width="204" alt="2016-09-04 11 09 43" src="https://cloud.githubusercontent.com/assets/6477701/18228803/12a4b810-7299-11e6-9140-5cfc277297b1.png">
 
-- Enable the link with GitHub via clicking "Link Github account".
+- Enable the link with GitHub via clicking "Link GitHub account".
 
   <img width="256" alt="2016-09-04 11 09 52" src="https://cloud.githubusercontent.com/assets/6477701/18228808/23861584-7299-11e6-9352-640a9c747c83.png">
 
-- Click "Authorize application" in Github site.
+- Click "Authorize application" in GitHub site.
 
 <img width="491" alt="2016-09-04 11 10 05" src="https://cloud.githubusercontent.com/assets/6477701/18228814/5cc239e0-7299-11e6-8aeb-71305e22d930.png">
 
@@ -63,11 +63,11 @@ Currently, SparkR on Windows is being tested with [AppVeyor](https://ci.appveyor
   
   <img width="144" alt="2016-08-30 12 16 35" src="https://cloud.githubusercontent.com/assets/6477701/18075026/3ee57bc6-6eac-11e6-826e-5dd09aeb0e7c.png">
 
-- Since we will use Github here, click the "GITHUB" button and then click "Authorize Github" so that AppVeyor can access the Github logs (e.g. commits).
+- Since we will use GitHub here, click the "GITHUB" button and then click "Authorize GitHub" so that AppVeyor can access the GitHub logs (e.g. commits).
     
   <img width="517" alt="2016-09-04 11 10 22" src="https://cloud.githubusercontent.com/assets/6477701/18228819/9a4d5722-7299-11e6-900c-c5ff6b0450b1.png">
 
-- Click "Authorize application" from Github (the above step will pop up this page).
+- Click "Authorize application" from GitHub (the above step will pop up this page).
 
   <img width="484" alt="2016-09-04 11 10 27" src="https://cloud.githubusercontent.com/assets/6477701/18228820/a7cfce02-7299-11e6-8ec0-1dd7807eecb7.png">
 

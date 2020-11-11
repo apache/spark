@@ -636,7 +636,7 @@ def main():
         # /home/jenkins/anaconda2/envs/py36/bin
         os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally or Github Actions.
+        # else we're running locally or GitHub Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
@@ -654,12 +654,12 @@ def main():
     included_tags = []
     excluded_tags = []
     if should_only_test_modules:
-        # If we're running the tests in Github Actions, attempt to detect and test
+        # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
             if os.environ["GITHUB_INPUT_BRANCH"] != "":
                 # Dispatched request
-                # Note that it assumes Github Actions has already merged
+                # Note that it assumes GitHub Actions has already merged
                 # the given `GITHUB_INPUT_BRANCH` branch.
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_branch=os.environ["GITHUB_SHA"])
