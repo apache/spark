@@ -2854,11 +2854,11 @@ private[spark] object Utils extends Logging {
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
       if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an intepreter
+        // The name does not have dollar sign or is not an interpreter
         // generated class, so we should return the full string
         s
       } else {
-        // The class name is intepreter generated,
+        // The class name is interpreter generated,
         // return the part after the last dollar sign
         // This is the same behavior as getClass.getSimpleName
         s.substring(lastDollarIndex + 1)
