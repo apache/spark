@@ -231,7 +231,7 @@ setMethod("rangeBetween",
 #' @rdname over
 #' @name over
 #' @aliases over,Column,WindowSpec-method
-#' @family colum_func
+#' @family column_func
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(mtcars)
