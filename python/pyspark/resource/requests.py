@@ -189,7 +189,7 @@ class ExecutorResourceRequests(object):
 
 class TaskResourceRequest(object):
     """
-    A task resource request. This is used in conjuntion with the
+    A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level. The amount is specified
     as a Double to allow for saying you want more than 1 task per resource. Valid values
@@ -226,7 +226,7 @@ class TaskResourceRequest(object):
 class TaskResourceRequests(object):
 
     """
-    A set of task resource requests. This is used in conjuntion with the
+    A set of task resource requests. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level.
 
