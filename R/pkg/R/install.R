@@ -289,7 +289,7 @@ sparkCachePath <- function() {
 }
 
 # Length of the Spark cache specific relative path segments for each platform
-# eg. "Apache\Spark\Cache" is 3 in Windows, or "spark" is 1 in unix
+# e.g. "Apache\Spark\Cache" is 3 in Windows, or "spark" is 1 in unix
 # Must match sparkCachePath() exactly.
 sparkCacheRelPathLength <- function() {
   if (is_windows()) {

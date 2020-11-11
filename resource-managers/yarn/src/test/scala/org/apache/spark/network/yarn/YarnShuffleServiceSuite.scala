@@ -250,7 +250,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()
 
-    // another stop & restart should be fine though (eg., we recover from previous corruption)
+    // another stop & restart should be fine though (e.g., we recover from previous corruption)
     s3 = new YarnShuffleService
     s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s3.init(yarnConfig)
