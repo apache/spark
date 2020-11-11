@@ -110,6 +110,7 @@ object Cast {
     case (StringType, TimestampType | DateType) => true
     case (TimestampType | DateType, StringType) => true
     case (DateType, TimestampType) => true
+    case (DateType, StringType) => true
     case (TimestampType, DateType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
