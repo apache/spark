@@ -1661,7 +1661,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
   }
 
   test("evaluate with labels that are not doubles") {
-    // Evaulate with a dataset that contains Labels not as doubles to verify correct casting
+    // Evaluate with a dataset that contains Labels not as doubles to verify correct casting
     val dataset = Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(19.0, 1.0, Vectors.dense(1.0, 7.0)),
