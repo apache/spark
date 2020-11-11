@@ -571,7 +571,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
   }
 
-  test("event queue size can be configued through spark conf") {
+  test("event queue size can be configured through spark conf") {
     // configure the shared queue size to be 1, event log queue size to be 2,
     // and listner bus event queue size to be 5
     val conf = new SparkConf(false)
