@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 
 case class TestData(key: Int, value: String)
 
-case class ThreeCloumntable(key: Int, value: String, key1: String)
+case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     with SQLTestUtils  with PrivateMethodTester  {
