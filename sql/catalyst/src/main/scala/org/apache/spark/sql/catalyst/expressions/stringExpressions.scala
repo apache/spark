@@ -1401,13 +1401,7 @@ case class ParseUrl(children: Seq[Expression])
       case QUERY => _.getQuery
       case REF => _.getRef
       case PROTOCOL => _.getProtocol
-      case FILE =>
-        (url: URL) =>
-          if (url.getPath ne null) {
-            url.getPath + "?" + url.getQuery
-          } else {
-            url.getPath
-          }
+      case FILE => _.getFile
       case AUTHORITY => _.getAuthority
       case USERINFO => _.getUserInfo
       case _ => (url: URL) => null
