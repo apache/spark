@@ -116,6 +116,7 @@ trait ShowTablesSuite extends SharedSparkSession {
         // Update the current namespace to match "ns.tbl".
         sql(s"USE $catalog.ns")
         runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
+        sql(s"USE default")
       }
     }
   }
