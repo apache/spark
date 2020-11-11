@@ -699,7 +699,7 @@ def _make_skel_func(code, cell_count, base_globals=None):
     """
     # This function is deprecated and should be removed in cloudpickle 1.7
     warnings.warn(
-        "A pickle file created using an old (<=1.4.1) version of cloudpicke "
+        "A pickle file created using an old (<=1.4.1) version of cloudpickle "
         "is currently being loaded. This is not supported by cloudpickle and "
         "will break in cloudpickle 1.7", category=UserWarning
     )
