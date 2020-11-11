@@ -1383,7 +1383,7 @@ class DatasetSuite extends QueryTest
               }
             }
           } else {
-            // Local checkpoints dont require checkpoint_dir
+            // Local checkpoints don't require checkpoint_dir
             f
           }
         }
