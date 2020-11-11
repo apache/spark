@@ -727,24 +727,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "window expressions are not allowed in observed metrics, but found")
   }
 
-  test("check WindowFirstSubstitution") {
-    val a = testRelation.output.head
-    val inputPlan = testRelation.select(
-      WindowExpression(
-        First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(Nil, a.asc :: Nil,
-          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("window"))
-    val inputPlan2 = testRelation.select(
-      WindowExpression(
-        NthValue(a, Literal(1), false),
-        WindowSpecDefinition(Nil, a.asc :: Nil,
-          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("window"))
-    val analyzer = getAnalyzer
-    val actualPlan = analyzer.execute(inputPlan)
-    val expectedPlan = analyzer.execute(inputPlan2)
-    comparePlans(actualPlan, expectedPlan)
-  }
-
   test("check CollectMetrics duplicates") {
     val a = testRelation.output.head
     val sum = Sum(a).toAggregateExpression().as("sum")
