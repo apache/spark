@@ -59,7 +59,7 @@ def report_times(outfile, boot, init, finish):
 
 
 def add_path(path):
-    # worker can be used, so donot add path multiple times
+    # worker can be used, so do not add path multiple times
     if path not in sys.path:
         # overwrite system packages
         sys.path.insert(1, path)
