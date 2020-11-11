@@ -93,7 +93,7 @@ setMethod("explain",
 
 #' lastProgress
 #'
-#' Prints the most recent progess update of this streaming query in JSON format.
+#' Prints the most recent progress update of this streaming query in JSON format.
 #'
 #' @param x a StreamingQuery.
 #' @rdname lastProgress
