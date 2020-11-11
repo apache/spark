@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveS
 object ExplainUtils extends AdaptiveSparkPlanHelper {
   /**
    * Given a input physical plan, performs the following tasks.
-   *   1. Computes the operator id for current operator and records it in the operaror
+   *   1. Computes the operator id for current operator and records it in the operator
    *      by setting a tag.
    *   2. Computes the whole stage codegen id for current operator and records it in the
    *      operator by setting a tag.
@@ -210,7 +210,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
 
   /**
    * Given a input plan, returns an array of tuples comprising of :
-   *  1. Hosting opeator id.
+   *  1. Hosting operator id.
    *  2. Hosting expression
    *  3. Subquery plan
    */
