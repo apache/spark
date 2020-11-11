@@ -1474,7 +1474,7 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-18717: code generation works for both scala.collection.Map" +
-    " and scala.collection.imutable.Map") {
+    " and scala.collection.immutable.Map") {
     val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
     checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
 
