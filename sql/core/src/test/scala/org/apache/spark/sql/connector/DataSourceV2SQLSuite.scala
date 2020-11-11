@@ -1360,9 +1360,9 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namspace")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namespace")
 
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES")
@@ -1373,11 +1373,11 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
 
     val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namspace")
+      sql("SHOW NAMESPACES in testcat_no_namespace")
     }
 
     assert(exception.getMessage.contains("does not support namespaces"))
