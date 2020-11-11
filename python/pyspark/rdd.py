@@ -2292,7 +2292,7 @@ class RDD(object):
         """
         return python_cogroup((self, other) + others, numPartitions=None)
 
-    # TODO: add variant with custom parittioner
+    # TODO: add variant with custom partitioner
     def cogroup(self, other, numPartitions=None):
         """
         For each key k in `self` or `other`, return a resulting RDD that
