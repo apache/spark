@@ -780,7 +780,7 @@ class ExpressionParserSuite extends AnalysisTest {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
     intercept(complexName.unquotedString, "mismatched input")
-    // Function identifier contains countious backticks should be treated correctly.
+    // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
   }
