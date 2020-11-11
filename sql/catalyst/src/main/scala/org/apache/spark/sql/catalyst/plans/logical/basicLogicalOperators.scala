@@ -557,11 +557,21 @@ case class Range(
       start
     }
 
-    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements),
-      attributeStats = AttributeMap(output.map(a => (a,
-        ColumnStat(distinctCount = Some(numElements), max = Some(maxVal), min = Some(minVal),
-          nullCount = Some(0), avgLen = Some(LongType.defaultSize),
-          maxLen = Some(LongType.defaultSize))))))
+    Statistics(
+      sizeInBytes = LongType.defaultSize * numElements,
+      rowCount = Some(numElements),
+      attributeStats = AttributeMap(
+        output.map(
+          a =>
+            (
+              a,
+              ColumnStat(
+                distinctCount = Some(numElements),
+                max = Some(maxVal),
+                min = Some(minVal),
+                nullCount = Some(0),
+                avgLen = Some(LongType.defaultSize),
+                maxLen = Some(LongType.defaultSize))))))
   }
 
   override def outputOrdering: Seq[SortOrder] = {
