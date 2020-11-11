@@ -258,7 +258,7 @@ class SparkContext(object):
                         sys.path.insert(1, filepath)
                 except Exception:
                     warnings.warn(
-                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Failed to add file [%s] specified in 'spark.submit.pyFiles' to "
                         "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
                         RuntimeWarning)
 
