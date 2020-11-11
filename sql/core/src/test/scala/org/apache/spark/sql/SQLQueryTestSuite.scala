@@ -563,7 +563,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    (filteredFiles ++ dirs.flatMap(listFilesRecursively))
+      .filter(_.getName.equals("window.sql"))
   }
 
   /** Load built-in test tables into the SparkSession. */
