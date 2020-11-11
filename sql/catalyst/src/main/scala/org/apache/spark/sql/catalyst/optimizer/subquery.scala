@@ -174,7 +174,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val inConditions = values.zip(sub.output).map(EqualTo.tupled)
           // To handle a null-aware predicate not-in-subquery in nested conditions
           // (e.g., `v > 0 OR t1.id NOT IN (SELECT id FROM t2)`), we transform
-          // `inConditon` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
+          // `inCondition` (t1.id=t2.id) into `(inCondition) OR ISNULL(inCondition)`.
           //
           // For example, `SELECT * FROM t1 WHERE v > 0 OR t1.id NOT IN (SELECT id FROM t2)`
           // is transformed into a plan below;
