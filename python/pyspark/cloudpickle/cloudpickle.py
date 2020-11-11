@@ -457,7 +457,7 @@ if sys.version_info[:2] < (3, 7):  # pragma: no branch
         is_typing = getattr(obj, '__origin__', None) is not None
 
         # typing_extensions.Literal
-        is_litteral = getattr(obj, '__values__', None) is not None
+        is_literal = getattr(obj, '__values__', None) is not None
 
         # typing_extensions.Final
         is_final = getattr(obj, '__type__', None) is not None
@@ -469,7 +469,7 @@ if sys.version_info[:2] < (3, 7):  # pragma: no branch
             getattr(obj, '__result__', None) is not None and
             getattr(obj, '__args__', None) is not None
         )
-        return any((is_typing, is_litteral, is_final, is_union, is_tuple,
+        return any((is_typing, is_literal, is_final, is_union, is_tuple,
                     is_callable))
 
     def _create_parametrized_type_hint(origin, args):
