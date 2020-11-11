@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -1270,7 +1270,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val hivePredicates = predicates.map {
       // Avoid Hive metastore stack overflow.
       case InSet(child, values)
-          if values.size > conf.get(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD) =>
+          if values.size > SQLConf.get.metastorePartitionPruningInSetThreshold =>
         val dataType = child.dataType
         val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
         And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
