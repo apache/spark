@@ -180,7 +180,7 @@ if (isEmpty != 0) {
     } else if (deserializer == "arrow" && mode == 1) {
       data <- SparkR:::readDeserializeInArrow(inputCon)
       # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
-      # rbind.fill might be an anternative to make it faster if plyr is installed.
+      # rbind.fill might be an alternative to make it faster if plyr is installed.
       # Also, note that, 'dapply' applies a function to each partition.
       data <- do.call("rbind", data)
     }
@@ -212,7 +212,7 @@ if (isEmpty != 0) {
 
         if (serializer == "arrow") {
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
-          # rbind.fill might be an anternative to make it faster if plyr is installed.
+          # rbind.fill might be an alternative to make it faster if plyr is installed.
           combined <- do.call("rbind", outputs)
           SparkR:::writeSerializeInArrow(outputCon, combined)
         }
