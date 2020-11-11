@@ -970,7 +970,7 @@ setMethod("takeSample", signature(x = "RDD", withReplacement = "logical",
                                                                   MAXINT)))))
             # If the first sample didn't turn out large enough, keep trying to
             # take samples; this shouldn't happen often because we use a big
-            # multiplier for thei initial size
+            # multiplier for the initial size
             while (length(samples) < total)
               samples <- collectRDD(sampleRDD(x, withReplacement, fraction,
                                            as.integer(ceiling(stats::runif(1,

@@ -3743,7 +3743,7 @@ setMethod("histogram",
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
-#' @param tableName yhe name of the table in the external database.
+#' @param tableName the name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.
