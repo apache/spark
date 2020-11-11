@@ -89,8 +89,8 @@ case class CreateDatabaseCommand(
  * A command for users to remove a database from the system.
  *
  * 'ifExists':
- * - true, if database_name does't exist, no action
- * - false (default), if database_name does't exist, a warning message will be issued
+ * - true, if database_name doesn't exist, no action
+ * - false (default), if database_name doesn't exist, a warning message will be issued
  * 'cascade':
  * - true, the dependent objects are automatically dropped before dropping database.
  * - false (default), it is in the Restrict mode. The database cannot be dropped if
