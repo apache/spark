@@ -527,7 +527,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       .exists(_.getRenderedMessage().contains("Generated method too long")))
   }
 
-  test("SPARK-28916: subexrepssion elimination can cause 64kb code limit on UnsafeProjection") {
+  test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
     val numOfExprs = 10000
     val exprs = (0 to numOfExprs).flatMap(colIndex =>
       Seq(Add(BoundReference(colIndex, DoubleType, true),
