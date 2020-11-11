@@ -376,7 +376,7 @@ private[spark] object Utils extends Logging {
    * This returns a new InputStream which contains the same data as the original input stream.
    * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
    * continue to read from the original stream. The only real use of this is if the original input
-   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * stream will potentially detect corruption while the data is being read (e.g. from compression).
    * This allows for an eager check of corruption in the first maxSize bytes of data.
    *
    * @return An InputStream which includes all data from the original stream (combining buffered

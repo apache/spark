@@ -44,7 +44,7 @@ import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
  * TaskSetManagers.
  *
  * Test cases are configured by providing a set of jobs to submit, and then simulating interaction
- * with spark's executors via a mocked backend (eg., task completion, task failure, executors
+ * with spark's executors via a mocked backend (e.g., task completion, task failure, executors
  * disconnecting, etc.).
  */
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
