@@ -535,8 +535,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("super simple job") {
     def runBackend(): Unit = {
-      val (taskDescripition, _) = backend.beginTask()
-      backend.taskSuccess(taskDescripition, 42)
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskSuccess(taskDescription, 42)
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
