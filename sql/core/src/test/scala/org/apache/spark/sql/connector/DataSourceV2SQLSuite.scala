@@ -2261,7 +2261,7 @@ class DataSourceV2SQLSuite
 
     val e = intercept[AnalysisException] {
       // Since the following multi-part name starts with `globalTempDB`, it is resolved to
-      // the session catalog, not the `gloabl_temp` v2 catalog.
+      // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
     assert(e.message.contains(
