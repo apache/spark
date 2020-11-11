@@ -1839,6 +1839,19 @@ object AnsiCast {
 
     case (NullType, _) => true
 
+    case (StringType, _: BinaryType) => true
+
+    case (StringType, BooleanType) => true
+    case (_: NumericType, BooleanType) => true
+
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+
+    case (StringType, _: CalendarIntervalType) => true
+
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
+
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -1849,19 +1862,6 @@ object AnsiCast {
     case (_: CalendarIntervalType, StringType) => true
     case (BooleanType, StringType) => true
     case (BinaryType, StringType) => true
-
-    case (StringType, DateType) => true
-    case (TimestampType, DateType) => true
-
-    case (StringType, TimestampType) => true
-    case (DateType, TimestampType) => true
-
-    case (StringType, _: CalendarIntervalType) => true
-
-    case (StringType, BooleanType) => true
-    case (_: NumericType, BooleanType) => true
-
-    case (StringType, _: BinaryType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
