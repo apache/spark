@@ -4071,7 +4071,7 @@ def _get_lambda_parameters(f):
     # We should exclude functions that use
     # variable args and keyword argnames
     # as well as keyword only args
-    supported_parmeter_types = {
+    supported_parameter_types = {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.POSITIONAL_ONLY,
     }
@@ -4086,7 +4086,7 @@ def _get_lambda_parameters(f):
         )
 
     # and all arguments can be used as positional
-    if not all(p.kind in supported_parmeter_types for p in parameters):
+    if not all(p.kind in supported_parameter_types for p in parameters):
         raise ValueError(
             "f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
         )
