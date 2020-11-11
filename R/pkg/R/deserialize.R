@@ -250,7 +250,7 @@ readDeserializeWithKeysInArrow <- function(inputCon) {
 
   keys <- readMultipleObjects(inputCon)
 
-  # Read keys to map with each groupped batch later.
+  # Read keys to map with each grouped batch later.
   list(keys = keys, data = data)
 }
 
