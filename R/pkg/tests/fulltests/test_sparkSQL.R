@@ -2092,7 +2092,7 @@ test_that("higher order functions", {
     createDataFrame(data.frame(id = 1)),
     expr("CAST(array(1.0, 2.0, -3.0, -4.0) AS array<double>) xs"),
     expr("CAST(array(0.0, 3.0, 48.0) AS array<double>) ys"),
-    expr("array('FAILED', 'SUCCEDED') as vs"),
+    expr("array('FAILED', 'SUCCEEDED') as vs"),
     expr("map('foo', 1, 'bar', 2) as mx"),
     expr("map('foo', 42, 'bar', -1, 'baz', 0) as my")
   )
