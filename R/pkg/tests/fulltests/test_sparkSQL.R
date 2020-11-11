@@ -3964,7 +3964,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                paste("Error in listFunctions : analysis error - Database",
                      "'zxwtyswklpf_db' does not exist"))
 
-  # recoverPartitions does not work with tempory view
+  # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
                "no such table - Table or view 'cars' not found in database 'default'")
   expect_error(refreshTable("cars"), NA)
