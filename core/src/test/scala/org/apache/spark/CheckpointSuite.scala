@@ -635,12 +635,12 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       // Verify that RDD is checkpointed
       assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
       val checkpointedRDD = rdd.firstParent.asInstanceOf[ReliableCheckpointRDD[_]]
-      val partiton = checkpointedRDD.partitions(0)
-      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+      val partition = checkpointedRDD.partitions(0)
+      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
 
-      val preferredLoc = checkpointedRDD.preferredLocations(partiton)
-      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
-      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partiton))
+      val preferredLoc = checkpointedRDD.preferredLocations(partition)
+      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
+      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partition))
     }
   }
 
