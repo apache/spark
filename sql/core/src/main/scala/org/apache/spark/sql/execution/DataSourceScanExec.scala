@@ -284,7 +284,7 @@ case class FileSourceScanExec(
       //
       // Sort ordering would be over the prefix subset of `sort columns` being read
       // from the table.
-      // eg.
+      // e.g.
       // Assume (col0, col2, col3) are the columns read from the table
       // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
       // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
