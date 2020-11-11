@@ -1103,7 +1103,7 @@ private[spark] class BlockManager(
       blockSize: Long): Option[ManagedBuffer] = {
     val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
     if (file.exists()) {
-      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+      val managedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
           // Encrypted blocks cannot be memory mapped; return a special object that does decryption
           // and provides InputStream / FileRegion implementations for reading the data.
@@ -1114,7 +1114,7 @@ private[spark] class BlockManager(
           val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
-      Some(mangedBuffer)
+      Some(managedBuffer)
     } else {
       None
     }
