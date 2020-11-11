@@ -239,7 +239,7 @@ setMethod("partitionByRDD",
             javaPairRDD <- callJMethod(javaPairRDD, "partitionBy", rPartitioner)
 
             # Call .values() on the result to get back the final result, the
-            # shuffled acutal content key-val pairs.
+            # shuffled actual content key-val pairs.
             r <- callJMethod(javaPairRDD, "values")
 
             RDD(r, serializedMode = "byte")
