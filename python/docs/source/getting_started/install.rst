@@ -42,7 +42,7 @@ PySpark installation using `PyPI <https://pypi.org/project/pyspark/>`_ is as fol
 
     pip install pyspark
 
-If you want to install extra dependencies for a specific componenet, you can install it as below:
+If you want to install extra dependencies for a specific component, you can install it as below:
 
 .. code-block:: bash
 
