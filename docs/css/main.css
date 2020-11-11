@@ -325,6 +325,7 @@ a.anchorjs-link:hover { text-decoration: none; }
   border-bottom-width: 0px;
   margin-top: 0px;
   width: 210px;
+  height:80%;
   float: left;
   position: fixed;
   overflow-y: scroll;
