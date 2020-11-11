@@ -776,7 +776,7 @@ object DateTimeUtils {
     // without using time zone information. This results in a performance improvement.
     level match {
       case TRUNC_TO_MICROSECOND => t
-      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
+      case TRUNC_TO_MINUTE => truncToUnit(t, zoneId, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
       case _ =>
