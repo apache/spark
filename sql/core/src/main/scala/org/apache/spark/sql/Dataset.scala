@@ -1665,10 +1665,10 @@ class Dataset[T] private[sql](
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup($"department", $"group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -1794,10 +1794,10 @@ class Dataset[T] private[sql](
    * (i.e. cannot construct expressions).
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup("department", "group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
