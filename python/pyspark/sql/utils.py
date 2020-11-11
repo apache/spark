@@ -151,10 +151,10 @@ def toJArray(gateway, jtype, arr):
     arr :
         python type list
     """
-    jarr = gateway.new_array(jtype, len(arr))
+    jarray = gateway.new_array(jtype, len(arr))
     for i in range(0, len(arr)):
-        jarr[i] = arr[i]
-    return jarr
+        jarray[i] = arr[i]
+    return jarray
 
 
 def require_test_compiled():
