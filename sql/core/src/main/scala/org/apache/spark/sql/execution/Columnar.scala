@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
@@ -393,6 +392,13 @@ private object RowToColumnConverter {
 }
 
 /**
+ * A trait that is used as a tag to indicate a transition from rows to columns. This allows plugins
+ * to replace the current [[RowToColumnarExec]] with an optimized version and still have operations
+ * that walk a spark plan looking for this type of transition properly match it.
+ */
+trait RowToColumnarTransition extends UnaryExecNode
+
+/**
  * Provides a common executor to translate an [[RDD]] of [[InternalRow]] into an [[RDD]] of
  * [[ColumnarBatch]]. This is inserted whenever such a transition is determined to be needed.
  *
@@ -409,7 +415,7 @@ private object RowToColumnConverter {
  * populate with [[RowToColumnConverter]], but the performance requirements are different and it
  * would only be to reduce code.
  */
-case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
+case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -487,7 +493,6 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
  * to/from columnar formatted data.
  */
 case class ApplyColumnarRulesAndInsertTransitions(
-    conf: SQLConf,
     columnarRules: Seq[ColumnarRule])
   extends Rule[SparkPlan] {
 
@@ -499,8 +504,10 @@ case class ApplyColumnarRulesAndInsertTransitions(
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
       RowToColumnarExec(insertTransitions(plan))
-    } else {
+    } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan.withNewChildren(plan.children.map(insertRowToColumnar))
+    } else {
+      plan
     }
   }
 
@@ -512,8 +519,10 @@ case class ApplyColumnarRulesAndInsertTransitions(
       // The tree feels kind of backwards
       // This is the end of the columnar processing so go back to rows
       ColumnarToRowExec(insertRowToColumnar(plan))
-    } else {
+    } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
       plan.withNewChildren(plan.children.map(insertTransitions))
+    } else {
+      plan
     }
   }
 

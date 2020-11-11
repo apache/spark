@@ -39,7 +39,7 @@ function formatDuration(milliseconds) {
 
 function formatBytes(bytes, type) {
     if (type !== 'display') return bytes;
-    if (bytes == 0) return '0.0 B';
+    if (bytes <= 0) return '0.0 B';
     var k = 1024;
     var dm = 1;
     var sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
@@ -158,6 +158,9 @@ function createTemplateURI(appId, templateName) {
 function setDataTableDefaults() {
   $.extend($.fn.dataTable.defaults, {
     stateSave: true,
+    stateSaveParams: function(_, data) {
+        data.search.search = "";
+    },
     lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
     pageLength: 20
   });
@@ -166,7 +169,7 @@ function setDataTableDefaults() {
 function formatDate(date) {
   if (date <= 0) return "-";
   else {
-     var dt = new Date(date.replace("GMT", "Z"))
+     var dt = new Date(date.replace("GMT", "Z"));
      return formatDateString(dt);
   }
 }

@@ -36,7 +36,7 @@ ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
 #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
 #   We should use the latest Sphinx version once this is fixed.
-ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1"
+ARG PIP_PKGS="sphinx==3.0.4 mkdocs==1.0.4 numpy==1.18.1 pydata_sphinx_theme==0.3.1 ipython==7.16.1 nbsphinx==0.7.1 numpydoc==1.1.0"
 ARG GEM_PKGS="jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0"
 
 # Install extra needed repos and refresh.
@@ -75,6 +75,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
+  # Note that PySpark doc generation also needs pandoc due to nbsphinx
   $APT_INSTALL r-base r-base-dev && \
   $APT_INSTALL texlive-latex-base texlive texlive-fonts-extra texinfo qpdf && \
   Rscript -e "install.packages(c('curl', 'xml2', 'httr', 'devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2', 'e1071', 'survival'), repos='https://cloud.r-project.org/')" && \

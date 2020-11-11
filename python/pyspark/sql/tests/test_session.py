@@ -358,10 +358,10 @@ class SparkExtensionsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_session import *
+    from pyspark.sql.tests.test_session import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

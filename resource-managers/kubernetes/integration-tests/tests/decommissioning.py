@@ -28,7 +28,7 @@ if __name__ == "__main__":
     print("Starting decom test")
     spark = SparkSession \
         .builder \
-        .appName("PyMemoryTest") \
+        .appName("DecomTest") \
         .getOrCreate()
     sc = spark._sc
     acc = sc.accumulator(0)
@@ -46,11 +46,6 @@ if __name__ == "__main__":
     print("Waiting to give nodes time to finish migration, decom exec 1.")
     print("...")
     time.sleep(30)
-    rdd.count()
-    print("Waiting some more, please kill exec 1.")
-    print("...")
-    time.sleep(30)
-    print("Executor node should be deleted now")
     rdd.count()
     rdd.collect()
     print("Final accumulator value is: " + str(acc.value))

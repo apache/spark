@@ -14,6 +14,8 @@ plugins:
 include:
   - _static
   - _modules
+  - _images
+  - _sources
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.

@@ -410,7 +410,7 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
    */
   def unapply(join: Join): Option[ReturnType] = join match {
     case Join(left, right, LeftAnti,
-      Some(Or(e @ EqualTo(leftAttr: AttributeReference, rightAttr: AttributeReference),
+      Some(Or(e @ EqualTo(leftAttr: Expression, rightAttr: Expression),
         IsNull(e2 @ EqualTo(_, _)))), _)
         if SQLConf.get.optimizeNullAwareAntiJoin &&
           e.semanticEquals(e2) =>

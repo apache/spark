@@ -21,10 +21,9 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{SparkOptimizer, SparkPlanner}
+import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
@@ -38,8 +37,11 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
  * Builder that produces a Hive-aware `SessionState`.
  */
 @Unstable
-class HiveSessionStateBuilder(session: SparkSession, parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
+class HiveSessionStateBuilder(
+    session: SparkSession,
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
@@ -73,22 +75,22 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      new ResolveHiveSerdeTable(session) +:
-        new FindDataSourceTable(session) +:
-        new ResolveSQLOnFile(session) +:
-        new FallBackFileSourceV2(session) +:
+      ResolveHiveSerdeTable +:
+        FindDataSourceTable +:
+        ResolveSQLOnFile +:
+        FallBackFileSourceV2 +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
-          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
+          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetectAmbiguousSelfJoin(conf) +:
-        new DetermineTableStats(session) +:
-        RelationConversions(conf, catalog) +:
-        PreprocessTableCreation(session) +:
-        PreprocessTableInsertion(conf) +:
-        DataSourceAnalysis(conf) +:
+      DetectAmbiguousSelfJoin +:
+        DetermineTableStats +:
+        RelationConversions(catalog) +:
+        PreprocessTableCreation +:
+        PreprocessTableInsertion +:
+        DataSourceAnalysis +:
         HiveAnalysis +:
         customPostHocResolutionRules
 
@@ -101,7 +103,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   }
 
   override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
-    Seq(new PruneHiveTablePartitions(session))
+    Seq(PruneHiveTablePartitions)
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -116,7 +118,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     }
   }
 
-  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _, Map.empty)
 }
 
 class HiveSessionResourceLoader(

@@ -567,7 +567,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     try {
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
-      SparkSession.setActiveSession(spark)
+      SparkSession.setActiveSessionInternal(spark)
       implicit val sqlContext = spark.sqlContext
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
@@ -767,6 +767,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
     sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    sqlConf.setConf(SQLConf.STATE_STORE_COMPRESSION_CODEC, SQLConf.get.stateStoreCompressionCodec)
     val provider = new HDFSBackedStateStoreProvider()
     provider.init(
       StateStoreId(dir, opId, partition),
@@ -815,10 +816,10 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 }
 
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-  extends SparkFunSuite {
+  extends StateStoreCodecsTest {
   import StateStoreTestsHelper._
 
-  test("get, put, remove, commit, and all data iterator") {
+  testWithAllCodec("get, put, remove, commit, and all data iterator") {
     val provider = newStoreProvider()
 
     // Verify state before starting a new set of updates
@@ -870,7 +871,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(getData(provider, version = 1) === Set("b" -> 2))
   }
 
-  test("removing while iterating") {
+  testWithAllCodec("removing while iterating") {
     val provider = newStoreProvider()
 
     // Verify state before starting a new set of updates
@@ -892,7 +893,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(get(store, "b") === None)
   }
 
-  test("abort") {
+  testWithAllCodec("abort") {
     val provider = newStoreProvider()
     val store = provider.getStore(0)
     put(store, "a", 1)
@@ -905,7 +906,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     store1.abort()
   }
 
-  test("getStore with invalid versions") {
+  testWithAllCodec("getStore with invalid versions") {
     val provider = newStoreProvider()
 
     def checkInvalidVersion(version: Int): Unit = {
@@ -939,7 +940,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     checkInvalidVersion(3)
   }
 
-  test("two concurrent StateStores - one for read-only and one for read-write") {
+  testWithAllCodec("two concurrent StateStores - one for read-only and one for read-write") {
     // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
     // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
     // will be called for these StateStores if they haven't committed their results. We need to
@@ -957,7 +958,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     // two state stores
     val provider1 = newStoreProvider(storeId)
-    val restoreStore = provider1.getStore(1)
+    val restoreStore = provider1.getReadStore(1)
     val saveStore = provider1.getStore(1)
 
     put(saveStore, key, get(restoreStore, key).get + 1)
@@ -1033,7 +1034,7 @@ object StateStoreTestsHelper {
     store.put(stringToRow(key), intToRow(value))
   }
 
-  def get(store: StateStore, key: String): Option[Int] = {
+  def get(store: ReadStateStore, key: String): Option[Int] = {
     Option(store.get(stringToRow(key))).map(rowToInt)
   }
 

@@ -501,7 +501,7 @@ case class ArrayFilter(
       }
       i += 1
     }
-    new GenericArrayData(buffer)
+    new GenericArrayData(buffer.toSeq)
   }
 
   override def prettyName: String = "filter"

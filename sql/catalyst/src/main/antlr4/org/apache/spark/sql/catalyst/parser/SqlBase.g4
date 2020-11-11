@@ -850,7 +850,7 @@ errorCapturingMultiUnitsInterval
     ;
 
 multiUnitsInterval
-    : (intervalValue intervalUnit)+
+    : (intervalValue unit+=identifier)+
     ;
 
 errorCapturingUnitToUnitInterval
@@ -858,22 +858,12 @@ errorCapturingUnitToUnitInterval
     ;
 
 unitToUnitInterval
-    : value=intervalValue from=intervalUnit TO to=intervalUnit
+    : value=intervalValue from=identifier TO to=identifier
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
-    ;
-
-intervalUnit
-    : DAY
-    | HOUR
-    | MINUTE
-    | MONTH
-    | SECOND
-    | YEAR
-    | identifier
     ;
 
 colPosition
@@ -1287,7 +1277,6 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
-    | DAY
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1331,7 +1320,6 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
-    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1364,8 +1352,6 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
-    | MINUTE
-    | MONTH
     | MSCK
     | NAMESPACE
     | NAMESPACES
@@ -1420,7 +1406,6 @@ nonReserved
     | ROW
     | ROWS
     | SCHEMA
-    | SECOND
     | SELECT
     | SEPARATED
     | SERDE
@@ -1475,7 +1460,6 @@ nonReserved
     | WHERE
     | WINDOW
     | WITH
-    | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;
@@ -1540,7 +1524,6 @@ CURRENT_USER: 'CURRENT_USER';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES' | 'SCHEMAS';
-DAY: 'DAY';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
@@ -1586,7 +1569,6 @@ GRANT: 'GRANT';
 GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
-HOUR: 'HOUR';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1623,8 +1605,6 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
-MINUTE: 'MINUTE';
-MONTH: 'MONTH';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';
 NAMESPACES: 'NAMESPACES';
@@ -1682,7 +1662,6 @@ ROLLUP: 'ROLLUP';
 ROW: 'ROW';
 ROWS: 'ROWS';
 SCHEMA: 'SCHEMA';
-SECOND: 'SECOND';
 SELECT: 'SELECT';
 SEMI: 'SEMI';
 SEPARATED: 'SEPARATED';
@@ -1741,7 +1720,6 @@ WHEN: 'WHEN';
 WHERE: 'WHERE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
-YEAR: 'YEAR';
 ZONE: 'ZONE';
 //--SPARK-KEYWORD-LIST-END
 //============================

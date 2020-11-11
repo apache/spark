@@ -41,10 +41,10 @@ private[ui] class ExecutorThreadDumpPage(
       val dumpRows = threadDump.map { thread =>
         val threadId = thread.threadId
         val blockedBy = thread.blockedByThreadId match {
-          case Some(_) =>
+          case Some(blockingThreadId) =>
             <div>
-              Blocked by <a href={s"#${thread.blockedByThreadId}_td_id"}>
-              Thread {thread.blockedByThreadId} {thread.blockedByLock}</a>
+              Blocked by <a href={s"#${blockingThreadId}_td_id"}>
+              Thread {blockingThreadId} {thread.blockedByLock}</a>
             </div>
           case None => Text("")
         }

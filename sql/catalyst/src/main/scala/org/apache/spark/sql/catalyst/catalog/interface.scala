@@ -24,6 +24,8 @@ import java.util.Date
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
@@ -31,11 +33,11 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
@@ -639,7 +641,10 @@ object CatalogTypes {
  * A placeholder for a table relation, which will be replaced by concrete relation like
  * `LogicalRelation` or `HiveTableRelation`, during analysis.
  */
-case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
+case class UnresolvedCatalogRelation(
+    tableMeta: CatalogTable,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val isStreaming: Boolean = false) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
@@ -690,4 +695,40 @@ case class HiveTableRelation(
   override def newInstance(): HiveTableRelation = copy(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
+
+  override def simpleString(maxFields: Int): String = {
+    val catalogTable = tableMeta.storage.serde match {
+      case Some(serde) => tableMeta.identifier :: serde :: Nil
+      case _ => tableMeta.identifier :: Nil
+    }
+
+    var metadata = Map(
+      "CatalogTable" -> catalogTable.mkString(", "),
+      "Data Cols" -> truncatedString(dataCols, "[", ", ", "]", maxFields),
+      "Partition Cols" -> truncatedString(partitionCols, "[", ", ", "]", maxFields)
+    )
+
+    if (prunedPartitions.nonEmpty) {
+      metadata += ("Pruned Partitions" -> {
+        val parts = prunedPartitions.get.map { part =>
+          val spec = part.spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+          if (part.storage.serde.nonEmpty && part.storage.serde != tableMeta.storage.serde) {
+            s"($spec, ${part.storage.serde.get})"
+          } else {
+            s"($spec)"
+          }
+        }
+        truncatedString(parts, "[", ", ", "]", maxFields)
+      })
+    }
+
+    val metadataEntries = metadata.toSeq.map {
+      case (key, value) if key == "CatalogTable" => value
+      case (key, value) =>
+        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
+    }
+
+    val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
+    s"$nodeName $metadataStr"
+  }
 }

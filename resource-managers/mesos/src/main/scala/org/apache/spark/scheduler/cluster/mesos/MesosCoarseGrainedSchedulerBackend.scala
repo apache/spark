@@ -63,7 +63,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   with MesosScheduler
   with MesosSchedulerUtils {
 
-  // Blacklist a agent after this many failures
+  // Exclude an agent after this many failures
   private val MAX_AGENT_FAILURES = 2
 
   private val maxCoresOption = conf.get(config.CORES_MAX)
@@ -667,12 +667,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           totalGpusAcquired -= gpus
           gpusByTaskId -= taskId
         }
-        // If it was a failure, mark the agent as failed for blacklisting purposes
+        // If it was a failure, mark the agent as failed for excluding purposes
         if (TaskState.isFailed(state)) {
           agent.taskFailures += 1
 
           if (agent.taskFailures >= MAX_AGENT_FAILURES) {
-            logInfo(s"Blacklisting Mesos agent $agentId due to too many failures; " +
+            logInfo(s"Excluding Mesos agent $agentId due to too many failures; " +
                 "is Spark installed on it?")
           }
         }

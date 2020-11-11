@@ -717,6 +717,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
   }
 
+  test("SPARK-33291: Cast array with null elements to string") {
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret1 = cast(Literal.create(Array(null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"[${if (omitNull) "" else "null"},${if (omitNull) "" else " null"}]")
+      }
+    }
+  }
+
   test("SPARK-22973 Cast map to string") {
     Seq(
       false -> ("{", "}"),
@@ -769,6 +780,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(ret5, s"$lb[1, 2, 3], a, 0.1$rb")
         val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
         checkEvaluation(ret6, s"${lb}1, ${lb}1 -> a, 2 -> b, 3 -> c$rb$rb")
+      }
+    }
+  }
+
+  test("SPARK-33291: Cast struct with null elements to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Tuple2[String, String](null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
       }
     }
   }
@@ -1344,6 +1368,34 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("SPARK-32828: cast from a derived user-defined type to a base type") {
+    val v = Literal.create(Row(1), new ExampleSubTypeUDT())
+    checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
+  }
+
+  test("Fast fail for cast string type to decimal type") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
+    checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
 }
 
 /**
@@ -1366,24 +1418,25 @@ class AnsiCastSuite extends CastSuiteBase {
       val array = Literal.create(Seq("123", "true", "f", null),
         ArrayType(StringType, containsNull = true))
       checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
+        cast(array, ArrayType(dataType, containsNull = true)),
+        "invalid input syntax for type numeric: true")
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input")
+        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input")
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
       checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input")
+        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
+        cast("string", dataType), "invalid input syntax for type numeric: string")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input")
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input")
+        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
     }
   }
 
@@ -1398,5 +1451,38 @@ class AnsiCastSuite extends CastSuiteBase {
       checkExceptionInExpression[ArithmeticException](cast(negativeTs, IntegerType), errMsg("int"))
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
+  }
+
+  test("Fast fail for cast string type to decimal type in ansi mode") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+38", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+37", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("abcd", DecimalType(38, 1)),
+      "invalid input syntax for type numeric")
   }
 }

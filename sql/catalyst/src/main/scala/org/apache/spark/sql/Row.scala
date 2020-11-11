@@ -160,6 +160,7 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
@@ -188,6 +189,7 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
@@ -314,7 +316,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
+  def getSeq[T](i: Int): Seq[T] = getAs[scala.collection.Seq[T]](i).toSeq
 
   /**
    * Returns the value at position i of array type as `java.util.List`.

@@ -40,6 +40,11 @@ import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
+ *
+ * Note: when you write unit test for an expression and call `checkEvaluation` to check the result,
+ *       please make sure that you explore all the cases that can lead to null result (including
+ *       null in struct fields, array elements and map values). The framework will test the
+ *       nullability flag of the expression automatically.
  */
 trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
   self: SparkFunSuite =>
@@ -69,7 +74,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
+    val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
@@ -159,7 +164,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (!errMsg.contains(expectedErrMsg)) {
+        if (errMsg == null) {
+          if (expectedErrMsg != null) {
+            fail(s"Expected null error message, but `$errMsg` found")
+          }
+        } else if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
@@ -337,6 +346,21 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       dataType: DataType): Unit = {
     forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, c(l))
+    }
+  }
+
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against unary expressions by feeding them arbitrary literals of `dataType`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      c: Expression => Expression,
+      dataType: DataType): Unit = {
+    forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l), true)
     }
   }
 

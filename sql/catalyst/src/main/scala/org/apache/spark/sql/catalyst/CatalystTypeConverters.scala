@@ -164,7 +164,7 @@ object CatalystTypeConverters {
       scalaValue match {
         case a: Array[_] =>
           new GenericArrayData(a.map(elementConverter.toCatalyst))
-        case s: Seq[_] =>
+        case s: scala.collection.Seq[_] =>
           new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator
@@ -291,6 +291,7 @@ object CatalystTypeConverters {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
+      case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
           + s"cannot be converted to the string type")

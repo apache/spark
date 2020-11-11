@@ -81,22 +81,24 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .saveAsTable("bucketed_table")
 
-      val bucketValue = Random.nextInt(maxI)
-      val table = spark.table("bucketed_table").filter($"i" === bucketValue)
-      val query = table.queryExecution
-      val output = query.analyzed.output
-      val rdd = query.toRdd
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false") {
+        val bucketValue = Random.nextInt(maxI)
+        val table = spark.table("bucketed_table").filter($"i" === bucketValue)
+        val query = table.queryExecution
+        val output = query.analyzed.output
+        val rdd = query.toRdd
 
-      assert(rdd.partitions.length == 8)
+        assert(rdd.partitions.length == 8)
 
-      val attrs = table.select("j", "k").queryExecution.analyzed.output
-      val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
-        val getBucketId = UnsafeProjection.create(
-          HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
-          output)
-        rows.map(row => getBucketId(row).getInt(0) -> index)
-      })
-      checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+        val attrs = table.select("j", "k").queryExecution.analyzed.output
+        val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
+          val getBucketId = UnsafeProjection.create(
+            HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
+            output)
+          rows.map(row => getBucketId(row).getInt(0) -> index)
+        })
+        checkBucketId.collect().foreach(r => assert(r._1 == r._2))
+      }
     }
   }
 
@@ -111,7 +113,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   //   2) Verify the final result is the same as the expected one
   private def checkPrunedAnswers(
       bucketSpec: BucketSpec,
-      bucketValues: Seq[Integer],
+      bucketValues: Seq[Any],
       filterCondition: Column,
       originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
@@ -188,7 +190,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Case 4: InSet
       val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
@@ -240,6 +242,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues = null :: Nil,
         filterCondition = $"j" <=> null,
         nullDF)
+    }
+  }
+
+  test("bucket pruning support IsNaN") {
+    withTable("bucketed_table") {
+      val numBuckets = NumBucketsForPruningNullDf
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      // json does not support predicate push-down, and thus json is used here
+      naNDF.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Double.NaN :: Nil,
+        filterCondition = $"j".isNaN,
+        naNDF)
     }
   }
 
@@ -870,6 +891,36 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
             bucketedTableTestSpecRight = bucketedTableTestSpecRight,
             joinCondition = joinCondition(Seq("i", "j"))
           )
+        }
+      }
+    }
+  }
+
+  test("SPARK-32767 Bucket join should work if SHUFFLE_PARTITIONS larger than bucket number") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "9",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10")  {
+
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false,
+        expectedNumOutputPartitions = Some(8))
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(6, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = true,
+        expectedSort = true,
+        expectedNumOutputPartitions = Some(8))
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+            testBucketing(
+              bucketedTableTestSpecLeft = specs._1,
+              bucketedTableTestSpecRight = specs._2,
+              joinCondition = joinCondition(Seq("i", "j")))
+          }
         }
       }
     }

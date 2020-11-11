@@ -43,6 +43,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -71,7 +72,7 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: SQLConf) {
+      conf: SQLConf) = {
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
@@ -83,7 +84,7 @@ class SessionCatalog(
   }
 
   // For testing only.
-  def this(externalCatalog: ExternalCatalog) {
+  def this(externalCatalog: ExternalCatalog) = {
     this(
       externalCatalog,
       new SimpleFunctionRegistry,
@@ -783,7 +784,9 @@ class SessionCatalog(
     }
   }
 
-  def getRelation(metadata: CatalogTable): LogicalPlan = {
+  def getRelation(
+      metadata: CatalogTable,
+      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): LogicalPlan = {
     val name = metadata.identifier
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
@@ -801,7 +804,7 @@ class SessionCatalog(
         child = parser.parsePlan(viewText))
       SubqueryAlias(multiParts, child)
     } else {
-      SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata))
+      SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
     }
   }
 
@@ -1332,7 +1335,7 @@ class SessionCatalog(
       }
       e
     } else {
-      throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
+      throw new InvalidUDFClassException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
         s"Use sparkSession.udf.register(...) instead.")
     }
   }

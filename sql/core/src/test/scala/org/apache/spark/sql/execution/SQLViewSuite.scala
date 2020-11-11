@@ -168,14 +168,20 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
-      assertNoSuchTable(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
-      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
       val e2 = intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
+      }.getMessage
+      assert(e2.contains(s"$viewName is a temp view not table"))
+      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
+      val e3 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e2.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(e3.contains(s"$viewName is a temp view not table or permanent view"))
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      val e4 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      }.getMessage
+      assert(e4.contains(s"$viewName is a temp view not table or permanent view"))
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
   }
@@ -205,7 +211,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
-      assert(e.contains(s"Target table in LOAD DATA cannot be a view: `default`.`testview`"))
+      assert(e.contains("default.testView is a view not table"))
 
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
@@ -723,7 +729,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
   test("sparkSession API view resolution with different default database") {
     withDatabase("db2") {
-      withView("v1") {
+      withView("default.v1") {
         withTable("t1") {
           sql("USE default")
           sql("CREATE TABLE t1 USING parquet AS SELECT 1 AS c0")

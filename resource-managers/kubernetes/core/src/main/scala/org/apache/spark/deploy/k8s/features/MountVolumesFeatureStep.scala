@@ -16,12 +16,19 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Constants.ENV_EXECUTOR_ID
 
 private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
+  import MountVolumesFeatureStep._
+
+  val additionalResources = ArrayBuffer.empty[HasMetadata]
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val (volumeMounts, volumes) = constructVolumes(conf.volumes).unzip
@@ -42,7 +49,12 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   private def constructVolumes(
     volumeSpecs: Iterable[KubernetesVolumeSpec]
   ): Iterable[(VolumeMount, Volume)] = {
-    volumeSpecs.map { spec =>
+    val duplicateMountPaths = volumeSpecs.map(_.mountPath).toSeq.groupBy(identity).collect {
+      case (x, ys) if ys.length > 1 => s"'$x'"
+    }
+    require(duplicateMountPaths.isEmpty,
+      s"Found duplicated mountPath: ${duplicateMountPaths.mkString(", ")}")
+    volumeSpecs.zipWithIndex.map { case (spec, i) =>
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)
         .withReadOnly(spec.mountReadOnly)
@@ -56,7 +68,33 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
           new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath, ""))
 
-        case KubernetesPVCVolumeConf(claimName) =>
+        case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size) =>
+          val claimName = conf match {
+            case c: KubernetesExecutorConf =>
+              claimNameTemplate
+                .replaceAll(PVC_ON_DEMAND,
+                  s"${conf.resourceNamePrefix}-exec-${c.executorId}$PVC_POSTFIX-$i")
+                .replaceAll(ENV_EXECUTOR_ID, c.executorId)
+            case _ =>
+              claimNameTemplate
+                .replaceAll(PVC_ON_DEMAND, s"${conf.resourceNamePrefix}-driver$PVC_POSTFIX-$i")
+          }
+          if (storageClass.isDefined && size.isDefined) {
+            additionalResources.append(new PersistentVolumeClaimBuilder()
+              .withKind(PVC)
+              .withApiVersion("v1")
+              .withNewMetadata()
+                .withName(claimName)
+                .endMetadata()
+              .withNewSpec()
+                .withStorageClassName(storageClass.get)
+                .withAccessModes(PVC_ACCESS_MODE)
+                .withResources(new ResourceRequirementsBuilder()
+                  .withRequests(Map("storage" -> new Quantity(size.get)).asJava).build())
+                .endSpec()
+              .build())
+          }
+
           new VolumeBuilder()
             .withPersistentVolumeClaim(
               new PersistentVolumeClaimVolumeSource(claimName, spec.mountReadOnly))
@@ -77,4 +115,15 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
       (volumeMount, volume)
     }
   }
+
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
+    additionalResources.toSeq
+  }
+}
+
+private[spark] object MountVolumesFeatureStep {
+  val PVC_ON_DEMAND = "OnDemand"
+  val PVC = "PersistentVolumeClaim"
+  val PVC_POSTFIX = "-pvc"
+  val PVC_ACCESS_MODE = "ReadWriteOnce"
 }

@@ -17,7 +17,6 @@
 import sys
 import warnings
 
-from pyspark import since
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
@@ -29,19 +28,27 @@ class PandasGroupedOpsMixin(object):
     can use this class.
     """
 
-    @since(2.3)
     def apply(self, udf):
         """
         It is an alias of :meth:`pyspark.sql.GroupedData.applyInPandas`; however, it takes a
         :meth:`pyspark.sql.functions.pandas_udf` whereas
         :meth:`pyspark.sql.GroupedData.applyInPandas` takes a Python native function.
 
-        .. note:: It is preferred to use :meth:`pyspark.sql.GroupedData.applyInPandas` over this
-            API. This API will be deprecated in the future releases.
+        .. versionadded:: 2.3.0
 
-        :param udf: a grouped map user-defined function returned by
+        Parameters
+        ----------
+        udf : :func:`pyspark.sql.functions.pandas_udf`
+            a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.
 
+        Notes
+        -----
+        It is preferred to use :meth:`pyspark.sql.GroupedData.applyInPandas` over this
+        API. This API will be deprecated in the future releases.
+
+        Examples
+        --------
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
@@ -61,8 +68,9 @@ class PandasGroupedOpsMixin(object):
         |  2| 1.1094003924504583|
         +---+-------------------+
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
-
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
         """
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
@@ -77,7 +85,6 @@ class PandasGroupedOpsMixin(object):
 
         return self.applyInPandas(udf.func, schema=udf.returnType)
 
-    @since(3.0)
     def applyInPandas(self, func, schema):
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
@@ -94,11 +101,19 @@ class PandasGroupedOpsMixin(object):
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
-        :param func: a Python native function that takes a `pandas.DataFrame`, and outputs a
+        .. versionadded:: 3.0.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes a `pandas.DataFrame`, and outputs a
             `pandas.DataFrame`.
-        :param schema: the return type of the `func` in PySpark. The value can be either a
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
+        Examples
+        --------
         >>> import pandas as pd  # doctest: +SKIP
         >>> from pyspark.sql.functions import pandas_udf, ceil
         >>> df = spark.createDataFrame(
@@ -141,6 +156,7 @@ class PandasGroupedOpsMixin(object):
         |  1|1.5|
         |  2|6.0|
         +---+---+
+
         >>> def sum_func(key, pdf):
         ...     # key is a tuple of two numpy.int64s, which is the values
         ...     # of 'id' and 'ceil(df.v / 2)' for the current group
@@ -156,19 +172,23 @@ class PandasGroupedOpsMixin(object):
         |  2|          2| 3.0|
         +---+-----------+----+
 
-        .. note:: This function requires a full shuffle. All the data of a group will be loaded
-            into memory, so the user should be aware of the potential OOM risk if data is skewed
-            and certain groups are too large to fit in memory.
+        Notes
+        -----
+        This function requires a full shuffle. All the data of a group will be loaded
+        into memory, so the user should be aware of the potential OOM risk if data is skewed
+        and certain groups are too large to fit in memory.
 
-        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-            recommended to explicitly index the columns by name to ensure the positions are correct,
-            or alternatively use an `OrderedDict`.
-            For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-            `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
+        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
+        recommended to explicitly index the columns by name to ensure the positions are correct,
+        or alternatively use an `OrderedDict`.
+        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
+        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
 
-        .. note:: Experimental
+        This API is experimental.
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import GroupedData
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -182,12 +202,13 @@ class PandasGroupedOpsMixin(object):
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
-    @since(3.0)
     def cogroup(self, other):
         """
         Cogroups this group with another group so that we can run cogrouped operations.
 
-        See :class:`CoGroupedData` for the operations that can be run.
+        .. versionadded:: 3.0.0
+
+        See :class:`PandasCogroupedOps` for the operations that can be run.
         """
         from pyspark.sql import GroupedData
 
@@ -201,9 +222,11 @@ class PandasCogroupedOps(object):
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.
 
-    .. note:: Experimental
+    .. versionadded:: 3.0.0
 
-    .. versionadded:: 3.0
+    Notes
+    -----
+    This API is experimental.
     """
 
     def __init__(self, gd1, gd2):
@@ -211,7 +234,6 @@ class PandasCogroupedOps(object):
         self._gd2 = gd2
         self.sql_ctx = gd1.sql_ctx
 
-    @since(3.0)
     def applyInPandas(self, func, schema):
         """
         Applies a function to each cogroup using pandas and returns the result
@@ -228,12 +250,20 @@ class PandasCogroupedOps(object):
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
-        :param func: a Python native function that takes two `pandas.DataFrame`\\s, and
+        .. versionadded:: 3.0.0
+
+        Parameters
+        ----------
+        func : function
+            a Python native function that takes two `pandas.DataFrame`\\s, and
             outputs a `pandas.DataFrame`, or that takes one tuple (grouping keys) and two
-            pandas ``DataFrame``s, and outputs a pandas ``DataFrame``.
-        :param schema: the return type of the `func` in PySpark. The value can be either a
+            pandas ``DataFrame``\\s, and outputs a pandas ``DataFrame``.
+        schema : :class:`pyspark.sql.types.DataType` or str
+            the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
+        Examples
+        --------
         >>> from pyspark.sql.functions import pandas_udf
         >>> df1 = spark.createDataFrame(
         ...     [(20000101, 1, 1.0), (20000101, 2, 2.0), (20000102, 1, 3.0), (20000102, 2, 4.0)],
@@ -275,20 +305,23 @@ class PandasCogroupedOps(object):
         |20000102|  1|3.0|  x|
         +--------+---+---+---+
 
-        .. note:: This function requires a full shuffle. All the data of a cogroup will be loaded
-            into memory, so the user should be aware of the potential OOM risk if data is skewed
-            and certain groups are too large to fit in memory.
+        Notes
+        -----
+        This function requires a full shuffle. All the data of a cogroup will be loaded
+        into memory, so the user should be aware of the potential OOM risk if data is skewed
+        and certain groups are too large to fit in memory.
 
-        .. note:: If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-            recommended to explicitly index the columns by name to ensure the positions are correct,
-            or alternatively use an `OrderedDict`.
-            For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-            `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
+        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
+        recommended to explicitly index the columns by name to ensure the positions are correct,
+        or alternatively use an `OrderedDict`.
+        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
+        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
 
-        .. note:: Experimental
+        This API is experimental.
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
-
+        See Also
+        --------
+        pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql.pandas.functions import pandas_udf
 

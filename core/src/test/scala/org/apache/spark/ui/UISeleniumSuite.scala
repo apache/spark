@@ -46,7 +46,6 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
-import org.apache.spark.util.CallSite
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 

@@ -1612,13 +1612,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Create the function call.
     val name = ctx.functionName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
-    val arguments = ctx.argument.asScala.map(expression) match {
+    // Call `toSeq`, otherwise `ctx.argument.asScala.map(expression)` is `Buffer` in Scala 2.13
+    val arguments = ctx.argument.asScala.map(expression).toSeq match {
       case Seq(UnresolvedStar(None))
         if name.toLowerCase(Locale.ROOT) == "count" && !isDistinct =>
         // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
       case expressions =>
-        expressions.toSeq
+        expressions
     }
     val filter = Option(ctx.where).map(expression(_))
     val function = UnresolvedFunction(
@@ -2124,14 +2125,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitMultiUnitsInterval(ctx: MultiUnitsIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
-      val units = ctx.intervalUnit().asScala
+      val units = ctx.unit.asScala
       val values = ctx.intervalValue().asScala
       try {
         assert(units.length == values.length)
         val kvs = units.indices.map { i =>
           val u = units(i).getText
           val v = if (values(i).STRING() != null) {
-            string(values(i).STRING())
+            val value = string(values(i).STRING())
+            // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
+            // INTERVAL 'interval 1' day, we need to check ahead before they are concatenated with
+            // units and become valid ones, e.g. '1 day 2 hour'.
+            // Ideally, we only ensure the value parts don't contain any units here.
+            if (value.exists(Character.isLetter)) {
+              throw new ParseException("Can only use numbers in the interval value part for" +
+                s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
+            }
+            value
           } else {
             values(i).getText
           }
@@ -2868,11 +2878,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DropTableStatement]] command.
+   * Create a [[DropTable]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    DropTableStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
+    // DROP TABLE works with either a table or a temporary view.
+    DropTable(
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -3174,7 +3185,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[DescribeColumnStatement]] or [[DescribeRelation]] commands.
+   * Create a [[DescribeColumn]] or [[DescribeRelation]] commands.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -3182,8 +3193,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       if (ctx.partitionSpec != null) {
         throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
       } else {
-        DescribeColumnStatement(
-          visitMultipartIdentifier(ctx.multipartIdentifier()),
+        DescribeColumn(
+          UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
           ctx.describeColName.nameParts.asScala.map(_.getText).toSeq,
           isExtended)
       }
@@ -3206,7 +3217,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AnalyzeTableStatement]], or an [[AnalyzeColumnStatement]].
+   * Create an [[AnalyzeTable]], or an [[AnalyzeColumn]].
    * Example SQL for analyzing a table or a set of partitions :
    * {{{
    *   ANALYZE TABLE multi_part_name [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
@@ -3239,18 +3250,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
     if (ctx.ALL() != null) {
       checkPartitionSpec()
-      AnalyzeColumnStatement(tableName, None, allColumns = true)
+      AnalyzeColumn(UnresolvedTableOrView(tableName), None, allColumns = true)
     } else if (ctx.identifierSeq() == null) {
       val partitionSpec = if (ctx.partitionSpec != null) {
         visitPartitionSpec(ctx.partitionSpec)
       } else {
         Map.empty[String, Option[String]]
       }
-      AnalyzeTableStatement(tableName, partitionSpec, noScan = ctx.identifier != null)
+      AnalyzeTable(
+        UnresolvedTableOrView(tableName, allowTempView = false),
+        partitionSpec,
+        noScan = ctx.identifier != null)
     } else {
       checkPartitionSpec()
-      AnalyzeColumnStatement(
-        tableName, Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
+      AnalyzeColumn(
+        UnresolvedTableOrView(tableName),
+        Option(visitIdentifierSeq(ctx.identifierSeq())),
+        allColumns = false)
     }
   }
 
@@ -3267,7 +3283,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[LoadDataStatement]].
+   * Create a [[LoadData]].
    *
    * For example:
    * {{{
@@ -3276,8 +3292,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadDataStatement(
-      tableName = visitMultipartIdentifier(ctx.multipartIdentifier),
+    LoadData(
+      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3286,10 +3302,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Creates a [[ShowCreateTableStatement]]
+   * Creates a [[ShowCreateTable]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()), ctx.SERDE != null)
+    ShowCreateTable(
+      UnresolvedTableOrView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        allowTempView = false),
+      ctx.SERDE != null)
   }
 
   /**
@@ -3355,7 +3375,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[RefreshTableStatement]].
+   * Create a [[RefreshTable]].
    *
    * For example:
    * {{{
@@ -3363,7 +3383,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
-    RefreshTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    RefreshTable(UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())))
   }
 
   /**

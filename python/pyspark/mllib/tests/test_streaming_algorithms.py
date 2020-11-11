@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from time import time, sleep
 import unittest
 
 from numpy import array, random, exp, dot, all, mean, abs
@@ -467,10 +466,10 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_streaming_algorithms import *
+    from pyspark.mllib.tests.test_streaming_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

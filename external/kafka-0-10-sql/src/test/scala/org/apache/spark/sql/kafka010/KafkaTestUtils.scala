@@ -395,7 +395,7 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).mapValues(_.size).toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -587,7 +587,7 @@ class KafkaTestUtils(
     }), s"checkpoint for topic $topic still exists")
     // ensure the topic is gone
     assert(
-      !zkClient.getAllTopicsInCluster.contains(topic),
+      !zkClient.getAllTopicsInCluster().contains(topic),
       s"topic $topic still exists on zookeeper")
   }
 

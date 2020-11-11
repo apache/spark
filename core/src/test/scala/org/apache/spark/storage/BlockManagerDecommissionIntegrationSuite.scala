@@ -40,7 +40,47 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   val TaskEnded = "TASK_ENDED"
   val JobEnded = "JOB_ENDED"
 
-  test(s"verify that an already running task which is going to cache data succeeds " +
+  Seq(false, true).foreach { isEnabled =>
+    test(s"SPARK-32850: BlockManager decommission should respect the configuration " +
+      s"(enabled=${isEnabled})") {
+      val conf = new SparkConf()
+        .setAppName("test-blockmanager-decommissioner")
+        .setMaster("local-cluster[2, 1, 1024]")
+        .set(config.DECOMMISSION_ENABLED, true)
+        .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 6000)
+      val executors = sc.getExecutorIds().toArray
+      val decommissionListener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          // ensure Tasks launched at executors before they're marked as decommissioned by driver
+          Thread.sleep(3000)
+          sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+            .decommissionExecutors(
+              executors.map { id => (id, ExecutorDecommissionInfo("test")) },
+              true,
+              false)
+        }
+      }
+      sc.addSparkListener(decommissionListener)
+
+      val decommissionStatus: Seq[Boolean] = sc.parallelize(1 to 100, 2).mapPartitions { _ =>
+        val startTime = System.currentTimeMillis()
+        while (SparkEnv.get.blockManager.decommissioner.isEmpty &&
+          // wait at most 6 seconds for BlockManager to start to decommission (if enabled)
+          System.currentTimeMillis() - startTime < 6000) {
+          Thread.sleep(300)
+        }
+        val blockManagerDecommissionStatus =
+          if (SparkEnv.get.blockManager.decommissioner.isEmpty) false else true
+        Iterator.single(blockManagerDecommissionStatus)
+      }.collect()
+      assert(decommissionStatus.forall(_ == isEnabled))
+      sc.removeSparkListener(decommissionListener)
+    }
+  }
+
+  testRetry(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)
   }
@@ -65,10 +105,12 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     val migrateDuring = whenToDecom != JobEnded
     val master = s"local-cluster[${numExecs}, 1, 1024]"
     val conf = new SparkConf().setAppName("test").setMaster(master)
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+      .set(config.DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED, persist)
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, shuffle)
+      // Since we use the bus for testing we don't want to drop any messages
+      .set(config.LISTENER_BUS_EVENT_QUEUE_CAPACITY, 1000000)
       // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
@@ -89,7 +131,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val sleepIntervalMs = whenToDecom match {
       // Increase the window of time b/w task started and ended so that we can decom within that.
-      case TaskStarted => 2000
+      case TaskStarted => 10000
       // Make one task take a really short time so that we can decommission right after it is
       // done but before its peers are done.
       case TaskEnded =>
@@ -137,7 +179,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         taskEndEvents.add(taskEnd)
       }
 
-      override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
+      override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = synchronized {
         blocksUpdated.append(blockUpdated)
       }
 
@@ -176,11 +218,11 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       } else {
         10.milliseconds
       }
-      eventually(timeout(6.seconds), interval(intervalMs)) {
+      eventually(timeout(20.seconds), interval(intervalMs)) {
         assert(getCandidateExecutorToDecom.isDefined)
       }
     } else {
-      ThreadUtils.awaitResult(asyncCount, 15.seconds)
+      ThreadUtils.awaitResult(asyncCount, 1.minute)
     }
 
     // Decommission one of the executors.
@@ -188,13 +230,16 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val execToDecommission = getCandidateExecutorToDecom.get
     logInfo(s"Decommissioning executor ${execToDecommission}")
+
+    // Decommission executor and ensure it is not relaunched by setting adjustTargetNumExecutors
     sched.decommissionExecutor(
       execToDecommission,
-      ExecutorDecommissionInfo("", isHostDecommissioned = false))
+      ExecutorDecommissionInfo("", None),
+      adjustTargetNumExecutors = true)
     val decomTime = new SystemClock().getTimeMillis()
 
     // Wait for job to finish.
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 15.seconds)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 1.minute)
     assert(asyncCountResult === numParts)
     // All tasks finished, so accum should have been increased numParts times.
     assert(accum.value === numParts)
@@ -226,7 +271,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for our respective blocks to have migrated
-    eventually(timeout(30.seconds), interval(10.milliseconds)) {
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
       if (persist) {
         // One of our blocks should have moved.
         val rddUpdates = blocksUpdated.filter { update =>
@@ -276,6 +321,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     }
 
     // Wait for the executor to be removed automatically after migration.
+    // This is set to a high value since github actions is sometimes high latency
+    // but I've never seen this go for more than a minute.
     assert(executorRemovedSem.tryAcquire(1, 5L, TimeUnit.MINUTES))
 
     // Since the RDD is cached or shuffled so further usage of same RDD should use the

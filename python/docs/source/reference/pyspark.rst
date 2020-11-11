@@ -39,6 +39,7 @@ Public Classes
     RDDBarrier
     BarrierTaskContext
     BarrierTaskInfo
+    InheritableThread
 
 
 Spark Context APIs
@@ -63,6 +64,7 @@ Spark Context APIs
     SparkContext.defaultParallelism
     SparkContext.dump_profiles
     SparkContext.emptyRDD
+    SparkContext.getCheckpointDir
     SparkContext.getConf
     SparkContext.getLocalProperty
     SparkContext.getOrCreate
@@ -249,6 +251,7 @@ Management
     SparkFiles.getRootDirectory
     StorageLevel.DISK_ONLY
     StorageLevel.DISK_ONLY_2
+    StorageLevel.DISK_ONLY_3
     StorageLevel.MEMORY_AND_DISK
     StorageLevel.MEMORY_AND_DISK_2
     StorageLevel.MEMORY_ONLY

@@ -679,6 +679,138 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val sparkPlanInfo = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
     assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
   }
+
+  test("SPARK-32615,SPARK-33016: SQLMetrics validation after sparkPlanInfo updated in AQE") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 0
+    val df = createTestDataFrame
+
+    // oldPlan SQLMetrics
+    // SQLPlanMetric(duration,0,timing)
+    // SQLPlanMetric(number of output rows,1,sum)
+    // SQLPlanMetric(number of output rows,2,sum)
+    val oldPlan = SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan)
+    val oldAccumulatorIds =
+      SparkPlanGraph(oldPlan)
+        .allNodes.flatMap(_.metrics.map(_.accumulatorId))
+
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      executionId,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      oldPlan,
+      System.currentTimeMillis()))
+
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Seq(createStageInfo(0, 0)),
+      createProperties(executionId)))
+
+    listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0)))
+
+    assert(statusStore.executionMetrics(executionId).isEmpty)
+
+    // update old metrics with Id 1 & 2, since 0 is timing metrics,
+    // timing metrics has a complicated string presentation so we don't test it here.
+    val oldMetricsValueMap = oldAccumulatorIds.sorted.tail.map(id => (id, 100L)).toMap
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+      (0L, 0, 0, createAccumulatorInfos(oldMetricsValueMap))
+    )))
+
+    assert(statusStore.executionMetrics(executionId).size == 2)
+    statusStore.executionMetrics(executionId).foreach { m =>
+      assert(m._2 == "100")
+    }
+
+    listener.onTaskEnd(SparkListenerTaskEnd(
+      stageId = 0,
+      stageAttemptId = 0,
+      taskType = "",
+      reason = null,
+      createTaskInfo(0, 0),
+      new ExecutorMetrics,
+      null))
+
+    listener.onStageCompleted(SparkListenerStageCompleted(createStageInfo(0, 0)))
+
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      JobSucceeded
+    ))
+
+    val df2 = createTestDataFrame.filter("_2 > 2")
+    // newPlan SQLMetrics
+    // SQLPlanMetric(duration,3,timing)
+    // SQLPlanMetric(number of output rows,4,sum)
+    // SQLPlanMetric(number of output rows,5,sum)
+    val newPlan = SparkPlanInfo.fromSparkPlan(df2.queryExecution.executedPlan)
+    val newAccumulatorIds =
+      SparkPlanGraph(newPlan)
+        .allNodes.flatMap(_.metrics.map(_.accumulatorId))
+
+    // Assume that AQE update sparkPlanInfo with newPlan
+    // ExecutionMetrics will be appended using newPlan's SQLMetrics
+    listener.onOtherEvent(SparkListenerSQLAdaptiveExecutionUpdate(
+      executionId,
+      "test",
+      newPlan))
+
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 1,
+      time = System.currentTimeMillis(),
+      stageInfos = Seq(createStageInfo(1, 0)),
+      createProperties(executionId)))
+
+    listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
+    listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0)))
+
+    // historical metrics will be kept despite of the newPlan updated.
+    assert(statusStore.executionMetrics(executionId).size == 2)
+
+    // update new metrics with Id 4 & 5, since 3 is timing metrics,
+    // timing metrics has a complicated string presentation so we don't test it here.
+    val newMetricsValueMap = newAccumulatorIds.sorted.tail.map(id => (id, 500L)).toMap
+    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
+      (0L, 1, 0, createAccumulatorInfos(newMetricsValueMap))
+    )))
+
+    assert(statusStore.executionMetrics(executionId).size == 4)
+    statusStore.executionMetrics(executionId).foreach { m =>
+      assert(m._2 == "100" || m._2 == "500")
+    }
+
+    listener.onTaskEnd(SparkListenerTaskEnd(
+      stageId = 1,
+      stageAttemptId = 0,
+      taskType = "",
+      reason = null,
+      createTaskInfo(0, 0),
+      new ExecutorMetrics,
+      null))
+
+    listener.onStageCompleted(SparkListenerStageCompleted(createStageInfo(1, 0)))
+
+    listener.onJobEnd(SparkListenerJobEnd(
+      jobId = 1,
+      time = System.currentTimeMillis(),
+      JobSucceeded
+    ))
+
+    // aggregateMetrics should contains all metrics from job 0 and job 1
+    val aggregateMetrics = listener.liveExecutionMetrics(executionId)
+    if (aggregateMetrics.isDefined) {
+      assert(aggregateMetrics.get.keySet.size == 4)
+    }
+
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(
+      executionId, System.currentTimeMillis()))
+  }
 }
 
 

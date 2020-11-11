@@ -25,7 +25,9 @@ import warnings
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import udf
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
+    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, MapType, \
+    ArrayType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -35,12 +37,12 @@ if have_pandas:
     from pandas.util.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
 class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
@@ -262,11 +264,12 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
-        fields[0], fields[1] = fields[1], fields[0]  # swap str with int
+        fields[5], fields[6] = fields[6], fields[5]  # swap decimal with date
         wrong_schema = StructType(fields)
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "integer.*required"):
-                self.spark.createDataFrame(pdf, schema=wrong_schema)
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                    self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
@@ -454,10 +457,16 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(len(pdf), 0)
         self.assertEqual(list(pdf.columns), ["col1"])
 
+    def test_createDataFrame_empty_partition(self):
+        pdf = pd.DataFrame({"c1": [1], "c2": ["string"]})
+        df = self.spark.createDataFrame(pdf)
+        self.assertEqual([Row(c1=1, c2='string')], df.collect())
+        self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
 class MaxResultArrowTests(unittest.TestCase):
     # These tests are separate as 'spark.driver.maxResultSize' configuration
     # is a static configuration to Spark context.
@@ -489,10 +498,10 @@ class EncryptionArrowTests(ArrowTests):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow import *
+    from pyspark.sql.tests.test_arrow import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

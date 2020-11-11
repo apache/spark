@@ -1,0 +1,6 @@
+org.apache.spark.sql.execution.datasources.jdbc.connection.BasicConnectionProvider
+org.apache.spark.sql.execution.datasources.jdbc.connection.DB2ConnectionProvider
+org.apache.spark.sql.execution.datasources.jdbc.connection.MariaDBConnectionProvider
+org.apache.spark.sql.execution.datasources.jdbc.connection.MSSQLConnectionProvider
+org.apache.spark.sql.execution.datasources.jdbc.connection.PostgresConnectionProvider
+org.apache.spark.sql.execution.datasources.jdbc.connection.OracleConnectionProvider

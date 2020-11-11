@@ -27,7 +27,8 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
@@ -47,8 +48,8 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * executors that could run all current running and pending tasks at once.
  *
  * Increasing the target number of executors happens in response to backlogged tasks waiting to be
- * scheduled. If the scheduler queue is not drained in N seconds, then new executors are added. If
- * the queue persists for another M seconds, then more executors are added and so on. The number
+ * scheduled. If the scheduler queue is not drained in M seconds, then new executors are added. If
+ * the queue persists for another N seconds, then more executors are added and so on. The number
  * added in each round increases exponentially from the previous round until an upper bound has been
  * reached. The upper bound is based both on a configured property and on the current number of
  * running and pending tasks, as described above.
@@ -127,6 +128,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
+  private val decommissionEnabled = conf.get(DECOMMISSION_ENABLED)
+
   private val defaultProfileId = resourceProfileManager.defaultResourceProfile.id
 
   validateSettings()
@@ -147,11 +150,7 @@ private[spark] class ExecutorAllocationManager(
   private var addTime: Long = NOT_SET
 
   // Polling loop interval (ms)
-  private val intervalMillis: Long = if (Utils.isTesting) {
-      conf.get(TEST_SCHEDULE_INTERVAL)
-    } else {
-      100
-    }
+  private val intervalMillis: Long = 100
 
   // Listener for Spark events that impact the allocation policy
   val listener = new ExecutorAllocationListener
@@ -204,7 +203,12 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
+      // If dynamic allocation shuffle tracking or worker decommissioning along with
+      // storage shuffle decommissioning is enabled we have *experimental* support for
+      // decommissioning without a shuffle service.
+      if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED) ||
+          (decommissionEnabled &&
+            conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))) {
         logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires the external " +
@@ -239,7 +243,10 @@ private[spark] class ExecutorAllocationManager(
         }
       }
     }
-    executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    if (!testing || conf.get(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED)) {
+      executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+    }
 
     // copy the maps inside synchonize to ensure not being modified
     val (numExecutorsTarget, numLocalityAware) = synchronized {
@@ -270,6 +277,9 @@ private[spark] class ExecutorAllocationManager(
     addTime = 0L
     numExecutorsTargetPerResourceProfileId.keys.foreach { rpId =>
       numExecutorsTargetPerResourceProfileId(rpId) = initialNumExecutors
+    }
+    numExecutorsToAddPerResourceProfileId.keys.foreach { rpId =>
+      numExecutorsToAddPerResourceProfileId(rpId) = 1
     }
     executorMonitor.reset()
   }
@@ -302,8 +312,8 @@ private[spark] class ExecutorAllocationManager(
 
     if (unschedulableTaskSets > 0) {
       // Request additional executors to account for task sets having tasks that are unschedulable
-      // due to blacklisting when the active executor count has already reached the max needed
-      // which we would normally get.
+      // due to executors excluded for failures when the active executor count has already reached
+      // the max needed which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
       math.max(maxNeededWithSpeculationLocalityOffset,
@@ -539,7 +549,9 @@ private[spark] class ExecutorAllocationManager(
         // get the running total as we remove or initialize it to the count - pendingRemoval
         val newExecutorTotal = numExecutorsTotalPerRpId.getOrElseUpdate(rpId,
           (executorMonitor.executorCountWithResourceProfile(rpId) -
-            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId)))
+            executorMonitor.pendingRemovalCountPerResourceProfileId(rpId) -
+            executorMonitor.decommissioningPerResourceProfileId(rpId)
+          ))
         if (newExecutorTotal - 1 < minNumExecutors) {
           logDebug(s"Not removing idle executor $executorIdToBeRemoved because there " +
             s"are only $newExecutorTotal executor(s) left (minimum number of executor limit " +
@@ -565,8 +577,17 @@ private[spark] class ExecutorAllocationManager(
     } else {
       // We don't want to change our target number of executors, because we already did that
       // when the task backlog decreased.
-      client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
-        countFailures = false, force = false)
+      if (decommissionEnabled) {
+        val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
+          id => (id, ExecutorDecommissionInfo("spark scale down"))).toArray
+        client.decommissionExecutors(
+          executorIdsWithoutHostLoss,
+          adjustTargetNumExecutors = false,
+          triggeredByExecutor = false)
+      } else {
+        client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
+          countFailures = false, force = false)
+      }
     }
 
     // [SPARK-21834] killExecutors api reduces the target number of executors.
@@ -578,7 +599,11 @@ private[spark] class ExecutorAllocationManager(
 
     // reset the newExecutorTotal to the existing number of executors
     if (testing || executorsRemoved.nonEmpty) {
-      executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      if (decommissionEnabled) {
+        executorMonitor.executorsDecommissioned(executorsRemoved.toSeq)
+      } else {
+        executorMonitor.executorsKilled(executorsRemoved.toSeq)
+      }
       logInfo(s"Executors ${executorsRemoved.mkString(",")} removed due to idle timeout.")
       executorsRemoved.toSeq
     } else {
@@ -637,10 +662,10 @@ private[spark] class ExecutorAllocationManager(
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
 
-    // Keep track of unschedulable task sets due to blacklisting. This is a Set of StageAttempt's
-    // because we'll only take the last unschedulable task in a taskset although there can be more.
-    // This is done in order to avoid costly loops in the scheduling.
-    // Check TaskSetManager#getCompletelyBlacklistedTaskIfAny for more details.
+    // Keep track of unschedulable task sets because of executor/node exclusions from too many task
+    // failures. This is a Set of StageAttempt's because we'll only take the last unschedulable task
+    // in a taskset although there can be more. This is done in order to avoid costly loops in the
+    // scheduling. Check TaskSetManager#getCompletelyExcludedTaskIfAny for more details.
     private val unschedulableTaskSets = new mutable.HashSet[StageAttempt]
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair

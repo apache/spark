@@ -119,7 +119,8 @@ private[this] object SharedFactory {
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
   """,
-  group = "json_funcs")
+  group = "json_funcs",
+  since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -343,7 +344,8 @@ case class GetJsonObject(json: Expression, path: Expression)
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1	2
   """,
-  group = "json_funcs")
+  group = "json_funcs",
+  since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -739,9 +741,9 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
   """,
   group = "json_funcs",
   since = "2.4.0")
@@ -799,7 +801,7 @@ case class SchemaOfJson(
       }
     }
 
-    UTF8String.fromString(dt.catalogString)
+    UTF8String.fromString(dt.sql)
   }
 
   override def prettyName: String = "schema_of_json"

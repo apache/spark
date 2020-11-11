@@ -57,7 +57,7 @@ private object PostgresDialect extends JdbcDialect {
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "money" | "float8" => Some(DoubleType)
-    case "text" | "varchar" | "char" | "cidr" | "inet" | "json" | "jsonb" | "uuid" =>
+    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
@@ -126,4 +126,20 @@ private object PostgresDialect extends JdbcDialect {
     }
   }
 
+  // See https://www.postgresql.org/docs/12/sql-altertable.html
+  override def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String = {
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} TYPE $newDataType"
+  }
+
+  // See https://www.postgresql.org/docs/12/sql-altertable.html
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
 }
