@@ -94,7 +94,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
       // The generated the state watermark cleanup expression is inclusive of the state watermark.
       // If state watermark is W, all state where timestamp <= W will be cleaned up.
-      // Now when the canonicalized join condition solves to leftTime >= W, we dont want to clean
+      // Now when the canonicalized join condition solves to leftTime >= W, we don't want to clean
       // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
       val stateWatermark = predicate match {
         case LessThan(l, r) => getStateWatermarkSafely(l, r)
