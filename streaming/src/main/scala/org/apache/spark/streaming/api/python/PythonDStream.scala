@@ -163,7 +163,7 @@ private[python] object PythonTransformFunctionSerializer {
 private[streaming] object PythonDStream {
 
   /**
-   * can not access PythonTransformFunctionSerializer.register() via Py4j
+   * cannot access PythonTransformFunctionSerializer.register() via Py4j
    * Py4JError: PythonTransformFunctionSerializerregister does not exist in the JVM
    */
   def registerSerializer(ser: PythonTransformFunctionSerializer): Unit = {
