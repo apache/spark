@@ -22,7 +22,7 @@ import java.lang.{Byte => JByte}
 import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
-import java.net._
+import java.net.{HttpURLConnection, _}
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
@@ -47,7 +47,7 @@ import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
-import org.apache.commons.codec.binary.Hex
+import org.apache.commons.codec.binary.{Base64, Hex}
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path, Trash}
@@ -743,7 +743,15 @@ private[spark] object Utils extends Logging {
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
-        val uc = new URL(url).openConnection()
+        val url_object = new URL(url)
+        val uc = url_object.openConnection().asInstanceOf[HttpURLConnection]
+        uc.setDoInput(true)
+        uc.setRequestMethod("GET")
+        if (!url_object.getUserInfo.isEmpty) {
+          uc.setRequestProperty(
+            "Authorization",
+            "Basic " + Base64.encodeBase64(url_object.getUserInfo.getBytes))
+        }
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
         uc.setConnectTimeout(timeoutMs)
