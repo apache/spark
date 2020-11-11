@@ -1610,7 +1610,7 @@ class SessionCatalog(
   }
 
   /**
-   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   * Validate the new location before renaming a managed table, which should be non-existent.
    */
   private def validateNewLocationOfRename(
       oldName: TableIdentifier,
