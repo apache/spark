@@ -1363,7 +1363,7 @@ class Dataset[T] private[sql](
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
-  // Note that, the metadata added here are only avaiable in the analyzer, as the analyzer rule
+  // Note that, the metadata added here are only available in the analyzer, as the analyzer rule
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
