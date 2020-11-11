@@ -630,7 +630,7 @@ class CloudPickler(Pickler):
                 return self._function_reduce(obj)
             else:
                 # fallback to save_global, including the Pickler's
-                # distpatch_table
+                # dispatch_table
                 return NotImplemented
 
     else:
