@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# This Protocol resuses core Pandas annotation.
+# This Protocol reuses core Pandas annotation.
 # Overall pipeline looks as follows
 # - Stubgen pandas.core.frame
 # - Add Protocol as a base class
