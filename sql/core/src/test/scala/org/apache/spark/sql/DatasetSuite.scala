@@ -1286,7 +1286,7 @@ class DatasetSuite extends QueryTest
       Route("b", "c", 6))
     val ds = sparkContext.parallelize(data).toDF.as[Route]
 
-    val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
+    val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
       .reduceGroups { (g1: GroupedRoutes, g2: GroupedRoutes) =>
         GroupedRoutes(g1.src, g1.dest, g1.routes ++ g2.routes)
@@ -1303,7 +1303,7 @@ class DatasetSuite extends QueryTest
     implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] =
       (x: GroupedRoutes, y: GroupedRoutes) => x.toString.compareTo(y.toString)
 
-    checkDatasetUnorderly(grped, expected: _*)
+    checkDatasetUnorderly(grouped, expected: _*)
   }
 
   test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
