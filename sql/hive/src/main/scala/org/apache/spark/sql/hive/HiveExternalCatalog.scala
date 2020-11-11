@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
@@ -1267,9 +1267,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val catalogTable = restoreTableMetadata(rawTable)
 
     val partColNameMap = buildLowerCasePartColNameMap(catalogTable)
+    val hivePredicates = predicates.map {
+      // Avoid Hive metastore stack overflow.
+      case InSet(child, values)
+          if values.size > conf.get(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD) =>
+        val dataType = child.dataType
+        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
+        And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
+          LessThanOrEqual(child, Literal(sortedValues.last, dataType)))
+      case other => other
+    }
 
     val clientPrunedPartitions =
-      client.getPartitionsByFilter(rawTable, predicates).map { part =>
+      client.getPartitionsByFilter(rawTable, hivePredicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)

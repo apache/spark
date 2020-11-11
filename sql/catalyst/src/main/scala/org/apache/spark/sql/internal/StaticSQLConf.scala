@@ -54,6 +54,15 @@ object StaticSQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
+  val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
+    buildStaticConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
+      .doc("The threshold of set size for InSet predicate when pruning partitions through Hive" +
+        "Metastore. Larger values may cause Hive metastore stack overflow.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
+      .createWithDefault(Int.MaxValue)
+
   // This is used to control when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters, so do not use a value larger than 4000 as the default
