@@ -590,7 +590,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
         // tests that have different result regarding the conf
         if (escape) {
-          // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
+          // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing falls back to
           // Spark 1.6 behavior.
 
           // 'LIKE' string literals.

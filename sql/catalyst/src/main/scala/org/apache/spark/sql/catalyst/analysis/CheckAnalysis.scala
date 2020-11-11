@@ -579,7 +579,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
-          case _ => // Fallbacks to the following checks
+          case _ => // Falls back to the following checks
         }
 
         operator match {
