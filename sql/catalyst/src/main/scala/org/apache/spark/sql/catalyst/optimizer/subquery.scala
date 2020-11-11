@@ -565,7 +565,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
                 subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
               case s @ SubqueryAlias(alias, _) =>
                 subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-              case op => sys.error(s"Unexpected operator $op in corelated subquery")
+              case op => sys.error(s"Unexpected operator $op in correlated subquery")
             }
 
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
