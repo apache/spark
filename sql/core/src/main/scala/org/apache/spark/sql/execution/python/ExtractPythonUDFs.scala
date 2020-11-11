@@ -268,7 +268,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new AnalysisException("Unexcepted UDF evalType")
+              throw new AnalysisException("Unexpected UDF evalType")
           }
 
           attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)
