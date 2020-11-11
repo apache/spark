@@ -1164,26 +1164,26 @@ class PlanResolutionSuite extends AnalysisTest {
     )
   }
 
-  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatalog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
-      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      val catalogIdent = if (isSessionCatalog) v2SessionCatalog else testCat
+      val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case AppendData(r: DataSourceV2Relation, _, _, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
           assert(t.identifier == tableIdent)
