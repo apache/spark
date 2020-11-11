@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
