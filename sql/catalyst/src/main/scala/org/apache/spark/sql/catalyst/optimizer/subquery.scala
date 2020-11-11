@@ -63,7 +63,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes.
     // SPARK-26078: it may also happen that the subquery has conflicting attributes with the outer
-    // values. In this case, the resulting join would contain trivially true conditions (eg.
+    // values. In this case, the resulting join would contain trivially true conditions (e.g.
     // id#3 = id#3) which cannot be de-duplicated after. In this method, if there are conflicting
     // attributes in the join condition, the subquery's conflicting attributes are changed using
     // a projection which aliases them and resolves the problem.

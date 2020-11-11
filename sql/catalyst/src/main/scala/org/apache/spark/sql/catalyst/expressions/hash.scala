@@ -907,7 +907,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    * - year, month (stored as HiveIntervalYearMonth)
    * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
    *
-   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   * e.g. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
    *
    * This method mimics HiveIntervalDayTime.hashCode() in Hive.
    *
