@@ -904,6 +904,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkParseUrl("spark.apache.org", "http://spark.apache.org/path?query=1", "HOST")
+    checkParseUrl("a.b.c", "https://a.b.c/index.php?params1=a|b&params2=x", "HOST")
     checkParseUrl("/path", "http://spark.apache.org/path?query=1", "PATH")
     checkParseUrl("query=1", "http://spark.apache.org/path?query=1", "QUERY")
     checkParseUrl("Ref", "http://spark.apache.org/path?query=1#Ref", "REF")

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.net.{URI, URISyntaxException}
+import java.net.{MalformedURLException, URL}
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
@@ -1373,15 +1373,15 @@ case class ParseUrl(children: Seq[Expression])
     Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
   }
 
-  private def getUrl(url: UTF8String): URI = {
+  private def getUrl(url: UTF8String): URL = {
     try {
-      new URI(url.toString)
+      new URL(url.toString)
     } catch {
-      case e: URISyntaxException => null
+      case _: MalformedURLException => null
     }
   }
 
-  private def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
+  private def getExtractPartFunc(partToExtract: UTF8String): URL => String = {
 
     // partToExtract match {
     //   case HOST => _.toURL().getHost
@@ -1392,25 +1392,25 @@ case class ParseUrl(children: Seq[Expression])
     //   case FILE => _.toURL().getFile
     //   case AUTHORITY => _.toURL().getAuthority
     //   case USERINFO => _.toURL().getUserInfo
-    //   case _ => (url: URI) => null
+    //   case _ => (url: URL) => null
     // }
 
     partToExtract match {
       case HOST => _.getHost
-      case PATH => _.getRawPath
-      case QUERY => _.getRawQuery
-      case REF => _.getRawFragment
-      case PROTOCOL => _.getScheme
+      case PATH => _.getPath
+      case QUERY => _.getQuery
+      case REF => _.getRef
+      case PROTOCOL => _.getProtocol
       case FILE =>
-        (url: URI) =>
-          if (url.getRawQuery ne null) {
-            url.getRawPath + "?" + url.getRawQuery
+        (url: URL) =>
+          if (url.getPath ne null) {
+            url.getPath + "?" + url.getQuery
           } else {
-            url.getRawPath
+            url.getPath
           }
-      case AUTHORITY => _.getRawAuthority
-      case USERINFO => _.getRawUserInfo
-      case _ => (url: URI) => null
+      case AUTHORITY => _.getAuthority
+      case USERINFO => _.getUserInfo
+      case _ => (url: URL) => null
     }
   }
 
@@ -1423,7 +1423,7 @@ case class ParseUrl(children: Seq[Expression])
     }
   }
 
-  private def extractFromUrl(url: URI, partToExtract: UTF8String): UTF8String = {
+  private def extractFromUrl(url: URL, partToExtract: UTF8String): UTF8String = {
     if (cachedExtractPartFunc ne null) {
       UTF8String.fromString(cachedExtractPartFunc.apply(url))
     } else {
