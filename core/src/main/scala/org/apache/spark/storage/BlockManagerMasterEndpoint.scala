@@ -100,6 +100,8 @@ class BlockManagerMasterEndpoint(
 
   val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
 
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
+
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
   //   && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)`
@@ -549,7 +551,9 @@ class BlockManagerMasterEndpoint(
       blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
 
-      addMergerLocation(id)
+      if (pushBasedShuffleEnabled) {
+        addMergerLocation(id)
+      }
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
