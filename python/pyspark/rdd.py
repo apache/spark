@@ -1253,7 +1253,7 @@ class RDD(object):
         and 50 we would have a histogram of 1,0,1.
 
         If your histogram is evenly spaced (e.g. [0, 10, 20, 30]),
-        this can be switched from an O(log n) inseration to O(1) per
+        this can be switched from an O(log n) insertion to O(1) per
         element (where n is the number of buckets).
 
         Buckets must be sorted, not contain any duplicates, and have
