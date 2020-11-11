@@ -236,7 +236,7 @@ def _extract_code_globals(co):
         out_names = {names[oparg] for _, oparg in _walk_global_ops(co)}
 
         # Declaring a function inside another one using the "def ..."
-        # syntax generates a constant code object corresonding to the one
+        # syntax generates a constant code object corresponding to the one
         # of the nested function's As the nested function may itself need
         # global variables, we need to introspect its code, extract its
         # globals, (look for code object in it's co_consts attribute..) and
