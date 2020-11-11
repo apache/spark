@@ -146,10 +146,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
         s"'$viewName' is a view not a table")
       assertAnalysisError(
-        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
+        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
         s"$viewName is a temp view not table")
       assertAnalysisError(
-        s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
+        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
         s"$viewName is a temp view not table")
 
       // For the following v2 ALERT TABLE statements, unsupported operations are checked first
