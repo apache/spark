@@ -179,7 +179,7 @@ def _class_getstate(obj):
     clsdict.pop('__weakref__', None)
 
     if issubclass(type(obj), abc.ABCMeta):
-        # If obj is an instance of an ABCMeta subclass, dont pickle the
+        # If obj is an instance of an ABCMeta subclass, don't pickle the
         # cache/negative caches populated during isinstance/issubclass
         # checks, but pickle the list of registered subclasses of obj.
         clsdict.pop('_abc_cache', None)

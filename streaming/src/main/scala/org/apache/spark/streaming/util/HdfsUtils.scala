@@ -39,7 +39,7 @@ private[streaming] object HdfsUtils {
           throw new IllegalStateException("File exists and there is no append support!")
         }
       } else {
-        // we dont' want to use hdfs erasure coding, as that lacks support for append and hflush
+        // we don't want to use hdfs erasure coding, as that lacks support for append and hflush
         SparkHadoopUtil.createFile(dfs, dfsPath, false)
       }
     }
