@@ -46,7 +46,7 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
-   * Wheather or not to use ipc mode for shared memory when starting docker image
+   * Whether or not to use ipc mode for shared memory when starting docker image
    */
   val usesIpc: Boolean
 
