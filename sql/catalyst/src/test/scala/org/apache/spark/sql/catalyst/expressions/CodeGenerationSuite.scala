@@ -554,7 +554,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Expecting result:
     //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
-    // Using lenient assertions to be resilient to annonymous class numbering changes
+    // Using lenient assertions to be resilient to anonymous class numbering changes
     assert(!refTerm.contains("null"))
     assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }
