@@ -180,6 +180,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
+/**
+ * Optimized version of LIKE ALL, when all pattern values are literal.
+ */
 abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[Any]
