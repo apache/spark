@@ -425,7 +425,7 @@ class Column(object):
         +--------------+
 
         However, if you are going to add/replace multiple nested fields,
-        it is preffered to extract out the nested struct before
+        it is preferred to extract out the nested struct before
         adding/replacing multiple fields e.g.
 
         >>> df.select(col("a").withField(
