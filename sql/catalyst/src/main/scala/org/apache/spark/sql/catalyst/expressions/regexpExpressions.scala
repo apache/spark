@@ -201,14 +201,19 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
 
   override def eval(input: InternalRow): Any = {
-    if (hasNull) {
+    val exprValue = child.eval(input)
+    if (exprValue == null) {
       null
     } else {
-      val str = child.eval(input).toString
-      if (isNotDefined) {
-        !cache.exists(p => p.matcher(str).matches())
+      val allMatched = if (isNotDefined) {
+        !cache.exists(p => p.matcher(exprValue.toString).matches())
       } else {
-        cache.forall(p => p.matcher(str).matches())
+        cache.forall(p => p.matcher(exprValue.toString).matches())
+      }
+      if (allMatched && hasNull) {
+        null
+      } else {
+        allMatched
       }
     }
   }
@@ -218,8 +223,8 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     val patternClass = classOf[Pattern].getName
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
-    val returnNull = ctx.freshName("returnNull")
     val allMatched = ctx.freshName("allMatched")
+    val valueIsNull = ctx.freshName("valueIsNull")
     val valueArg = ctx.freshName("valueArg")
     val patternHasNull = ctx.addReferenceObj("hasNull", hasNull)
     val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
@@ -233,20 +238,19 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     ev.copy(code =
       code"""
             |${eval.code}
-            |boolean $returnNull = false;
             |boolean $allMatched = true;
-            |if (${eval.isNull} || $patternHasNull) {
-            |  $returnNull = true;
+            |boolean $valueIsNull = false;
+            |if (${eval.isNull}) {
+            |  $valueIsNull = true;
             |} else {
             |  $javaDataType $valueArg = ${eval.value};
             |  for ($patternClass $pattern: $patternCache) {
             |    if ($matchCode) {
             |      $allMatched = false;
-            |      break;
             |    }
             |  }
             |}
-            |final boolean ${ev.isNull} = $returnNull;
+            |final boolean ${ev.isNull} = $valueIsNull || ($allMatched && $patternHasNull);
             |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }

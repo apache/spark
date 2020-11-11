@@ -1410,9 +1410,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
             val expressions = ctx.expression.asScala.map(expression)
-            if (expressions.size > 200 && expressions.forall(_.foldable)) {
+            if (expressions.size > SQLConf.get.optimizerLikeAllConversionThreshold &&
+              expressions.forall(_.foldable)) {
               // If there are many pattern expressions, will throw StackOverflowError.
-              // 200 is an empirical value that will not cause StackOverflowError is used here.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow))
               ctx.NOT match {
