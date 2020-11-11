@@ -234,8 +234,9 @@ case class ConcatWs(children: Seq[Expression])
 @ExpressionDescription(
   usage = """
     _FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
-    If the index exceeds the length of the array, Returns NULL if ANSI mode is off;
-    Throws ArrayIndexOutOfBoundsException when ANSI mode is on.
+    The function returns NULL if the index exceeds the length of the array
+    and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+    it throws ArrayIndexOutOfBoundsException for invalid indices.
   """,
   examples = """
     Examples:

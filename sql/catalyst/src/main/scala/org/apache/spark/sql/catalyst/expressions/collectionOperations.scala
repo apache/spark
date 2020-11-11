@@ -1906,8 +1906,9 @@ case class ArrayPosition(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. If the index exceeds the length of the array,
-      Returns NULL if ANSI mode is off; Throws ArrayIndexOutOfBoundsException when ANSI mode is on.
+      accesses elements from the last to the first. The function returns NULL
+      if the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException for invalid indices.
 
     _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
   """,
