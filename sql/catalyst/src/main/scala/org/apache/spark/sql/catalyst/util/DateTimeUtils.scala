@@ -771,8 +771,12 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
+    // Time zone offsets have a maximum precision of seconds (see `java.time.ZoneOffset`). Hence
+    // truncation to microsecond, millisecond, and second can be done
+    // without using time zone information. This results in a performance improvement.
     level match {
       case TRUNC_TO_MICROSECOND => t
+      case TRUNC_TO_MINUTE => truncToUnit(t, zoneId, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR => truncToUnit(t, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(t, zoneId, ChronoUnit.DAYS)
       case _ =>
@@ -781,8 +785,6 @@ object DateTimeUtils {
           case TRUNC_TO_MILLISECOND => millis
           case TRUNC_TO_SECOND =>
             millis - Math.floorMod(millis, MILLIS_PER_SECOND)
-          case TRUNC_TO_MINUTE =>
-            millis - Math.floorMod(millis, MILLIS_PER_MINUTE)
           case _ => // Try to truncate date levels
             val dDays = millisToDays(millis, zoneId)
             daysToMillis(truncDate(dDays, level), zoneId)
