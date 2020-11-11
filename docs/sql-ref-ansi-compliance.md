@@ -107,6 +107,22 @@ SELECT * FROM t;
 +---+
 ```
 
+The valid combinations of target data type and source data type in a `Cast` expression are given by the following table.
+“Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
+    
+| From\To   | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
+|-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
+| Numeric   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| String    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
+| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
+| Map       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
+| Struct    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
+
 ### SQL Functions
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).

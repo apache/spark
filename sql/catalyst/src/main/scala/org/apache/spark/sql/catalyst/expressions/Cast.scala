@@ -1831,7 +1831,6 @@ object AnsiCast {
    * Spark's ANSI mode follows the syntax rules, except it specially allow the following
    * straightforward type conversions which are disallowed as per the SQL standard:
    *   - Numeric <=> Boolean
-   *   - String <=> Boolean
    *   - String <=> Binary
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
