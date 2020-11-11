@@ -144,37 +144,39 @@ private[spark] object InstanceBlock {
   }
 
   def blokifyWithMaxMemUsage(
-      iterator: Iterator[Instance],
+      instanceIterator: Iterator[Instance],
       maxMemUsage: Long): Iterator[InstanceBlock] = {
     require(maxMemUsage > 0)
 
-    var numCols = -1L
-    val buff = mutable.ArrayBuilder.make[Instance]
-    var buffCnt = 0L
-    var buffNnz = 0L
-    var buffUnitWeight = true
+    new Iterator[InstanceBlock]() {
+      private var numCols = -1L
 
-    iterator.flatMap { instance =>
-      if (numCols < 0L) numCols = instance.features.size
-      require(numCols == instance.features.size)
-      buff += instance
-      buffCnt += 1L
-      buffNnz += instance.features.numNonzeros
-      buffUnitWeight &&= (instance.weight == 1)
+      override def hasNext: Boolean = instanceIterator.hasNext
 
-      if (getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight) >= maxMemUsage) {
-        val block = InstanceBlock.fromInstances(buff.result())
-        buff.clear()
-        buffCnt = 0L
-        buffNnz = 0L
-        buffUnitWeight = true
-        Iterator.single(block)
-      } else Iterator.empty
-    } ++ {
-      if (buffCnt > 0) {
-        val block = InstanceBlock.fromInstances(buff.result())
-        Iterator.single(block)
-      } else Iterator.empty
+      override def next(): InstanceBlock = {
+        val buff = mutable.ArrayBuilder.make[Instance]
+        var buffCnt = 0L
+        var buffNnz = 0L
+        var buffUnitWeight = true
+        var blockMemUsage = 0L
+
+        while (instanceIterator.hasNext && blockMemUsage < maxMemUsage) {
+          val instance: Instance = instanceIterator.next()
+          if (numCols < 0L) numCols = instance.features.size
+          require(numCols == instance.features.size)
+          val nnz = instance.features.numNonzeros
+
+          buff += instance
+          buffCnt += 1L
+          buffNnz += nnz
+          buffUnitWeight &&= (instance.weight == 1)
+          blockMemUsage = getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight)
+        }
+
+        // the block mem usage may slightly exceed threshold, not a big issue.
+        // and this ensure even if one row exceed block limit, each block has one row
+        InstanceBlock.fromInstances(buff.result())
+      }
     }
   }
 
