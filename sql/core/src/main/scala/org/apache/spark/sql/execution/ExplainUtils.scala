@@ -35,7 +35,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *   3. Generate the two part explain output for this plan.
    *      1. First part explains the operator tree with each operator tagged with an unique
    *         identifier.
-   *      2. Second part explans each operator in a verbose manner.
+   *      2. Second part explains each operator in a verbose manner.
    *
    * Note : This function skips over subqueries. They are handled by its caller.
    *
