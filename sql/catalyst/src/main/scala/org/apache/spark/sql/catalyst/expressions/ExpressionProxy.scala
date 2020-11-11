@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.DataType
@@ -38,8 +40,14 @@ case class ExpressionProxy(child: Expression, runtime: EvaluationRunTime) extend
     child.eval(input)
   }
 
-  override def eval(input: InternalRow = null): Any = {
+  override def eval(input: InternalRow = null): Any = try {
     runtime.cache.get(this).result
+  } catch {
+    // Cache.get() may wrap the original exception. See the following URL
+    // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
+    //   Cache.html#get(K,%20java.util.concurrent.Callable)
+    case e@(_: UncheckedExecutionException | _: ExecutionError) =>
+      throw e.getCause
   }
 }
 
