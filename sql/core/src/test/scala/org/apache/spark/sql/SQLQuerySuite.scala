@@ -2812,7 +2812,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+  test("SPARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
