@@ -760,36 +760,36 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
-        sql("create table t(i int, t timestamp) using parquet")
+        sql("CREATE TABLE t(i int, t timestamp) USING parquet")
         val msg = intercept[AnalysisException] {
-          sql("insert into t values (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
         assert(msg.contains("Cannot safely cast 't': int to timestamp"))
       }
 
       withTable("t") {
-        sql("create table t(i int, d date) using parquet")
+        sql("CREATE TABLE t(i int, d date) USING parquet")
         val msg = intercept[AnalysisException] {
-          sql("insert into t values (date('2010-09-02'), 1)")
+          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'i': date to int"))
         assert(msg.contains("Cannot safely cast 'd': int to date"))
       }
 
       withTable("t") {
-        sql("create table t(b boolean, t timestamp) using parquet")
+        sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
         val msg = intercept[AnalysisException] {
-          sql("insert into t values (TIMESTAMP('2010-09-02 14:10:10'), true)")
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
         assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
       }
 
       withTable("t") {
-        sql("create table t(b boolean, d date) using parquet")
+        sql("CREATE TABLE t(b boolean, d date) USING parquet")
         val msg = intercept[AnalysisException] {
-          sql("insert into t values (date('2010-09-02'), true)")
+          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
         }.getMessage
         assert(msg.contains("Cannot safely cast 'b': date to boolean"))
         assert(msg.contains("Cannot safely cast 'd': boolean to date"))
