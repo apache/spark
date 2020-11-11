@@ -817,10 +817,12 @@ object SQLConf {
 
   val HIVE_METASTORE_PARTITION_LIMIT =
     buildConf("spark.sql.hive.metastorePartitionLimit")
-      .doc("The maximum number of metastore partitions allowed. Use -1 for unlimited.")
-      .version("3.0.2")
+      .doc("The maximum number of metastore partitions allowed for a given table. The default " +
+           "value -1 to follow the Hive config (see HiveConf.METASTORE_LIMIT_PARTITION_REQUEST " +
+           "for more information).")
+      .version("3.1.0")
       .intConf
-      .checkValue(_ >= -1, "The maximum must be a positive integer, -1 to apply no limit.")
+      .checkValue(_ >= -1, "The maximum must be a positive integer, -1 to follow the Hive config.")
       .createWithDefault(100000)
 
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =

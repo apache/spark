@@ -1257,9 +1257,9 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       val num = try {
         getNumPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[Int]
       } catch {
-        case ex: Exception =>
-          logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-            "filter from Hive", ex)
+        case NonFatal(e) =>
+          logWarning(s"Error get the number of partitions by filter '$filter' for table $table, " +
+            "using 0 for a partition number", e)
           0
       }
       if (num > limit) {
