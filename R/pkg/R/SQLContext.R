@@ -203,7 +203,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       })
     }
 
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # SPARK-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
       nn <- gsub(".", "_", n, fixed = TRUE)
