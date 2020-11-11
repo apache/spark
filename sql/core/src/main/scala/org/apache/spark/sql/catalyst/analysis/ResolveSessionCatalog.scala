@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
@@ -42,6 +42,7 @@ class ResolveSessionCatalog(
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AlterTableAddColumnsStatement(
@@ -497,11 +498,10 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartitionStatement(tbl, partitionSpecsAndLocs, ifNotExists) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE ADD PARTITION")
+    case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
-        v1TableName.asTableIdentifier,
-        partitionSpecsAndLocs,
+        ident.asTableIdentifier,
+        partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
@@ -511,11 +511,11 @@ class ResolveSessionCatalog(
         from,
         to)
 
-    case AlterTableDropPartitionStatement(tbl, specs, ifExists, purge, retainData) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE DROP PARTITION")
+    case AlterTableDropPartition(
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
-        v1TableName.asTableIdentifier,
-        specs,
+        ident.asTableIdentifier,
+        specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
         retainData)
