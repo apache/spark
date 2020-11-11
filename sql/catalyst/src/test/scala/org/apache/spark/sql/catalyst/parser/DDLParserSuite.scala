@@ -1595,15 +1595,19 @@ class DDLParserSuite extends AnalysisTest {
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
+      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), None, false, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
+      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), None, true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
+      CacheTable(
+        UnresolvedTableOrView(Seq("a", "b", "c")),
+        None,
+        true,
+        Map("storageLevel" -> "DISK_ONLY")))
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
       "It is not allowed to add catalog/namespace prefix a.b")

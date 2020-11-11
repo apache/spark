@@ -289,6 +289,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowCreateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
+    case CacheTable(_: ResolvedTable, _, _, _) =>
+      throw new AnalysisException("CACHE TABLE is not supported for v2 tables.")
+
     case _ => Nil
   }
 }

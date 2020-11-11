@@ -1963,13 +1963,8 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testV1CommandSupportingTempView("CACHE TABLE", t)
-
-      val e = intercept[AnalysisException] {
-        sql(s"CACHE LAZY TABLE $t")
-      }
-      assert(e.message.contains("CACHE TABLE is only supported with temp views or v1 tables"))
+      testNotSupportedV2Command("CACHE TABLE", t)
+      testNotSupportedV2Command("CACHE LAZY TABLE", t, sqlCommandInMessage = Some("CACHE TABLE"))
     }
   }
 
@@ -2486,11 +2481,15 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      sqlCommandInMessage: Option[String] = None): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
+    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
+    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
