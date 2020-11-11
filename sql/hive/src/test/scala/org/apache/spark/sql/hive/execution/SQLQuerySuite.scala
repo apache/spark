@@ -228,7 +228,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `a function doesn't exist`"), Nil)
       checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
 
       // this probably will failed if we add more function with `sha` prefixing.
