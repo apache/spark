@@ -1149,7 +1149,7 @@ object SQLConf {
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("This config determines the fallback behavior of several codegen generators " +
-      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
       "this config works only for tests.")
