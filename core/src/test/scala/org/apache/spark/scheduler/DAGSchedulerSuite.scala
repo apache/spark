@@ -3057,7 +3057,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertResultStageFailToRollback(shuffleMapRdd)
   }
 
-  private def assertResultStageNotRollbacked(mapRdd: MyRDD): Unit = {
+  private def assertResultStageNotRolledBack(mapRdd: MyRDD): Unit = {
     val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
@@ -3097,7 +3097,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
       shuffleMapRdd.checkpoint()
       shuffleMapRdd.doCheckpoint()
-      assertResultStageNotRollbacked(shuffleMapRdd)
+      assertResultStageNotRolledBack(shuffleMapRdd)
     }
   }
 
