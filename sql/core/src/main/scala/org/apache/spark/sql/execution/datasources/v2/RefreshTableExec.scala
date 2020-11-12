@@ -31,7 +31,7 @@ case class RefreshTableExec(
     catalog.invalidateTable(ident)
 
     // invalidate all caches referencing the given table
-    // TODO: re-cache the table itself once we support caching a DSv2 table
+    // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
     val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
 
