@@ -157,6 +157,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("conv") {
+    println(BigInt("-2133453231342131342134521345").toString(-2))
     checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "-F")
