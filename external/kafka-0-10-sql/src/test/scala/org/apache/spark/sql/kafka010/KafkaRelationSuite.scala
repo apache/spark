@@ -239,7 +239,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
   test("read Kafka transactional messages: read_committed") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -288,7 +288,7 @@ class KafkaRelationSuite extends QueryTest with SharedSQLContext with KafkaTest 
   test("read Kafka transactional messages: read_uncommitted") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")

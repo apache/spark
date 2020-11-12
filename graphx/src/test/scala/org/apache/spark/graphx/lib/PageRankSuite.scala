@@ -205,8 +205,8 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
     withSpark { sc =>
       // Check that implementation can handle large vertexIds, SPARK-25149
       val vertexIdOffset = Int.MaxValue.toLong + 1
-      val sourceOffest = 4
-      val source = vertexIdOffset + sourceOffest
+      val sourceOffset = 4
+      val source = vertexIdOffset + sourceOffset
       val numIter = 10
       val vertices = vertexIdOffset until vertexIdOffset + numIter
       val chain1 = vertices.zip(vertices.tail)
@@ -216,7 +216,7 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val tol = 0.0001
       val errorTol = 1.0e-1
 
-      val a = resetProb / (1 - Math.pow(1 - resetProb, numIter - sourceOffest))
+      val a = resetProb / (1 - Math.pow(1 - resetProb, numIter - sourceOffset))
       // We expect the rank to decay as (1 - resetProb) ^ distance
       val expectedRanks = sc.parallelize(vertices).map { vid =>
         val rank = if (vid < source) {

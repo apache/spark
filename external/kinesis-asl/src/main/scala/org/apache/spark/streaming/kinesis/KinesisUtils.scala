@@ -597,7 +597,7 @@ private class KinesisUtilsPythonHelper {
     // scalastyle:on
     if (!(stsAssumeRoleArn != null && stsSessionName != null && stsExternalId != null)
         && !(stsAssumeRoleArn == null && stsSessionName == null && stsExternalId == null)) {
-      throw new IllegalArgumentException("stsAssumeRoleArn, stsSessionName, and stsExtenalId " +
+      throw new IllegalArgumentException("stsAssumeRoleArn, stsSessionName, and stsExternalId " +
         "must all be defined or all be null")
     }
 

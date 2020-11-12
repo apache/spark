@@ -348,7 +348,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   }
 
   /** Call `f` with a `KafkaProducer` that has initialized transactions. */
-  def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
+  def withTransactionalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
     props.put("transactional.id", UUID.randomUUID().toString)
     val producer = new KafkaProducer[String, String](props)
@@ -390,7 +390,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     // ensure that logs from all replicas are deleted if delete topic is marked successful
     assert(servers.forall(server => topicAndPartitions.forall(tp =>
       server.getLogManager().getLog(tp).isEmpty)),
-      s"topic $topic still exists in log mananger")
+      s"topic $topic still exists in log manager")
     // ensure that topic is removed from all cleaner offsets
     assert(servers.forall(server => topicAndPartitions.forall { tp =>
       val checkpoints = server.getLogManager().liveLogDirs.map { logDir =>
