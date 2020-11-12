@@ -179,6 +179,7 @@ class LimitPushdownSuite extends PlanTest {
     val optimized1 = Optimize.execute(analyzed1)
     comparePlans(analyzed1, optimized1)
 
+    // test push down
     val analyzed2 = Limit(1, Union(
       x.groupBy(Symbol("a"))(count(1)),
       y.groupBy(Symbol("b"))(count(1)))).analyze
