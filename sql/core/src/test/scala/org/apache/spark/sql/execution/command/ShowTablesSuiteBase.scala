@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuite extends QueryTest with SQLTestUtils {
+trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]

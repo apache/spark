@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ShowTablesSuite extends v1.ShowTablesTests with TestHiveSingleton {
+class ShowTablesSuite extends v1.ShowTablesSuiteBase with TestHiveSingleton {
   override def version: String = "Hive V1"
   override def defaultUsing: String = "USING HIVE"
 }
