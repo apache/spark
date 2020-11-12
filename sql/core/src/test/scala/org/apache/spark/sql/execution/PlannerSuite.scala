@@ -953,6 +953,31 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-33399: aliased should be handled properly " +
+    "for partitioning and sortorder involving complex expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).createTempView("t1")
+        spark.range(20).createTempView("t2")
+        spark.range(30).createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id
+            |    FROM t1, t2
+            |    WHERE t1.id % 10 = t2.id % 10
+            |) t12, t3
+            |WHERE t1id % 10 = t3.id % 10
+          """.stripMargin).queryExecution.executedPlan
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val exchangeNodes = planned.collect { case e: ShuffleExchangeExec => e }
+        assert(exchangeNodes.size == 3)
+      }
+    }
+  }
+
   test("SPARK-33399: alias handling should happen properly for SinglePartition") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df = spark.range(1, 100, 1, 1)

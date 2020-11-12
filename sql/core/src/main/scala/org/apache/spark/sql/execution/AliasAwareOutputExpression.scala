@@ -31,8 +31,10 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
 
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
-  protected def replaceAlias(attr: AttributeReference): Option[Attribute] = {
-    aliasMap.get(attr)
+  protected def normalizeExpression(exp: Expression): Expression = {
+    exp.transform {
+      case attr: AttributeReference => aliasMap.get(attr).getOrElse(attr)
+    }
   }
 }
 
@@ -45,10 +47,7 @@ trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
     if (hasAlias) {
       child.outputPartitioning match {
         case e: Expression =>
-          val normalizedExpr = e.transform {
-            case attr: AttributeReference => replaceAlias(attr).getOrElse(attr)
-          }
-          normalizedExpr.asInstanceOf[Partitioning]
+          normalizeExpression(e).asInstanceOf[Partitioning]
         case other => other
       }
     } else {
@@ -66,11 +65,8 @@ trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
 
   final override def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
-      orderingExpressions.map { s =>
-        s.child match {
-          case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))
-          case _ => s
-        }
+      orderingExpressions.map { sortOrder =>
+        normalizeExpression(sortOrder).asInstanceOf[SortOrder]
       }
     } else {
       orderingExpressions
