@@ -172,7 +172,7 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty ") {
+  test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty") {
     val analyzed1 = Limit(1, Union(
       x.groupBy()(count(1)),
       y.groupBy()(count(1)))).analyze
