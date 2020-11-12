@@ -702,8 +702,8 @@ class BlockManagerMasterEndpoint(
       // Delta mergers added from inactive mergers list to the active mergers list
       val filteredMergersWithExecutorsHosts = filteredMergersWithExecutors.map(_.host)
       val filteredMergersWithoutExecutors = shuffleMergerLocations.values
-        .filterNot(
-          mergerHost => filteredMergersWithExecutorsHosts.contains(mergerHost.host))
+        .filterNot(x => hostsToFilter.contains(x.host))
+        .filterNot(x => filteredMergersWithExecutorsHosts.contains(x.host))
       filteredMergersWithExecutors.toSeq ++
         filteredMergersWithoutExecutors.toSeq
           .take(numMergersNeeded - filteredMergersWithExecutors.size)

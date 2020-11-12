@@ -100,6 +100,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
+      .set(PUSH_BASED_SHUFFLE_ENABLED, true)
   }
 
   private def makeSortShuffleManager(): SortShuffleManager = {
@@ -1988,8 +1989,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     assert(master.getShufflePushMergerLocations(10, Set.empty).size == 4)
-    assert(master.getShufflePushMergerLocations(10, Set.empty)
-      .exists(x => Seq("hostC", "hostD", "hostA", "hostB").contains(x.host)))
+    assert(master.getShufflePushMergerLocations(10, Set.empty).map(_.host).sorted ===
+      Seq("hostC", "hostD", "hostA", "hostB").sorted)
     assert(master.getShufflePushMergerLocations(10, Set("hostB")).size == 3)
   }
 
@@ -2010,10 +2011,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     master.removeExecutor("execE")
 
     assert(master.getShufflePushMergerLocations(3, Set.empty).size == 3)
-    val expectedHosts = Set("hostB", "hostC", "hostD")
-    val shufflePushMergers = master
-      .getShufflePushMergerLocations(3, Set.empty).map(x => x.host).toSet
-    assert(expectedHosts.forall(x => shufflePushMergers.contains(x)))
+    assert(master.getShufflePushMergerLocations(3, Set.empty).map(_.host).sorted ===
+      Seq("hostC", "hostB", "hostD").sorted)
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostA", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {

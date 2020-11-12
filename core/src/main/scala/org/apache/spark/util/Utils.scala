@@ -2547,7 +2547,9 @@ private[spark] object Utils extends Logging {
    * at the same time. Will improve this in a later version.
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    conf.get(PUSH_BASED_SHUFFLE_ENABLED) && conf.get(SHUFFLE_SERVICE_ENABLED)
+    val pushBasedEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
+    pushBasedEnabled &&
+      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
   }
 
   /**

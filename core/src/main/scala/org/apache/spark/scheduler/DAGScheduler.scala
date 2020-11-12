@@ -1272,12 +1272,13 @@ private[spark] class DAGScheduler(
       stage.shuffleDep.setMergerLocs(mergerLocs)
       logInfo("Shuffle merge enabled for %s (%s) with %d merger locations"
         .format(stage, stage.name, stage.shuffleDep.getMergerLocs.size))
-    } else {
-      logInfo("Shuffle merge disabled for %s (%s)".format(stage, stage.name))
-    }
 
-    logDebug(s"List of shuffle push merger locations " +
-      s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+      logDebug(s"List of shuffle push merger locations " +
+        s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
+    } else {
+      logInfo(("No available merger locations." +
+        " Shuffle merge disabled for %s (%s)").format(stage, stage.name))
+    }
   }
 
   /** Called when stage's parents are available and we can now do its task. */

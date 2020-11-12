@@ -30,7 +30,6 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, EXECUTOR_INSTANCES}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
@@ -89,9 +88,9 @@ private[spark] abstract class YarnSchedulerBackend(
   private val minMergersStaticThreshold =
     conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
 
-  private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+  private val maxNumExecutors = conf.get(config.DYN_ALLOCATION_MAX_EXECUTORS)
 
-  private val numExecutors = conf.get(EXECUTOR_INSTANCES).getOrElse(0)
+  private val numExecutors = conf.get(config.EXECUTOR_INSTANCES).getOrElse(0)
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -194,7 +193,7 @@ private[spark] abstract class YarnSchedulerBackend(
     // Request for numMergersDesired shuffle mergers to BlockManagerMasterEndpoint
     // and if its less than minMergersNeeded, we disable push based shuffle.
     val mergerLocations = blockManagerMaster
-      .getShufflePushMergerLocations(numMergersDesired, scheduler.nodeBlacklist())
+      .getShufflePushMergerLocations(numMergersDesired, scheduler.excludedNodes())
     logDebug(s"Num merger locations available ${mergerLocations.length}")
     if (mergerLocations.size < numMergersDesired && mergerLocations.size < minMergersNeeded) {
       Seq.empty[BlockManagerId]

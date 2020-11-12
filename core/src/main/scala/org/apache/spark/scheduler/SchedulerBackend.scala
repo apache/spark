@@ -94,7 +94,7 @@ private[spark] trait SchedulerBackend {
   def maxNumConcurrentTasks(rp: ResourceProfile): Int
 
   /**
-   * Get the list of both active and dead executors host locations for push based shuffle
+   * Get the list of host locations for push based shuffle
    *
    * Currently push based shuffle is disabled for both stage retry and stage reuse cases
    * (for eg: in the case where few partitions are lost due to failure). Hence this method
