@@ -58,15 +58,18 @@ trait ShowTablesSuite extends SharedSparkSession {
   }
 
   test("show tables with a pattern") {
-    withNamespace(s"$catalog.ns1") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
       sql(s"CREATE NAMESPACE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
       withTable(
         s"$catalog.ns1.table",
         s"$catalog.ns1.table_name_1a",
-        s"$catalog.ns1.table_name_2b") {
+        s"$catalog.ns1.table_name_2b",
+        s"$catalog.ns2.table_name_2b") {
         sql(s"CREATE TABLE $catalog.ns1.table (id bigint, data string) $defaultUsing")
         sql(s"CREATE TABLE $catalog.ns1.table_name_1a (id bigint, data string) $defaultUsing")
         sql(s"CREATE TABLE $catalog.ns1.table_name_2b (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns2.table_name_2b (id bigint, data string) $defaultUsing")
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1",
