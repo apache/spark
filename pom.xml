@@ -164,6 +164,7 @@
     <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.12.10</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
+    <scalac.arg.unused-imports>-Ywarn-unused-import</scalac.arg.unused-imports>
     <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -2537,6 +2538,7 @@
               <arg>-deprecation</arg>
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
+              <arg>${scalac.arg.unused-imports}</arg>
               <arg>-target:jvm-1.8</arg>
             </args>
             <jvmArgs>
@@ -3266,6 +3268,7 @@
       <properties>
         <scala.version>2.13.3</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
+        <scalac.arg.unused-imports>-Wconf:cat=unused-imports:ws</scalac.arg.unused-imports>
       </properties>
       <dependencyManagement>
         <dependencies>
