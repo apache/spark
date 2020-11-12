@@ -2144,9 +2144,10 @@ object SQLConf {
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
+      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
+      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
+      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
