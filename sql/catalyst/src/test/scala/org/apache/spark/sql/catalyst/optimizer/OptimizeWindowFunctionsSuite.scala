@@ -52,7 +52,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     assert(optimized == correctAnswer)
   }
 
-  test("can't replace first(col) by nth_value(col, 1) if the window frame type is row") {
+  test("can't replace first(col) by nth_value(col, 1) if the window frame type is range") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
