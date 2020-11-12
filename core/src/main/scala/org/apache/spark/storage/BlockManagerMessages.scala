@@ -145,4 +145,6 @@ private[spark] object BlockManagerMessages {
   case class GetShufflePushMergerLocations(numMergersNeeded: Int, hostsToFilter: Set[String])
     extends ToBlockManagerMaster
 
+  case class RemoveShufflePushMergerLocation(host: String) extends ToBlockManagerMaster
+
 }

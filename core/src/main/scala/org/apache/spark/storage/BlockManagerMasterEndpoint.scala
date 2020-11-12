@@ -152,6 +152,9 @@ class BlockManagerMasterEndpoint(
     case GetShufflePushMergerLocations(numMergersNeeded, hostsToFilter) =>
       context.reply(getShufflePushMergerLocations(numMergersNeeded, hostsToFilter))
 
+    case RemoveShufflePushMergerLocation(host) =>
+      context.reply(removeShufflePushMergerLocation(host))
+
     case IsExecutorAlive(executorId) =>
       context.reply(blockManagerIdByExecutor.contains(executorId))
 
@@ -701,12 +704,19 @@ class BlockManagerMasterEndpoint(
     } else {
       // Delta mergers added from inactive mergers list to the active mergers list
       val filteredMergersWithExecutorsHosts = filteredMergersWithExecutors.map(_.host)
-      val filteredMergersWithoutExecutors = shuffleMergerLocations.values
+      // Pick random hosts instead of preferring the top of the list
+      val randomizedShuffleMergerLocations = Utils.randomize(shuffleMergerLocations.values.toSeq)
+      val filteredMergersWithoutExecutors = randomizedShuffleMergerLocations
         .filterNot(x => hostsToFilter.contains(x.host))
         .filterNot(x => filteredMergersWithExecutorsHosts.contains(x.host))
-      filteredMergersWithExecutors.toSeq ++
-        filteredMergersWithoutExecutors.toSeq
-          .take(numMergersNeeded - filteredMergersWithExecutors.size)
+      filteredMergersWithExecutors.toSeq ++ filteredMergersWithoutExecutors
+        .take(numMergersNeeded - filteredMergersWithExecutors.size)
+    }
+  }
+
+  private def removeShufflePushMergerLocation(host: String): Unit = {
+    if (shuffleMergerLocations.contains(host)) {
+      shuffleMergerLocations.remove(host)
     }
   }
 
