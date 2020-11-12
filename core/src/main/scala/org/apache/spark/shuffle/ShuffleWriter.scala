@@ -412,7 +412,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
           }
         }
       }
-      offset = offset + blockSize
+      offset += blockSize
     }
     // Add in the final request
     if (blocks.nonEmpty) {
