@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 
 /**
  * A trait that provides functionality to handle aliases in the `outputExpressions`.
@@ -33,7 +33,7 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
 
   protected def normalizeExpression(exp: Expression): Expression = {
     exp.transform {
-      case attr: AttributeReference => aliasMap.get(attr).getOrElse(attr)
+      case attr: AttributeReference => aliasMap.getOrElse(attr, attr)
     }
   }
 }

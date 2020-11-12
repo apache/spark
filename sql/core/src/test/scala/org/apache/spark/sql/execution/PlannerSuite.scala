@@ -936,6 +936,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           """.stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
         assert(exchanges.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "t1id"
+          case _ => false
+        }))
       }
     }
   }
@@ -950,6 +956,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       val planned = df.queryExecution.executedPlan
       val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
       assert(exchanges.isEmpty)
+
+      val projects = planned.collect { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case RangePartitioning(Seq(_@SortOrder(ar: AttributeReference, _, _, _)), _) =>
+          ar.name == "id1"
+        case _ => false
+      }))
     }
   }
 
@@ -985,6 +998,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       val planned = df.queryExecution.executedPlan
       val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
       assert(exchanges.isEmpty)
+
+      val projects = planned.collect { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case SinglePartition => true
+        case _ => false
+      }))
     }
   }
 
