@@ -70,8 +70,15 @@ class EvaluationRunTime {
     // Only adding proxy if we find subexpressions.
     if (proxyMap.nonEmpty) {
       expressions.map { expr =>
-        expr.transformUp {
-          case e if proxyMap.contains(e) => proxyMap(e)
+        // `transform` will cause stackoverflow because it keeps transforming into
+        // `ExpressionProxy`. But we cannot use `transformUp` because we want to use
+        // subexpressions at higher level. So we `transformDown` until finding first
+        // subexpression.
+        var transformed = false
+        expr.transform {
+          case e if !transformed && proxyMap.contains(e) =>
+            transformed = true
+            proxyMap(e)
         }
       }
     } else {
