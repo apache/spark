@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.types.DataType
 
 /**
- * A proxy for an catalyst `Expression`. Given a runtime object `EvaluationRunTime`, when this
+ * A proxy for an catalyst `Expression`. Given a runtime object `EvaluationRuntime`, when this
  * is asked to evaluate, it will load the evaluation cache in the runtime first.
  */
-case class ExpressionProxy(child: Expression, runtime: EvaluationRunTime) extends Expression {
+case class ExpressionProxy(child: Expression, runtime: EvaluationRuntime) extends Expression {
 
   final override def dataType: DataType = child.dataType
   final override def nullable: Boolean = child.nullable
@@ -46,12 +46,12 @@ case class ExpressionProxy(child: Expression, runtime: EvaluationRunTime) extend
     // Cache.get() may wrap the original exception. See the following URL
     // http://google.github.io/guava/releases/14.0/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
-    case e@(_: UncheckedExecutionException | _: ExecutionError) =>
+    case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       throw e.getCause
   }
 }
 
 /**
- * A simple wrapper for holding `Any` in the cache of `EvaluationRunTime`.
+ * A simple wrapper for holding `Any` in the cache of `EvaluationRuntime`.
  */
 case class ResultProxy(result: Any)

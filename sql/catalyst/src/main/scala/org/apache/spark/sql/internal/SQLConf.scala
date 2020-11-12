@@ -545,7 +545,7 @@ object SQLConf {
       .doc("The maximum entries of the cache used for interpreted subexpression elimination.")
       .version("3.1.0")
       .intConf
-      .checkValue(maxEntries => maxEntries >= 0, "The maximum must not be negative")
+      .checkValue(_ >= 0, "The maximum must not be negative")
       .createWithDefault(100)
 
   val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")

@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * This class wraps `ExpressionProxy` around given expressions. The `ExpressionProxy`
  * intercepts expression evaluation and loads from the cache first.
  */
-class EvaluationRunTime {
+class EvaluationRuntime {
 
   val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.subexpressionEliminationCacheMaxEntries)
