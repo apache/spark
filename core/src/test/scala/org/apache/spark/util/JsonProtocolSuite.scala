@@ -978,8 +978,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val stackTrace = {
     Array[StackTraceElement](
       new StackTraceElement("Apollo", "Venus", "Mercury", 42),
-      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420),
-      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200)
+      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420), /* odd spellings intentional */
+      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200) /* odd spellings intentional */
     )
   }
 
