@@ -189,7 +189,7 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     if (!namespaceExists(namespace)) {
       throw new NoSuchNamespaceException(namespace)
     }
-    tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
+    super.listTables(namespace)
   }
 }
 
