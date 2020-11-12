@@ -215,7 +215,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
         .setMaxIter(5)
       val model = lsvc.fit(dataset)
       Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
-        val model2 = lsvc.setBlockSizeInMB(s).fit(dataset)
+        val model2 = lsvc.setMaxBlockSizeInMB(s).fit(dataset)
         assert(model.intercept ~== model2.intercept relTol 1e-9)
         assert(model.coefficients ~== model2.coefficients relTol 1e-9)
       }

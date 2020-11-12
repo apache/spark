@@ -109,10 +109,10 @@ private[shared] object SharedParamsCodeGen {
         "stacked within partitions. If block size is more than remaining data in a partition " +
         "then it is adjusted to the size of this data.",
         isValid = "ParamValidators.gt(0)", isExpertParam = true),
-      ParamDesc[Double]("blockSizeInMB", "Maximum memory in MB for stacking input data " +
-        "in blocks. Data is stacked within partitions. If more than remaining data size in a " +
-        "partition then it is adjusted to the data size. If 0, try to infer an appropriate value " +
-        "based on the statistics of dataset. Must be >= 0.",
+      ParamDesc[Double]("maxBlockSizeInMB", "Maximum memory in MB for stacking input data " +
+        "into blocks. Data is stacked within partitions. If more than remaining data size in a " +
+        "partition then it is adjusted to the data size. If 0, try to infer an appropriate " +
+        "value. Must be >= 0.",
         Some("0.0"), isValid = "ParamValidators.gtEq(0.0)", isExpertParam = true)
     )
 

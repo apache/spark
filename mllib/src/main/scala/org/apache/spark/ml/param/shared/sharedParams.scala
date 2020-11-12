@@ -564,20 +564,20 @@ trait HasBlockSize extends Params {
 }
 
 /**
- * Trait for shared param blockSizeInMB (default: 0.0). This trait may be changed or
+ * Trait for shared param maxBlockSizeInMB (default: 0.0). This trait may be changed or
  * removed between minor versions.
  */
-trait HasBlockSizeInMB extends Params {
+trait HasMaxBlockSizeInMB extends Params {
 
   /**
-   * Param for Maximum memory in MB for stacking input data in blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value based on the statistics of dataset. Must be &gt;= 0..
+   * Param for Maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value. Must be &gt;= 0..
    * @group expertParam
    */
-  final val blockSizeInMB: DoubleParam = new DoubleParam(this, "blockSizeInMB", "Maximum memory in MB for stacking input data in blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value based on the statistics of dataset. Must be >= 0.", ParamValidators.gtEq(0.0))
+  final val maxBlockSizeInMB: DoubleParam = new DoubleParam(this, "maxBlockSizeInMB", "Maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. If 0, try to infer an appropriate value. Must be >= 0.", ParamValidators.gtEq(0.0))
 
-  setDefault(blockSizeInMB, 0.0)
+  setDefault(maxBlockSizeInMB, 0.0)
 
   /** @group expertGetParam */
-  final def getBlockSizeInMB: Double = $(blockSizeInMB)
+  final def getMaxBlockSizeInMB: Double = $(maxBlockSizeInMB)
 }
 // scalastyle:on

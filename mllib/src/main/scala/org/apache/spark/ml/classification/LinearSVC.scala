@@ -42,7 +42,7 @@ import org.apache.spark.storage.StorageLevel
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold with HasBlockSizeInMB {
+  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -57,7 +57,7 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
     "threshold in binary classification prediction applied to rawPrediction")
 
   setDefault(regParam -> 0.0, maxIter -> 100, fitIntercept -> true, tol -> 1E-6,
-    standardization -> true, threshold -> 0.0, aggregationDepth -> 2, blockSizeInMB -> 0.0)
+    standardization -> true, threshold -> 0.0, aggregationDepth -> 2, maxBlockSizeInMB -> 0.0)
 }
 
 /**
@@ -153,13 +153,13 @@ class LinearSVC @Since("2.2.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
   /**
-   * Sets the value of param [[blockSizeInMB]].
+   * Sets the value of param [[maxBlockSizeInMB]].
    * Default is 0.0.
    *
    * @group expertSetParam
    */
   @Since("3.1.0")
-  def setBlockSizeInMB(value: Double): this.type = set(blockSizeInMB, value)
+  def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -169,7 +169,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth,
-      blockSizeInMB)
+      maxBlockSizeInMB)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
@@ -191,7 +191,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
     instr.logSumOfWeights(summarizer.weightSum)
 
-    var actualBlockSizeInMB = $(blockSizeInMB)
+    var actualBlockSizeInMB = $(maxBlockSizeInMB)
     if (actualBlockSizeInMB == 0) {
       actualBlockSizeInMB = InstanceBlock.DefaultBlockSizeInMB
       require(actualBlockSizeInMB > 0, "inferred actual BlockSizeInMB must > 0")

@@ -161,20 +161,19 @@ private[spark] object InstanceBlock {
         var blockMemUsage = 0L
 
         while (instanceIterator.hasNext && blockMemUsage < maxMemUsage) {
-          val instance: Instance = instanceIterator.next()
+          val instance = instanceIterator.next()
           if (numCols < 0L) numCols = instance.features.size
           require(numCols == instance.features.size)
-          val nnz = instance.features.numNonzeros
 
           buff += instance
           buffCnt += 1L
-          buffNnz += nnz
+          buffNnz += instance.features.numNonzeros
           buffUnitWeight &&= (instance.weight == 1)
           blockMemUsage = getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight)
         }
 
-        // the block mem usage may slightly exceed threshold, not a big issue.
-        // and this ensure even if one row exceed block limit, each block has one row
+        // the block memory usage may slightly exceed threshold, not a big issue.
+        // and this ensure even if one row exceed block limit, each block has one row.
         InstanceBlock.fromInstances(buff.result())
       }
     }
