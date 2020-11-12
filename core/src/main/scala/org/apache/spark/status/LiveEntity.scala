@@ -676,7 +676,7 @@ private[spark] object LiveEntityHelpers {
       .filter { acc =>
         // We don't need to store internal or SQL accumulables as their values will be shown in
         // other places, so drop them to reduce the memory usage.
-        !acc.internal && acc.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
+        !acc.internal && !acc.metadata.contains(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
       }
       .map { acc =>
         new v1.AccumulableInfo(

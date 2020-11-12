@@ -338,7 +338,7 @@ private[deploy] class Master(
             }
             exec.worker.removeExecutor(exec)
 
-            val normalExit = exitStatus == Some(0)
+            val normalExit = exitStatus.contains(0)
             // Only retry certain number of times so we don't go into an infinite loop.
             // Important note: this code path is not exercised by tests, so be very careful when
             // changing this `if` condition.

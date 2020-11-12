@@ -729,7 +729,7 @@ private[spark] class TaskSetManager(
       // checking if can fetch more results
       calculatedTasks -= 1
       val resultSizeAcc = result.accumUpdates.find(a =>
-        a.name == Some(InternalAccumulator.RESULT_SIZE))
+        a.name.contains(InternalAccumulator.RESULT_SIZE))
       if (resultSizeAcc.isDefined) {
         totalResultSize -= resultSizeAcc.get.asInstanceOf[LongAccumulator].value
       }

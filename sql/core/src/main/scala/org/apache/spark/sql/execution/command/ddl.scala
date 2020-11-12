@@ -916,8 +916,8 @@ object DDLUtils {
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             OrcFileFormat.checkFieldNames(colNames)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
-            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
+            serde.contains("parquet.hive.serde.ParquetHiveSerDe") ||
+            serde.contains("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
             ParquetSchemaConverter.checkFieldNames(colNames)
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)

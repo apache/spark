@@ -106,7 +106,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // We need to do this here on the driver because if we did this on the executors then
           // we would have to serialize the result again after updating the size.
           result.accumUpdates = result.accumUpdates.map { a =>
-            if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+            if (a.name.contains(InternalAccumulator.RESULT_SIZE)) {
               val acc = a.asInstanceOf[LongAccumulator]
               assert(acc.sum == 0L, "task result size should not have been set on the executors")
               acc.setValue(size.toLong)

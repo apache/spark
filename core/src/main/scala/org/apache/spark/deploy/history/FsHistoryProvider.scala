@@ -665,7 +665,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       // If no attempt is specified, or there is no attemptId for attempts, return all attempts
       attemptId
-        .map { id => app.attempts.filter(_.info.attemptId == Some(id)) }
+        .map { id => app.attempts.filter(_.info.attemptId.contains(id)) }
         .getOrElse(app.attempts)
         .foreach { attempt =>
           val reader = EventLogFileReader(fs, new Path(logDir, attempt.logPath),

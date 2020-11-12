@@ -847,7 +847,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema = reorderedSchema,
       partitionColumnNames = partColumnNames,
       bucketSpec = getBucketSpecFromTableProperties(table),
-      tracksPartitionsInCatalog = partitionProvider == Some(TABLE_PARTITION_PROVIDER_CATALOG),
+      tracksPartitionsInCatalog = partitionProvider.contains(TABLE_PARTITION_PROVIDER_CATALOG),
       properties = table.properties.filterKeys(!HIVE_GENERATED_TABLE_PROPERTIES(_)).toMap)
   }
 
@@ -1440,7 +1440,7 @@ object HiveExternalCatalog {
    */
   private[spark] def isDatasourceTable(table: CatalogTable): Boolean = {
     val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
-    provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
+    provider.isDefined && !provider.contains(DDLUtils.HIVE_PROVIDER)
   }
 
 }

@@ -86,7 +86,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
       self.context.clean(mergeCombiners))
-    if (self.partitioner == Some(partitioner)) {
+    if (self.partitioner.contains(partitioner)) {
       self.mapPartitions(iter => {
         val context = TaskContext.get()
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
@@ -526,7 +526,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     if (keyClass.isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("HashPartitioner cannot partition array keys.")
     }
-    if (self.partitioner == Some(partitioner)) {
+    if (self.partitioner.contains(partitioner)) {
       self
     } else {
       new ShuffledRDD[K, V, V](self, partitioner)

@@ -1078,7 +1078,7 @@ abstract class RDD[T: ClassTag](
   def subtract(
       other: RDD[T],
       p: Partitioner)(implicit ord: Ordering[T] = null): RDD[T] = withScope {
-    if (partitioner == Some(p)) {
+    if (partitioner.contains(p)) {
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
       val p2 = new Partitioner() {
