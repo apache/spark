@@ -109,6 +109,13 @@ object Canonicalize {
     // order the list in the In operator
     case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
 
+    case g: Greatest =>
+      val newChildren = orderCommutative(g, { case Greatest(children) => children })
+      Greatest(newChildren)
+    case l: Least =>
+      val newChildren = orderCommutative(l, { case Least(children) => children })
+      Least(newChildren)
+
     case _ => e
   }
 }
