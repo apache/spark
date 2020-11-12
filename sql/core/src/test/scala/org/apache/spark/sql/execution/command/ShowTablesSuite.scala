@@ -20,13 +20,13 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuite extends SharedSparkSession {
+trait ShowTablesSuite extends QueryTest with SharedSparkSession {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
@@ -39,7 +39,7 @@ trait ShowTablesSuite extends SharedSparkSession {
   protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
-    assert(df.collect().toSet === getRows(expected).toSet)
+    checkAnswer(df, getRows(expected))
   }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
