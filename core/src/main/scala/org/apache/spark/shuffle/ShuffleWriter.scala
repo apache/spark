@@ -33,7 +33,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient}
+import org.apache.spark.network.shuffle.{BlockFetchingListener}
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.scheduler.MapStatus
@@ -118,9 +118,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
 
-    val shuffleClient = SparkEnv.get.blockManager.blockStoreClient
     submitTask(() => {
-      pushUpToMax(shuffleClient)
+      pushUpToMax()
     })
   }
 
@@ -144,7 +143,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
    * This code is similar to ShuffleBlockFetcherIterator#fetchUpToMaxBytes in how it throttles
    * the data transfer between shuffle client/server.
    */
-  private def pushUpToMax(shuffleClient: BlockStoreClient): Unit = synchronized {
+  private def pushUpToMax(): Unit = synchronized {
     // Process any outstanding deferred push requests if possible.
     if (deferredPushRequests.nonEmpty) {
       for ((remoteAddress, defReqQueue) <- deferredPushRequests) {
@@ -153,7 +152,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
           val request = defReqQueue.dequeue()
           logDebug(s"Processing deferred push request for $remoteAddress with "
             + s"${request.blocks.length} blocks")
-          sendRequest(request, shuffleClient)
+          sendRequest(request)
           if (defReqQueue.isEmpty) {
             deferredPushRequests -= remoteAddress
           }
@@ -171,7 +170,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         defReqQueue.enqueue(request)
         deferredPushRequests(remoteAddress) = defReqQueue
       } else {
-        sendRequest(request, shuffleClient)
+        sendRequest(request)
       }
     }
 
@@ -197,7 +196,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
    * client thread instead of task execution thread which takes care of majority of the block
    * pushes.
    */
-  private def sendRequest(request: PushRequest, shuffleClient: BlockStoreClient): Unit = {
+  private def sendRequest(request: PushRequest): Unit = {
     bytesInFlight = bytesInFlight + request.size
     reqsInFlight = reqsInFlight + 1
     numBlocksInFlightPerAddress(request.address) = numBlocksInFlightPerAddress.getOrElseUpdate(
@@ -222,7 +221,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         submitTask(() => {
           if (updateStateAndCheckIfPushMore(
             sizeMap(result.blockId), address, remainingBlocks, result)) {
-            pushUpToMax(SparkEnv.get.blockManager.blockStoreClient)
+            pushUpToMax()
           }
         })
       }
@@ -242,7 +241,8 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         handleResult(PushResult(blockId, exception))
       }
     }
-    shuffleClient.pushBlocks(address.host, address.port, blockIds.toArray,
+    SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
+      address.host, address.port, blockIds.toArray,
       sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)),
       blockPushListener)
   }
@@ -263,7 +263,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
       reqBuffer: ManagedBuffer,
       blockSizes: Seq[Long]): Array[ManagedBuffer] = {
     if (blockSizes.size == 1) {
-      Seq(reqBuffer).toArray
+      Array(reqBuffer)
     } else {
       val inMemoryBuffer = reqBuffer.nioByteBuffer()
       val blockOffsets = new Array[Long](blockSizes.size)
@@ -378,7 +378,7 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
         // Start a new PushRequest if the current request goes beyond the max batch size,
         // or the number of blocks in the current request goes beyond the limit per destination,
         // or the next block push location is for a different shuffle service, or the next block
-        // exceeds the max block size to push limit. This guarantees that each PushReqeust
+        // exceeds the max block size to push limit. This guarantees that each PushRequest
         // represents continuous blocks in the shuffle file to be pushed to the same shuffle
         // service, and does not go beyond existing limitations.
         if (currentReqSize + blockSize <= maxBlockBatchSize
@@ -394,13 +394,13 @@ private[spark] abstract class ShuffleWriter[K, V] extends Logging {
           }
           // Start a new batch
           currentReqSize = 0
-          // Set currentReqffset to -1 so we are able to distinguish between the initial value
+          // Set currentReqOffset to -1 so we are able to distinguish between the initial value
           // of currentReqOffset and when we are about to start a new batch
           currentReqOffset = -1
           currentMergerId = mergerId
           blocks = new ArrayBuffer[(BlockId, Long)]
         }
-        // Skip blocks exceeding the size limit for push
+        // Only push blocks under the size limit
         if (blockSize <= maxBlockSizeToPush) {
           blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSize))
           // Only update currentReqOffset if the current block is the first in the request
@@ -455,10 +455,7 @@ private[spark] object ShuffleWriter {
    * @param failure exception if the push was unsuccessful; null otherwise;
    */
   @Since("3.1.0")
-  private case class PushResult(
-      blockId: String,
-      failure: Throwable
-  )
+  private case class PushResult(blockId: String, failure: Throwable)
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
