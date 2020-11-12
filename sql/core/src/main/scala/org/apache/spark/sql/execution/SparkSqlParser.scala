@@ -90,10 +90,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.configValue() != null && ctx.configKey() != null) {
       SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
     } else if (ctx.configValue() != null) {
-      interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim match {
-        case configKeyDef(key) => SetCommand(Some(key -> Option(ctx.configValue().getText)))
-        case other => throw new ParseException(s"'$other' is an invalid property key, please use" +
-          s" quotes, e.g. SET `$other`=`${ctx.configValue().getText}`", ctx)
+      val valueStr = ctx.configValue().getText
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      keyCandidate match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
+        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property key, please " +
+          s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
       }
     } else {
       val keyStr = ctx.configKey().getText

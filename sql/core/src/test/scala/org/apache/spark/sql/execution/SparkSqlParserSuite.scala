@@ -166,8 +166,7 @@ class SparkSqlParserSuite extends AnalysisTest {
 
     assertEqual("SET `a`=1;;", SetCommand(Some("a" -> Some("1"))))
     assertEqual("SET `a`=`1;`", SetCommand(Some("a" -> Some("1;"))))
-
-    assertEqual("SET a=`1;`", SetCommand(Some("a" -> Some("1;"))))
+    assertEqual("SET `a`=`1;`;", SetCommand(Some("a" -> Some("1;"))))
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
       "'SET key=value'. If you want to include special characters in key, or include semicolon " +
