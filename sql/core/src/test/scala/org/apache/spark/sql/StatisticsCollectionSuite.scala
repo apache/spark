@@ -531,7 +531,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
-      assert(getStatAttrNames("tempView") !== Set("id"))
+      assert(getStatAttrNames("tempView") === Set("id"))
       sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
       assert(getStatAttrNames("tempView") === Set("id"))
     }
@@ -553,7 +553,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
-      assert(getStatAttrNames(s"$globalTempDB.gTempView") !== Set("id"))
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
       sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
     }

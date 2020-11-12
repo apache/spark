@@ -82,6 +82,6 @@ object UnionEstimation {
       Statistics(
         sizeInBytes = sizeInBytes,
         rowCount = outputRows,
-        attributeStats = AttributeMap(outputAttrStats)))
+        attributeStats = AttributeMap(outputAttrStats.toSeq)))
   }
 }
