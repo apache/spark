@@ -23,6 +23,7 @@ import traceback
 import types
 import os
 import platform
+import itertools
 
 from py4j.clientserver import ClientServer
 
@@ -105,9 +106,28 @@ def try_simplify_traceback(tb):
     >>> import importlib
     >>> import sys
     >>> import traceback
-    >>> spec = importlib.util.spec_from_file_location("dummy_module", "data/dummy_module.py")
-    >>> dummy_module = importlib.util.module_from_spec(spec)
-    >>> spec.loader.exec_module(dummy_module)
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as tmp_dir:
+    ...     with open("%s/dummy_module.py" % tmp_dir, "w") as f:
+    ...         _ = f.write(
+    ...             'def raise_stop_iteration():\\n'
+    ...             '    raise StopIteration()\\n\\n'
+    ...             'def simple_wrapper(f):\\n'
+    ...             '    def wrapper(*a, **k):\\n'
+    ...             '        return f(*a, **k)\\n'
+    ...             '    return wrapper\\n')
+    ...         f.flush()
+    ...         spec = importlib.util.spec_from_file_location(
+    ...             "dummy_module", "%s/dummy_module.py" % tmp_dir)
+    ...         dummy_module = importlib.util.module_from_spec(spec)
+    ...         spec.loader.exec_module(dummy_module)
+    >>> def skip_doctest_traceback(tb):
+    ...     import pyspark
+    ...     root = os.path.dirname(pyspark.__file__)
+    ...     pairs = zip(walk_tb(tb), traceback.extract_tb(tb))
+    ...     for cur_tb, cur_frame in pairs:
+    ...         if cur_frame.filename.startswith(root):
+    ...             return cur_tb
 
     Regular exceptions should show the file name of the current package as below.
 
@@ -138,11 +158,9 @@ def try_simplify_traceback(tb):
     ...     tb = try_simplify_traceback(sys.exc_info()[-1])
     ...     e.__cause__ = None
     ...     exc_info = "".join(
-    ...         traceback.format_exception(type(e), e, try_simplify_traceback(tb)))
+    ...         traceback.format_exception(
+    ...             type(e), e, try_simplify_traceback(skip_doctest_traceback(tb))))
     >>> print(exc_info)  # doctest: +NORMALIZE_WHITESPACE, +ELLIPSIS
-    Traceback (most recent call last):
-      File ...
-        ...
     RuntimeError: ...
     >>> "pyspark/util.py" in exc_info
     False
@@ -160,7 +178,8 @@ def try_simplify_traceback(tb):
     ...     exc_info_a = "".join(
     ...         traceback.format_exception(type(e), e, tb))
     ...     exc_info_b = "".join(
-    ...         traceback.format_exception(type(e), e, try_simplify_traceback(tb)))
+    ...         traceback.format_exception(
+    ...             type(e), e, try_simplify_traceback(skip_doctest_traceback(tb))))
     >>> exc_info_a.count("pyspark/util.py")
     2
     >>> exc_info_b.count("pyspark/util.py")
@@ -179,12 +198,17 @@ def try_simplify_traceback(tb):
     root = os.path.dirname(pyspark.__file__)
     tb_next = None
     new_tb = None
-    should_skip = True
+    pairs = zip(walk_tb(tb), traceback.extract_tb(tb))
+    last_seen = []
 
-    for cur_tb, cur_frame in reversed(list(zip(walk_tb(tb), traceback.extract_tb(tb)))):
-        if should_skip and cur_frame.filename.startswith(root):
-            continue  # Filter the stacktrace from the PySpark source itself.
-        should_skip = False  # Once we have seen the file names outside, don't skip.
+    for cur_tb, cur_frame in pairs:
+        if not cur_frame.filename.startswith(root):
+            # Filter the stacktrace from the PySpark source itself.
+            last_seen = [(cur_tb, cur_frame)]
+            break
+
+    for cur_tb, cur_frame in reversed(list(itertools.chain(last_seen, pairs))):
+        # Once we have seen the file names outside, don't skip.
         new_tb = types.TracebackType(
             tb_next=tb_next,
             tb_frame=cur_tb.tb_frame,
