@@ -26,24 +26,4 @@ class ShowTablesSuite extends v1.ShowTablesSuite {
   override def defaultUsing: String = "USING HIVE"
   override protected val spark: SparkSession = TestHive.sparkSession
   protected override def beforeAll(): Unit = {}
-
-  test("show Hive tables") {
-    withTable("show1a", "show2b") {
-      sql("CREATE TABLE show1a(c1 int)")
-      sql("CREATE TABLE show2b(c2 int)")
-      runShowTablesSql(
-        "SHOW TABLES IN default 'show1*'",
-        ShowRow("default", "show1a", false) :: Nil)
-      runShowTablesSql(
-        "SHOW TABLES IN default 'show1*|show2*'",
-        ShowRow("default", "show1a", false) ::
-          ShowRow("default", "show2b", false) :: Nil)
-      runShowTablesSql(
-        "SHOW TABLES 'show1*|show2*'",
-        ShowRow("default", "show1a", false) ::
-          ShowRow("default", "show2b", false) :: Nil)
-      assert(sql("SHOW TABLES").count() >= 2)
-      assert(sql("SHOW TABLES IN default").count() >= 2)
-    }
-  }
 }

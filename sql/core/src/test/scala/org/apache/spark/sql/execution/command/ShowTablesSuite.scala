@@ -39,7 +39,7 @@ trait ShowTablesSuite extends SharedSparkSession {
   protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
-    assert(df.collect() === getRows(expected))
+    assert(df.collect().toSet === getRows(expected).toSet)
   }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
@@ -58,35 +58,38 @@ trait ShowTablesSuite extends SharedSparkSession {
   }
 
   test("show tables with a pattern") {
-    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+    withNamespace(s"$catalog.ns1") {
       sql(s"CREATE NAMESPACE $catalog.ns1")
-      sql(s"CREATE NAMESPACE $catalog.ns2")
       withTable(
         s"$catalog.ns1.table",
-        s"$catalog.ns1.table_name_1",
-        s"$catalog.ns1.table_name_2",
-        s"$catalog.ns2.table_name_2") {
+        s"$catalog.ns1.table_name_1a",
+        s"$catalog.ns1.table_name_2b") {
         sql(s"CREATE TABLE $catalog.ns1.table (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns1.table_name_1 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns1.table_name_2 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns2.table_name_2 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_1a (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_2b (id bigint, data string) $defaultUsing")
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1",
           Seq(
             ShowRow("ns1", "table", false),
-            ShowRow("ns1", "table_name_1", false),
-            ShowRow("ns1", "table_name_2", false)))
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
           Seq(
-            ShowRow("ns1", "table_name_1", false),
-            ShowRow("ns1", "table_name_2", false)))
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2'",
-          Seq(ShowRow("ns1", "table_name_2", false)))
+          s"SHOW TABLES FROM $catalog.ns1 LIKE 'table_name_1*|table_name_2*'",
+          Seq(
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
+
+        runShowTablesSql(
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2b'",
+          Seq(ShowRow("ns1", "table_name_2b", false)))
       }
     }
   }
@@ -116,7 +119,6 @@ trait ShowTablesSuite extends SharedSparkSession {
         // Update the current namespace to match "ns.tbl".
         sql(s"USE $catalog.ns")
         runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
-        defaultNamespace.headOption.foreach(ns => sql(s"USE $ns"))
       }
     }
   }
