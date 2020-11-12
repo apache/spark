@@ -1326,7 +1326,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       test(s"$name - state format version $version") {
         withSQLConf(
             SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> version.toString,
-            SQLConf.STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED.key -> "false") {
+            SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
           func
         }
       }

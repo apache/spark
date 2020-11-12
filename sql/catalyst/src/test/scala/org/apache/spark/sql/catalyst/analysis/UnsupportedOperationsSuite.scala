@@ -231,7 +231,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
           streamRelation)),
       outputMode = outputMode,
-      SQLConf.STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED.key -> "false")
+      SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
   }
 
   for (outputMode <- Seq(Append, Update)) {
@@ -280,7 +280,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null, streamRelation)),
     outputMode = Append,
-    SQLConf.STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED.key -> "false")
+    SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState -  multiple flatMapGroupsWithStates on s streaming relation but some" +
@@ -1078,7 +1078,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       expectFailure: Boolean): Unit = {
     test(s"Global watermark limit - $testNamePostfix") {
       if (expectFailure) {
-        withSQLConf(SQLConf.STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED.key -> "true") {
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "true") {
           val e = intercept[AnalysisException] {
             UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
               wrapInStreaming(plan), outputMode)
@@ -1086,7 +1086,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
           assert(e.message.contains("Detected pattern of possible 'correctness' issue"))
         }
       } else {
-        withSQLConf(SQLConf.STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED.key -> "false") {
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
           UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
             wrapInStreaming(plan), outputMode)
         }

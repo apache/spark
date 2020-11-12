@@ -1382,8 +1382,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED =
-    buildConf("spark.sql.streaming.statefulOperator.correctnessCheck")
+  val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
       .internal()
       .doc("When true, the stateful operators for streaming query will be checked for possible " +
         "correctness issue due to global watermark. The correctness issue comes from queries " +
@@ -3044,7 +3044,7 @@ class SQLConf extends Serializable with Logging {
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
-    getConf(STATEFUL_OPERATOR_CORRECTNESS_CHECK_ENABLED)
+    getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 

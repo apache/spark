@@ -43,9 +43,9 @@ object UnsupportedOperationChecker extends Logging {
 
   /**
    * Checks for possible correctness issue in chained stateful operators. The behavior is
-   * controlled by SQL config `spark.sql.streaming.statefulOperator.correctnessCheck"`. Once it
-   * is enabled, an analysis exception will be thrown. Otherwise, Spark will just print a warning
-   * message which is the behavior before Spark 3.1.0.
+   * controlled by SQL config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled`.
+   * Once it is enabled, an analysis exception will be thrown. Otherwise, Spark will just
+   * print a warning message.
    */
   def checkStreamingQueryGlobalWatermarkLimit(
       plan: LogicalPlan,
@@ -84,7 +84,7 @@ object UnsupportedOperationChecker extends Logging {
               "Please refer the programming guide doc for more details. If you understand " +
               "the possible risk of correctness issue and still need to run the query, " +
               "you can disable this check by setting the config " +
-              "`spark.sql.streaming.statefulOperator.correctnessCheck` to false."
+              "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false."
             throwError(errorMsg)(plan)
           }
         }
