@@ -1986,24 +1986,9 @@ case class ElementAt(
     }
   }
 
-  override def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
-    if (ordinal.foldable && !ordinal.nullable) {
-      val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
-      child match {
-        case CreateArray(ar, _) =>
-          nullability(ar, intOrdinal)
-        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _) =>
-          nullability(elements, intOrdinal) || field.nullable
-        case _ =>
-          true
-      }
-    } else {
-      if (failOnError) arrayContainsNull else true
-    }
-  }
-
   override def nullable: Boolean = left.dataType match {
-    case _: ArrayType => computeNullabilityFromArray(left, right)
+    case _: ArrayType =>
+      computeNullabilityFromArray(left, right, failOnError, nullability)
     case _: MapType => true
   }
 
@@ -2016,7 +2001,8 @@ case class ElementAt(
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
           if (failOnError) {
-            throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+            throw new ArrayIndexOutOfBoundsException(
+              s"Invalid index: $index, numElements: ${array.numElements()}")
           } else {
             null
           }
@@ -2055,7 +2041,10 @@ case class ElementAt(
           }
 
           val failOnErrorBranch = if (failOnError) {
-            s"""throw new ArrayIndexOutOfBoundsException("Invalid index: " + $index);""".stripMargin
+            s"""throw new ArrayIndexOutOfBoundsException(
+               |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
+               |);
+             """.stripMargin
           } else {
             s"${ev.isNull} = true;"
           }

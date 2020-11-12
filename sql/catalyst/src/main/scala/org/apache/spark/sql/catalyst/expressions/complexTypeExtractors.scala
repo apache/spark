@@ -240,15 +240,25 @@ case class GetArrayItem(
 
   override def left: Expression = child
   override def right: Expression = ordinal
-  override def nullable: Boolean = computeNullabilityFromArray(left, right)
+  override def nullable: Boolean =
+    computeNullabilityFromArray(left, right, failOnError, nullability)
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
+
+  private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    if (ordinal >= 0 && ordinal < elements.length) {
+      elements(ordinal).nullable
+    } else {
+      !failOnError
+    }
+  }
 
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
     if (index >= baseValue.numElements() || index < 0) {
       if (failOnError) {
-        throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+        throw new ArrayIndexOutOfBoundsException(
+          s"Invalid index: $index, numElements: ${baseValue.numElements()}")
       } else {
         null
       }
@@ -272,7 +282,10 @@ case class GetArrayItem(
       }
 
       val failOnErrorBranch = if (failOnError) {
-        s"""throw new ArrayIndexOutOfBoundsException("Invalid index: " + $index);""".stripMargin
+        s"""throw new ArrayIndexOutOfBoundsException(
+           |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
+           |);
+         """.stripMargin
       } else {
         s"${ev.isNull} = true;"
       }
@@ -295,20 +308,24 @@ case class GetArrayItem(
 trait GetArrayItemUtil {
 
   /** `Null` is returned for invalid ordinals. */
-  protected def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
+  protected def computeNullabilityFromArray(
+      child: Expression,
+      ordinal: Expression,
+      failOnError: Boolean,
+      nullability: (Seq[Expression], Int) => Boolean): Boolean = {
+    val arrayContainsNull = child.dataType.asInstanceOf[ArrayType].containsNull
     if (ordinal.foldable && !ordinal.nullable) {
       val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
       child match {
-        case CreateArray(ar, _) if intOrdinal < ar.length =>
-          ar(intOrdinal).nullable
-        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _)
-          if intOrdinal < elements.length =>
-          elements(intOrdinal).nullable || field.nullable
+        case CreateArray(ar, _) =>
+          nullability(ar, intOrdinal)
+        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _) =>
+          nullability(elements, intOrdinal) || field.nullable
         case _ =>
           true
       }
     } else {
-      true
+      if (failOnError) arrayContainsNull else true
     }
   }
 }

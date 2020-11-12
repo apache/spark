@@ -33,7 +33,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Expression, GetArrayItem, Literal, Uuid}
+import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -2566,97 +2566,6 @@ class DataFrameSuite extends QueryTest
     val l = c.select("col2")
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
-  }
-
-  test("SPARK-33391: element_at ArrayIndexOutOfBoundsException") {
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        var df = sql("select element_at(array(1, 2, 3), 5)")
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: 5"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-
-        df = sql("select element_at(array(1, 2, 3), -5)")
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: -5"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-
-        // SQL array indices start at 1 exception throws for both mode.
-        val errMsg = "SQL array indices start at 1"
-        df = sql("select element_at(array(1, 2, 3), 0)")
-        val ex = intercept[Exception](df.collect())
-        assert(ex.getMessage.contains(errMsg))
-      }
-    }
-  }
-
-  test("SPARK-33391: elt ArrayIndexOutOfBoundsException") {
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        var df = sql("select elt(4, '123', '456')")
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: 4"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-
-        df = sql("select elt(0, '123', '456')")
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: 0"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-
-        df = sql("select elt(-1, '123', '456')")
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: -1"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-      }
-    }
-  }
-
-  test("SPARK-33391: GetArrayItem ArrayIndexOutOfBoundsException") {
-    def getArrayItem(child: Expression, ordinal: Expression): Column = {
-      Column(GetArrayItem(child, ordinal))
-    }
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        val array = Literal.create(Seq("a", "b"), ArrayType(StringType))
-        var df = testData.where($"key" === lit(1)).select(getArrayItem(array, Literal(5)))
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: 5"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-
-        df = testData.where($"key" === lit(1)).select(getArrayItem(array, Literal(-1)))
-        if (ansiEnabled) {
-          val errMsg = "Invalid index: -1"
-          val ex = intercept[Exception](df.collect())
-          assert(ex.getMessage.contains(errMsg))
-        } else {
-          checkAnswer(df, Row(null))
-        }
-      }
-    }
   }
 }
 

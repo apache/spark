@@ -286,7 +286,8 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw new ArrayIndexOutOfBoundsException(s"Invalid index: $index")
+          throw new ArrayIndexOutOfBoundsException(
+            s"Invalid index: $index, numElements: ${inputExprs.length}")
         } else {
           null
         }
@@ -340,7 +341,8 @@ case class Elt(
     val failOnErrorBranch = if (failOnError) {
       s"""
          |if (!$indexMatched) {
-         |  throw new ArrayIndexOutOfBoundsException("Invalid index: " + ${index.value});
+         |  throw new ArrayIndexOutOfBoundsException(
+         |    "Invalid index: " + ${index.value} + ", numElements: " + ${inputExprs.length});
          |}
        """.stripMargin
     } else {

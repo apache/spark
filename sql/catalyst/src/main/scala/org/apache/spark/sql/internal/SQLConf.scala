@@ -2147,7 +2147,7 @@ object SQLConf {
       "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
       "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
       "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser. 3. Spark will returns null for null input for function `size`.")
+      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
