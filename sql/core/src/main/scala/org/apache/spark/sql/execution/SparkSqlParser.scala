@@ -80,30 +80,34 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case s if s.isEmpty =>
         SetCommand(None)
       case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-        "'SET key=value'. If you want to include special characters in key or semicolon is value," +
-        " please use quotes, e.g., SET `ke y`=`value`.", ctx)
+        "'SET key=value'. If you want to include special characters in key, or include semicolon " +
+        "in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
     }
   }
 
   override def visitSetQuotedConfiguration(
       ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
-      if (ctx.configValue() != null && ctx.configKey() != null) {
-        SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
-      } else if (ctx.configValue() != null) {
-        SetCommand(Some(ctx.anything.getText -> Option(ctx.configValue().getText)))
-      } else {
-        val keyStr = ctx.configKey().getText
-        if (ctx.EQ() != null) {
-          remainder(ctx.EQ().getSymbol).trim match {
-            case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
-            case other => throw new ParseException(s"'$other' is an invalid property value," +
-              s" please use quotes, e.g. SET `$keyStr`=`$other`", ctx)
-          }
-        } else {
-          SetCommand(Some(keyStr -> None))
+    if (ctx.configValue() != null && ctx.configKey() != null) {
+      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+    } else if (ctx.configValue() != null) {
+      interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(ctx.configValue().getText)))
+        case other => throw new ParseException(s"'$other' is an invalid property key, please use" +
+          s" quotes, e.g. SET `$other`=`${ctx.configValue().getText}`", ctx)
+      }
+    } else {
+      val keyStr = ctx.configKey().getText
+      if (ctx.EQ() != null) {
+        remainder(ctx.EQ().getSymbol).trim match {
+          case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
+          case other => throw new ParseException(s"'$other' is an invalid property value, please " +
+            s"use quotes, e.g. SET `$keyStr`=`$other`", ctx)
         }
+      } else {
+        SetCommand(Some(keyStr -> None))
       }
     }
+  }
 
   /**
    * Create a [[ResetCommand]] logical plan.

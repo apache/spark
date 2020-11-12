@@ -71,6 +71,12 @@ object ParserUtils {
     stream.getText(interval)
   }
 
+  /** Get all the text which between the given start and end tokens. */
+  def interval(start: Token, end: Token): String = {
+    val interval = Interval.of(start.getStopIndex + 1, end.getStartIndex - 1)
+    start.getInputStream.getText(interval)
+  }
+
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 
