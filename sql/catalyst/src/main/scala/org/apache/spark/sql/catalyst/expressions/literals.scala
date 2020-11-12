@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Boolean => JavaBoolean}
 import java.lang.{Byte => JavaByte}
+import java.lang.{Character => JavaChar}
 import java.lang.{Double => JavaDouble}
 import java.lang.{Float => JavaFloat}
 import java.lang.{Integer => JavaInteger}
@@ -62,6 +63,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
+    case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -102,6 +104,7 @@ object Literal {
     case JavaByte.TYPE => ByteType
     case JavaFloat.TYPE => FloatType
     case JavaBoolean.TYPE => BooleanType
+    case JavaChar.TYPE => StringType
 
     // java classes
     case _ if clz == classOf[LocalDate] => DateType
@@ -110,6 +113,7 @@ object Literal {
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[Array[Char]] => StringType
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
