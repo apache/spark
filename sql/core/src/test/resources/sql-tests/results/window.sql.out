@@ -421,10 +421,11 @@ window aggregate function with filter predicate is not supported yet.;
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (ORDER BY salary DESC) highest_salary,
-    nth_value(employee_name, 2) OVER (ORDER BY salary DESC) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -452,14 +453,11 @@ Leslie Thompson	5186	Larry Bott	Gerard Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -487,14 +485,11 @@ Leslie Thompson	5186	Larry Bott	Gerard Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -522,14 +517,11 @@ Leslie Thompson	5186	Larry Bott	Gerard Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary
-      RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary
-      RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING)
 ORDER BY salary
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -557,14 +549,11 @@ Larry Bott	11798	Mary Patterson	Loui Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -592,14 +581,11 @@ Leslie Thompson	5186	Foon Yue Tseng	Anthony Bow
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -627,14 +613,11 @@ Leslie Thompson	5186	Leslie Thompson	NULL
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -662,14 +645,11 @@ Leslie Thompson	5186	Larry Bott	Gerard Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -697,14 +677,11 @@ Leslie Thompson	5186	Larry Bott	Gerard Bondur
 SELECT
     employee_name,
     salary,
-    first_value(employee_name) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) highest_salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary DESC
 -- !query schema
 struct<employee_name:string,salary:int,highest_salary:string,second_highest_salary:string>
@@ -733,18 +710,15 @@ SELECT
 	employee_name,
 	department,
 	salary,
-	FIRST_VALUE(employee_name) OVER  (
-		PARTITION BY department
-		ORDER BY salary DESC
-		RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-	) highest_salary,
-	NTH_VALUE(employee_name, 2) OVER  (
-		PARTITION BY department
-		ORDER BY salary DESC
-		RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-	) second_highest_salary
+	FIRST_VALUE(employee_name) OVER w highest_salary,
+	NTH_VALUE(employee_name, 2) OVER w second_highest_salary
 FROM
 	basic_pays
+WINDOW w AS (
+  PARTITION BY department
+  ORDER BY salary DESC
+  RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
 ORDER BY department
 -- !query schema
 struct<employee_name:string,department:string,salary:int,highest_salary:string,second_highest_salary:string>

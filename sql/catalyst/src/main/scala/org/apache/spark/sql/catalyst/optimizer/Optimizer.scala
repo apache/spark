@@ -808,8 +808,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
- * Substitute the aggregate expression which uses [[First]] as the aggregate function
- * in the window with the window function [[NthValue]].
+ * Replaces first(col) to nth_value(col, 1) for better performance.
  */
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {

@@ -31,21 +31,35 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
         OptimizeWindowFunctions) :: Nil
   }
 
-  test("check OptimizeWindowFunctions") {
-    val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
-    val a = testRelation.output.head
+  val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
+  val a = testRelation.output(0)
+  val b = testRelation.output(1)
+  val c = testRelation.output(2)
+
+  test("replace first(col) by nth_value(col, 1) if the window frame is ordered") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
-        WindowSpecDefinition(Nil, a.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
     val correctAnswer = testRelation.select(
       WindowExpression(
         NthValue(a, Literal(1), false),
-        WindowSpecDefinition(Nil, a.asc :: Nil,
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
 
     val optimized = Optimize.execute(inputPlan)
     assert(optimized == correctAnswer)
+  }
+
+  test("can't replace first(col) by nth_value(col, 1) if the window frame isn't ordered") {
+    val inputPlan = testRelation.select(
+      WindowExpression(
+        First(a, false).toAggregateExpression(),
+        WindowSpecDefinition(b :: Nil, Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))))
+
+    val optimized = Optimize.execute(inputPlan)
+    assert(optimized == inputPlan)
   }
 }
