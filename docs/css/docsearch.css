@@ -6,7 +6,7 @@
 /* Main category (eg. Getting Started) */
 .algolia-autocomplete .algolia-docsearch-suggestion--category-header {
     color: darkgray;
-    border: 1px solid gray;
+    border: 1px underline gray;
 }
 
 /* Category (eg. Downloads) */
