@@ -556,7 +556,7 @@ class CloudPickler(Pickler):
         # `dispatch` attribute.  Earlier versions of the protocol 5 CloudPickler
         # used `CloudPickler.dispatch` as a class-level attribute storing all
         # reducers implemented by cloudpickle, but the attribute name was not a
-        # great choice given the meaning of `Cloudpickler.dispatch` when
+        # great choice given the meaning of `CloudPickler.dispatch` when
         # `CloudPickler` extends the pure-python pickler.
         dispatch = dispatch_table
 
