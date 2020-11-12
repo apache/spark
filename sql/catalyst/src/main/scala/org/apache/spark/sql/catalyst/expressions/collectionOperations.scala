@@ -2040,7 +2040,7 @@ case class ElementAt(
             ""
           }
 
-          val failOnErrorBranch = if (failOnError) {
+          val indexOutOfBoundBranch = if (failOnError) {
             s"""throw new ArrayIndexOutOfBoundsException(
                |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
                |);
@@ -2052,7 +2052,7 @@ case class ElementAt(
           s"""
              |int $index = (int) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
-             |  $failOnErrorBranch
+             |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
              |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");

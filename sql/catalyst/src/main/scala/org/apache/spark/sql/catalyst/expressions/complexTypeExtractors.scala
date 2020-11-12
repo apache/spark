@@ -281,7 +281,7 @@ case class GetArrayItem(
         ""
       }
 
-      val failOnErrorBranch = if (failOnError) {
+      val indexOutOfBoundBranch = if (failOnError) {
         s"""throw new ArrayIndexOutOfBoundsException(
            |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
            |);
@@ -293,7 +293,7 @@ case class GetArrayItem(
       s"""
         final int $index = (int) $eval2;
         if ($index >= $eval1.numElements() || $index < 0) {
-          $failOnErrorBranch
+          $indexOutOfBoundBranch
         } $nullCheck else {
           ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
         }

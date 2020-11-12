@@ -338,7 +338,7 @@ case class Elt(
          """.stripMargin
       }.mkString)
 
-    val failOnErrorBranch = if (failOnError) {
+    val indexOutOfBoundBranch = if (failOnError) {
       s"""
          |if (!$indexMatched) {
          |  throw new ArrayIndexOutOfBoundsException(
@@ -358,7 +358,7 @@ case class Elt(
          |do {
          |  $codes
          |} while (false);
-         |$failOnErrorBranch
+         |$indexOutOfBoundBranch
          |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
