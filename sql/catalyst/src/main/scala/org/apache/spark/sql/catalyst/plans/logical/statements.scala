@@ -348,13 +348,6 @@ case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
- * An UNCACHE TABLE statement, as parsed from SQL
- */
-case class UncacheTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * A TRUNCATE TABLE statement, as parsed from SQL
  */
 case class TruncateTableStatement(

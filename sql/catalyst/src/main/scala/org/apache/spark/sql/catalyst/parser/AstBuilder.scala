@@ -3336,10 +3336,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[UncacheTableStatement]] logical plan.
+   * Create an [[UncacheTable]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier), ctx.EXISTS != null)
+    UncacheTable(
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      ctx.EXISTS != null)
   }
 
   /**

@@ -449,9 +449,8 @@ class ResolveSessionCatalog(
     case CacheTable(ResolvedV1TableOrViewIdentifier(ident), plan, isLazy, options) =>
       CacheTableCommand(ident.asTableIdentifier, plan, isLazy, options)
 
-    case UncacheTableStatement(tbl, ifExists) =>
-      val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
-      UncacheTableCommand(name.asTableIdentifier, ifExists)
+    case UncacheTable(ResolvedV1TableOrViewIdentifier(ident), ifExists) =>
+      UncacheTableCommand(ident.asTableIdentifier, ifExists)
 
     case TruncateTableStatement(tbl, partitionSpec) =>
       val v1TableName = parseV1Table(tbl, "TRUNCATE TABLE")

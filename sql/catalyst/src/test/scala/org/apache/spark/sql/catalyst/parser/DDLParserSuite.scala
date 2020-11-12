@@ -1616,11 +1616,11 @@ class DDLParserSuite extends AnalysisTest {
   test("UNCACHE TABLE") {
     comparePlans(
       parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
+      UncacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), ifExists = false))
 
     comparePlans(
       parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
+      UncacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), ifExists = true))
   }
 
   test("TRUNCATE table") {

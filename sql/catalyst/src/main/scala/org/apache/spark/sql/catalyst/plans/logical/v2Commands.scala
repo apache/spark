@@ -641,3 +641,9 @@ case class CacheTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
+/**
+ * The logical plan of the UNCACHE TABLE command.
+ */
+case class UncacheTable(child: LogicalPlan, ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
