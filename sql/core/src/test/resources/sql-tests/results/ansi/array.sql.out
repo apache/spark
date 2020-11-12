@@ -165,17 +165,19 @@ struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,
 -- !query
 select element_at(array(1, 2, 3), 5)
 -- !query schema
-struct<element_at(array(1, 2, 3), 5):int>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: 5, numElements: 3
 
 
 -- !query
 select element_at(array(1, 2, 3), -5)
 -- !query schema
-struct<element_at(array(1, 2, 3), -5):int>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: -5, numElements: 3
 
 
 -- !query
@@ -190,38 +192,43 @@ SQL array indices start at 1
 -- !query
 select elt(4, '123', '456')
 -- !query schema
-struct<elt(4, 123, 456):string>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: 4, numElements: 2
 
 
 -- !query
 select elt(0, '123', '456')
 -- !query schema
-struct<elt(0, 123, 456):string>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: 0, numElements: 2
 
 
 -- !query
 select elt(-1, '123', '456')
 -- !query schema
-struct<elt(-1, 123, 456):string>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: -1, numElements: 2
 
 
 -- !query
 select array(1, 2, 3)[5]
 -- !query schema
-struct<array(1, 2, 3)[5]:int>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: 5, numElements: 3
 
 
 -- !query
 select array(1, 2, 3)[-1]
 -- !query schema
-struct<array(1, 2, 3)[-1]:int>
+struct<>
 -- !query output
-NULL
+java.lang.ArrayIndexOutOfBoundsException
+Invalid index: -1, numElements: 3
