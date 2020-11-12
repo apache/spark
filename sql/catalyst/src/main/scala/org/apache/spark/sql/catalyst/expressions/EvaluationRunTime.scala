@@ -46,7 +46,7 @@ class EvaluationRunTime {
    */
   def setInput(input: InternalRow = null): Unit = {
     currentInput = input
-    cache.cleanUp()
+    cache.invalidateAll()
   }
 
   /**
