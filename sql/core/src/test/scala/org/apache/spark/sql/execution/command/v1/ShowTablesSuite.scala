@@ -50,14 +50,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 
-  // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
-  test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchDatabaseException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.contains("Database 'unknown' not found"))
-  }
-
   // `SHOW TABLES` from v2 catalog returns empty result.
   test("v1 SHOW TABLES list the temp views") {
     withSourceViews {
