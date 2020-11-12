@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ShowTablesSuite extends v1.ShowTablesSuite {
+class ShowTablesSuite extends v1.ShowTablesTests with TestHiveSingleton {
   override def version: String = "Hive V1"
   override def defaultUsing: String = "USING HIVE"
-  override protected val spark: SparkSession = TestHive.sparkSession
-  protected override def beforeAll(): Unit = {}
 }

@@ -23,10 +23,10 @@ import org.scalatest.Tag
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuite extends QueryTest with SharedSparkSession {
+trait ShowTablesSuite extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
