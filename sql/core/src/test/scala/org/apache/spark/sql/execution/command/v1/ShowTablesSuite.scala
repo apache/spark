@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
