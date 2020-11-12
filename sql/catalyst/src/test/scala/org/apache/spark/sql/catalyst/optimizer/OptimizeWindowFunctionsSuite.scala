@@ -36,7 +36,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
   val b = testRelation.output(1)
   val c = testRelation.output(2)
 
-  test("replace first(col) by nth_value(col, 1) if the window frame is ordered") {
+  test("replace first(col) by nth_value(col, 1)") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
@@ -50,6 +50,17 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
 
     val optimized = Optimize.execute(inputPlan)
     assert(optimized == correctAnswer)
+  }
+
+  test("can't replace first(col) by nth_value(col, 1) if the window frame type is row") {
+    val inputPlan = testRelation.select(
+      WindowExpression(
+        First(a, false).toAggregateExpression(),
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
+          SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow))))
+
+    val optimized = Optimize.execute(inputPlan)
+    assert(optimized == inputPlan)
   }
 
   test("can't replace first(col) by nth_value(col, 1) if the window frame isn't ordered") {

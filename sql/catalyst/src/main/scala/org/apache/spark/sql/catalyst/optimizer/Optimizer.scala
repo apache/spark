@@ -813,7 +813,8 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
     case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), spec)
-      if !spec.orderSpec.isEmpty =>
+      if spec.orderSpec.nonEmpty &&
+        spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame].frameType == RowFrame =>
       we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
   }
 }
