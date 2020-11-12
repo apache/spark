@@ -58,7 +58,6 @@ trait ShowTablesSuite extends SharedSparkSession {
     }
   }
 
-  // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
   test("show table in a not existing namespace") {
     val msg = intercept[NoSuchNamespaceException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
