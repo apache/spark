@@ -184,6 +184,13 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     listTables(namespace).foreach(dropTable)
     Option(namespaces.remove(namespace.toList)).isDefined
   }
+
+  override def listTables(namespace: Array[String]): Array[Identifier] = {
+    if (!namespaceExists(namespace)) {
+      throw new NoSuchNamespaceException(namespace)
+    }
+    tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
+  }
 }
 
 object InMemoryTableCatalog {
