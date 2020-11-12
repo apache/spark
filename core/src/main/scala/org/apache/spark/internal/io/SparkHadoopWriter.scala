@@ -18,7 +18,7 @@
 package org.apache.spark.internal.io
 
 import java.text.NumberFormat
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, UUID}
 
 import scala.reflect.ClassTag
 
@@ -70,19 +70,28 @@ object SparkHadoopWriter extends Logging {
     // Assert the output format/key/value class is set in JobConf.
     config.assertConf(jobContext, rdd.conf)
 
+    // propagate the description UUID into the jobs, so that committers
+    // get an ID guaranteed to be unique.
+    jobContext.getConfiguration.set("spark.sql.sources.writeJobUUID",
+      UUID.randomUUID.toString)
+
     val committer = config.createCommitter(commitJobId)
     committer.setupJob(jobContext)
 
     // Try to write all RDD partitions as a Hadoop OutputFormat.
     try {
       val ret = sparkContext.runJob(rdd, (context: TaskContext, iter: Iterator[(K, V)]) => {
+        // SPARK-24552: Generate a unique "attempt ID" based on the stage and task attempt numbers.
+        // Assumes that there won't be more than Short.MaxValue attempts, at least not concurrently.
+        val attemptId = (context.stageAttemptNumber << 16) | context.attemptNumber
+
         executeTask(
           context = context,
           config = config,
           jobTrackerId = jobTrackerId,
           commitJobId = commitJobId,
           sparkPartitionId = context.partitionId,
-          sparkAttemptNumber = context.attemptNumber,
+          sparkAttemptNumber = attemptId,
           committer = committer,
           iterator = iter)
       })
@@ -112,11 +121,13 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId, commitJobId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
-    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
-
     // Initiate the writer.
     config.initWriter(taskContext, sparkPartitionId)
     var recordsWritten = 0L
+
+    // We must initialize the callback for calculating bytes written after the statistic table
+    // is initialized in FileSystem which is happened in initWriter.
+    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
 
     // Write all rows in RDD partition.
     try {
@@ -216,7 +227,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
       if (path != null) {
         path.getFileSystem(getConf)
       } else {
+        // scalastyle:off FileSystemGet
         FileSystem.get(getConf)
+        // scalastyle:on FileSystemGet
       }
     }
 
@@ -252,7 +265,7 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
   private def getOutputFormat(): OutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------
@@ -279,7 +292,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
 
     if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
       // FileOutputFormat ignores the filesystem parameter
+      // scalastyle:off FileSystemGet
       val ignoredFs = FileSystem.get(getConf)
+      // scalastyle:on FileSystemGet
       getOutputFormat().checkOutputSpecs(ignoredFs, getConf)
     }
   }
@@ -375,7 +390,7 @@ class HadoopMapReduceWriteConfigUtil[K, V: ClassTag](conf: SerializableConfigura
   private def getOutputFormat(): NewOutputFormat[K, V] = {
     require(outputFormat != null, "Must call initOutputFormat first.")
 
-    outputFormat.newInstance()
+    outputFormat.getConstructor().newInstance()
   }
 
   // --------------------------------------------------------------------------

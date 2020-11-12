@@ -22,13 +22,11 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Specifies how tuples that share common expressions will be distributed when a query is executed
- * in parallel on many machines.  Distribution can be used to refer to two distinct physical
- * properties:
- *  - Inter-node partitioning of data: In this case the distribution describes how tuples are
- *    partitioned across physical machines in a cluster.  Knowing this property allows some
- *    operators (e.g., Aggregate) to perform partition local operations instead of global ones.
- *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
- *    about how tuples are distributed within a single partition.
+ * in parallel on many machines.
+ *
+ * Distribution here refers to inter-node partitioning of data. That is, it describes how tuples
+ * are partitioned across physical machines in a cluster. Knowing this property allows some
+ * operators (e.g., Aggregate) to perform partition local operations instead of global ones.
  */
 sealed trait Distribution {
   /**
@@ -70,9 +68,7 @@ case object AllTuples extends Distribution {
 
 /**
  * Represents data where tuples that share the same values for the `clustering`
- * [[Expression Expressions]] will be co-located. Based on the context, this
- * can mean such tuples are either co-located in the same partition or they will be contiguous
- * within a single partition.
+ * [[Expression Expressions]] will be co-located in the same partition.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
@@ -99,26 +95,31 @@ case class ClusteredDistribution(
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
  */
-case class HashClusteredDistribution(expressions: Seq[Expression]) extends Distribution {
+case class HashClusteredDistribution(
+    expressions: Seq[Expression],
+    requiredNumPartitions: Option[Int] = None) extends Distribution {
   require(
     expressions != Nil,
-    "The expressions for hash of a HashPartitionedDistribution should not be Nil. " +
+    "The expressions for hash of a HashClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
-  override def requiredNumPartitions: Option[Int] = None
-
   override def createPartitioning(numPartitions: Int): Partitioning = {
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This HashClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
     HashPartitioning(expressions, numPartitions)
   }
 }
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
- * [[Expression Expressions]].  This is a strictly stronger guarantee than
- * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the
- * same value for the ordering expressions are contiguous and will never be split across
- * partitions.
+ * [[Expression Expressions]]. Its requirement is defined as the following:
+ *   - Given any 2 adjacent partitions, all the rows of the second partition must be larger than or
+ *     equal to any row in the first partition, according to the `ordering` expressions.
+ *
+ * In other words, this distribution requires the rows to be ordered across partitions, but not
+ * necessarily within a partition.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   require(
@@ -163,11 +164,22 @@ trait Partitioning {
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
    *
-   * By default a [[Partitioning]] can satisfy [[UnspecifiedDistribution]], and [[AllTuples]] if
-   * the [[Partitioning]] only have one partition. Implementations can overwrite this method with
-   * special logic.
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * [[Distribution.requiredNumPartitions]].
    */
-  def satisfies(required: Distribution): Boolean = required match {
+  final def satisfies(required: Distribution): Boolean = {
+    required.requiredNumPartitions.forall(_ == numPartitions) && satisfies0(required)
+  }
+
+  /**
+   * The actual method that defines whether this [[Partitioning]] can satisfy the given
+   * [[Distribution]], after the `numPartitions` check.
+   *
+   * By default a [[Partitioning]] can satisfy [[UnspecifiedDistribution]], and [[AllTuples]] if
+   * the [[Partitioning]] only have one partition. Implementations can also overwrite this method
+   * with special logic.
+   */
+  protected def satisfies0(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case AllTuples => numPartitions == 1
     case _ => false
@@ -186,9 +198,8 @@ case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
-    case ClusteredDistribution(_, Some(requiredNumPartitions)) => requiredNumPartitions == 1
     case _ => true
   }
 }
@@ -205,16 +216,15 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = {
-    super.satisfies(required) || {
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
       required match {
         case h: HashClusteredDistribution =>
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-            (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
+        case ClusteredDistribution(requiredClustering, _) =>
+          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
         case _ => false
       }
     }
@@ -229,12 +239,12 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
 /**
  * Represents a partitioning where rows are split across partitions based on some total ordering of
- * the expressions specified in `ordering`.  When data is partitioned in this manner the following
- * two conditions are guaranteed to hold:
- *  - All row where the expressions in `ordering` evaluate to the same values will be in the same
- *    partition.
- *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
- *    that are in between `min` and `max` in this `ordering` will reside in this partition.
+ * the expressions specified in `ordering`.  When data is partitioned in this manner, it guarantees:
+ * Given any 2 adjacent partitions, all the rows of the second partition must be larger than any row
+ * in the first partition, according to the `ordering` expressions.
+ *
+ * This is a strictly stronger guarantee than what `OrderedDistribution(ordering)` requires, as
+ * there is no overlap between partitions.
  *
  * This class extends expression primarily so that transformations over expression will descend
  * into its child.
@@ -246,15 +256,30 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   override def nullable: Boolean = false
   override def dataType: DataType = IntegerType
 
-  override def satisfies(required: Distribution): Boolean = {
-    super.satisfies(required) || {
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
       required match {
         case OrderedDistribution(requiredOrdering) =>
+          // If `ordering` is a prefix of `requiredOrdering`:
+          //   Let's say `ordering` is [a, b] and `requiredOrdering` is [a, b, c]. According to the
+          //   RangePartitioning definition, any [a, b] in a previous partition must be smaller
+          //   than any [a, b] in the following partition. This also means any [a, b, c] in a
+          //   previous partition must be smaller than any [a, b, c] in the following partition.
+          //   Thus `RangePartitioning(a, b)` satisfies `OrderedDistribution(a, b, c)`.
+          //
+          // If `requiredOrdering` is a prefix of `ordering`:
+          //   Let's say `ordering` is [a, b, c] and `requiredOrdering` is [a, b]. According to the
+          //   RangePartitioning definition, any [a, b, c] in a previous partition must be smaller
+          //   than any [a, b, c] in the following partition. If there is a [a1, b1] from a previous
+          //   partition which is larger than a [a2, b2] from the following partition, then there
+          //   must be a [a1, b1 c1] larger than [a2, b2, c2], which violates RangePartitioning
+          //   definition. So it's guaranteed that, any [a, b] in a previous partition must not be
+          //   greater(i.e. smaller or equal to) than any [a, b] in the following partition. Thus
+          //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-            (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
+        case ClusteredDistribution(requiredClustering, _) =>
+          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
         case _ => false
       }
     }
@@ -295,7 +320,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * Returns true if any `partitioning` of this collection satisfies the given
    * [[Distribution]].
    */
-  override def satisfies(required: Distribution): Boolean =
+  override def satisfies0(required: Distribution): Boolean =
     partitionings.exists(_.satisfies(required))
 
   override def toString: String = {
@@ -310,7 +335,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
-  override def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies0(required: Distribution): Boolean = required match {
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
   }

@@ -25,17 +25,21 @@ import scala.xml.Node
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
+import org.apache.spark.ui.storage.ToolTips._
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val content = rddTable(store.rddList()) ++ receiverBlockTables(store.streamBlocksList())
-    UIUtils.headerSparkPage("Storage", content, parent)
+    val content = rddTable(request, store.rddList()) ++
+      receiverBlockTables(store.streamBlocksList())
+    UIUtils.headerSparkPage(request, "Storage", content, parent)
   }
 
-  private[storage] def rddTable(rdds: Seq[v1.RDDStorageInfo]): Seq[Node] = {
+  private[storage] def rddTable(
+      request: HttpServletRequest,
+      rdds: Seq[v1.RDDStorageInfo]): Seq[Node] = {
     if (rdds.isEmpty) {
       // Don't show the rdd table if there is no RDD persisted.
       Nil
@@ -49,7 +53,12 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
           </h4>
         </span>
         <div class="aggregated-rdds collapsible-table">
-          {UIUtils.listingTable(rddHeader, rddRow, rdds, id = Some("storage-by-rdd-table"))}
+          {UIUtils.listingTable(
+            rddHeader,
+            rddRow(request, _: v1.RDDStorageInfo),
+            rdds,
+            id = Some("storage-by-rdd-table"),
+            tooltipHeaders = tooltips)}
         </div>
       </div>
     }
@@ -65,13 +74,24 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
     "Size in Memory",
     "Size on Disk")
 
+  /** Tooltips for header fields of the RDD table */
+  val tooltips = Seq(
+    None,
+    Some(RDD_NAME),
+    Some(STORAGE_LEVEL),
+    Some(CACHED_PARTITIONS),
+    Some(FRACTION_CACHED),
+    Some(SIZE_IN_MEMORY),
+    Some(SIZE_ON_DISK))
+
   /** Render an HTML row representing an RDD */
-  private def rddRow(rdd: v1.RDDStorageInfo): Seq[Node] = {
+  private def rddRow(request: HttpServletRequest, rdd: v1.RDDStorageInfo): Seq[Node] = {
     // scalastyle:off
     <tr>
       <td>{rdd.id}</td>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
+        <a href={"%s/storage/rdd/?id=%s".format(
+          UIUtils.prependBaseUri(request, parent.basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>

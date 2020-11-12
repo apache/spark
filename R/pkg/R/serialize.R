@@ -84,7 +84,7 @@ writeObject <- function(con, object, writeType = TRUE) {
          Date = writeDate(con, object),
          POSIXlt = writeTime(con, object),
          POSIXct = writeTime(con, object),
-         stop(paste("Unsupported type for serialization", type)))
+         stop("Unsupported type for serialization ", type))
 }
 
 writeVoid <- function(con) {
@@ -158,7 +158,7 @@ writeType <- function(con, class) {
                  Date = "D",
                  POSIXlt = "t",
                  POSIXct = "t",
-                 stop(paste("Unsupported type for serialization", class)))
+                 stop("Unsupported type for serialization ", class))
   writeBin(charToRaw(type), con)
 }
 
@@ -218,5 +218,16 @@ writeArgs <- function(con, args) {
     for (a in args) {
       writeObject(con, a)
     }
+  }
+}
+
+writeSerializeInArrow <- function(conn, df) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    # There looks no way to send each batch in streaming format via socket
+    # connection. See ARROW-4512.
+    # So, it writes the whole Arrow streaming-formatted binary at once for now.
+    writeRaw(conn, arrow::write_arrow(df, raw()))
+  } else {
+    stop("'arrow' package should be installed.")
   }
 }

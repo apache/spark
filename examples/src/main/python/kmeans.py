@@ -22,8 +22,6 @@ examples/src/main/python/ml/kmeans_example.py.
 
 This example requires NumPy (http://www.numpy.org/).
 """
-from __future__ import print_function
-
 import sys
 
 import numpy as np
@@ -49,7 +47,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) != 4:
         print("Usage: kmeans <file> <k> <convergeDist>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     print("""WARN: This is a naive implementation of KMeans Clustering and is given
        as an example! Please refer to examples/src/main/python/ml/kmeans_example.py for an

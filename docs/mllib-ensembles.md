@@ -2,6 +2,21 @@
 layout: global
 title: Ensembles - RDD-based API
 displayTitle: Ensembles - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -9,7 +24,7 @@ displayTitle: Ensembles - RDD-based API
 
 An [ensemble method](http://en.wikipedia.org/wiki/Ensemble_learning)
 is a learning algorithm which creates a model composed of a set of other base models.
-`spark.mllib` supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`RandomForest`](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$).
+`spark.mllib` supports two major ensemble algorithms: [`GradientBoostedTrees`](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`RandomForest`](api/scala/org/apache/spark/mllib/tree/RandomForest$.html).
 Both use [decision trees](mllib-decision-tree.html) as their base models.
 
 ## Gradient-Boosted Trees vs. Random Forests
@@ -96,7 +111,7 @@ The test error is calculated to measure the algorithm accuracy.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
+Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) and [`RandomForestModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RandomForestClassificationExample.scala %}
 </div>
@@ -127,7 +142,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest$) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
+Refer to the [`RandomForest` Scala docs](api/scala/org/apache/spark/mllib/tree/RandomForest$.html) and [`RandomForestModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/RandomForestRegressionExample.scala %}
 </div>
@@ -237,7 +252,7 @@ The test error is calculated to measure the algorithm accuracy.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
+Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/GradientBoostingClassificationExample.scala %}
 </div>
@@ -268,7 +283,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
+Refer to the [`GradientBoostedTrees` Scala docs](api/scala/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Scala docs](api/scala/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/GradientBoostingRegressionExample.scala %}
 </div>

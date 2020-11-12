@@ -17,141 +17,133 @@
 
 package org.apache.spark.sql.execution.command
 
-import scala.collection.mutable
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types._
 
 
 /**
  * Analyzes the given columns of the given table to generate statistics, which will be used in
- * query optimizations.
+ * query optimizations. Parameter `allColumns` may be specified to generate statistics of all the
+ * columns of a given table.
  */
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
-    columnNames: Seq[String]) extends RunnableCommand {
+    columnNames: Option[Seq[String]],
+    allColumns: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
+      "mutually exclusive. Only one of them should be specified.")
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+
+    tableIdent.database match {
+      case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
+        val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
+          throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+        }
+        analyzeColumnInTempView(plan, sparkSession)
+      case Some(_) =>
+        analyzeColumnInCatalog(sparkSession)
+      case None =>
+        sessionState.catalog.getTempView(tableIdent.identifier) match {
+          case Some(tempView) => analyzeColumnInTempView(tempView, sparkSession)
+          case _ => analyzeColumnInCatalog(sparkSession)
+        }
     }
-    val sizeInBytes = CommandUtils.calculateTotalSize(sessionState, tableMeta)
-
-    // Compute stats for each column
-    val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
-
-    // We also update table-level stats in order to keep them consistent with column-level stats.
-    val statistics = CatalogStatistics(
-      sizeInBytes = sizeInBytes,
-      rowCount = Some(rowCount),
-      // Newly computed column stats should override the existing ones.
-      colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
-
-    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
 
     Seq.empty[Row]
   }
 
-  /**
-   * Compute stats for the given columns.
-   * @return (row count, map from column name to ColumnStats)
-   */
-  private def computeColumnStats(
-      sparkSession: SparkSession,
-      tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
+  private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
+    val cacheManager = sparkSession.sharedState.cacheManager
+    cacheManager.lookupCachedData(plan).map { cachedData =>
+      val columnsToAnalyze = getColumnsToAnalyze(
+        tableIdent, cachedData.plan, columnNames, allColumns)
+      cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
+      cachedData
+    }.isDefined
+  }
 
-    val conf = sparkSession.sessionState.conf
-    val relation = sparkSession.table(tableIdent).logicalPlan
-    // Resolve the column names and dedup using AttributeSet
-    val attributesToAnalyze = columnNames.map { col =>
-      val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-      exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+  private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
+    if (!analyzeColumnInCachedData(plan, sparkSession)) {
+      val catalog = sparkSession.sessionState.catalog
+      val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
+      throw new NoSuchTableException(db = db, table = tableIdent.identifier)
     }
+  }
 
+  private def getColumnsToAnalyze(
+      tableIdent: TableIdentifier,
+      relation: LogicalPlan,
+      columnNames: Option[Seq[String]],
+      allColumns: Boolean = false): Seq[Attribute] = {
+    val columnsToAnalyze = if (allColumns) {
+      relation.output
+    } else {
+      columnNames.get.map { col =>
+        val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
+        exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+      }
+    }
     // Make sure the column types are supported for stats gathering.
-    attributesToAnalyze.foreach { attr =>
-      if (!ColumnStat.supportsType(attr.dataType)) {
+    columnsToAnalyze.foreach { attr =>
+      if (!supportsType(attr.dataType)) {
         throw new AnalysisException(
           s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
             "and Spark does not support statistics collection on this column type.")
       }
     }
-
-    // Collect statistics per column.
-    // If no histogram is required, we run a job to compute basic column stats such as
-    // min, max, ndv, etc. Otherwise, besides basic column stats, histogram will also be
-    // generated. Currently we only support equi-height histogram.
-    // To generate an equi-height histogram, we need two jobs:
-    // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
-    // 2. use the percentiles as value intervals of bins, e.g. [p(0), p(1/n)],
-    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bin.
-    // Basic column stats will be computed together in the second job.
-    val attributePercentiles = computePercentiles(attributesToAnalyze, sparkSession, relation)
-
-    // The first element in the result will be the overall row count, the following elements
-    // will be structs containing all column stats.
-    // The layout of each struct follows the layout of the ColumnStats.
-    val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(ColumnStat.statExprs(_, conf, attributePercentiles))
-
-    val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
-      .executedPlan.executeTake(1).head
-
-    val rowCount = statsRow.getLong(0)
-    val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
-      // according to `ColumnStat.statExprs`, the stats struct always have 7 fields.
-      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
-        attributePercentiles.get(attr)))
-    }.toMap
-    (rowCount, columnStats)
+    columnsToAnalyze
   }
 
-  /** Computes percentiles for each attribute. */
-  private def computePercentiles(
-      attributesToAnalyze: Seq[Attribute],
-      sparkSession: SparkSession,
-      relation: LogicalPlan): AttributeMap[ArrayData] = {
-    val attrsToGenHistogram = if (conf.histogramEnabled) {
-      attributesToAnalyze.filter(a => ColumnStat.supportsHistogram(a.dataType))
+  private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
+    val sessionState = sparkSession.sessionState
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      // Analyzes a catalog view if the view is cached
+      val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
+      if (!analyzeColumnInCachedData(plan, sparkSession)) {
+        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      }
     } else {
-      Nil
-    }
-    val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
-    if (attrsToGenHistogram.nonEmpty) {
-      val percentiles = (0 to conf.histogramNumBins)
-        .map(i => i.toDouble / conf.histogramNumBins).toArray
+      val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val relation = sparkSession.table(tableIdent).logicalPlan
+      val columnsToAnalyze = getColumnsToAnalyze(tableIdent, relation, columnNames, allColumns)
 
-      val namedExprs = attrsToGenHistogram.map { attr =>
-        val aggFunc =
-          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
-        val expr = aggFunc.toAggregateExpression()
-        Alias(expr, expr.toString)()
+      // Compute stats for the computed list of columns.
+      val (rowCount, newColStats) =
+        CommandUtils.computeColumnStats(sparkSession, relation, columnsToAnalyze)
+
+      val newColCatalogStats = newColStats.map {
+        case (attr, columnStat) =>
+          attr.name -> columnStat.toCatalogColumnStat(attr.name, attr.dataType)
       }
 
-      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
-        .executedPlan.executeTake(1).head
-      attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
-        val percentiles = percentilesRow.getArray(i)
-        // When there is no non-null value, `percentiles` is null. In such case, there is no
-        // need to generate histogram.
-        if (percentiles != null) {
-          attributePercentiles += attr -> percentiles
-        }
-      }
+      // We also update table-level stats in order to keep them consistent with column-level stats.
+      val statistics = CatalogStatistics(
+        sizeInBytes = sizeInBytes,
+        rowCount = Some(rowCount),
+        // Newly computed column stats should override the existing ones.
+        colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColCatalogStats)
+
+      sessionState.catalog.alterTableStats(tableIdent, Some(statistics))
     }
-    AttributeMap(attributePercentiles.toSeq)
   }
 
+  /** Returns true iff the we support gathering column statistics on column of the given type. */
+  private def supportsType(dataType: DataType): Boolean = dataType match {
+    case _: IntegralType => true
+    case _: DecimalType => true
+    case DoubleType | FloatType => true
+    case BooleanType => true
+    case DateType => true
+    case TimestampType => true
+    case BinaryType | StringType => true
+    case _ => false
+  }
 }

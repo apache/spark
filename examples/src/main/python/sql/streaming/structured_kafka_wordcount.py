@@ -36,8 +36,6 @@
     `$ bin/spark-submit examples/src/main/python/sql/streaming/structured_kafka_wordcount.py \
     host1:port1,host2:port2 subscribe topic1,topic2`
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession
@@ -49,7 +47,7 @@ if __name__ == "__main__":
         print("""
         Usage: structured_kafka_wordcount.py <bootstrap-servers> <subscribe-type> <topics>
         """, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     bootstrapServers = sys.argv[1]
     subscribeType = sys.argv[2]

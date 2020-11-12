@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 
-from pyspark import since
-from pyspark.rdd import ignore_unicode_prefix
+import sys
+
+from pyspark import since, _NoValue
 
 
 class RuntimeConfig(object):
@@ -29,26 +30,24 @@ class RuntimeConfig(object):
         """Create a new RuntimeConfig that wraps the underlying JVM object."""
         self._jconf = jconf
 
-    @ignore_unicode_prefix
     @since(2.0)
     def set(self, key, value):
         """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
-    @ignore_unicode_prefix
     @since(2.0)
-    def get(self, key, default=None):
+    def get(self, key, default=_NoValue):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """
         self._checkType(key, "key")
-        if default is None:
+        if default is _NoValue:
             return self._jconf.get(key)
         else:
-            self._checkType(default, "default")
+            if default is not None:
+                self._checkType(default, "default")
             return self._jconf.get(key, default)
 
-    @ignore_unicode_prefix
     @since(2.0)
     def unset(self, key):
         """Resets the configuration property for the given key."""
@@ -56,15 +55,21 @@ class RuntimeConfig(object):
 
     def _checkType(self, obj, identifier):
         """Assert that an object is of type str."""
-        if not isinstance(obj, str) and not isinstance(obj, unicode):
+        if not isinstance(obj, str):
             raise TypeError("expected %s '%s' to be a string (was '%s')" %
                             (identifier, obj, type(obj).__name__))
+
+    @since(2.4)
+    def isModifiable(self, key):
+        """Indicates whether the configuration property with the given key
+        is modifiable in the current session.
+        """
+        return self._jconf.isModifiable(key)
 
 
 def _test():
     import os
     import doctest
-    from pyspark.context import SparkContext
     from pyspark.sql.session import SparkSession
     import pyspark.sql.conf
 
@@ -80,7 +85,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

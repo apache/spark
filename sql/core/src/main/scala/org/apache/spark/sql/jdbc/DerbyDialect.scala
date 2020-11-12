@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLFeatureNotSupportedException, Types}
+import java.util.Locale
 
 import org.apache.spark.sql.types._
 
 
 private object DerbyDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -40,5 +42,18 @@ private object DerbyDialect extends JdbcDialect {
     case t: DecimalType if t.precision > 31 =>
       Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
     case _ => None
+  }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://db.apache.org/derby/docs/10.5/ref/rrefsqljrenametablestatement.html
+  override def renameTable(oldTable: String, newTable: String): String = {
+    s"RENAME TABLE $oldTable TO $newTable"
+  }
+
+  // Derby currently doesn't support comment on table. Here is the ticket to add the support
+  // https://issues.apache.org/jira/browse/DERBY-7008
+  override def getTableCommentQuery(table: String, comment: String): String = {
+    throw new SQLFeatureNotSupportedException(s"comment on table is not supported")
   }
 }

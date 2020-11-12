@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
+import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.
-  assert(Utils.isTesting, "spark.testing is not set to true")
+  assert(Utils.isTesting, s"${IS_TESTING.key} is not set to true")
 
   /**
    * Drop all the tables
@@ -37,28 +37,40 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with B
   protected override def afterAll(): Unit = {
     try {
       // For debugging dump some statistics about how much time was spent in various optimizer rules
+      // code generation, and compilation.
       logWarning(RuleExecutor.dumpTimeSpent())
+      val codeGenTime = WholeStageCodegenExec.codeGenTime.toDouble / NANOS_PER_SECOND
+      val compileTime = CodeGenerator.compileTime.toDouble / NANOS_PER_SECOND
+      val codegenInfo =
+        s"""
+           |=== Metrics of Whole-stage Codegen ===
+           |Total code generation time: $codeGenTime seconds
+           |Total compile time: $compileTime seconds
+         """.stripMargin
+      logWarning(codegenInfo)
       spark.sessionState.catalog.reset()
     } finally {
       super.afterAll()
     }
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     RuleExecutor.resetMetrics()
+    CodeGenerator.resetCompileTime()
+    WholeStageCodegenExec.resetCodeGenTime()
   }
 
-  protected def checkGeneratedCode(plan: SparkPlan): Unit = {
+  protected def checkGeneratedCode(plan: SparkPlan, checkMethodCodeSize: Boolean = true): Unit = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan foreach {
       case s: WholeStageCodegenExec =>
         codegenSubtrees += s
-      case s => s
+      case _ =>
     }
     codegenSubtrees.toSeq.foreach { subtree =>
       val code = subtree.doCodeGen()._2
-      try {
+      val (_, ByteCodeStats(maxMethodCodeSize, _, _)) = try {
         // Just check the generated code can be properly compiled
         CodeGenerator.compile(code)
       } catch {
@@ -73,6 +85,11 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with B
              """.stripMargin
           throw new Exception(msg, e)
       }
+
+      assert(!checkMethodCodeSize ||
+          maxMethodCodeSize <= CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT,
+        s"too long generated codes found in the WholeStageCodegenExec subtree (id=${subtree.id}) " +
+          s"and JIT optimization might not work:\n${subtree.treeString}")
     }
   }
 }

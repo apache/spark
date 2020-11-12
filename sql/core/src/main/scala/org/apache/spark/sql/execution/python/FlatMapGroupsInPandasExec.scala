@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.python.PandasGroupUtils._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
+
 
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
@@ -50,13 +50,16 @@ case class FlatMapGroupsInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends SparkPlan with UnaryExecNode {
 
+  private val sessionLocalTimeZone = conf.sessionLocalTimeZone
+  private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
+  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (groupingAttributes.isEmpty) {
@@ -72,35 +75,23 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
-    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
-    val schema = StructType(child.schema.drop(groupingAttributes.length))
-    val sessionLocalTimeZone = conf.sessionLocalTimeZone
-    val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+    val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
 
-    inputRDD.mapPartitionsInternal { iter =>
-      val grouped = if (groupingAttributes.isEmpty) {
-        Iterator(iter)
-      } else {
-        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        val dropGrouping =
-          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
-        groupedIter.map {
-          case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
-        }
-      }
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
-      val context = TaskContext.get()
+      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
+        .map { case (_, x) => x }
 
-      val columnarBatchIter = new ArrowPythonRunner(
-        chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, schema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
-          .compute(grouped, context.partitionId(), context)
+      val runner = new ArrowPythonRunner(
+        chainedFunc,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        Array(argOffsets),
+        StructType.fromAttributes(dedupAttributes),
+        sessionLocalTimeZone,
+        pythonRunnerConf)
 
-      columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
-    }
+      executePython(data, output, runner)
+    }}
   }
 }

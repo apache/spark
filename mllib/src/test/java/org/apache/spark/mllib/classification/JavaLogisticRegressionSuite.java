@@ -50,11 +50,8 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     List<LabeledPoint> validationData =
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 17);
 
-    LogisticRegressionWithSGD lrImpl = new LogisticRegressionWithSGD();
+    LogisticRegressionWithSGD lrImpl = new LogisticRegressionWithSGD(1.0, 100, 1.0, 1.0);
     lrImpl.setIntercept(true);
-    lrImpl.optimizer().setStepSize(1.0)
-      .setRegParam(1.0)
-      .setNumIterations(100);
     LogisticRegressionModel model = lrImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
@@ -72,8 +69,8 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession {
     List<LabeledPoint> validationData =
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 17);
 
-    LogisticRegressionModel model = LogisticRegressionWithSGD.train(
-      testRDD.rdd(), 100, 1.0, 1.0);
+    LogisticRegressionModel model = new LogisticRegressionWithSGD(1.0, 100, 0.01, 1.0)
+        .run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);

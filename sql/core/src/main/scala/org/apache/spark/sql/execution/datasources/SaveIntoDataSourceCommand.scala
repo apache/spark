@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.CreatableRelationProvider
-import org.apache.spark.util.Utils
 
 /**
  * Saves the results of `query` in to a data source.
@@ -40,7 +39,7 @@ case class SaveIntoDataSourceCommand(
     options: Map[String, String],
     mode: SaveMode) extends RunnableCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     dataSource.createRelation(
@@ -49,8 +48,14 @@ case class SaveIntoDataSourceCommand(
     Seq.empty[Row]
   }
 
-  override def simpleString: String = {
-    val redacted = Utils.redact(SparkEnv.get.conf, options.toSeq).toMap
+  override def simpleString(maxFields: Int): String = {
+    val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
+  }
+
+  // Override `clone` since the default implementation will turn `CaseInsensitiveMap` to a normal
+  // map.
+  override def clone(): LogicalPlan = {
+    SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
   }
 }

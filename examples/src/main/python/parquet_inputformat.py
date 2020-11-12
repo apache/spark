@@ -29,8 +29,6 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
 {u'favorite_color': u'red', u'name': u'Ben', u'favorite_numbers': []}
 <...more log output...>
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark.sql import SparkSession
@@ -45,7 +43,7 @@ if __name__ == "__main__":
                 /path/to/examples/parquet_inputformat.py <data_file>
         Assumes you have Parquet data stored in <data_file>.
         """, file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     path = sys.argv[1]
 

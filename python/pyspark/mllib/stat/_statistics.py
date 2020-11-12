@@ -16,10 +16,8 @@
 #
 
 import sys
-if sys.version >= '3':
-    basestring = str
 
-from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
@@ -98,10 +96,10 @@ class Statistics(object):
         """
         Compute the correlation (matrix) for the input RDD(s) using the
         specified method.
-        Methods currently supported: I{pearson (default), spearman}.
+        Methods currently supported: `pearson (default), spearman`.
 
         If a single RDD of Vectors is passed in, a correlation matrix
-        comparing the columns in the input RDD is returned. Use C{method=}
+        comparing the columns in the input RDD is returned. Use `method`
         to specify the method to be used for single RDD inout.
         If two RDDs of floats are passed in, a single float is returned.
 
@@ -157,7 +155,6 @@ class Statistics(object):
             return callMLlibFunc("corr", x.map(float), y.map(float), method)
 
     @staticmethod
-    @ignore_unicode_prefix
     def chiSqTest(observed, expected=None):
         """
         If `observed` is Vector, conduct Pearson's chi-squared goodness
@@ -199,9 +196,9 @@ class Statistics(object):
         >>> print(round(pearson.pValue, 4))
         0.8187
         >>> pearson.method
-        u'pearson'
+        'pearson'
         >>> pearson.nullHypothesis
-        u'observed follows the same distribution as expected.'
+        'observed follows the same distribution as expected.'
 
         >>> observed = Vectors.dense([21, 38, 43, 80])
         >>> expected = Vectors.dense([3, 5, 7, 20])
@@ -242,7 +239,6 @@ class Statistics(object):
         return ChiSqTestResult(jmodel)
 
     @staticmethod
-    @ignore_unicode_prefix
     def kolmogorovSmirnovTest(data, distName="norm", *params):
         """
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
@@ -259,7 +255,7 @@ class Statistics(object):
 
         The KS statistic gives us the maximum distance between the
         ECDF and the CDF. Intuitively if this statistic is large, the
-        probabilty that the null hypothesis is true becomes small.
+        probability that the null hypothesis is true becomes small.
         For specific details of the implementation, please have a look
         at the Scala documentation.
 
@@ -282,7 +278,7 @@ class Statistics(object):
         >>> print(round(ksmodel.statistic, 3))
         0.175
         >>> ksmodel.nullHypothesis
-        u'Sample follows theoretical distribution'
+        'Sample follows theoretical distribution'
 
         >>> data = sc.parallelize([2.0, 3.0, 4.0])
         >>> ksmodel = kstest(data, "norm", 3.0, 1.0)
@@ -293,7 +289,7 @@ class Statistics(object):
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD, got %s." % type(data))
-        if not isinstance(distName, basestring):
+        if not isinstance(distName, str):
             raise TypeError("distName should be a string, got %s." % type(distName))
 
         params = [float(param) for param in params]
@@ -303,7 +299,13 @@ class Statistics(object):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = globals().copy()
     spark = SparkSession.builder\
         .master("local[4]")\
@@ -313,7 +315,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,9 @@ import os
 import re
 import sys
 
-from releaseutils import *
+from releaseutils import tag_exists, raw_input, get_commits, yesOrNoPrompt, get_date, \
+    is_valid_author, capitalize_author, JIRA, find_components, translate_issue_type, \
+    translate_component, CORE_COMPONENT, contributors_file_name, nice_join
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -67,7 +69,7 @@ print("JIRA server: %s" % JIRA_API_BASE)
 print("Release tag: %s" % RELEASE_TAG)
 print("Previous release tag: %s" % PREVIOUS_RELEASE_TAG)
 print("Number of commits in this range: %s" % len(new_commits))
-print
+print("")
 
 
 def print_indented(_list):
@@ -88,10 +90,10 @@ filtered_commits = []
 
 
 def is_release(commit_title):
-    return re.findall("\[release\]", commit_title.lower()) or \
-        "preparing spark release" in commit_title.lower() or \
-        "preparing development version" in commit_title.lower() or \
-        "CHANGES.txt" in commit_title
+    return ("[release]" in commit_title.lower() or
+            "preparing spark release" in commit_title.lower() or
+            "preparing development version" in commit_title.lower() or
+            "CHANGES.txt" in commit_title)
 
 
 def is_maintenance(commit_title):

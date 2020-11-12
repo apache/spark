@@ -21,9 +21,11 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -58,8 +60,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveIntLit, negativeIntLit), -1)
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
-    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Add, tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
@@ -74,6 +80,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
     checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
     checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Long.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Int.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Short.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Byte.MinValue)), "overflow")
+      checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
+      checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
+      checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
+      checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
+      checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
+      checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
+    }
     checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
     checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
     checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
@@ -81,8 +103,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
 
-    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(UnaryMinus, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(UnaryMinus(_), tpe)
+        }
+      }
     }
   }
 
@@ -99,8 +125,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveIntLit, negativeIntLit), positiveInt - negativeInt)
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
-    DataTypeTestUtils.numericAndInterval.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Subtract, tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericAndInterval.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Subtract(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
@@ -117,8 +147,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveIntLit, negativeIntLit), positiveInt * negativeInt)
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
-    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Multiply, tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
@@ -131,28 +165,45 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     testDecimalAndDoubleType { convert =>
       val left = Literal(convert(2))
       val right = Literal(convert(1))
-      val dataType = left.dataType
       checkEvaluation(Divide(left, right), convert(2))
-      checkEvaluation(Divide(Literal.create(null, dataType), right), null)
+      checkEvaluation(Divide(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
     }
 
-    Seq(DoubleType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        Seq(DoubleType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Divide(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
-  // By fixing SPARK-15776, Divide's inputType is required to be DoubleType of DecimalType.
-  // TODO: in future release, we should add a IntegerDivide to support integral types.
-  ignore("/ (Divide) for integral type") {
-    checkEvaluation(Divide(Literal(1.toByte), Literal(2.toByte)), 0.toByte)
-    checkEvaluation(Divide(Literal(1.toShort), Literal(2.toShort)), 0.toShort)
-    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
-    checkEvaluation(Divide(Literal(1.toLong), Literal(2.toLong)), 0.toLong)
-    checkEvaluation(Divide(positiveShortLit, negativeShortLit), 0.toShort)
-    checkEvaluation(Divide(positiveIntLit, negativeIntLit), 0)
-    checkEvaluation(Divide(positiveLongLit, negativeLongLit), 0L)
+  private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
+    testFunc(_.toLong)
+    testFunc(Decimal(_))
+  }
+
+  test("/ (Divide) for Long and Decimal type") {
+    testDecimalAndLongType { convert =>
+      val left = Literal(convert(1))
+      val right = Literal(convert(2))
+      checkEvaluation(IntegralDivide(left, right), 0L)
+      checkEvaluation(IntegralDivide(Literal.create(null, left.dataType), right), null)
+      checkEvaluation(IntegralDivide(left, Literal.create(null, right.dataType)), null)
+      checkEvaluation(IntegralDivide(left, Literal(convert(0))), null)  // divide by zero
+    }
+    checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
+
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        Seq(LongType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+            IntegralDivide(_, _), tpe, tpe)
+        }
+      }
+    }
   }
 
   test("% (Remainder)") {
@@ -171,8 +222,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Remainder(positiveLongLit, positiveLongLit), 0L)
     checkEvaluation(Remainder(negativeLongLit, negativeLongLit), 0L)
 
-    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
-      checkConsistencyBetweenInterpretedAndCodegen(Remainder, tpe, tpe)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Remainder(_, _), tpe, tpe)
+        }
+      }
     }
   }
 
@@ -225,12 +280,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
 
-    // mod by 0
-    checkEvaluation(Pmod(Literal(-7), Literal(0)), null)
-    checkEvaluation(Pmod(Literal(7.2D), Literal(0D)), null)
-    checkEvaluation(Pmod(Literal(7.2F), Literal(0F)), null)
-    checkEvaluation(Pmod(Literal(2.toByte), Literal(0.toByte)), null)
-    checkEvaluation(Pmod(positiveShort, 0.toShort), null)
+    Seq("true", "false").foreach { failOnError =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
+        DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(Pmod(_, _), tpe, tpe)
+        }
+      }
+    }
   }
 
   test("function least") {
@@ -282,6 +338,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Least, dt, 2)
     }
+
+    val least = Least(Seq(
+      Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(least.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(least, Seq(1, 2))
   }
 
   test("function greatest") {
@@ -334,10 +396,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
+
+    val greatest = Greatest(Seq(
+      Literal.create(Seq(1, 2), ArrayType(IntegerType, containsNull = false)),
+      Literal.create(Seq(1, 3, null), ArrayType(IntegerType, containsNull = true))))
+    assert(greatest.dataType === ArrayType(IntegerType, containsNull = true))
+    checkEvaluation(greatest, Seq(1, 3, null))
   }
 
   test("SPARK-22499: Least and greatest should not generate codes beyond 64KB") {
-    val N = 3000
+    val N = 2000
     val strings = (1 to N).map(x => "s" * x)
     val inputsExpr = strings.map(Literal.create(_, StringType))
 
@@ -353,5 +421,159 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val ctx2 = new CodegenContext()
     Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
     assert(ctx2.inlinedMutableStates.size == 1)
+  }
+
+  test("SPARK-28322: IntegralDivide supports decimal type") {
+    checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
+    checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), 2L)
+    checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
+    checkEvaluation(IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null)
+    // overflows long and so returns a wrong result
+    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+      Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+      687399551400672280L)
+    // overflow during promote precision
+    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+      Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+      null)
+  }
+
+  test("SPARK-24598: overflow on long returns wrong result") {
+    val maxLongLiteral = Literal(Long.MaxValue)
+    val minLongLiteral = Literal(Long.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = Add(maxLongLiteral, Literal(1L))
+      val e2 = Subtract(maxLongLiteral, Literal(-1L))
+      val e3 = Multiply(maxLongLiteral, Literal(2L))
+      val e4 = Add(minLongLiteral, minLongLiteral)
+      val e5 = Subtract(minLongLiteral, maxLongLiteral)
+      val e6 = Multiply(minLongLiteral, minLongLiteral)
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val e1 = Add(maxLongLiteral, Literal(1L))
+      val e2 = Subtract(maxLongLiteral, Literal(-1L))
+      val e3 = Multiply(maxLongLiteral, Literal(2L))
+      val e4 = Add(minLongLiteral, minLongLiteral)
+      val e5 = Subtract(minLongLiteral, maxLongLiteral)
+      val e6 = Multiply(minLongLiteral, minLongLiteral)
+      checkEvaluation(e1, Long.MinValue)
+      checkEvaluation(e2, Long.MinValue)
+      checkEvaluation(e3, -2L)
+      checkEvaluation(e4, 0L)
+      checkEvaluation(e5, 1L)
+      checkEvaluation(e6, 0L)
+    }
+  }
+
+  test("SPARK-24598: overflow on integer returns wrong result") {
+    val maxIntLiteral = Literal(Int.MaxValue)
+    val minIntLiteral = Literal(Int.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = Add(maxIntLiteral, Literal(1))
+      val e2 = Subtract(maxIntLiteral, Literal(-1))
+      val e3 = Multiply(maxIntLiteral, Literal(2))
+      val e4 = Add(minIntLiteral, minIntLiteral)
+      val e5 = Subtract(minIntLiteral, maxIntLiteral)
+      val e6 = Multiply(minIntLiteral, minIntLiteral)
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val e1 = Add(maxIntLiteral, Literal(1))
+      val e2 = Subtract(maxIntLiteral, Literal(-1))
+      val e3 = Multiply(maxIntLiteral, Literal(2))
+      val e4 = Add(minIntLiteral, minIntLiteral)
+      val e5 = Subtract(minIntLiteral, maxIntLiteral)
+      val e6 = Multiply(minIntLiteral, minIntLiteral)
+      checkEvaluation(e1, Int.MinValue)
+      checkEvaluation(e2, Int.MinValue)
+      checkEvaluation(e3, -2)
+      checkEvaluation(e4, 0)
+      checkEvaluation(e5, 1)
+      checkEvaluation(e6, 0)
+    }
+  }
+
+  test("SPARK-24598: overflow on short returns wrong result") {
+    val maxShortLiteral = Literal(Short.MaxValue)
+    val minShortLiteral = Literal(Short.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = Add(maxShortLiteral, Literal(1.toShort))
+      val e2 = Subtract(maxShortLiteral, Literal((-1).toShort))
+      val e3 = Multiply(maxShortLiteral, Literal(2.toShort))
+      val e4 = Add(minShortLiteral, minShortLiteral)
+      val e5 = Subtract(minShortLiteral, maxShortLiteral)
+      val e6 = Multiply(minShortLiteral, minShortLiteral)
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val e1 = Add(maxShortLiteral, Literal(1.toShort))
+      val e2 = Subtract(maxShortLiteral, Literal((-1).toShort))
+      val e3 = Multiply(maxShortLiteral, Literal(2.toShort))
+      val e4 = Add(minShortLiteral, minShortLiteral)
+      val e5 = Subtract(minShortLiteral, maxShortLiteral)
+      val e6 = Multiply(minShortLiteral, minShortLiteral)
+      checkEvaluation(e1, Short.MinValue)
+      checkEvaluation(e2, Short.MinValue)
+      checkEvaluation(e3, (-2).toShort)
+      checkEvaluation(e4, 0.toShort)
+      checkEvaluation(e5, 1.toShort)
+      checkEvaluation(e6, 0.toShort)
+    }
+  }
+
+  test("SPARK-24598: overflow on byte returns wrong result") {
+    val maxByteLiteral = Literal(Byte.MaxValue)
+    val minByteLiteral = Literal(Byte.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = Add(maxByteLiteral, Literal(1.toByte))
+      val e2 = Subtract(maxByteLiteral, Literal((-1).toByte))
+      val e3 = Multiply(maxByteLiteral, Literal(2.toByte))
+      val e4 = Add(minByteLiteral, minByteLiteral)
+      val e5 = Subtract(minByteLiteral, maxByteLiteral)
+      val e6 = Multiply(minByteLiteral, minByteLiteral)
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val e1 = Add(maxByteLiteral, Literal(1.toByte))
+      val e2 = Subtract(maxByteLiteral, Literal((-1).toByte))
+      val e3 = Multiply(maxByteLiteral, Literal(2.toByte))
+      val e4 = Add(minByteLiteral, minByteLiteral)
+      val e5 = Subtract(minByteLiteral, maxByteLiteral)
+      val e6 = Multiply(minByteLiteral, minByteLiteral)
+      checkEvaluation(e1, Byte.MinValue)
+      checkEvaluation(e2, Byte.MinValue)
+      checkEvaluation(e3, (-2).toByte)
+      checkEvaluation(e4, 0.toByte)
+      checkEvaluation(e5, 1.toByte)
+      checkEvaluation(e6, 0.toByte)
+    }
+  }
+
+  test("SPARK-33008: division by zero on divide-like operations returns incorrect result") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val operators: Seq[((Expression, Expression) => Expression, ((Int => Any) => Unit) => Unit)] =
+        Seq((Divide(_, _), testDecimalAndDoubleType),
+          (IntegralDivide(_, _), testDecimalAndLongType),
+          (Remainder(_, _), testNumericDataTypes),
+          (Pmod(_, _), testNumericDataTypes))
+      operators.foreach { case (operator, testTypesFn) =>
+        testTypesFn { convert =>
+          val one = Literal(convert(1))
+          val zero = Literal(convert(0))
+          checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
+          checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
+          checkExceptionInExpression[ArithmeticException](operator(one, zero), "divide by zero")
+        }
+      }
+    }
   }
 }

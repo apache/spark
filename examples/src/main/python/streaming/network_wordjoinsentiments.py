@@ -30,8 +30,6 @@ r"""
     localhost 9999`
 """
 
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext
@@ -47,7 +45,7 @@ def print_happiest_words(rdd):
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: network_wordjoinsentiments.py <hostname> <port>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     sc = SparkContext(appName="PythonStreamingNetworkWordJoinSentiments")
     ssc = StreamingContext(sc, 5)

@@ -39,6 +39,7 @@ NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
 function exit_with_usage {
+  set +x
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
@@ -72,8 +73,16 @@ while (( "$#" )); do
     --help)
       exit_with_usage
       ;;
-    *)
+    --*)
+      echo "Error: $1 is not supported"
+      exit_with_usage
+      ;;
+    -*)
       break
+      ;;
+    *)
+      echo "Error: $1 is not supported"
+      exit_with_usage
       ;;
   esac
   shift
@@ -117,19 +126,19 @@ if [ ! "$(command -v "$MVN")" ] ; then
     exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ 2>/dev/null\
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ 2>/dev/null\
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
+SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | fgrep --count "<id>hive</id>";\
@@ -152,12 +161,12 @@ fi
 # Build uber fat JAR
 cd "$SPARK_HOME"
 
-export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=512m}"
+export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:ReservedCodeCacheSize=1g}"
 
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" -T 1C clean package -DskipTests $@)
+BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -184,6 +193,7 @@ fi
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
   mkdir -p "$DISTDIR/kubernetes/"
   cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/integration-tests/tests "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies
@@ -203,9 +213,13 @@ mkdir -p "$DISTDIR/examples/src/main"
 cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
-cp "$SPARK_HOME/LICENSE" "$DISTDIR"
-cp -r "$SPARK_HOME/licenses" "$DISTDIR"
-cp "$SPARK_HOME/NOTICE" "$DISTDIR"
+if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
+  cp "$SPARK_HOME/LICENSE-binary" "$DISTDIR/LICENSE"
+  cp -r "$SPARK_HOME/licenses-binary" "$DISTDIR/licenses"
+  cp "$SPARK_HOME/NOTICE-binary" "$DISTDIR/NOTICE"
+else
+  echo "Skipping copying LICENSE files"
+fi
 
 if [ -e "$SPARK_HOME/CHANGES.txt" ]; then
   cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"
@@ -220,7 +234,7 @@ if [ "$MAKE_PIP" == "true" ]; then
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-  python setup.py sdist
+  python3 setup.py sdist
   popd > /dev/null
 else
   echo "Skipping building python distribution package"

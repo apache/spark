@@ -19,10 +19,15 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.regex.{Pattern, PatternSyntaxException}
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
-object StringUtils {
+object StringUtils extends Logging {
 
   /**
    * Validate and convert SQL 'like' pattern to a Java regular expression.
@@ -33,9 +38,10 @@ object StringUtils {
    * throw an [[AnalysisException]].
    *
    * @param pattern the SQL pattern to convert
+   * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String): String = {
+  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
@@ -44,13 +50,14 @@ object StringUtils {
 
     while (in.hasNext) {
       in.next match {
-        case '\\' if in.hasNext =>
+        case c1 if c1 == escapeChar && in.hasNext =>
           val c = in.next
           c match {
-            case '_' | '%' | '\\' => out ++= Pattern.quote(Character.toString(c))
+            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
+            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
             case _ => fail(s"the escape character is not allowed to precede '$c'")
           }
-        case '\\' => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
@@ -59,11 +66,17 @@ object StringUtils {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
-  private[this] val trueStrings = Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
-  private[this] val falseStrings = Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+  private[this] val trueStrings =
+    Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 
-  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
-  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+  private[this] val falseStrings =
+    Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
+
+  // scalastyle:off caselocale
+  def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.trimAll().toLowerCase)
+
+  def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trimAll().toLowerCase)
+  // scalastyle:on caselocale
 
   /**
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
@@ -84,5 +97,75 @@ object StringUtils {
       }
     }
     funcNames.toSeq
+  }
+
+  /**
+   * Concatenation of sequence of strings to final string with cheap append method
+   * and one memory allocation for the final string.  Can also bound the final size of
+   * the string.
+   */
+  class StringConcat(val maxLength: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+    protected val strings = new ArrayBuffer[String]
+    protected var length: Int = 0
+
+    def atLimit: Boolean = length >= maxLength
+
+    /**
+     * Appends a string and accumulates its length to allocate a string buffer for all
+     * appended strings once in the toString method.  Returns true if the string still
+     * has room for further appends before it hits its max limit.
+     */
+    def append(s: String): Unit = {
+      if (s != null) {
+        val sLen = s.length
+        if (!atLimit) {
+          val available = maxLength - length
+          val stringToAppend = if (available >= sLen) s else s.substring(0, available)
+          strings.append(stringToAppend)
+        }
+
+        // Keeps the total length of appended strings. Note that we need to cap the length at
+        // `ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH`; otherwise, we will overflow
+        // length causing StringIndexOutOfBoundsException in the substring call above.
+        length = Math.min(length.toLong + sLen, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH).toInt
+      }
+    }
+
+    /**
+     * The method allocates memory for all appended strings, writes them to the memory and
+     * returns concatenated string.
+     */
+    override def toString: String = {
+      val finalLength = if (atLimit) maxLength else length
+      val result = new java.lang.StringBuilder(finalLength)
+      strings.foreach(result.append)
+      result.toString
+    }
+  }
+
+  /**
+   * A string concatenator for plan strings.  Uses length from a configured value, and
+   *  prints a warning the first time a plan is truncated.
+   */
+  class PlanStringConcat extends StringConcat(Math.max(0, SQLConf.get.maxPlanStringLength - 30)) {
+    override def toString: String = {
+      if (atLimit) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too long. The " +
+            s"plan had length ${length} and the maximum is ${maxLength}. This behavior " +
+            s"can be adjusted by setting '${SQLConf.MAX_PLAN_STRING_LENGTH.key}'.")
+        val truncateMsg = if (maxLength == 0) {
+          s"Truncated plan of $length characters"
+        } else {
+          s"... ${length - maxLength} more characters"
+        }
+        val result = new java.lang.StringBuilder(maxLength + truncateMsg.length)
+        strings.foreach(result.append)
+        result.append(truncateMsg)
+        result.toString
+      } else {
+        super.toString
+      }
+    }
   }
 }

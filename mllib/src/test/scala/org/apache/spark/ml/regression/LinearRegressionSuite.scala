@@ -17,18 +17,24 @@
 
 package org.apache.spark.ml.regression
 
+import scala.collection.JavaConverters._
 import scala.util.Random
+
+import org.dmg.pmml.{OpType, PMML}
+import org.dmg.pmml.regression.{RegressionModel => PMMLRegressionModel}
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 
-class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
+
+class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
 
   import testImplicits._
 
@@ -180,6 +186,18 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model.hasParent)
     val numFeatures = datasetWithDenseFeature.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
+  }
+
+  test("linear regression: can transform data with LinearRegressionModel") {
+    withClue("training related params like loss are only validated during fitting phase") {
+      val original = new LinearRegression().fit(datasetWithDenseFeature)
+
+      val deserialized = new LinearRegressionModel(uid = original.uid,
+        coefficients = original.coefficients,
+        intercept = original.intercept)
+      val output = deserialized.transform(datasetWithDenseFeature)
+      assert(output.collect().size > 0) // simple assertion to ensure no exception thrown
+    }
   }
 
   test("linear regression: illegal params") {
@@ -636,6 +654,33 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("prediction on single instance") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(datasetWithDenseFeature)
+
+    testPredictionModelSinglePrediction(model, datasetWithDenseFeature)
+  }
+
+  test("LinearRegression on blocks") {
+    for (dataset <- Seq(datasetWithDenseFeature, datasetWithStrongNoise,
+      datasetWithDenseFeatureWithoutIntercept, datasetWithSparseFeature, datasetWithWeight,
+      datasetWithWeightConstantLabel, datasetWithWeightZeroLabel, datasetWithOutlier);
+         fitIntercept <- Seq(true, false);
+         loss <- Seq("squaredError", "huber")) {
+      val lir = new LinearRegression()
+        .setFitIntercept(fitIntercept)
+        .setLoss(loss)
+        .setMaxIter(3)
+      val model = lir.fit(dataset)
+      Seq(4, 16, 64).foreach { blockSize =>
+        val model2 = lir.setBlockSize(blockSize).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-9)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+        assert(model.scale ~== model2.scale relTol 1e-9)
+      }
+    }
+  }
+
   test("linear regression model with constant label") {
     /*
        R code:
@@ -716,6 +761,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
           .fit(datasetWithWeightConstantLabel)
         if (fitIntercept) {
           assert(model1.summary.objectiveHistory(0) ~== 0.0 absTol 1e-4)
+          assert(model1.summary.totalIterations === 0)
         }
         val model2 = new LinearRegression()
           .setFitIntercept(fitIntercept)
@@ -723,6 +769,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
           .setSolver("l-bfgs")
           .fit(datasetWithWeightZeroLabel)
         assert(model2.summary.objectiveHistory(0) ~== 0.0 absTol 1e-4)
+        assert(model2.summary.totalIterations === 0)
       }
     }
   }
@@ -855,6 +902,59 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("linear regression model training summary with weighted samples") {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = new LinearRegression().setSolver(solver)
+      val trainer2 = new LinearRegression().setSolver(solver).setWeightCol("weight")
+
+      Seq(0.25, 1.0, 10.0, 50.00).foreach { w =>
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature.withColumn("weight", lit(w)))
+        assert(model1.summary.explainedVariance ~== model2.summary.explainedVariance relTol 1e-6)
+        assert(model1.summary.meanAbsoluteError ~== model2.summary.meanAbsoluteError relTol 1e-6)
+        assert(model1.summary.meanSquaredError ~== model2.summary.meanSquaredError relTol 1e-6)
+        assert(model1.summary.rootMeanSquaredError ~==
+          model2.summary.rootMeanSquaredError relTol 1e-6)
+        assert(model1.summary.r2 ~== model2.summary.r2 relTol 1e-6)
+        assert(model1.summary.r2adj ~== model2.summary.r2adj relTol 1e-6)
+      }
+    }
+  }
+
+  test("linear regression model testset evaluation summary with weighted samples") {
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      val trainer1 = new LinearRegression().setSolver(solver)
+      val trainer2 = new LinearRegression().setSolver(solver).setWeightCol("weight")
+
+      Seq(0.25, 1.0, 10.0, 50.00).foreach { w =>
+        val model1 = trainer1.fit(datasetWithDenseFeature)
+        val model2 = trainer2.fit(datasetWithDenseFeature.withColumn("weight", lit(w)))
+        val testSummary1 = model1.evaluate(datasetWithDenseFeature)
+        val testSummary2 = model2.evaluate(datasetWithDenseFeature.withColumn("weight", lit(w)))
+        assert(testSummary1.explainedVariance ~== testSummary2.explainedVariance relTol 1e-6)
+        assert(testSummary1.meanAbsoluteError ~== testSummary2.meanAbsoluteError relTol 1e-6)
+        assert(testSummary1.meanSquaredError ~== testSummary2.meanSquaredError relTol 1e-6)
+        assert(testSummary1.rootMeanSquaredError ~==
+          testSummary2.rootMeanSquaredError relTol 1e-6)
+        assert(testSummary1.r2 ~== testSummary2.r2 relTol 1e-6)
+        assert(testSummary1.r2adj ~== testSummary2.r2adj relTol 1e-6)
+      }
+    }
+  }
+
+  test("linear regression training summary totalIterations") {
+    Seq(1, 5, 10, 20).foreach { maxIter =>
+      val trainer = new LinearRegression().setSolver("l-bfgs").setMaxIter(maxIter)
+      val model = trainer.fit(datasetWithDenseFeature)
+      assert(model.summary.totalIterations <= maxIter)
+    }
+    Seq("auto", "normal").foreach { solver =>
+      val trainer = new LinearRegression().setSolver(solver)
+      val model = trainer.fit(datasetWithDenseFeature)
+      assert(model.summary.totalIterations === 0)
+    }
+  }
+
   test("linear regression with weighted samples") {
     val sqlContext = spark.sqlContext
     import sqlContext.implicits._
@@ -879,6 +979,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setStandardization(standardization)
         .setRegParam(regParam)
         .setElasticNetParam(elasticNetParam)
+        .setSolver(solver)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
@@ -895,6 +997,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setFitIntercept(fitIntercept)
         .setStandardization(standardization)
         .setRegParam(regParam)
+        .setMaxIter(1)
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithOutlier.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
@@ -1043,6 +1146,24 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
     val lr = new LinearRegression()
     testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
       LinearRegressionSuite.allParamSettings, checkModelData)
+  }
+
+  test("pmml export") {
+    val lr = new LinearRegression()
+    val model = lr.fit(datasetWithWeight)
+    def checkModel(pmml: PMML): Unit = {
+      val dd = pmml.getDataDictionary
+      assert(dd.getNumberOfFields === 3)
+      val fields = dd.getDataFields.asScala
+      assert(fields(0).getName().toString === "field_0")
+      assert(fields(0).getOpType() == OpType.CONTINUOUS)
+      val pmmlRegressionModel = pmml.getModels().get(0).asInstanceOf[PMMLRegressionModel]
+      val pmmlPredictors = pmmlRegressionModel.getRegressionTables.get(0).getNumericPredictors
+      val pmmlWeights = pmmlPredictors.asScala.map(_.getCoefficient()).toList
+      assert(pmmlWeights(0) ~== model.coefficients(0) relTol 1E-3)
+      assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
+    }
+    testPMMLWrite(sc, model, checkModel)
   }
 
   test("should support all NumericType labels and weights, and not support other types") {

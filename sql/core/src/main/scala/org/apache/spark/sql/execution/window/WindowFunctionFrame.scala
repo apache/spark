@@ -21,6 +21,7 @@ import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 
@@ -30,7 +31,7 @@ import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
  * Before use a frame must be prepared by passing it all the rows in the current partition. After
  * preparation the update method can be called to fill the output rows.
  */
-private[window] abstract class WindowFunctionFrame {
+abstract class WindowFunctionFrame {
   /**
    * Prepare the frame for calculating the results for a partition.
    *
@@ -42,6 +43,20 @@ private[window] abstract class WindowFunctionFrame {
    * Write the current results to the target row.
    */
   def write(index: Int, current: InternalRow): Unit
+
+  /**
+   * The current lower window bound in the row array (inclusive).
+   *
+   * This should be called after the current row is updated via `write`.
+   */
+  def currentLowerBound(): Int
+
+  /**
+   * The current row index of the upper window bound in the row array (exclusive)
+   *
+   * This should be called after the current row is updated via `write`.
+   */
+  def currentUpperBound(): Int
 }
 
 object WindowFunctionFrame {
@@ -62,7 +77,7 @@ object WindowFunctionFrame {
  * @param newMutableProjection function used to create the projection.
  * @param offset by which rows get moved within a partition.
  */
-private[window] final class OffsetWindowFunctionFrame(
+abstract class OffsetWindowFunctionFrameBase(
     target: InternalRow,
     ordinal: Int,
     expressions: Array[OffsetWindowFunction],
@@ -72,35 +87,34 @@ private[window] final class OffsetWindowFunctionFrame(
   extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
-  private[this] var input: ExternalAppendOnlyUnsafeRowArray = null
+  protected var input: ExternalAppendOnlyUnsafeRowArray = null
 
   /**
    * An iterator over the [[input]]
    */
-  private[this] var inputIterator: Iterator[UnsafeRow] = _
+  protected var inputIterator: Iterator[UnsafeRow] = _
 
   /** Index of the input row currently used for output. */
-  private[this] var inputIndex = 0
+  protected var inputIndex = 0
 
   /**
    * Create the projection used when the offset row exists.
    * Please note that this project always respect null input values (like PostgreSQL).
    */
-  private[this] val projection = {
+  protected val projection = {
     // Collect the expressions and bind them.
     val inputAttrs = inputSchema.map(_.withNullability(true))
-    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
-      BindReferences.bindReference(e.input, inputAttrs)
-    }
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
+      expressions.toSeq.map(_.input), inputAttrs)
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
   }
 
   /** Create the projection used when the offset row DOES NOT exists. */
-  private[this] val fillDefaultValue = {
+  protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val inputAttrs = inputSchema.map(_.withNullability(true))
+    val inputAttrs: AttributeSeq = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
@@ -114,6 +128,28 @@ private[window] final class OffsetWindowFunctionFrame(
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
   }
+
+  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+
+  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+}
+
+/**
+ * The frameless offset window frame is an internal window frame just used to optimize the
+ * performance for the window function that returns the value of the input column offset
+ * by a number of rows according to the current row. The internal window frame is not a popular
+ * window frame cannot be specified and used directly by the users. This window frame
+ * calculates frames containing LEAD/LAG statements.
+ */
+class FrameLessOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -140,6 +176,95 @@ private[window] final class OffsetWindowFunctionFrame(
 }
 
 /**
+ * The unbounded offset window frame is an internal window frame just used to optimize the
+ * performance for the window function that returns the value of the input column offset
+ * by a number of rows within the frame and has specified ROWS BETWEEN UNBOUNDED PRECEDING
+ * AND UNBOUNDED FOLLOWING. The internal window frame is not a popular window frame cannot be
+ * specified and used directly by the users.
+ * The unbounded offset window frame calculates frames containing NTH_VALUE statements.
+ * The unbounded offset window frame return the same value for all rows in the window partition.
+ */
+class UnboundedOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+  assert(offset > 0)
+
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    input = rows
+    if (offset > input.length) {
+      fillDefaultValue(EmptyRow)
+    } else {
+      inputIterator = input.generateIterator()
+      // drain the first few rows if offset is larger than one
+      inputIndex = 0
+      while (inputIndex < offset - 1) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      projection(r)
+    }
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    // The results are the same for each row in the partition, and have been evaluated in prepare.
+    // Don't need to recalculate here.
+  }
+}
+
+/**
+ * The unbounded preceding offset window frame is an internal window frame just used to optimize
+ * the performance for the window function that returns the value of the input column offset
+ * by a number of rows within the frame and has specified ROWS BETWEEN UNBOUNDED PRECEDING
+ * AND CURRENT ROW. The internal window frame is not a popular window frame cannot be specified
+ * and used directly by the users.
+ * The unbounded preceding offset window frame calculates frames containing NTH_VALUE statements.
+ * The unbounded preceding offset window frame return the same value for rows which index
+ * (starting from 1) equal to or greater than offset in the window partition.
+ */
+class UnboundedPrecedingOffsetWindowFunctionFrame(
+    target: InternalRow,
+    ordinal: Int,
+    expressions: Array[OffsetWindowFunction],
+    inputSchema: Seq[Attribute],
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+    offset: Int)
+  extends OffsetWindowFunctionFrameBase(
+    target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
+  assert(offset > 0)
+
+  var selectedRow: UnsafeRow = null
+
+  override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    input = rows
+    inputIterator = input.generateIterator()
+    // drain the first few rows if offset is larger than one
+    inputIndex = 0
+    while (inputIndex < offset - 1) {
+      if (inputIterator.hasNext) inputIterator.next()
+      inputIndex += 1
+    }
+    if (inputIndex < input.length) {
+      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+    }
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    if (index >= inputIndex && selectedRow != null) {
+      projection(selectedRow)
+    } else {
+      fillDefaultValue(EmptyRow)
+    }
+  }
+}
+
+/**
  * The sliding window frame calculates frames with the following SQL form:
  * ... BETWEEN 1 PRECEDING AND 1 FOLLOWING
  *
@@ -148,7 +273,7 @@ private[window] final class OffsetWindowFunctionFrame(
  * @param lbound comparator used to identify the lower bound of an output row.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[window] final class SlidingWindowFunctionFrame(
+final class SlidingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
@@ -170,24 +295,24 @@ private[window] final class SlidingWindowFunctionFrame(
   private[this] val buffer = new util.ArrayDeque[InternalRow]()
 
   /**
-   * Index of the first input row with a value greater than the upper bound of the current
-   * output row.
-   */
-  private[this] var inputHighIndex = 0
-
-  /**
    * Index of the first input row with a value equal to or greater than the lower bound of the
    * current output row.
    */
-  private[this] var inputLowIndex = 0
+  private[this] var lowerBound = 0
+
+  /**
+   * Index of the first input row with a value greater than the upper bound of the current
+   * output row.
+   */
+  private[this] var upperBound = 0
 
   /** Prepare the frame for calculating a new partition. Reset all variables. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
     nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-    inputHighIndex = 0
-    inputLowIndex = 0
+    lowerBound = 0
+    upperBound = 0
     buffer.clear()
   }
 
@@ -197,27 +322,27 @@ private[window] final class SlidingWindowFunctionFrame(
 
     // Drop all rows from the buffer for which the input row value is smaller than
     // the output row lower bound.
-    while (!buffer.isEmpty && lbound.compare(buffer.peek(), inputLowIndex, current, index) < 0) {
+    while (!buffer.isEmpty && lbound.compare(buffer.peek(), lowerBound, current, index) < 0) {
       buffer.remove()
-      inputLowIndex += 1
+      lowerBound += 1
       bufferUpdated = true
     }
 
     // Add all rows to the buffer for which the input row value is equal to or less than
     // the output row upper bound.
-    while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
-      if (lbound.compare(nextRow, inputLowIndex, current, index) < 0) {
-        inputLowIndex += 1
+    while (nextRow != null && ubound.compare(nextRow, upperBound, current, index) <= 0) {
+      if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
+        lowerBound += 1
       } else {
         buffer.add(nextRow.copy())
         bufferUpdated = true
       }
       nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputHighIndex += 1
+      upperBound += 1
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (processor != null && bufferUpdated) {
       processor.initialize(input.length)
       val iter = buffer.iterator()
       while (iter.hasNext) {
@@ -226,6 +351,10 @@ private[window] final class SlidingWindowFunctionFrame(
       processor.evaluate(target)
     }
   }
+
+  override def currentLowerBound(): Int = lowerBound
+
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -239,27 +368,38 @@ private[window] final class SlidingWindowFunctionFrame(
  * @param target to write results to.
  * @param processor to calculate the row values with.
  */
-private[window] final class UnboundedWindowFunctionFrame(
+final class UnboundedWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor)
   extends WindowFunctionFrame {
 
+  val lowerBound: Int = 0
+  var upperBound: Int = 0
+
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    processor.initialize(rows.length)
+    if (processor != null) {
+      processor.initialize(rows.length)
+      val iterator = rows.generateIterator()
+      while (iterator.hasNext) {
+        processor.update(iterator.next())
+      }
 
-    val iterator = rows.generateIterator()
-    while (iterator.hasNext) {
-      processor.update(iterator.next())
+      processor.evaluate(target)
     }
+
+    upperBound = rows.length
   }
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(index: Int, current: InternalRow): Unit = {
-    // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
-    // for each row.
-    processor.evaluate(target)
+    // The results are the same for each row in the partition, and have been evaluated in prepare.
+    // Don't need to recalculate here.
   }
+
+  override def currentLowerBound(): Int = lowerBound
+
+  override def currentUpperBound(): Int = upperBound
 }
 
 /**
@@ -276,7 +416,7 @@ private[window] final class UnboundedWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param ubound comparator used to identify the upper bound of an output row.
  */
-private[window] final class UnboundedPrecedingWindowFunctionFrame(
+final class UnboundedPrecedingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     ubound: BoundOrdering)
@@ -308,7 +448,9 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
       nextRow = inputIterator.next()
     }
 
-    processor.initialize(input.length)
+    if (processor != null) {
+      processor.initialize(input.length)
+    }
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -318,17 +460,23 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
     // Add all rows to the aggregates for which the input row value is equal to or less than
     // the output row upper bound.
     while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
-      processor.update(nextRow)
+      if (processor != null) {
+        processor.update(nextRow)
+      }
       nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
       inputIndex += 1
       bufferUpdated = true
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (processor != null && bufferUpdated) {
       processor.evaluate(target)
     }
   }
+
+  override def currentLowerBound(): Int = 0
+
+  override def currentUpperBound(): Int = inputIndex
 }
 
 /**
@@ -347,7 +495,7 @@ private[window] final class UnboundedPrecedingWindowFunctionFrame(
  * @param processor to calculate the row values with.
  * @param lbound comparator used to identify the lower bound of an output row.
  */
-private[window] final class UnboundedFollowingWindowFunctionFrame(
+final class UnboundedFollowingWindowFunctionFrame(
     target: InternalRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering)
@@ -384,7 +532,7 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
     }
 
     // Only recalculate and update when the buffer changes.
-    if (bufferUpdated) {
+    if (processor != null && bufferUpdated) {
       processor.initialize(input.length)
       if (nextRow != null) {
         processor.update(nextRow)
@@ -395,4 +543,8 @@ private[window] final class UnboundedFollowingWindowFunctionFrame(
       processor.evaluate(target)
     }
   }
+
+  override def currentLowerBound(): Int = inputIndex
+
+  override def currentUpperBound(): Int = input.length
 }

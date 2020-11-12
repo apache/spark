@@ -31,9 +31,9 @@ private[spark] object ToolTips {
   val SHUFFLE_READ_BLOCKED_TIME =
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
-  val INPUT = "Bytes and records read from Hadoop or from Spark storage."
+  val INPUT = "Bytes read from Hadoop or from Spark storage."
 
-  val OUTPUT = "Bytes and records written to Hadoop."
+  val OUTPUT = "Bytes written to Hadoop."
 
   val STORAGE_MEMORY =
     "Memory used / total available memory for storage of data " +
@@ -91,12 +91,12 @@ private[spark] object ToolTips {
   val TASK_TIME =
   "Shaded red when garbage collection (GC) time is over 10% of task time"
 
-  val BLACKLISTED =
-  "Shows if this executor has been blacklisted by the scheduler due to task failures."
-
   val APPLICATION_EXECUTOR_LIMIT =
     """Maximum number of executors that this application will use. This limit is finite only when
        dynamic allocation is enabled. The number of granted executors may exceed the limit
        ephemerally when executors are being killed.
     """
+
+  val DURATION =
+    "Elapsed time since the stage was submitted until execution completion of all its tasks."
 }

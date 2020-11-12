@@ -16,15 +16,21 @@ select + + 100;
 select - - max(key) from testdata;
 select + - key from testdata where key = 33;
 
--- div
+-- division
 select 5 / 2;
 select 5 / 0;
 select 5 / null;
 select null / 5;
+
+-- integral div
 select 5 div 2;
 select 5 div 0;
 select 5 div null;
 select null div 5;
+select cast(51 as decimal(10, 0)) div cast(2 as decimal(2, 0));
+select cast(5 as decimal(1, 0)) div cast(0 as decimal(2, 0));
+select cast(5 as decimal(1, 0)) div cast(null as decimal(2, 0));
+select cast(null as decimal(1, 0)) div cast(5 as decimal(2, 0));
 
 -- other arithmetics
 select 1 + 2;
@@ -32,27 +38,6 @@ select 1 - 2;
 select 2 * 5;
 select 5 % 3;
 select pmod(-7, 3);
-
--- check operator precedence.
--- We follow Oracle operator precedence in the table below that lists the levels of precedence
--- among SQL operators from high to low:
-------------------------------------------------------------------------------------------
--- Operator                                          Operation
-------------------------------------------------------------------------------------------
--- +, -                                              identity, negation
--- *, /                                              multiplication, division
--- +, -, ||                                          addition, subtraction, concatenation
--- =, !=, <, >, <=, >=, IS NULL, LIKE, BETWEEN, IN   comparison
--- NOT                                               exponentiation, logical negation
--- AND                                               conjunction
--- OR                                                disjunction
-------------------------------------------------------------------------------------------
-explain select 'a' || 1 + 2;
-explain select 1 - 2 || 'b';
-explain select 2 * 4  + 3 || 'b';
-explain select 3 + 1 || 'a' || 4 / 2;
-explain select 1 == 1 OR 'a' || 'b' ==  'ab';
-explain select 'a' || 'c' == 'ac' AND 2 == 3;
 
 -- math functions
 select cot(1);
@@ -96,3 +81,17 @@ select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);
 -- pmod
 select pmod(-7, 2), pmod(0, 2), pmod(7, 0), pmod(7, null), pmod(null, 2), pmod(null, null);
 select pmod(cast(3.13 as decimal), cast(0 as decimal)), pmod(cast(2 as smallint), cast(0 as smallint));
+
+-- width_bucket
+select width_bucket(5.35, 0.024, 10.06, 5);
+select width_bucket(5.35, 0.024, 10.06, 3 + 2);
+select width_bucket('5.35', '0.024', '10.06', '5');
+select width_bucket(5.35, 0.024, 10.06, 2.5);
+select width_bucket(5.35, 0.024, 10.06, 0.5);
+select width_bucket(null, 0.024, 10.06, 5);
+select width_bucket(5.35, null, 10.06, 5);
+select width_bucket(5.35, 0.024, null, -5);
+select width_bucket(5.35, 0.024, 10.06, null);
+select width_bucket(5.35, 0.024, 10.06, -5);
+select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L); -- long max value
+select width_bucket(5.35, 0.024, 10.06, 9223372036854775807L - 1);

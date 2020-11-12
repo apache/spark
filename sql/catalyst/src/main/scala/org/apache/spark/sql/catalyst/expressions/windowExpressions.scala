@@ -21,7 +21,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
 /**
@@ -49,7 +50,6 @@ case class WindowSpecDefinition(
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
   override def nullable: Boolean = true
-  override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException("dataType")
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -70,9 +70,9 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType.simpleString}' used in the order " +
+          s"The data type '${orderSpec.head.dataType.catalogString}' used in the order " +
             "specification does not match the data type " +
-            s"'${f.valueBoundary.head.dataType.simpleString}' which is used in the range frame.")
+            s"'${f.valueBoundary.head.dataType.catalogString}' which is used in the range frame.")
       case _ => TypeCheckSuccess
     }
   }
@@ -143,7 +143,6 @@ case object RangeFrame extends FrameType {
 sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
   override def dataType: DataType = NullType
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
 }
 
@@ -167,7 +166,6 @@ case object CurrentRow extends SpecialFrameBoundary {
 sealed trait WindowFrame extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
   override def dataType: DataType = throw new UnsupportedOperationException("dataType")
-  override def foldable: Boolean = false
   override def nullable: Boolean = false
 }
 
@@ -205,7 +203,7 @@ case class SpecifiedWindowFrame(
     // Check combination (of expressions).
     (lower, upper) match {
       case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
-        TypeCheckFailure(s"Window frame upper bound '$upper' does not followes the lower bound " +
+        TypeCheckFailure(s"Window frame upper bound '$upper' does not follow the lower bound " +
           s"'$lower'.")
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
@@ -237,12 +235,16 @@ case class SpecifiedWindowFrame(
 
   private def boundarySql(expr: Expression): String = expr match {
     case e: SpecialFrameBoundary => e.sql
-    case UnaryMinus(n) => n.sql + " PRECEDING"
+    case UnaryMinus(n, _) => n.sql + " PRECEDING"
     case e: Expression => e.sql + " FOLLOWING"
   }
 
-  private def isGreaterThan(l: Expression, r: Expression): Boolean = {
-    GreaterThan(l, r).eval().asInstanceOf[Boolean]
+  // Check whether the left boundary value is greater than the right boundary value. It's required
+  // that the both expressions have the same data type.
+  // Since CalendarIntervalType is not comparable, we only compare expressions that are AtomicType.
+  private def isGreaterThan(l: Expression, r: Expression): Boolean = l.dataType match {
+    case _: AtomicType => GreaterThan(l, r).eval().asInstanceOf[Boolean]
+    case _ => false
   }
 
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
@@ -251,7 +253,7 @@ case class SpecifiedWindowFrame(
       TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType.simpleString}' does not match " +
+        s"The data type of the $location bound '${e.dataType.catalogString}' does not match " +
           s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
@@ -270,7 +272,6 @@ case class UnresolvedWindowExpression(
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
@@ -282,7 +283,6 @@ case class WindowExpression(
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
 
   override def dataType: DataType = windowFunction.dataType
-  override def foldable: Boolean = windowFunction.foldable
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
@@ -298,17 +298,51 @@ trait WindowFunction extends Expression {
 }
 
 /**
- * An offset window function is a window function that returns the value of the input column offset
- * by a number of rows within the partition. For instance: an OffsetWindowfunction for value x with
- * offset -2, will get the value of x 2 rows back in the partition.
+ * Case objects that describe whether a window function is a SQL window function or a Python
+ * user-defined window function.
  */
-abstract class OffsetWindowFunction
-  extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
+sealed trait WindowFunctionType
+
+object WindowFunctionType {
+  case object SQL extends WindowFunctionType
+  case object Python extends WindowFunctionType
+
+  def functionType(windowExpression: NamedExpression): WindowFunctionType = {
+    val t = windowExpression.collectFirst {
+      case _: WindowFunction | _: AggregateFunction => SQL
+      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
+    }
+
+    // Normally a window expression would either have a SQL window function, a SQL
+    // aggregate function or a python window UDF. However, sometimes the optimizer will replace
+    // the window function if the value of the window function can be predetermined.
+    // For example, for query:
+    //
+    // select count(NULL) over () from values 1.0, 2.0, 3.0 T(a)
+    //
+    // The window function will be replaced by expression literal(0)
+    // To handle this case, if a window expression doesn't have a regular window function, we
+    // consider its type to be SQL as literal(0) is also a SQL expression.
+    t.getOrElse(SQL)
+  }
+}
+
+trait OffsetWindowFunction extends WindowFunction {
   /**
    * Input expression to evaluate against a row which a number of rows below or above (depending on
-   * the value and sign of the offset) the current row.
+   * the value and sign of the offset) the starting row (current row if isRelative=true, or the
+   * first row of the window frame otherwise).
    */
   val input: Expression
+
+  /**
+   * (Foldable) expression that contains the number of rows between the current row and the row
+   * where the input expression is evaluated. If `offset` is a positive integer, it means that
+   * the direction of the `offset` is from front to back. If it is a negative integer, the direction
+   * of the `offset` is from back to front. If it is zero, it means that the offset is ignored and
+   * use current row.
+   */
+  val offset: Expression
 
   /**
    * Default result value for the function when the `offset`th row does not exist.
@@ -316,16 +350,27 @@ abstract class OffsetWindowFunction
   val default: Expression
 
   /**
-   * (Foldable) expression that contains the number of rows between the current row and the row
-   * where the input expression is evaluated.
+   * An optional specification that indicates the offset window function should skip null values in
+   * the determination of which row to use.
    */
-  val offset: Expression
+  val ignoreNulls: Boolean
 
   /**
-   * Direction of the number of rows between the current row and the row where the input expression
-   * is evaluated.
+   * A fake window frame which is used to hold the offset information. It's used as a key to group
+   * by offset window functions in `WindowExecBase.windowFrameExpressionFactoryPairs`, as offset
+   * window functions with the same offset and same window frame can be evaluated together.
    */
-  val direction: SortDirection
+  lazy val fakeFrame = SpecifiedWindowFrame(RowFrame, offset, offset)
+}
+
+/**
+ * A frameless offset window function is a window function that cannot specify window frame and
+ * returns the value of the input column offset by a number of rows according to the current row
+ * within the partition. For instance: a FrameLessOffsetWindowFunction for value x with offset -2,
+ * will get the value of x 2 rows back from the current row in the partition.
+ */
+abstract class FrameLessOffsetWindowFunction
+  extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -334,18 +379,17 @@ abstract class OffsetWindowFunction
    * OffsetWindowFunction is executed, the input expression and the default expression. Even when
    * both the input and the default expression are foldable, the result is still not foldable due to
    * the frame.
+   *
+   * Note, the value of foldable is set to false in the trait Unevaluable
+   *
+   * override def foldable: Boolean = false
    */
-  override def foldable: Boolean = false
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
-  override lazy val frame: WindowFrame = {
-    val boundary = direction match {
-      case Ascending => offset
-      case Descending => UnaryMinus(offset)
-    }
-    SpecifiedWindowFrame(RowFrame, boundary, boundary)
-  }
+  override val ignoreNulls = false
+
+  override lazy val frame: WindowFrame = fakeFrame
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
@@ -371,11 +415,8 @@ abstract class OffsetWindowFunction
  * the window. Offsets start at 0, which is the current row. The offset must be constant
  * integer value. The default offset is 1. When the value of `input` is null at the `offset`th row,
  * null is returned. If there is no such offset row, the `default` expression is evaluated.
- *
- * @param input expression to evaluate `offset` rows after the current row.
- * @param offset rows to jump ahead in the partition.
- * @param default to use when the offset is larger than the window. The default value is null.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset[, default]]) - Returns the value of `input` at the `offset`th row
@@ -383,17 +424,33 @@ abstract class OffsetWindowFunction
       value of `default` is null. If the value of `input` at the `offset`th row is null,
       null is returned. If there is no such an offset row (e.g., when the offset is 1, the last
       row of the window does not have any subsequent row), `default` is returned.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * input - a string expression to evaluate `offset` rows after the current row.
+      * offset - an int expression which is rows to jump ahead in the partition.
+      * default - a string expression which is to use when the offset is larger than the window.
+          The default value is null.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	2
+       A1	2	NULL
+       A2	3	NULL
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class Lead(input: Expression, offset: Expression, default: Expression)
-    extends OffsetWindowFunction {
+    extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
 
   def this() = this(Literal(null))
-
-  override val direction = Ascending
 }
 
 /**
@@ -401,11 +458,8 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
  * the window. Offsets start at 0, which is the current row. The offset must be constant
  * integer value. The default offset is 1. When the value of `input` is null at the `offset`th row,
  * null is returned. If there is no such offset row, the `default` expression is evaluated.
- *
- * @param input expression to evaluate `offset` rows before the current row.
- * @param offset rows to jump back in the partition.
- * @param default to use when the offset row does not exist.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(input[, offset[, default]]) - Returns the value of `input` at the `offset`th row
@@ -413,9 +467,26 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
       value of `default` is null. If the value of `input` at the `offset`th row is null,
       null is returned. If there is no such offset row (e.g., when the offset is 1, the first
       row of the window does not have any previous row), `default` is returned.
-  """)
-case class Lag(input: Expression, offset: Expression, default: Expression)
-    extends OffsetWindowFunction {
+  """,
+  arguments = """
+    Arguments:
+      * input - a string expression to evaluate `offset` rows before the current row.
+      * offset - an int expression which is rows to jump back in the partition.
+      * default - a string expression which is to use when the offset row does not exist.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	NULL
+       A1	1	1
+       A1	2	1
+       A2	3	NULL
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+case class Lag(input: Expression, inputOffset: Expression, default: Expression)
+    extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
@@ -423,12 +494,17 @@ case class Lag(input: Expression, offset: Expression, default: Expression)
 
   def this() = this(Literal(null))
 
-  override val direction = Descending
+  override def children: Seq[Expression] = Seq(input, inputOffset, default)
+
+  override val offset: Expression = UnaryMinus(inputOffset) match {
+    case e: Expression if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+    case o => o
+  }
 }
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
   self: Product =>
-  override val frame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
+  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
@@ -442,7 +518,7 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
-  override val updateExpressions: Seq[Expression] = Add(rowNumber, one) :: Nil
+  override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
 }
 
 /**
@@ -466,11 +542,23 @@ object SizeBasedWindowFunction {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_() - Assigns a unique, sequential number to each row, starting with one,
       according to the ordering of rows within the window partition.
-  """)
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	2
+       A1	2	3
+       A2	3	1
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
   override def prettyName: String = "row_number"
@@ -484,17 +572,117 @@ case class RowNumber() extends RowNumberLike {
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the position of a value relative to all values in the partition.
-  """)
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_() OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	0.6666666666666666
+       A1	1	0.6666666666666666
+       A1	2	1.0
+       A2	3	1.0
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   override def dataType: DataType = DoubleType
   // The frame for CUME_DIST is Range based instead of Row based, because CUME_DIST must
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-  override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
+  override val evaluateExpression = rowNumber.cast(DoubleType) / n.cast(DoubleType)
   override def prettyName: String = "cume_dist"
+}
+
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_(input[, offset]) - Returns the value of `input` at the row that is the `offset`th row
+      from beginning of the window frame. Offset starts at 1. If ignoreNulls=true, we will skip
+      nulls when finding the `offset`th row. Otherwise, every row counts for the `offset`. If
+      there is no such an `offset`th row (e.g., when the offset is 10, size of the window frame
+      is less than 10), null is returned.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b, 2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	1
+       A1	2	1
+       A2	3	NULL
+  """,
+  arguments = """
+    Arguments:
+      * input - the target column or expression that the function operates on.
+      * offset - a positive int literal to indicate the offset in the window frame. It starts
+          with 1.
+      * ignoreNulls - an optional specification that indicates the NthValue should skip null
+          values in the determination of which row to use.
+  """,
+  since = "3.1.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
+    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes {
+
+  def this(child: Expression, offset: Expression) = this(child, offset, false)
+
+  override lazy val default = Literal.create(null, input.dataType)
+
+  override def children: Seq[Expression] = input :: offset :: Nil
+
+  override val frame: WindowFrame = UnspecifiedFrame
+
+  override def dataType: DataType = input.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else if (!offset.foldable) {
+      TypeCheckFailure(s"Offset expression '$offset' must be a literal.")
+    } else if (offsetVal <= 0) {
+      TypeCheckFailure(
+        s"The 'offset' argument of nth_value must be greater than zero but it is $offsetVal.")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  private lazy val offsetVal = offset.eval().asInstanceOf[Int].toLong
+  private lazy val result = AttributeReference("result", input.dataType)()
+  private lazy val count = AttributeReference("count", LongType)()
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = result :: count :: Nil
+
+  override lazy val initialValues: Seq[Literal] = Seq(
+    /* result = */ default,
+    /* count = */ Literal(1L)
+  )
+
+  override lazy val updateExpressions: Seq[Expression] = {
+    if (ignoreNulls) {
+      Seq(
+        /* result = */ If(count === offsetVal && input.isNotNull, input, result),
+        /* count = */ If(input.isNull, count, count + 1L)
+      )
+    } else {
+      Seq(
+        /* result = */ If(count === offsetVal, input, result),
+        /* count = */ count + 1L
+      )
+    }
+  }
+
+  override lazy val evaluateExpression: AttributeReference = result
+
+  override def prettyName: String = "nth_value"
+  override def sql: String =
+    s"$prettyName(${input.sql}, ${offset.sql})${if (ignoreNulls) " ignore nulls" else ""}"
 }
 
 /**
@@ -515,14 +703,29 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
  * threshold is increased by the bucket size (plus one extra if the current bucket is padded).
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param buckets number of buckets to divide the rows in. Default value is 1.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(n) - Divides the rows for each window partition into `n` buckets ranging
       from 1 to at most `n`.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * buckets - an int expression which is number of buckets to divide the rows in.
+          Default value is 1.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	1
+       A1	2	2
+       A2	3	1
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
@@ -553,8 +756,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
   private val bucketSize = AttributeReference("bucketSize", IntegerType, nullable = false)()
   private val bucketsWithPadding =
     AttributeReference("bucketsWithPadding", IntegerType, nullable = false)()
-  private def bucketOverflow(e: Expression) =
-    If(GreaterThanOrEqual(rowNumber, bucketThreshold), e, zero)
+  private def bucketOverflow(e: Expression) = If(rowNumber >= bucketThreshold, e, zero)
 
   override val aggBufferAttributes = Seq(
     rowNumber,
@@ -568,15 +770,14 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     zero,
     zero,
     zero,
-    Cast(Divide(n, buckets), IntegerType),
-    Cast(Remainder(n, buckets), IntegerType)
+    (n.cast(DecimalType.IntDecimal) / buckets.cast(DecimalType.IntDecimal)).cast(IntegerType),
+    (n % buckets).cast(IntegerType)
   )
 
   override val updateExpressions = Seq(
-    Add(rowNumber, one),
-    Add(bucket, bucketOverflow(one)),
-    Add(bucketThreshold, bucketOverflow(
-      Add(bucketSize, If(LessThan(bucket, bucketsWithPadding), one, zero)))),
+    rowNumber + one,
+    bucket + bucketOverflow(one),
+    bucketThreshold + bucketOverflow(bucketSize + If(bucket < bucketsWithPadding, one, zero)),
     NoOp,
     NoOp
   )
@@ -610,7 +811,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, nullable = false)()
   protected val zero = Literal(0)
   protected val one = Literal(1)
-  protected val increaseRowNumber = Add(rowNumber, one)
+  protected val increaseRowNumber = rowNumber + one
 
   /**
    * Different RankLike implementations use different source expressions to update their rank value.
@@ -619,7 +820,7 @@ abstract class RankLike extends AggregateWindowFunction {
   protected def rankSource: Expression = rowNumber
 
   /** Increase the rank when the current rank == 0 or when the one of order attributes changes. */
-  protected val increaseRank = If(And(orderEquals, Not(EqualTo(rank, zero))), rank, rankSource)
+  protected val increaseRank = If(orderEquals && rank =!= zero, rank, rankSource)
 
   override val aggBufferAttributes: Seq[AttributeReference] = rank +: rowNumber +: orderAttrs
   override val initialValues = zero +: one +: orderInit
@@ -637,17 +838,31 @@ abstract class RankLike extends AggregateWindowFunction {
  * will produce gaps in the sequence.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the rank of a value in a group of values. The result is one plus the number
       of rows preceding or equal to the current row in the ordering of the partition. The values
       will produce gaps in the sequence.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	1
+       A1	2	3
+       A2	3	1
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
@@ -659,21 +874,35 @@ case class Rank(children: Seq[Expression]) extends RankLike {
  * ranking sequence.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the rank of a value in a group of values. The result is one plus the
       previously assigned rank value. Unlike the function rank, dense_rank will not produce gaps
       in the ranking sequence.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	1
+       A1	1	1
+       A1	2	2
+       A2	3	1
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class DenseRank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
-  override protected def rankSource = Add(rank, one)
+  override protected def rankSource = rank + one
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
@@ -689,21 +918,34 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
  * row counts in the its numerator.
  *
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
- *
- * @param children to base the rank on; a change in the value of one of the children will trigger a
- *                 change in rank. This is an internal parameter and will be assigned by the
- *                 Analyser.
  */
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_() - Computes the percentage ranking of a value in a group of values.
-  """)
+  """,
+  arguments = """
+    Arguments:
+      * children - this is to base the rank on; a change in the value of one the children will
+          trigger a change in rank. This is an internal parameter and will be assigned by the
+          Analyser.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	0.0
+       A1	1	0.0
+       A1	2	1.0
+       A2	3	0.0
+  """,
+  since = "2.0.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBasedWindowFunction {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order)
   override def dataType: DataType = DoubleType
-  override val evaluateExpression = If(GreaterThan(n, one),
-      Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
-      Literal(0.0d))
+  override val evaluateExpression =
+    If(n > one, (rank - one).cast(DoubleType) / (n - one).cast(DoubleType), 0.0d)
   override def prettyName: String = "percent_rank"
 }

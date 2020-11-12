@@ -25,7 +25,8 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.Timer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.{config, Logging}
 
 /**
  * An event bus which posts events to its listeners.
@@ -36,6 +37,20 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
+
+  private lazy val env = SparkEnv.get
+
+  private lazy val logSlowEventEnabled = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
+  } else {
+    false
+  }
+
+  private lazy val logSlowEventThreshold = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
+  } else {
+    Long.MaxValue
+  }
 
   /**
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
@@ -61,6 +76,23 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   }
 
   /**
+   * Remove all listeners and they won't receive any events. This method is thread-safe and can be
+   * called in any thread.
+   */
+  final def removeAllListeners(): Unit = {
+    listenersPlusTimers.clear()
+  }
+
+  /**
+   * This can be overridden by subclasses if there is any extra cleanup to do when removing a
+   * listener.  In particular AsyncEventQueues can clean up queues in the LiveListenerBus.
+   */
+  def removeListenerOnError(listener: L): Unit = {
+    removeListener(listener)
+  }
+
+
+  /**
    * Post the event to all registered listeners. The `postToAll` caller should guarantee calling
    * `postToAll` in the same thread for all events.
    */
@@ -78,14 +110,27 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
       } else {
         null
       }
+      lazy val listenerName = Utils.getFormattedClassName(listener)
       try {
         doPostEvent(listener, event)
+        if (Thread.interrupted()) {
+          // We want to throw the InterruptedException right away so we can associate the interrupt
+          // with this listener, as opposed to waiting for a queue.take() etc. to detect it.
+          throw new InterruptedException()
+        }
       } catch {
-        case NonFatal(e) =>
-          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
+        case ie: InterruptedException =>
+          logError(s"Interrupted while posting to ${listenerName}. Removing that listener.", ie)
+          removeListenerOnError(listener)
+        case NonFatal(e) if !isIgnorableException(e) =>
+          logError(s"Listener ${listenerName} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
-          maybeTimerContext.stop()
+          val elapsed = maybeTimerContext.stop()
+          if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
+            logInfo(s"Process of event ${event} by listener ${listenerName} took " +
+              s"${elapsed / 1000000000d}s.")
+          }
         }
       }
     }
@@ -96,6 +141,9 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * thread for all listeners.
    */
   protected def doPostEvent(listener: L, event: E): Unit
+
+  /** Allows bus implementations to prevent error logging for certain exceptions. */
+  protected def isIgnorableException(e: Throwable): Boolean = false
 
   private[spark] def findListenersByClass[T <: L : ClassTag](): Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass

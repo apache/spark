@@ -20,6 +20,7 @@ package org.apache.spark.internal.io
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 
@@ -41,7 +42,7 @@ import org.apache.spark.util.Utils
  * 3. When all necessary tasks completed successfully, the driver calls commitJob. If the job
  *    failed to execute (e.g. too many failed tasks), the job should call abortJob.
  */
-abstract class FileCommitProtocol {
+abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**
@@ -128,11 +129,13 @@ abstract class FileCommitProtocol {
    * before the job has finished. These same task commit messages will be passed to commitJob()
    * if the entire job succeeds.
    */
-  def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {}
+  def onTaskCommit(taskCommit: TaskCommitMessage): Unit = {
+    logDebug(s"onTaskCommit($taskCommit)")
+  }
 }
 
 
-object FileCommitProtocol {
+object FileCommitProtocol extends Logging {
   class TaskCommitMessage(val obj: Any) extends Serializable
 
   object EmptyTaskCommitMessage extends TaskCommitMessage(null)
@@ -145,15 +148,23 @@ object FileCommitProtocol {
       jobId: String,
       outputPath: String,
       dynamicPartitionOverwrite: Boolean = false): FileCommitProtocol = {
-    val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
+
+    logDebug(s"Creating committer $className; job $jobId; output=$outputPath;" +
+      s" dynamic=$dynamicPartitionOverwrite")
+    val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
     // dynamicPartitionOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
       val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
+      logDebug("Using (String, String, Boolean) constructor")
       ctor.newInstance(jobId, outputPath, dynamicPartitionOverwrite.asInstanceOf[java.lang.Boolean])
     } catch {
       case _: NoSuchMethodException =>
+        logDebug("Falling back to (String, String) constructor")
+        require(!dynamicPartitionOverwrite,
+          "Dynamic Partition Overwrite is enabled but" +
+            s" the committer ${className} does not have the appropriate constructor")
         val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
         ctor.newInstance(jobId, outputPath)
     }

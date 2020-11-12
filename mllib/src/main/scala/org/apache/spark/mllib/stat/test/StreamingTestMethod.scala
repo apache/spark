@@ -33,7 +33,7 @@ import org.apache.spark.util.StatCounter
 /**
  * Significance testing methods for [[StreamingTest]]. New 2-sample statistical significance tests
  * should extend [[StreamingTestMethod]] and introduce a new entry in
- * [[StreamingTestMethod.TEST_NAME_TO_OBJECT]]
+ * `StreamingTestMethod.TEST_NAME_TO_OBJECT`
  */
 private[stat] sealed trait StreamingTestMethod extends Serializable {
 

@@ -35,12 +35,27 @@ class StatsdSinkSuite extends SparkFunSuite {
     STATSD_KEY_UNIT -> "seconds",
     STATSD_KEY_HOST -> "127.0.0.1"
   )
-  private val socketTimeout = 30000 // milliseconds
-  private val socketBufferSize = 8192
+  // The maximum size of a single datagram packet payload. Payloads
+  // larger than this will be truncated.
+  private val maxPayloadSize = 256 // bytes
+
+  // The receive buffer must be large enough to hold all inflight
+  // packets. This includes any kernel and protocol overhead.
+  // This value was determined experimentally and should be
+  // increased if timeouts are seen.
+  private val socketMinRecvBufferSize = 16384 // bytes
+  private val socketTimeout = 30000           // milliseconds
 
   private def withSocketAndSink(testCode: (DatagramSocket, StatsdSink) => Any): Unit = {
     val socket = new DatagramSocket
-    socket.setReceiveBufferSize(socketBufferSize)
+
+    // Leave the receive buffer size untouched unless it is too
+    // small. If the receive buffer is too small packets will be
+    // silently dropped and receive operations will timeout.
+    if (socket.getReceiveBufferSize() < socketMinRecvBufferSize) {
+      socket.setReceiveBufferSize(socketMinRecvBufferSize)
+    }
+
     socket.setSoTimeout(socketTimeout)
     val props = new Properties
     defaultProps.foreach(e => props.put(e._1, e._2))
@@ -61,7 +76,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("counter", counter)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       socket.receive(p)
 
       val result = new String(p.getData, 0, p.getLength, UTF_8)
@@ -77,7 +92,7 @@ class StatsdSinkSuite extends SparkFunSuite {
       sink.registry.register("gauge", gauge)
       sink.report()
 
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       socket.receive(p)
 
       val result = new String(p.getData, 0, p.getLength, UTF_8)
@@ -87,7 +102,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
   test("metrics StatsD sink with Histogram") {
     withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       val histogram = new Histogram(new UniformReservoir)
       histogram.update(10)
       histogram.update(20)
@@ -121,7 +136,7 @@ class StatsdSinkSuite extends SparkFunSuite {
 
   test("metrics StatsD sink with Timer") {
     withSocketAndSink { (socket, sink) =>
-      val p = new DatagramPacket(new Array[Byte](socketBufferSize), socketBufferSize)
+      val p = new DatagramPacket(new Array[Byte](maxPayloadSize), maxPayloadSize)
       val timer = new Timer()
       timer.update(1, SECONDS)
       timer.update(2, SECONDS)

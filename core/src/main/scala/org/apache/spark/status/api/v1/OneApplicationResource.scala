@@ -19,13 +19,14 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs._
+import javax.ws.rs.{NotFoundException => _, _}
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
-import org.apache.spark.ui.UIUtils
+import org.apache.spark.status.api.v1
+import org.apache.spark.util.Utils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -98,21 +99,30 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("environment")
-  def environmentInfo(): ApplicationEnvironmentInfo = withUI(_.store.environmentInfo())
+  def environmentInfo(): ApplicationEnvironmentInfo = withUI { ui =>
+    val envInfo = ui.store.environmentInfo()
+    val resourceProfileInfo = ui.store.resourceProfileInfo()
+    new v1.ApplicationEnvironmentInfo(
+      envInfo.runtime,
+      Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      envInfo.classpathEntries.sortBy(_._1),
+      resourceProfileInfo)
+  }
 
   @GET
   @Path("logs")
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   def getEventLogs(): Response = {
-    // Retrieve the UI for the application just to do access permission checks. For backwards
-    // compatibility, this code also tries with attemptId "1" if the UI without an attempt ID does
-    // not exist.
+    // For backwards compatibility, this code also tries with attemptId "1" if the UI
+    // without an attempt ID does not exist.
     try {
-      withUI { _ => }
+      checkUIViewPermissions()
     } catch {
       case _: NotFoundException if attemptId == null =>
         attemptId = "1"
-        withUI { _ => }
+        checkUIViewPermissions()
         attemptId = null
     }
 
@@ -140,11 +150,8 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .header("Content-Type", MediaType.APPLICATION_OCTET_STREAM)
         .build()
     } catch {
-      case NonFatal(e) =>
-        Response.serverError()
-          .entity(s"Event logs are not available for app: $appId.")
-          .status(Response.Status.SERVICE_UNAVAILABLE)
-          .build()
+      case NonFatal(_) =>
+        throw new ServiceUnavailable(s"Event logs are not available for app: $appId.")
     }
   }
 
@@ -178,7 +185,7 @@ private[v1] class OneApplicationAttemptResource extends AbstractApplicationResou
   def getAttempt(): ApplicationAttemptInfo = {
     uiRoot.getApplicationInfo(appId)
       .flatMap { app =>
-        app.attempts.filter(_.attemptId == attemptId).headOption
+        app.attempts.find(_.attemptId.contains(attemptId))
       }
       .getOrElse {
         throw new NotFoundException(s"unknown app $appId, attempt $attemptId")

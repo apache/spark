@@ -19,10 +19,11 @@ package org.apache.spark.sql.streaming;
 
 import java.util.concurrent.TimeUnit;
 
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger;
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**
@@ -30,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
  *
  * @since 2.0.0
  */
-@InterfaceStability.Evolving
+@Evolving
 public class Trigger {
 
   /**
@@ -40,7 +41,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(long intervalMs) {
-      return ProcessingTime.create(intervalMs, TimeUnit.MILLISECONDS);
+      return ProcessingTimeTrigger.create(intervalMs, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -56,7 +57,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(long interval, TimeUnit timeUnit) {
-      return ProcessingTime.create(interval, timeUnit);
+      return ProcessingTimeTrigger.create(interval, timeUnit);
   }
 
   /**
@@ -71,7 +72,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(Duration interval) {
-      return ProcessingTime.apply(interval);
+      return ProcessingTimeTrigger.apply(interval);
   }
 
   /**
@@ -84,7 +85,7 @@ public class Trigger {
    * @since 2.2.0
    */
   public static Trigger ProcessingTime(String interval) {
-      return ProcessingTime.apply(interval);
+      return ProcessingTimeTrigger.apply(interval);
   }
 
   /**

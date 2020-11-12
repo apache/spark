@@ -1,46 +1,46 @@
 [ {
-  "id" : "application_1516285256255_0012",
+  "id" : "app-20200706201101-0003",
   "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2018-01-18T18:30:35.119GMT",
-    "endTime" : "2018-01-18T18:38:27.938GMT",
+    "startTime" : "2020-07-07T03:11:00.235GMT",
+    "endTime" : "2020-07-07T03:17:04.231GMT",
     "lastUpdated" : "",
-    "duration" : 472819,
-    "sparkUser" : "attilapiros",
+    "duration" : 363996,
+    "sparkUser" : "terryk",
     "completed" : true,
-    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "appSparkVersion" : "3.1.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1516300235119,
-    "endTimeEpoch" : 1516300707938
+    "endTimeEpoch" : 1594091824231,
+    "startTimeEpoch" : 1594091460235
   } ]
 }, {
-  "id" : "app-20180109111548-0000",
+  "id" : "application_1578436911597_0052",
   "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2018-01-09T10:15:42.372GMT",
-    "endTime" : "2018-01-09T10:24:37.606GMT",
+    "startTime" : "2020-01-11T17:44:22.851GMT",
+    "endTime" : "2020-01-11T17:46:42.615GMT",
     "lastUpdated" : "",
-    "duration" : 535234,
-    "sparkUser" : "attilapiros",
+    "duration" : 139764,
+    "sparkUser" : "tgraves",
     "completed" : true,
-    "appSparkVersion" : "2.3.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1515492942372,
-    "endTimeEpoch" : 1515493477606
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "endTimeEpoch" : 1578764802615,
+    "startTimeEpoch" : 1578764662851,
+    "lastUpdatedEpoch" : 0
   } ]
 }, {
-  "id" : "app-20161116163331-0000",
+  "id" : "application_1555004656427_0144",
   "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2016-11-16T22:33:29.916GMT",
-    "endTime" : "2016-11-16T22:33:40.587GMT",
+    "startTime" : "2019-07-02T21:02:17.180GMT",
+    "endTime" : "2019-07-02T21:02:35.974GMT",
     "lastUpdated" : "",
-    "duration" : 10671,
-    "sparkUser" : "jose",
+    "duration" : 18794,
+    "sparkUser" : "tgraves",
     "completed" : true,
-    "appSparkVersion" : "2.1.0-SNAPSHOT",
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1562101337180,
     "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1479335609916,
-    "endTimeEpoch" : 1479335620587
+    "endTimeEpoch" : 1562101355974
   } ]
 } ]

@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.util.MLUtils
 
 /**
- * :: DeveloperApi ::
  * Class for log loss calculation (for classification).
  * This uses twice the binomial negative log likelihood, called "deviance" in Friedman (1999).
  *
@@ -30,7 +29,6 @@ import org.apache.spark.mllib.util.MLUtils
  * where y is a label in {-1, 1} and F(x) is the model prediction for features x.
  */
 @Since("1.2.0")
-@DeveloperApi
 object LogLoss extends ClassificationLoss {
 
   /**

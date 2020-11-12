@@ -21,15 +21,13 @@ Package for distributed linear algebra.
 
 import sys
 
-if sys.version >= '3':
-    long = int
-
 from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
+from pyspark.sql import DataFrame
 from pyspark.storagelevel import StorageLevel
 
 
@@ -57,7 +55,8 @@ class RowMatrix(DistributedMatrix):
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
-    :param rows: An RDD of vectors.
+    :param rows: An RDD or DataFrame of vectors. If a DataFrame is provided, it must have a single
+                 vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the number of
@@ -73,7 +72,7 @@ class RowMatrix(DistributedMatrix):
 
         Create a wrapper over a Java RowMatrix.
 
-        Publicly, we require that `rows` be an RDD.  However, for
+        Publicly, we require that `rows` be an RDD or DataFrame.  However, for
         internal usage, `rows` can also be a Java RowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
@@ -93,7 +92,9 @@ class RowMatrix(DistributedMatrix):
         """
         if isinstance(rows, RDD):
             rows = rows.map(_convert_to_vector)
-            java_matrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
+            java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
+        elif isinstance(rows, DataFrame):
+            java_matrix = callMLlibFunc("createRowMatrix", rows, int(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "RowMatrix"):
             java_matrix = rows
@@ -270,7 +271,7 @@ class RowMatrix(DistributedMatrix):
         Reference:
          Paul G. Constantine, David F. Gleich. "Tall and skinny QR
          factorizations in MapReduce architectures"
-         ([[http://dx.doi.org/10.1145/1996092.1996103]])
+         ([[https://doi.org/10.1145/1996092.1996103]])
 
         :param: computeQ: whether to computeQ
         :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
@@ -435,13 +436,13 @@ class IndexedRow(object):
     """
     Represents a row of an IndexedRowMatrix.
 
-    Just a wrapper over a (long, vector) tuple.
+    Just a wrapper over a (int, vector) tuple.
 
     :param index: The index for the given row.
     :param vector: The row in the matrix at the given index.
     """
     def __init__(self, index, vector):
-        self.index = long(index)
+        self.index = int(index)
         self.vector = _convert_to_vector(vector)
 
     def __repr__(self):
@@ -461,7 +462,8 @@ class IndexedRowMatrix(DistributedMatrix):
     """
     Represents a row-oriented distributed Matrix with indexed rows.
 
-    :param rows: An RDD of IndexedRows or (long, vector) tuples.
+    :param rows: An RDD of IndexedRows or (int, vector) tuples or a DataFrame consisting of a
+                 int typed column of indices and a vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the max row
@@ -477,7 +479,7 @@ class IndexedRowMatrix(DistributedMatrix):
 
         Create a wrapper over a Java IndexedRowMatrix.
 
-        Publicly, we require that `rows` be an RDD.  However, for
+        Publicly, we require that `rows` be an RDD or DataFrame.  However, for
         internal usage, `rows` can also be a Java IndexedRowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
@@ -505,12 +507,14 @@ class IndexedRowMatrix(DistributedMatrix):
             # both be easily serialized.  We will convert back to
             # IndexedRows on the Scala side.
             java_matrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
-                                        long(numRows), int(numCols))
+                                        int(numRows), int(numCols))
+        elif isinstance(rows, DataFrame):
+            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, int(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "IndexedRowMatrix"):
             java_matrix = rows
         else:
-            raise TypeError("rows should be an RDD of IndexedRows or (long, vector) tuples, "
+            raise TypeError("rows should be an RDD of IndexedRows or (int, vector) tuples, "
                             "got %s" % type(rows))
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
@@ -724,15 +728,15 @@ class MatrixEntry(object):
     """
     Represents an entry of a CoordinateMatrix.
 
-    Just a wrapper over a (long, long, float) tuple.
+    Just a wrapper over a (int, int, float) tuple.
 
     :param i: The row index of the matrix.
     :param j: The column index of the matrix.
     :param value: The (i, j)th entry of the matrix, as a float.
     """
     def __init__(self, i, j, value):
-        self.i = long(i)
-        self.j = long(j)
+        self.i = int(i)
+        self.j = int(j)
         self.value = float(value)
 
     def __repr__(self):
@@ -753,7 +757,7 @@ class CoordinateMatrix(DistributedMatrix):
     Represents a matrix in coordinate format.
 
     :param entries: An RDD of MatrixEntry inputs or
-                    (long, long, float) tuples.
+                    (int, int, float) tuples.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the max row
@@ -797,13 +801,13 @@ class CoordinateMatrix(DistributedMatrix):
             # each be easily serialized. We will convert back to
             # MatrixEntry inputs on the Scala side.
             java_matrix = callMLlibFunc("createCoordinateMatrix", entries.toDF(),
-                                        long(numRows), long(numCols))
+                                        int(numRows), int(numCols))
         elif (isinstance(entries, JavaObject)
               and entries.getClass().getSimpleName() == "CoordinateMatrix"):
             java_matrix = entries
         else:
             raise TypeError("entries should be an RDD of MatrixEntry entries or "
-                            "(long, long, float) tuples, got %s" % type(entries))
+                            "(int, int, float) tuples, got %s" % type(entries))
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
 
@@ -1037,7 +1041,7 @@ class BlockMatrix(DistributedMatrix):
             # the Scala side.
             java_matrix = callMLlibFunc("createBlockMatrix", blocks.toDF(),
                                         int(rowsPerBlock), int(colsPerBlock),
-                                        long(numRows), long(numCols))
+                                        int(numRows), int(numCols))
         elif (isinstance(blocks, JavaObject)
               and blocks.getClass().getSimpleName() == "BlockMatrix"):
             java_matrix = blocks
@@ -1364,9 +1368,15 @@ class BlockMatrix(DistributedMatrix):
 
 def _test():
     import doctest
+    import numpy
     from pyspark.sql import SparkSession
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
+    try:
+        # Numpy 1.14+ changed it's string format.
+        numpy.set_printoptions(legacy='1.13')
+    except TypeError:
+        pass
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[2]")\
@@ -1377,7 +1387,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()

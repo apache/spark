@@ -37,7 +37,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.11/unidoc"
+    source = "../target/scala-2.12/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest
@@ -96,9 +96,9 @@ if not (ENV['SKIP_API'] == '1')
     end
     # End updating JavaDoc files for badge post-processing
 
-    puts "Copying jquery.js from Scala API to Java API for page post-processing of badges"
-    jquery_src_file = "./api/scala/lib/jquery.js"
-    jquery_dest_file = "./api/java/lib/jquery.js"
+    puts "Copying jquery.min.js from Scala API to Java API for page post-processing of badges"
+    jquery_src_file = "./api/scala/lib/jquery.min.js"
+    jquery_dest_file = "./api/java/lib/jquery.min.js"
     mkdir_p("./api/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 
@@ -126,8 +126,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Making directory api/python"
     mkdir_p "api/python"
 
-    puts "cp -r ../python/docs/_build/html/. api/python"
-    cp_r("../python/docs/_build/html/.", "api/python")
+    puts "cp -r ../python/docs/build/html/. api/python"
+    cp_r("../python/docs/build/html/.", "api/python")
   end
 
   if not (ENV['SKIP_RDOC'] == '1')
@@ -157,8 +157,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package") || raise("SQL doc generation failed")
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")

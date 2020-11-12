@@ -39,7 +39,8 @@ import org.apache.spark.unsafe.Platform
  *                            and its elements should be sorted into ascending order.
  *                            Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv for
  *                            interval (5, 5] would be 1.
- * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
+ * @param relativeSD The maximum relative standard deviation allowed
+ *                   in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
     child: Expression,
@@ -63,11 +64,11 @@ case class ApproxCountDistinctForIntervals(
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
-  lazy val endpoints: Array[Double] =
-    (endpointsExpression.dataType, endpointsExpression.eval()) match {
-      case (ArrayType(elementType, _), arrayData: ArrayData) =>
-        arrayData.toObjectArray(elementType).map(_.toString.toDouble)
-    }
+  lazy val endpoints: Array[Double] = {
+    val endpointsType = endpointsExpression.dataType.asInstanceOf[ArrayType]
+    val endpoints = endpointsExpression.eval().asInstanceOf[ArrayData]
+    endpoints.toObjectArray(endpointsType.elementType).map(_.toString.toDouble)
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()

@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalactic.source
 import org.scalatest.Suite
+import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
@@ -33,11 +35,28 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanTest extends SparkFunSuite with PlanTestBase
 
+trait CodegenInterpretedPlanTest extends PlanTest {
+
+  override protected def test(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
+    val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
+
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
+    }
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
+      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
+    }
+  }
+}
+
 /**
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper { self: Suite =>
+trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
 
   // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
   protected def conf = SQLConf.get
@@ -60,6 +79,17 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
         Alias(a.child, a.name)(exprId = ExprId(0))
       case ae: AggregateExpression =>
         ae.copy(resultId = ExprId(0))
+      case lv: NamedLambdaVariable =>
+        lv.copy(exprId = ExprId(0), value = null)
+      case udf: PythonUDF =>
+        udf.copy(resultId = ExprId(0))
+    }
+  }
+
+  protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressions {
+      case a @ AttributeReference(name, _, false, _) =>
+        a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier)
     }
   }
 
@@ -74,29 +104,39 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
   protected def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     plan transform {
       case Filter(condition: Expression, child: LogicalPlan) =>
-        Filter(splitConjunctivePredicates(condition).map(rewriteEqual).sortBy(_.hashCode())
-          .reduce(And), child)
+        Filter(splitConjunctivePredicates(condition).map(rewriteBinaryComparison)
+          .sortBy(_.hashCode()).reduce(And), child)
       case sample: Sample =>
         sample.copy(seed = 0L)
-      case Join(left, right, joinType, condition) if condition.isDefined =>
+      case Join(left, right, joinType, condition, hint) if condition.isDefined =>
+        val newJoinType = joinType match {
+          case ExistenceJoin(a: Attribute) =>
+            val newAttr = AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+            ExistenceJoin(newAttr)
+          case other => other
+        }
+
         val newCondition =
-          splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
-            .reduce(And)
-        Join(left, right, joinType, Some(newCondition))
+          splitConjunctivePredicates(condition.get).map(rewriteBinaryComparison)
+            .sortBy(_.hashCode()).reduce(And)
+        Join(left, right, newJoinType, Some(newCondition), hint)
     }
   }
 
   /**
-   * Rewrite [[EqualTo]] and [[EqualNullSafe]] operator to keep order. The following cases will be
+   * Rewrite [[BinaryComparison]] operator to keep order. The following cases will be
    * equivalent:
    * 1. (a = b), (b = a);
    * 2. (a <=> b), (b <=> a).
+   * 3. (a > b), (b < a)
    */
-  private def rewriteEqual(condition: Expression): Expression = condition match {
-    case eq @ EqualTo(l: Expression, r: Expression) =>
-      Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
-    case eq @ EqualNullSafe(l: Expression, r: Expression) =>
-      Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
+  private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
+    case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
+    case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
+    case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
+    case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+    case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+    case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
     case _ => condition // Don't reorder.
   }
 
@@ -117,7 +157,9 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
       fail(
         s"""
           |== FAIL: Plans do not match ===
-          |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
+          |${sideBySide(
+            rewriteNameFromAttrNullability(normalized1).treeString,
+            rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
          """.stripMargin)
     }
   }
@@ -125,59 +167,5 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
     comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
-  }
-
-  /** Fails the test if the join order in the two plans do not match */
-  protected def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizePlan(normalizeExprIds(plan1))
-    val normalized2 = normalizePlan(normalizeExprIds(plan2))
-    if (!sameJoinPlan(normalized1, normalized2)) {
-      fail(
-        s"""
-           |== FAIL: Plans do not match ===
-           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-         """.stripMargin)
-    }
-  }
-
-  /** Consider symmetry for joins when comparing plans. */
-  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    (plan1, plan2) match {
-      case (j1: Join, j2: Join) =>
-        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
-          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
-      case (p1: Project, p2: Project) =>
-        p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
-      case _ =>
-        plan1 == plan2
-    }
-  }
-
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
-   * configurations.
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SQLConf.get
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.getConfString(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach { (k, v) =>
-      if (SQLConf.staticConfKeys.contains(k)) {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
-      }
-      conf.setConfString(k, v)
-    }
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.setConfString(key, value)
-        case (key, None) => conf.unsetConf(key)
-      }
-    }
   }
 }

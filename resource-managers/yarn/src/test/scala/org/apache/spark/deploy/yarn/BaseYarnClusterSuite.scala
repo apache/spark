@@ -24,18 +24,18 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -53,7 +53,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark_project.jetty=WARN
+    |log4j.logger.org.sparkproject.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -64,7 +64,7 @@ abstract class BaseYarnClusterSuite
 
   def newYarnConfig(): YarnConfiguration
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     tempDir = Utils.createTempDir()
@@ -79,6 +79,16 @@ abstract class BaseYarnClusterSuite
     val yarnConf = newYarnConfig()
     yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
       "100.0")
+
+    // capacity-scheduler.xml is missing in hadoop-client-minicluster so this is a workaround
+    yarnConf.set("yarn.scheduler.capacity.root.queues", "default")
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.capacity", 100)
+    yarnConf.setFloat("yarn.scheduler.capacity.root.default.user-limit-factor", 1)
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.maximum-capacity", 100)
+    yarnConf.set("yarn.scheduler.capacity.root.default.state", "RUNNING")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
+    yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
 
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
     yarnCluster.init(yarnConf)
@@ -99,9 +109,9 @@ abstract class BaseYarnClusterSuite
     // This hack loops for a bit waiting for the port to change, and fails the test if it hasn't
     // done so in a timely manner (defined to be 10 seconds).
     val config = yarnCluster.getConfig()
-    val deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(10)
+    val startTimeNs = System.nanoTime()
     while (config.get(YarnConfiguration.RM_ADDRESS).split(":")(1) == "0") {
-      if (System.currentTimeMillis() > deadline) {
+      if (System.nanoTime() - startTimeNs > TimeUnit.SECONDS.toNanos(10)) {
         throw new IllegalStateException("Timed out waiting for RM to come up.")
       }
       logDebug("RM address still not set in configuration, waiting...")
@@ -116,7 +126,7 @@ abstract class BaseYarnClusterSuite
     File.createTempFile("token", ".txt", hadoopConfDir)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       yarnCluster.stop()
     } finally {
@@ -132,7 +142,8 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
+      extraEnv: Map[String, String] = Map(),
+      outFile: Option[File] = None): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
@@ -147,7 +158,7 @@ abstract class BaseYarnClusterSuite
     launcher.setSparkHome(sys.props("spark.test.home"))
       .setMaster("yarn")
       .setDeployMode(deployMode)
-      .setConf("spark.executor.instances", "1")
+      .setConf(EXECUTOR_INSTANCES.key, "1")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 
@@ -160,9 +171,14 @@ abstract class BaseYarnClusterSuite
     }
     extraJars.foreach(launcher.addJar)
 
+    if (outFile.isDefined) {
+      launcher.redirectOutput(outFile.get)
+      launcher.redirectError()
+    }
+
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(2 minutes), interval(1 second)) {
+      eventually(timeout(3.minutes), interval(1.second)) {
         assert(handle.getState().isFinal())
       }
     } finally {
@@ -178,17 +194,22 @@ abstract class BaseYarnClusterSuite
    * the tests enforce that something is written to a file after everything is ok to indicate
    * that the job succeeded.
    */
-  protected def checkResult(finalState: SparkAppHandle.State, result: File): Unit = {
-    checkResult(finalState, result, "success")
-  }
-
   protected def checkResult(
       finalState: SparkAppHandle.State,
       result: File,
-      expected: String): Unit = {
-    finalState should be (SparkAppHandle.State.FINISHED)
+      expected: String = "success",
+      outFile: Option[File] = None): Unit = {
+    // the context message is passed to assert as Any instead of a function. to lazily load the
+    // output from the file, this passes an anonymous object that loads it in toString when building
+    // an error message
+    val output = new Object() {
+      override def toString: String = outFile
+          .map(Files.toString(_, StandardCharsets.UTF_8))
+          .getOrElse("(stdout/stderr was not captured)")
+    }
+    assert(finalState === SparkAppHandle.State.FINISHED, output)
     val resultString = Files.toString(result, StandardCharsets.UTF_8)
-    resultString should be (expected)
+    assert(resultString === expected, output)
   }
 
   protected def mainClassName(klass: Class[_]): String = {
@@ -215,6 +236,14 @@ abstract class BaseYarnClusterSuite
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
     props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
+
+    // SPARK-24446: make sure special characters in the library path do not break containers.
+    if (!Utils.isWindows) {
+      val libPath = """/tmp/does not exist:$PWD/tmp:/tmp/quote":/tmp/ampersand&"""
+      props.setProperty(AM_LIBRARY_PATH.key, libPath)
+      props.setProperty(DRIVER_LIBRARY_PATH.key, libPath)
+      props.setProperty(EXECUTOR_LIBRARY_PATH.key, libPath)
+    }
 
     yarnCluster.getConfig().asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())

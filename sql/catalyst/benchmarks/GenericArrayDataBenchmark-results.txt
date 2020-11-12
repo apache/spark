@@ -1,0 +1,10 @@
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_191-b12 on Mac OS X 10.14.6
+Intel(R) Core(TM) i5-8210Y CPU @ 1.60GHz
+constructor:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+arrayOfAny                                            7              8           2       1471.6           0.7       1.0X
+arrayOfAnyAsObject                                  197            207           9         50.7          19.7       0.0X
+arrayOfAnyAsSeq                                      25             27           2        398.0           2.5       0.3X
+arrayOfInt                                          613            630          15         16.3          61.3       0.0X
+arrayOfIntAsObject                                  866            872           8         11.5          86.6       0.0X
+

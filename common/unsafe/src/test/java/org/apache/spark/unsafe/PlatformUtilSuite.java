@@ -114,25 +114,25 @@ public class PlatformUtilSuite {
     Assert.assertTrue(MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED);
     MemoryBlock onheap = MemoryAllocator.HEAP.allocate(1);
     Assert.assertEquals(
-      Platform.getByte(onheap.getBaseObject(), onheap.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(onheap.getBaseObject(), onheap.getBaseOffset()));
 
     MemoryBlock onheap1 = MemoryAllocator.HEAP.allocate(1024 * 1024);
     Object onheap1BaseObject = onheap1.getBaseObject();
     long onheap1BaseOffset = onheap1.getBaseOffset();
     MemoryAllocator.HEAP.free(onheap1);
     Assert.assertEquals(
-      Platform.getByte(onheap1BaseObject, onheap1BaseOffset),
-      MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
+      MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE,
+      Platform.getByte(onheap1BaseObject, onheap1BaseOffset));
     MemoryBlock onheap2 = MemoryAllocator.HEAP.allocate(1024 * 1024);
     Assert.assertEquals(
-      Platform.getByte(onheap2.getBaseObject(), onheap2.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(onheap2.getBaseObject(), onheap2.getBaseOffset()));
 
     MemoryBlock offheap = MemoryAllocator.UNSAFE.allocate(1);
     Assert.assertEquals(
-      Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
-      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+      MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE,
+      Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()));
     MemoryAllocator.UNSAFE.free(offheap);
   }
 
@@ -150,11 +150,11 @@ public class PlatformUtilSuite {
     // The size is greater than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,
     // reuse the previous memory which has released.
     MemoryBlock onheap3 = heapMem.allocate(1024 * 1024 + 1);
-    Assert.assertEquals(onheap3.size(), 1024 * 1024 + 1);
+    Assert.assertEquals(1024 * 1024 + 1, onheap3.size());
     Object obj3 = onheap3.getBaseObject();
     heapMem.free(onheap3);
     MemoryBlock onheap4 = heapMem.allocate(1024 * 1024 + 7);
-    Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
+    Assert.assertEquals(1024 * 1024 + 7, onheap4.size());
     Assert.assertEquals(obj3, onheap4.getBaseObject());
   }
 }

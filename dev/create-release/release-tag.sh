@@ -17,9 +17,13 @@
 # limitations under the License.
 #
 
+SELF=$(cd $(dirname $0) && pwd)
+. "$SELF/release-util.sh"
+
 function exit_with_usage {
+  local NAME=$(basename $0)
   cat << EOF
-usage: tag-release.sh
+usage: $NAME
 Tags a Spark release on a particular branch.
 
 Inputs are specified with the following environment variables:
@@ -36,6 +40,7 @@ EOF
 }
 
 set -e
+set -o pipefail
 
 if [[ $@ == *"help"* ]]; then
   exit_with_usage
@@ -54,11 +59,17 @@ for env in ASF_USERNAME ASF_PASSWORD RELEASE_VERSION RELEASE_TAG NEXT_VERSION GI
   fi
 done
 
-ASF_SPARK_REPO="git-wip-us.apache.org/repos/asf/spark.git"
-MVN="build/mvn --force"
+init_java
+init_maven_sbt
+
+ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
+
+function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
+
+declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
 
 rm -rf spark
-git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"
@@ -66,8 +77,12 @@ git config user.email $GIT_EMAIL
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
-# Set the release version in R/pkg/DESCRIPTION
-sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+if [[ $RELEASE_VERSION != *"preview"* ]]; then
+  # Set the release version in R/pkg/DESCRIPTION
+  sed -i".tmp1" 's/Version.*$/Version: '"$RELEASE_VERSION"'/g' R/pkg/DESCRIPTION
+else
+  sed -i".tmp1" 's/-SNAPSHOT/'"-$(cut -d "-" -f 2 <<< $RELEASE_VERSION)"'/g' R/pkg/R/sparkR.R
+fi
 # Set the release version in docs
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
@@ -94,9 +109,19 @@ sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
-# Push changes
-git push origin $RELEASE_TAG
-git push origin HEAD:$GIT_BRANCH
+if ! is_dry_run; then
+  # Push changes
+  git push origin $RELEASE_TAG
+  if [[ $RELEASE_VERSION != *"preview"* ]]; then
+    git push origin HEAD:$GIT_BRANCH
+  else
+    echo "It's preview release. We only push $RELEASE_TAG to remote."
+  fi
 
-cd ..
-rm -rf spark
+  cd ..
+  rm -rf spark
+else
+  cd ..
+  mv spark spark.tag
+  echo "Clone with version changes and tag available as spark.tag in the output directory."
+fi

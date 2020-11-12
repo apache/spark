@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Properties;
 
 import com.google.common.primitives.Ints;
+import io.netty.util.NettyRuntime;
 
 /**
  * A central location that tracks all the settings we expose to users.
@@ -41,6 +42,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
+  private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
 
   private final ConfigProvider conf;
 
@@ -63,6 +65,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
+    SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -105,7 +108,11 @@ public class TransportConf {
     return conf.getInt(SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
+  /**
+   * Requested maximum length of the queue of incoming connections. If  &lt; 1,
+   * the default Netty value of {@link io.netty.util.NetUtil#SOMAXCONN} will be used.
+   * Default to -1.
+   */
   public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, -1); }
 
   /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
@@ -173,6 +180,14 @@ public class TransportConf {
   }
 
   /**
+   * Whether to enable TCP keep-alive. If true, the TCP keep-alives are enabled, which removes
+   * connections that are idle for too long.
+   */
+  public boolean enableTcpKeepAlive() {
+    return conf.getBoolean(SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY, false);
+  }
+
+  /**
    * Maximum number of retries when binding to a port before giving up.
    */
   public int portMaxRetries() {
@@ -209,7 +224,7 @@ public class TransportConf {
    * (128 bits by default), which is not generally the case with user passwords.
    */
   public int keyFactoryIterations() {
-    return conf.getInt("spark.networy.crypto.keyFactoryIterations", 1024);
+    return conf.getInt("spark.network.crypto.keyFactoryIterations", 1024);
   }
 
   /**
@@ -265,6 +280,23 @@ public class TransportConf {
   }
 
   /**
+   * Flag indicating whether to share the pooled ByteBuf allocators between the different Netty
+   * channels. If enabled then only two pooled ByteBuf allocators are created: one where caching
+   * is allowed (for transport servers) and one where not (for transport clients).
+   * When disabled a new allocator is created for each transport servers and clients.
+   */
+  public boolean sharedByteBufAllocators() {
+    return conf.getBoolean("spark.network.sharedByteBufAllocators.enabled", true);
+  }
+
+  /**
+  * If enabled then off-heap byte buffers will be preferred for the shared ByteBuf allocators.
+  */
+  public boolean preferDirectBufsForSharedByteBufAllocators() {
+    return conf.getBoolean("spark.network.io.preferDirectBufs", true);
+  }
+
+  /**
    * The commons-crypto configuration for the module.
    */
   public Properties cryptoConf() {
@@ -280,5 +312,90 @@ public class TransportConf {
    */
   public long maxChunksBeingTransferred() {
     return conf.getLong("spark.shuffle.maxChunksBeingTransferred", Long.MAX_VALUE);
+  }
+
+  /**
+   * Percentage of io.serverThreads used by netty to process ChunkFetchRequest.
+   * When the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set,
+   * shuffle server will use a separate EventLoopGroup to process ChunkFetchRequest messages.
+   * Although when calling the async writeAndFlush on the underlying channel to send
+   * response back to client, the I/O on the channel is still being handled by
+   * {@link org.apache.spark.network.server.TransportServer}'s default EventLoopGroup
+   * that's registered with the Channel, by waiting inside the ChunkFetchRequest handler
+   * threads for the completion of sending back responses, we are able to put a limit on
+   * the max number of threads from TransportServer's default EventLoopGroup that are
+   * going to be consumed by writing response to ChunkFetchRequest, which are I/O intensive
+   * and could take long time to process due to disk contentions. By configuring a slightly
+   * higher number of shuffler server threads, we are able to reserve some threads for
+   * handling other RPC messages, thus making the Client less likely to experience timeout
+   * when sending RPC messages to the shuffle server. The number of threads used for handling
+   * chunked fetch requests are percentage of io.serverThreads (if defined) else it is a percentage
+   * of 2 * #cores. However, a percentage of 0 means netty default number of threads which
+   * is 2 * #cores ignoring io.serverThreads. The percentage here is configured via
+   * spark.shuffle.server.chunkFetchHandlerThreadsPercent. The returned value is rounded off to
+   * ceiling of the nearest integer.
+   */
+  public int chunkFetchHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    int chunkFetchHandlerThreadsPercent =
+      Integer.parseInt(conf.get("spark.shuffle.server.chunkFetchHandlerThreadsPercent"));
+    int threads =
+      this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
+    return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
+  }
+
+  /**
+   * Whether to use a separate EventLoopGroup to process ChunkFetchRequest messages, it is decided
+   * by the config `spark.shuffle.server.chunkFetchHandlerThreadsPercent` is set or not.
+   */
+  public boolean separateChunkFetchRequest() {
+    return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
+  }
+
+  /**
+   * Whether to use the old protocol while doing the shuffle block fetching.
+   * It is only enabled while we need the compatibility in the scenario of new spark version
+   * job fetching blocks from old version external shuffle service.
+   */
+  public boolean useOldFetchProtocol() {
+    return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
+  }
+
+  /**
+   * Class name of the implementation of MergedShuffleFileManager that merges the blocks
+   * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
+   * a cluster level because this configuration is set to
+   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   * To turn on push-based shuffle at a cluster level, set the configuration to
+   * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
+   */
+  public String mergedShuffleFileManagerImpl() {
+    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
+  }
+
+  /**
+   * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
+   * push-based shuffle.
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
+   * complete merged shuffle file in a single response increases the memory requirements for the
+   * clients. Instead of serving the entire merged file, the shuffle service serves the
+   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
+   * configuration controls how big a chunk can get. A corresponding index file for each merged
+   * shuffle file will be generated indicating chunk boundaries.
+   */
+  public int minChunkSizeInMergedShuffleFile() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+  }
+
+  /**
+   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
+   */
+  public long mergedIndexCacheSize() {
+    return JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
   }
 }

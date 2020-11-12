@@ -16,7 +16,7 @@
 #
 
 require 'liquid'
-require 'pygments'
+require 'rouge'
 
 module Jekyll
   class IncludeExampleTag < Liquid::Tag
@@ -48,15 +48,17 @@ module Jekyll
       begin
         code = File.open(@file).read.encode("UTF-8")
       rescue => e
-        # We need to explicitly exit on execptions here because Jekyll will silently swallow
+        # We need to explicitly exit on exceptions here because Jekyll will silently swallow
         # them, leading to silent build failures (see https://github.com/jekyll/jekyll/issues/5104)
         puts(e)
         puts(e.backtrace)
         exit 1
       end
-      code = select_lines(code)
+      code = select_lines(code).strip
 
-      rendered_code = Pygments.highlight(code, :lexer => @lang)
+      formatter = Rouge::Formatters::HTMLPygments.new(Rouge::Formatters::HTML.new)
+      lexer = Rouge::Lexer.find(@lang)
+      rendered_code = formatter.format(lexer.lex(code))
 
       hint = "<div><small>Find full example code at " \
         "\"examples/src/main/#{snippet_file}\" in the Spark repo.</small></div>"

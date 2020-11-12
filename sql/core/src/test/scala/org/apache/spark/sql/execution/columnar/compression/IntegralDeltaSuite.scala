@@ -32,9 +32,9 @@ class IntegralDeltaSuite extends SparkFunSuite {
   def testIntegralDelta[I <: IntegralType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[I],
-      scheme: CompressionScheme) {
+      scheme: CompressionScheme): Unit = {
 
-    def skeleton(input: Seq[I#InternalType]) {
+    def skeleton(input: Seq[Any]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -46,12 +46,13 @@ class IntegralDeltaSuite extends SparkFunSuite {
         (input.tail, input.init).zipped.map {
           case (x: Int, y: Int) => (x - y).toLong
           case (x: Long, y: Long) => x - y
+          case other => fail(s"Unexpected input $other")
         }
       }
 
       input.foreach { value =>
         val row = new GenericInternalRow(1)
-        columnType.setField(row, 0, value)
+        columnType.setField(row, 0, value.asInstanceOf[I#InternalType])
         builder.appendFrom(row, 0)
       }
 
@@ -111,12 +112,12 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(input: Seq[I#InternalType]) {
+    def skeletonForDecompress(input: Seq[I#InternalType]): Unit = {
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, scheme)
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)
       nullRow.setNullAt(0)
-      input.map { value =>
+      input.foreach { value =>
         if (value == nullValue) {
           builder.appendFrom(nullRow, 0)
         } else {
@@ -172,9 +173,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
     }
 
     test(s"$scheme: long random series") {
-      // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
-      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[I#InternalType]))
+      skeleton(Seq.fill[I#InternalType](10000)(makeRandomValue(columnType)))
     }
 
 

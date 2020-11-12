@@ -1,3 +1,3 @@
 org.apache.spark.scheduler.DummyExternalClusterManager
 org.apache.spark.scheduler.MockExternalClusterManager
-org.apache.spark.DummyLocalExternalClusterManager
+org.apache.spark.scheduler.CSMockExternalClusterManager

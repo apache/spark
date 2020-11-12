@@ -14,34 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import sys
-
-if sys.version >= '3':
-    basestring = unicode = str
 
 from py4j.java_gateway import JavaClass
 
-from pyspark import RDD, since, keyword_only
-from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.column import _to_seq
-from pyspark.sql.types import *
+from pyspark import RDD, since
+from pyspark.sql.column import _to_seq, _to_java_column
+from pyspark.sql.types import StructType
 from pyspark.sql import utils
+from pyspark.sql.utils import to_str
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
-
-
-def to_str(value):
-    """
-    A wrapper over str(), but converts bool values to lower case strings.
-    If None is given, just returns None, instead of converting it to string "None".
-    """
-    if isinstance(value, bool):
-        return str(value).lower()
-    elif value is None:
-        return value
-    else:
-        return str(value)
 
 
 class OptionUtils(object):
@@ -60,7 +43,7 @@ class OptionUtils(object):
 class DataFrameReader(OptionUtils):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
+    (e.g. file systems, key-value stores, etc). Use :attr:`SparkSession.read`
     to access this.
 
     .. versionadded:: 1.4
@@ -74,12 +57,18 @@ class DataFrameReader(OptionUtils):
         from pyspark.sql.dataframe import DataFrame
         return DataFrame(jdf, self._spark)
 
-    @since(1.4)
     def format(self, source):
         """Specifies the input data source format.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        source : str
+            string, name of the data source, e.g. 'json', 'parquet'.
+
+        Examples
+        --------
         >>> df = spark.read.format('json').load('python/test_support/sql/people.json')
         >>> df.dtypes
         [('age', 'bigint'), ('name', 'string')]
@@ -88,7 +77,6 @@ class DataFrameReader(OptionUtils):
         self._jreader = self._jreader.format(source)
         return self
 
-    @since(1.4)
     def schema(self, schema):
         """Specifies the input schema.
 
@@ -96,8 +84,13 @@ class DataFrameReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
-                       (For example ``col0 INT, col1 DOUBLE``).
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        schema : :class:`pyspark.sql.types.StructType` or str
+            a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+            (For example ``col0 INT, col1 DOUBLE``).
 
         >>> s = spark.read.schema("col0 INT, col1 DOUBLE")
         """
@@ -106,7 +99,7 @@ class DataFrameReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
@@ -117,9 +110,21 @@ class DataFrameReader(OptionUtils):
         """Adds an input option for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -129,26 +134,47 @@ class DataFrameReader(OptionUtils):
         """Adds input options for the underlying data source.
 
         You can set the following option(s) for reading files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
-                in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to parse
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
-    @since(1.4)
     def load(self, path=None, format=None, schema=None, **options):
-        """Loads data from a data source and returns it as a :class`DataFrame`.
+        """Loads data from a data source and returns it as a :class:`DataFrame`.
 
-        :param path: optional string or a list of string for file-system backed data sources.
-        :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param options: all other string options
+        .. versionadded:: 1.4.0
 
-        >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
-        ...     opt2=1, opt3='str')
+        Parameters
+        ----------
+        path : str or list, optional
+            optional string or a list of string for file-system backed data sources.
+        format : str, optional
+            optional string for format of the data source. Default to 'parquet'.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        **options : dict
+            all other string options
+
+        Examples
+        --------
+        >>> df = spark.read.format("parquet").load('python/test_support/sql/parquet_partitioned',
+        ...     opt1=True, opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
 
@@ -162,7 +188,7 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
             if type(path) != list:
@@ -171,12 +197,13 @@ class DataFrameReader(OptionUtils):
         else:
             return self._df(self._jreader.load())
 
-    @since(1.4)
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None):
+             multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
+             dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -186,58 +213,118 @@ class DataFrameReader(OptionUtils):
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param path: string represents path to the JSON dataset, or a list of paths,
-                     or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema or
-                       a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param primitivesAsString: infers all primitive values as a string type. If None is set,
-                                   it uses the default value, ``false``.
-        :param prefersDecimal: infers all floating-point values as a decimal type. If the values
-                               do not fit in decimal, then it infers them as doubles. If None is
-                               set, it uses the default value, ``false``.
-        :param allowComments: ignores Java/C++ style comment in JSON records. If None is set,
-                              it uses the default value, ``false``.
-        :param allowUnquotedFieldNames: allows unquoted JSON field names. If None is set,
-                                        it uses the default value, ``false``.
-        :param allowSingleQuotes: allows single quotes in addition to double quotes. If None is
-                                        set, it uses the default value, ``true``.
-        :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
-                                        set, it uses the default value, ``false``.
-        :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
-                                                   using backslash quoting mechanism. If None is
-                                                   set, it uses the default value, ``false``.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        path : str, list or :class:`RDD`
+            string represents path to the JSON dataset, or a list of paths,
+            or RDD of Strings storing JSON objects.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema or
+            a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        primitivesAsString : str or bool, optional
+            infers all primitive values as a string type. If None is set,
+            it uses the default value, ``false``.
+        prefersDecimal : str or bool, optional
+            infers all floating-point values as a decimal type. If the values
+            do not fit in decimal, then it infers them as doubles. If None is
+            set, it uses the default value, ``false``.
+        allowComments : str or bool, optional
+            ignores Java/C++ style comment in JSON records. If None is set,
+            it uses the default value, ``false``.
+        allowUnquotedFieldNames : str or bool, optional
+            allows unquoted JSON field names. If None is set,
+            it uses the default value, ``false``.
+        allowSingleQuotes : str or bool, optional
+            allows single quotes in addition to double quotes. If None is
+            set, it uses the default value, ``true``.
+        allowNumericLeadingZero : str or bool, optional
+            allows leading zeros in numbers (e.g. 00012). If None is
+            set, it uses the default value, ``false``.
+        allowBackslashEscapingAnyCharacter : str or bool, optional
+            allows accepting quoting of all character
+            using backslash quoting mechanism. If None is
+            set, it uses the default value, ``false``.
+        mode : str, optional
+            allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                 record, and puts the malformed string into a field configured by \
-                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
-                 schema. If a schema does not have the field, it drops corrupt records during \
-                 parsing. When inferring a schema, it implicitly adds a \
-                 ``columnNameOfCorruptRecord`` field in an output schema.
-                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
-                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+              field in an output schema.
+            *  ``DROPMALFORMED``: ignores the whole corrupted records.
+            *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
-                                          created by ``PERMISSIVE`` mode. This overrides
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-                                          it uses the value specified in
-                                          ``spark.sql.columnNameOfCorruptRecord``.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param multiLine: parse one record, which may span multiple lines, per file. If None is
-                          set, it uses the default value, ``false``.
-        :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
-                                          characters (ASCII characters with value less than 32,
-                                          including tab and line feed characters) or not.
+        columnNameOfCorruptRecord: str, optional
+            allows renaming the new field having malformed string
+            created by ``PERMISSIVE`` mode. This overrides
+            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+            it uses the value specified in
+            ``spark.sql.columnNameOfCorruptRecord``.
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats
+            follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        multiLine : str or bool, optional
+            parse one record, which may span multiple lines, per file. If None is
+            set, it uses the default value, ``false``.
+        allowUnquotedControlChars : str or bool, optional
+            allows JSON Strings to contain unquoted control
+            characters (ASCII characters with value less than 32,
+            including tab and line feed characters) or not.
+        encoding : str or bool, optional
+            allows to forcibly set one of standard basic or extended encoding for
+            the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+            the encoding of input JSON will be detected automatically
+            when the multiLine option is set to ``true``.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        samplingRatio : str or float, optional
+            defines fraction of input JSON objects used for schema inferring.
+            If None is set, it uses the default value, ``1.0``.
+        dropFieldIfAllNull : str or bool, optional
+            whether to ignore column of all null values or empty
+            array/struct during schema inference. If None is set, it
+            uses the default value, ``false``.
+        locale : str, optional
+            sets a locale as language tag in IETF BCP 47 format. If None is set,
+            it uses the default value, ``en-US``. For instance, ``locale`` is used while
+            parsing dates and timestamps.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        allowNonNumericNumbers : str or bool
+            allows JSON parser to recognize set of "Not-a-Number" (NaN)
+            tokens as legal floating number values. If None is set,
+            it uses the default value, ``true``.
 
+                * ``+INF``: for positive infinity, as well as alias of
+                            ``+Infinity`` and ``Infinity``.
+                *  ``-INF``: for negative infinity, alias ``-Infinity``.
+                *  ``NaN``: for other not-a-numbers, like result of division by zero.
+
+        Examples
+        --------
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
@@ -254,17 +341,20 @@ class DataFrameReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars)
-        if isinstance(path, basestring):
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
+            samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
+            locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers)
+        if isinstance(path, str):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, basestring):
-                        x = unicode(x)
-                    if isinstance(x, unicode):
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -274,12 +364,18 @@ class DataFrameReader(OptionUtils):
         else:
             raise TypeError("path can be only string, list or RDD")
 
-    @since(1.4)
     def table(self, tableName):
         """Returns the specified table as a :class:`DataFrame`.
 
-        :param tableName: string, name of the table.
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Examples
+        --------
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.createOrReplaceTempView('tmpTable')
         >>> spark.read.table('tmpTable').dtypes
@@ -287,134 +383,256 @@ class DataFrameReader(OptionUtils):
         """
         return self._df(self._jreader.table(tableName))
 
-    @since(1.4)
-    def parquet(self, *paths):
-        """Loads Parquet files, returning the result as a :class:`DataFrame`.
+    def parquet(self, *paths, **options):
+        """
+        Loads Parquet files, returning the result as a :class:`DataFrame`.
 
-        You can set the following Parquet-specific option(s) for reading Parquet files:
-            * ``mergeSchema``: sets whether we should merge schemas collected from all \
-                Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
-                The default value is specified in ``spark.sql.parquet.mergeSchema``.
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        paths : str
+
+        Other Parameters
+        ----------------
+        mergeSchema : str or bool, optional
+            sets whether we should merge schemas collected from all
+            Parquet part-files. This will override
+            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+            ``spark.sql.parquet.mergeSchema``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Examples
+        --------
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
+        mergeSchema = options.get('mergeSchema', None)
+        pathGlobFilter = options.get('pathGlobFilter', None)
+        recursiveFileLookup = options.get('recursiveFileLookup', None)
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
-    @ignore_unicode_prefix
-    @since(1.6)
-    def text(self, paths, wholetext=False):
+    def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
+             recursiveFileLookup=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
+        The text files must be encoded as UTF-8.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
-        :param paths: string, or list of strings, for input path(s).
-        :param wholetext: if true, read each file from input path(s) as a single row.
+        .. versionadded:: 1.6.0
 
+        Parameters
+        ----------
+        paths : str or list
+            string, or list of strings, for input path(s).
+        wholetext : str or bool, optional
+            if true, read each file from input path(s) as a single row.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Examples
+        --------
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
-        [Row(value=u'hello'), Row(value=u'this')]
+        [Row(value='hello'), Row(value='this')]
         >>> df = spark.read.text('python/test_support/sql/text-test.txt', wholetext=True)
         >>> df.collect()
-        [Row(value=u'hello\\nthis')]
+        [Row(value='hello\\nthis')]
         """
-        self._set_opts(wholetext=wholetext)
-        if isinstance(paths, basestring):
+        self._set_opts(
+            wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup)
+        if isinstance(paths, str):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
-    @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
-        """Loads a CSV file and returns the result as a  :class:`DataFrame`.
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
+            samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
+            pathGlobFilter=None, recursiveFileLookup=None):
+        r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        :param path: string, or list of strings, for input path(s),
-                     or RDD of Strings storing CSV rows.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
-        :param encoding: decodes the CSV files by the given encoding type. If None is set,
-                         it uses the default value, ``UTF-8``.
-        :param quote: sets a single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
-        :param escape: sets a single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets a single character used for skipping lines beginning with this
-                        character. By default (None), it is disabled.
-        :param header: uses the first line as names of columns. If None is set, it uses the
-                       default value, ``false``.
-        :param inferSchema: infers the input schema automatically from data. It requires one extra
-                       pass over the data. If None is set, it uses the default value, ``false``.
-        :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
-                                        values being read should be skipped. If None is set, it
-                                        uses the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: A flag indicating whether or not trailing whitespaces from
-                                         values being read should be skipped. If None is set, it
-                                         uses the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string. Since 2.0.1, this ``nullValue`` param
-                          applies to all supported types including the string type.
-        :param nanValue: sets the string representation of a non-number value. If None is set, it
-                         uses the default value, ``NaN``.
-        :param positiveInf: sets the string representation of a positive infinity value. If None
-                            is set, it uses the default value, ``Inf``.
-        :param negativeInf: sets the string representation of a negative infinity value. If None
-                            is set, it uses the default value, ``Inf``.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param maxColumns: defines a hard limit of how many columns a record can have. If None is
-                           set, it uses the default value, ``20480``.
-        :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
-                                  value being read. If None is set, it uses the default value,
-                                  ``-1`` meaning unlimited length.
-        :param maxMalformedLogPerPartition: this parameter is no longer used since Spark 2.2.0.
-                                            If specified, it is ignored.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
+        .. versionadded:: 2.0.0
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record, and puts the malformed string into a field configured by \
-                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                  a string type field named ``columnNameOfCorruptRecord`` in an \
-                  user-defined schema. If a schema does not have the field, it drops corrupt \
-                  records during parsing. When a length of parsed CSV tokens is shorter than \
-                  an expected length of a schema, it sets `null` for extra fields.
-                * ``DROPMALFORMED`` : ignores the whole corrupted records.
-                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+        Parameters
+        ----------
+        path : str or list
+            string, or list of strings, for input path(s),
+            or RDD of Strings storing CSV rows.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        sep : str, optional
+            sets a separator (one or more characters) for each field and value. If None is
+            set, it uses the default value, ``,``.
+        encoding : str, optional
+            decodes the CSV files by the given encoding type. If None is set,
+            it uses the default value, ``UTF-8``.
+        quote : str, optional
+            sets a single character used for escaping quoted values where the
+            separator can be part of the value. If None is set, it uses the default
+            value, ``"``. If you would like to turn off quotations, you need to set an
+            empty string.
+        escape : str, optional
+            sets a single character used for escaping quotes inside an already
+            quoted value. If None is set, it uses the default value, ``\``.
+        comment : str, optional
+            sets a single character used for skipping lines beginning with this
+            character. By default (None), it is disabled.
+        header : str or bool, optional
+            uses the first line as names of columns. If None is set, it uses the
+            default value, ``false``.
 
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
-                                          created by ``PERMISSIVE`` mode. This overrides
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-                                          it uses the value specified in
-                                          ``spark.sql.columnNameOfCorruptRecord``.
-        :param multiLine: parse records, which may span multiple lines. If None is
-                          set, it uses the default value, ``false``.
-        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, the default value is
-                                          escape character when escape and quote characters are
-                                          different, ``\0`` otherwise.
+            .. note:: if the given path is a RDD of Strings, this header
+                option will remove all lines same with the header if exists.
 
+        inferSchema : str or bool, optional
+            infers the input schema automatically from data. It requires one extra
+            pass over the data. If None is set, it uses the default value, ``false``.
+        enforceSchema : str or bool, optional
+            If it is set to ``true``, the specified or inferred schema will be
+            forcibly applied to datasource files, and headers in CSV files will be
+            ignored. If the option is set to ``false``, the schema will be
+            validated against all headers in CSV files or the first header in RDD
+            if the ``header`` option is set to ``true``. Field names in the schema
+            and column names in CSV headers are checked by their positions
+            taking into account ``spark.sql.caseSensitive``. If None is set,
+            ``true`` is used by default. Though the default value is ``true``,
+            it is recommended to disable the ``enforceSchema`` option
+            to avoid incorrect results.
+        ignoreLeadingWhiteSpace : str or bool, optional
+            A flag indicating whether or not leading whitespaces from
+            values being read should be skipped. If None is set, it
+            uses the default value, ``false``.
+        ignoreTrailingWhiteSpace : str or bool, optional
+            A flag indicating whether or not trailing whitespaces from
+            values being read should be skipped. If None is set, it
+            uses the default value, ``false``.
+        nullValue : str, optional
+            sets the string representation of a null value. If None is set, it uses
+            the default value, empty string. Since 2.0.1, this ``nullValue`` param
+            applies to all supported types including the string type.
+        nanValue : str, optional
+            sets the string representation of a non-number value. If None is set, it
+            uses the default value, ``NaN``.
+        positiveInf : str, optional
+            sets the string representation of a positive infinity value. If None
+            is set, it uses the default value, ``Inf``.
+        negativeInf : str, optional
+            sets the string representation of a negative infinity value. If None
+            is set, it uses the default value, ``Inf``.
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats
+            follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        maxColumns : str or int, optional
+            defines a hard limit of how many columns a record can have. If None is
+            set, it uses the default value, ``20480``.
+        maxCharsPerColumn : str or int, optional
+            defines the maximum number of characters allowed for any given
+            value being read. If None is set, it uses the default value,
+            ``-1`` meaning unlimited length.
+        maxMalformedLogPerPartition : str or int, optional
+            this parameter is no longer used since Spark 2.2.0.
+            If specified, it is ignored.
+        mode : str, optional
+            allows a mode for dealing with corrupt records during parsing. If None is
+            set, it uses the default value, ``PERMISSIVE``. Note that Spark tries to
+            parse only required columns in CSV under column pruning. Therefore, corrupt
+            records can be different based on required set of fields. This behavior can
+            be controlled by ``spark.sql.csv.parser.columnPruning.enabled``
+            (enabled by default).
+
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              A record with less/more tokens than schema is not a corrupted record to CSV. \
+              When it meets a record having fewer tokens than the length of the schema, \
+              sets ``null`` to extra fields. When the record has more tokens than the \
+              length of the schema, it drops extra tokens.
+            * ``DROPMALFORMED``: ignores the whole corrupted records.
+            * ``FAILFAST``: throws an exception when it meets corrupted records.
+
+        columnNameOfCorruptRecord : str, optional
+            allows renaming the new field having malformed string
+            created by ``PERMISSIVE`` mode. This overrides
+            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+            it uses the value specified in
+            ``spark.sql.columnNameOfCorruptRecord``.
+        multiLine : str or bool, optional
+            parse records, which may span multiple lines. If None is
+            set, it uses the default value, ``false``.
+        charToEscapeQuoteEscaping : str, optional
+            sets a single character used for escaping the escape for
+            the quote character. If None is set, the default value is
+            escape character when escape and quote characters are
+            different, ``\0`` otherwise.
+        samplingRatio : str or float, optional
+            defines fraction of rows used for schema inferring.
+            If None is set, it uses the default value, ``1.0``.
+        emptyValue : str, optional
+            sets the string representation of an empty value. If None is set, it uses
+            the default value, empty string.
+        locale : str, optional
+            sets a locale as language tag in IETF BCP 47 format. If None is set,
+            it uses the default value, ``en-US``. For instance, ``locale`` is used while
+            parsing dates and timestamps.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+            Maximum length is 1 character.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Examples
+        --------
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
@@ -432,17 +650,19 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
-            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
-        if isinstance(path, basestring):
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
+            enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+        if isinstance(path, str):
             path = [path]
         if type(path) == list:
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
-                    if not isinstance(x, basestring):
-                        x = unicode(x)
-                    if isinstance(x, unicode):
+                    if not isinstance(x, str):
+                        x = str(x)
+                    if isinstance(x, str):
                         x = x.encode("utf-8")
                     yield x
             keyed = path.mapPartitions(func)
@@ -459,21 +679,40 @@ class DataFrameReader(OptionUtils):
         else:
             raise TypeError("path can be only string, list or RDD")
 
-    @since(1.5)
-    def orc(self, path):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
-        .. note:: Currently ORC support is only available together with Hive support.
+        .. versionadded:: 1.5.0
 
+        Parameters
+        ----------
+        path : str or list
+        mergeSchema : str or bool, optional
+            sets whether we should merge schemas collected from all
+            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+            The default value is specified in ``spark.sql.orc.mergeSchema``.
+        pathGlobFilter : str or bool
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+
+        Examples
+        --------
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
-        if isinstance(path, basestring):
+        self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       recursiveFileLookup=recursiveFileLookup)
+        if isinstance(path, str):
             path = [path]
         return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
 
-    @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
              predicates=None, properties=None):
         """
@@ -481,30 +720,48 @@ class DataFrameReader(OptionUtils):
         accessible via JDBC URL ``url`` and connection ``properties``.
 
         Partitions of the table will be retrieved in parallel if either ``column`` or
-        ``predicates`` is specified. ``lowerBound`, ``upperBound`` and ``numPartitions``
+        ``predicates`` is specified. ``lowerBound``, ``upperBound`` and ``numPartitions``
         is needed when ``column`` is specified.
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        url : str
+            a JDBC URL of the form ``jdbc:subprotocol:subname``
+        table : str
+            the name of the table
+        column : str, optional
+            the name of a column of numeric, date, or timestamp type
+            that will be used for partitioning;
+            if this parameter is specified, then ``numPartitions``, ``lowerBound``
+            (inclusive), and ``upperBound`` (exclusive) will form partition strides
+            for generated WHERE clause expressions used to split the column
+            ``column`` evenly
+        lowerBound : str or int, optional
+            the minimum value of ``column`` used to decide partition stride
+        upperBound : str or int, optional
+            the maximum value of ``column`` used to decide partition stride
+        numPartitions : int, optional
+            the number of partitions
+        predicates : list, optional
+            a list of expressions suitable for inclusion in WHERE clauses;
+            each one defines one partition of the :class:`DataFrame`
+        properties : dict, optional
+            a dictionary of JDBC database connection arguments. Normally at
+            least properties "user" and "password" with their corresponding values.
+            For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Notes
+        -----
+        Don't create too many partitions in parallel on a large cluster;
         otherwise Spark might crash your external database systems.
 
-        :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
-        :param table: the name of the table
-        :param column: the name of an integer column that will be used for partitioning;
-                       if this parameter is specified, then ``numPartitions``, ``lowerBound``
-                       (inclusive), and ``upperBound`` (exclusive) will form partition strides
-                       for generated WHERE clause expressions used to split the column
-                       ``column`` evenly
-        :param lowerBound: the minimum value of ``column`` used to decide partition stride
-        :param upperBound: the maximum value of ``column`` used to decide partition stride
-        :param numPartitions: the number of partitions
-        :param predicates: a list of expressions suitable for inclusion in WHERE clauses;
-                           each one defines one partition of the :class:`DataFrame`
-        :param properties: a dictionary of JDBC database connection arguments. Normally at
-                           least properties "user" and "password" with their corresponding values.
-                           For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
-        :return: a DataFrame
+        Returns
+        -------
+        :class:`DataFrame`
         """
         if properties is None:
             properties = dict()
@@ -528,7 +785,7 @@ class DataFrameReader(OptionUtils):
 class DataFrameWriter(OptionUtils):
     """
     Interface used to write a :class:`DataFrame` to external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
+    (e.g. file systems, key-value stores, etc). Use :attr:`DataFrame.write`
     to access this.
 
     .. versionadded:: 1.4
@@ -542,7 +799,6 @@ class DataFrameWriter(OptionUtils):
         from pyspark.sql.streaming import StreamingQuery
         return StreamingQuery(jsq)
 
-    @since(1.4)
     def mode(self, saveMode):
         """Specifies the behavior when data or table already exists.
 
@@ -553,6 +809,10 @@ class DataFrameWriter(OptionUtils):
         * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
+        .. versionadded:: 1.4.0
+
+        Examples
+        --------
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         # At the JVM side, the default value of mode is already set to "error".
@@ -561,12 +821,18 @@ class DataFrameWriter(OptionUtils):
             self._jwrite = self._jwrite.mode(saveMode)
         return self
 
-    @since(1.4)
     def format(self, source):
         """Specifies the underlying output data source.
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        source : str
+            string, name of the data source, e.g. 'json', 'parquet'.
+
+        Examples
+        --------
         >>> df.write.format('json').save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self._jwrite = self._jwrite.format(source)
@@ -577,9 +843,18 @@ class DataFrameWriter(OptionUtils):
         """Adds an output option for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -589,23 +864,38 @@ class DataFrameWriter(OptionUtils):
         """Adds output options for the underlying data source.
 
         You can set the following option(s) for writing files:
-            * ``timeZone``: sets the string that indicates a timezone to be used to format
-                timestamps in the JSON/CSV datasources or partition values.
-                If it isn't set, it uses the default value, session local timezone.
+            * ``timeZone``: sets the string that indicates a time zone ID to be used to format
+                timestamps in the JSON/CSV datasources or partition values. The following
+                formats of `timeZone` are supported:
+
+                * Region-based zone ID: It should have the form 'area/city', such as \
+                  'America/Los_Angeles'.
+                * Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00' or \
+                 '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.
+
+                Other short names like 'CST' are not recommended to use because they can be
+                ambiguous. If it isn't set, the current value of the SQL config
+                ``spark.sql.session.timeZone`` is used by default.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
         return self
 
-    @since(1.4)
     def partitionBy(self, *cols):
         """Partitions the output by the given columns on the file system.
 
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        :param cols: name of columns
+        .. versionadded:: 1.4.0
 
+        Parameters
+        ----------
+        cols : str or list
+            name of columns
+
+        Examples
+        --------
         >>> df.write.partitionBy('year', 'month').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
@@ -613,18 +903,28 @@ class DataFrameWriter(OptionUtils):
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
-    @since(2.3)
     def bucketBy(self, numBuckets, col, *cols):
         """Buckets the output by the given columns.If specified,
         the output is laid out on the file system similar to Hive's bucketing scheme.
 
-        :param numBuckets: the number of buckets to save
-        :param col: a name of a column, or a list of names.
-        :param cols: additional names (optional). If `col` is a list it should be empty.
+        .. versionadded:: 2.3.0
 
-        .. note:: Applicable for file-based data sources in combination with
-                  :py:meth:`DataFrameWriter.saveAsTable`.
+        Parameters
+        ----------
+        numBuckets : int
+            the number of buckets to save
+        col : str, list or tuple
+            a name of a column, or a list of names.
+        cols : str
+            additional names (optional). If `col` is a list it should be empty.
 
+        Notes
+        -----
+        Applicable for file-based data sources in combination with
+        :py:meth:`DataFrameWriter.saveAsTable`.
+
+        Examples
+        --------
         >>> (df.write.format('parquet')  # doctest: +SKIP
         ...     .bucketBy(100, 'year', 'month')
         ...     .mode("overwrite")
@@ -639,19 +939,26 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
         return self
 
-    @since(2.3)
     def sortBy(self, col, *cols):
         """Sorts the output in each bucket by the given columns on the file system.
 
-        :param col: a name of a column, or a list of names.
-        :param cols: additional names (optional). If `col` is a list it should be empty.
+        .. versionadded:: 2.3.0
 
+        Parameters
+        ----------
+        col : str, tuple or list
+            a name of a column, or a list of names.
+        cols : str
+            additional names (optional). If `col` is a list it should be empty.
+
+        Examples
+        --------
         >>> (df.write.format('parquet')  # doctest: +SKIP
         ...     .bucketBy(100, 'year', 'month')
         ...     .sortBy('day')
@@ -664,13 +971,12 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]
 
-        if not all(isinstance(c, basestring) for c in cols) or not(isinstance(col, basestring)):
+        if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
         self._jwrite = self._jwrite.sortBy(col, _to_seq(self._spark._sc, cols))
         return self
 
-    @since(1.4)
     def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
@@ -678,19 +984,30 @@ class DataFrameWriter(OptionUtils):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        :param path: the path in a Hadoop supported file system
-        :param format: the format used to save
-        :param mode: specifies the behavior of the save operation when data already exists.
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        path : str, optional
+            the path in a Hadoop supported file system
+        format : str, optional
+            the format used to save
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        :param partitionBy: names of partitioning columns
-        :param options: all other string options
+        partitionBy : list, optional
+            names of partitioning columns
+        **options : dict
+            all other string options
 
-        >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
+        Examples
+        --------
+        >>> df.write.mode("append").save(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:
@@ -703,17 +1020,18 @@ class DataFrameWriter(OptionUtils):
             self._jwrite.save(path)
 
     @since(1.4)
-    def insertInto(self, tableName, overwrite=False):
+    def insertInto(self, tableName, overwrite=None):
         """Inserts the content of the :class:`DataFrame` to the specified table.
 
-        It requires that the schema of the class:`DataFrame` is the same as the
+        It requires that the schema of the :class:`DataFrame` is the same as the
         schema of the table.
 
         Optionally overwriting any existing data.
         """
-        self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
+        if overwrite is not None:
+            self.mode("overwrite" if overwrite else "append")
+        self._jwrite.insertInto(tableName)
 
-    @since(1.4)
     def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):
         """Saves the content of the :class:`DataFrame` as the specified table.
 
@@ -727,12 +1045,21 @@ class DataFrameWriter(OptionUtils):
         * `error` or `errorifexists`: Throw an exception if data already exists.
         * `ignore`: Silently ignore this operation if data already exists.
 
-        :param name: the table name
-        :param format: the format used to save
-        :param mode: one of `append`, `overwrite`, `error`, `errorifexists`, `ignore` \
-                     (default: error)
-        :param partitionBy: names of partitioning columns
-        :param options: all other string options
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        name : str
+            the table name
+        format : str, optional
+            the format used to save
+        mode : str, optional
+            one of `append`, `overwrite`, `error`, `errorifexists`, `ignore` \
+            (default: error)
+        partitionBy : str or list
+            names of partitioning columns
+        **options : dict
+            all other string options
         """
         self.mode(mode).options(**options)
         if partitionBy is not None:
@@ -741,58 +1068,89 @@ class DataFrameWriter(OptionUtils):
             self.format(format)
         self._jwrite.saveAsTable(name)
 
-    @since(1.4)
-    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None):
+    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
+             lineSep=None, encoding=None, ignoreNullFields=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
 
-        :param path: the path in any Hadoop supported file system
-        :param mode: specifies the behavior of the save operation when data already exists.
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-                            snappy and deflate).
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+        compression : str, optional
+            compression codec to use when saving to file. This can be one of the
+            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+            snappy and deflate).
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats
+            follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        encoding : str, optional
+            specifies encoding (charset) of saved json files. If None is set,
+            the default UTF-8 charset will be used.
+        lineSep : str, optional defines the line separator that should be used for writing. If None is
+            set, it uses the default value, ``\\n``.
+        ignoreNullFields : str or bool, optional
+            Whether to ignore null fields when generating JSON objects.
+            If None is set, it uses the default value, ``true``.
 
+        Examples
+        --------
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(
-            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat)
+            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
+            lineSep=lineSep, encoding=encoding, ignoreNullFields=ignoreNullFields)
         self._jwrite.json(path)
 
-    @since(1.4)
     def parquet(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
-        :param path: the path in any Hadoop supported file system
-        :param mode: specifies the behavior of the save operation when data already exists.
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        :param partitionBy: names of partitioning columns
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
-                            This will override ``spark.sql.parquet.compression.codec``. If None
-                            is set, it uses the value specified in
-                            ``spark.sql.parquet.compression.codec``.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        compression : str, optional
+            compression codec to use when saving to file. This can be one of the
+            known case-insensitive shorten names (none, uncompressed, snappy, gzip,
+            lzo, brotli, lz4, and zstd). This will override
+            ``spark.sql.parquet.compression.codec``. If None is set, it uses the
+            value specified in ``spark.sql.parquet.compression.codec``.
 
+        Examples
+        --------
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -801,30 +1159,44 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(compression=compression)
         self._jwrite.parquet(path)
 
-    @since(1.6)
-    def text(self, path, compression=None):
+    def text(self, path, compression=None, lineSep=None):
         """Saves the content of the DataFrame in a text file at the specified path.
+        The text files will be encoded as UTF-8.
 
-        :param path: the path in any Hadoop supported file system
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-                            snappy and deflate).
+        .. versionadded:: 1.6.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        compression : str, optional
+            compression codec to use when saving to file. This can be one of the
+            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+            snappy and deflate).
+        lineSep : str, optional
+            defines the line separator that should be used for writing. If None is
+            set, it uses the default value, ``\\n``.
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
         """
-        self._set_opts(compression=compression)
+        self._set_opts(compression=compression, lineSep=lineSep)
         self._jwrite.text(path)
 
-    @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None, quoteAll=None, dateFormat=None,
             timestampFormat=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            charToEscapeQuoteEscaping=None):
-        """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
+            charToEscapeQuoteEscaping=None, encoding=None, emptyValue=None, lineSep=None):
+        r"""Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
-        :param path: the path in any Hadoop supported file system
-        :param mode: specifies the behavior of the save operation when data already exists.
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
@@ -832,45 +1204,71 @@ class DataFrameWriter(OptionUtils):
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
 
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-                            snappy and deflate).
-        :param sep: sets a single character as a separator for each field and value. If None is
-                    set, it uses the default value, ``,``.
-        :param quote: sets a single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
-        :param escape: sets a single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``
-        :param escapeQuotes: a flag indicating whether values containing quotes should always
-                             be enclosed in quotes. If None is set, it uses the default value
-                             ``true``, escaping all values containing a quote character.
-        :param quoteAll: a flag indicating whether all values should always be enclosed in
-                          quotes. If None is set, it uses the default value ``false``,
-                          only escaping values containing a quote character.
-        :param header: writes the names of columns as the first line. If None is set, it uses
-                       the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at ``java.text.SimpleDateFormat``. This
-                           applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format. Custom date
-                                formats follow the formats at ``java.text.SimpleDateFormat``.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
-                                        values being written should be skipped. If None is set, it
-                                        uses the default value, ``true``.
-        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
-                                         values being written should be skipped. If None is set, it
-                                         uses the default value, ``true``.
-        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, the default value is
-                                          escape character when escape and quote characters are
-                                          different, ``\0`` otherwise..
+        compression : str, optional
+            compression codec to use when saving to file. This can be one of the
+            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+            snappy and deflate).
+        sep : str, optional
+            sets a separator (one or more characters) for each field and value. If None is
+            set, it uses the default value, ``,``.
+        quote : str, optional
+            sets a single character used for escaping quoted values where the
+            separator can be part of the value. If None is set, it uses the default
+            value, ``"``. If an empty string is set, it uses ``u0000`` (null character).
+        escape : str, optional
+            sets a single character used for escaping quotes inside an already
+            quoted value. If None is set, it uses the default value, ``\``
+        escapeQuotes : str or bool, optional
+            a flag indicating whether values containing quotes should always
+            be enclosed in quotes. If None is set, it uses the default value
+            ``true``, escaping all values containing a quote character.
+        quoteAll : str or bool, optional
+            a flag indicating whether all values should always be enclosed in
+            quotes. If None is set, it uses the default value ``false``,
+            only escaping values containing a quote character.
+        header : str or bool, optional
+            writes the names of columns as the first line. If None is set, it uses
+            the default value, ``false``.
+        nullValue : str, optional
+            sets the string representation of a null value. If None is set, it uses
+            the default value, empty string.
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats follow
+            the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        ignoreLeadingWhiteSpace : str or bool, optional
+            a flag indicating whether or not leading whitespaces from
+            values being written should be skipped. If None is set, it
+            uses the default value, ``true``.
+        ignoreTrailingWhiteSpace : str or bool, optional
+            a flag indicating whether or not trailing whitespaces from
+            values being written should be skipped. If None is set, it
+            uses the default value, ``true``.
+        charToEscapeQuoteEscaping : str, optional
+            sets a single character used for escaping the escape for
+            the quote character. If None is set, the default value is
+            escape character when escape and quote characters are
+            different, ``\0`` otherwise..
+        encoding : str, optional
+            sets the encoding (charset) of saved csv files. If None is set,
+            the default UTF-8 charset will be used.
+        emptyValue : str, optional
+            sets the string representation of an empty value. If None is set, it uses
+            the default value, ``""``.
+        lineSep : str, optional
+            defines the line separator that should be used for writing. If None is
+            set, it uses the default value, ``\\n``. Maximum length is 1 character.
 
+        Examples
+        --------
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -879,30 +1277,38 @@ class DataFrameWriter(OptionUtils):
                        dateFormat=dateFormat, timestampFormat=timestampFormat,
                        ignoreLeadingWhiteSpace=ignoreLeadingWhiteSpace,
                        ignoreTrailingWhiteSpace=ignoreTrailingWhiteSpace,
-                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
+                       charToEscapeQuoteEscaping=charToEscapeQuoteEscaping,
+                       encoding=encoding, emptyValue=emptyValue, lineSep=lineSep)
         self._jwrite.csv(path)
 
-    @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        .. note:: Currently ORC support is only available together with Hive support.
+        .. versionadded:: 1.5.0
 
-        :param path: the path in any Hadoop supported file system
-        :param mode: specifies the behavior of the save operation when data already exists.
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        :param partitionBy: names of partitioning columns
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
-                            This will override ``orc.compress`` and
-                            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
-                            specified in ``spark.sql.orc.compression.codec``.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        compression : str, optional
+            compression codec to use when saving to file. This can be one of the
+            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+            This will override ``orc.compress`` and
+            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
+            specified in ``spark.sql.orc.compression.codec``.
 
+        Examples
+        --------
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -912,25 +1318,34 @@ class DataFrameWriter(OptionUtils):
         self._set_opts(compression=compression)
         self._jwrite.orc(path)
 
-    @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster; \
-        otherwise Spark might crash your external database systems.
+        .. versionadded:: 1.4.0
 
-        :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
-        :param table: Name of the table in the external database.
-        :param mode: specifies the behavior of the save operation when data already exists.
+        Parameters
+        ----------
+        url : str
+            a JDBC URL of the form ``jdbc:subprotocol:subname``
+        table : str
+            Name of the table in the external database.
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
                 exists.
-        :param properties: a dictionary of JDBC database connection arguments. Normally at
-                           least properties "user" and "password" with their corresponding values.
-                           For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+        properties : dict
+            a dictionary of JDBC database connection arguments. Normally at
+            least properties "user" and "password" with their corresponding values.
+            For example { 'user' : 'SYSTEM', 'password' : 'mypassword' }
+
+        Notes
+        -----
+        Don't create too many partitions in parallel on a large cluster;
+        otherwise Spark might crash your external database systems.
         """
         if properties is None:
             properties = dict()
@@ -940,13 +1355,151 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
+class DataFrameWriterV2(object):
+    """
+    Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
+    to external storage using the v2 API.
+
+    .. versionadded:: 3.1.0
+    """
+
+    def __init__(self, df, table):
+        self._df = df
+        self._spark = df.sql_ctx
+        self._jwriter = df._jdf.writeTo(table)
+
+    @since(3.1)
+    def using(self, provider):
+        """
+        Specifies a provider for the underlying output data source.
+        Spark's default catalog supports "parquet", "json", etc.
+        """
+        self._jwriter.using(provider)
+        return self
+
+    @since(3.1)
+    def option(self, key, value):
+        """
+        Add a write option.
+        """
+        self._jwriter.option(key, to_str(value))
+        return self
+
+    @since(3.1)
+    def options(self, **options):
+        """
+        Add write options.
+        """
+        options = {k: to_str(v) for k, v in options.items()}
+        self._jwriter.options(options)
+        return self
+
+    @since(3.1)
+    def tableProperty(self, property, value):
+        """
+        Add table property.
+        """
+        self._jwriter.tableProperty(property, value)
+        return self
+
+    @since(3.1)
+    def partitionedBy(self, col, *cols):
+        """
+        Partition the output table created by `create`, `createOrReplace`, or `replace` using
+        the given columns or transforms.
+
+        When specified, the table data will be stored by these values for efficient reads.
+
+        For example, when a table is partitioned by day, it may be stored
+        in a directory layout like:
+
+        * `table/day=2019-06-01/`
+        * `table/day=2019-06-02/`
+
+        Partitioning is one of the most widely used techniques to optimize physical data layout.
+        It provides a coarse-grained index for skipping unnecessary data reads when queries have
+        predicates on the partitioned columns. In order for partitioning to work well, the number
+        of distinct values in each column should typically be less than tens of thousands.
+
+        `col` and `cols` support only the following functions:
+
+        * :py:func:`pyspark.sql.functions.years`
+        * :py:func:`pyspark.sql.functions.months`
+        * :py:func:`pyspark.sql.functions.days`
+        * :py:func:`pyspark.sql.functions.hours`
+        * :py:func:`pyspark.sql.functions.bucket`
+
+        """
+        col = _to_java_column(col)
+        cols = _to_seq(self._spark._sc, [_to_java_column(c) for c in cols])
+        return self
+
+    @since(3.1)
+    def create(self):
+        """
+        Create a new table from the contents of the data frame.
+
+        The new table's schema, partition layout, properties, and other configuration will be
+        based on the configuration set on this writer.
+        """
+        self._jwriter.create()
+
+    @since(3.1)
+    def replace(self):
+        """
+        Replace an existing table with the contents of the data frame.
+
+        The existing table's schema, partition layout, properties, and other configuration will be
+        replaced with the contents of the data frame and the configuration set on this writer.
+        """
+        self._jwriter.replace()
+
+    @since(3.1)
+    def createOrReplace(self):
+        """
+        Create a new table or replace an existing table with the contents of the data frame.
+
+        The output table's schema, partition layout, properties,
+        and other configuration will be based on the contents of the data frame
+        and the configuration set on this writer.
+        If the table exists, its configuration and data will be replaced.
+        """
+        self._jwriter.createOrReplace()
+
+    @since(3.1)
+    def append(self):
+        """
+        Append the contents of the data frame to the output table.
+        """
+        self._jwriter.append()
+
+    @since(3.1)
+    def overwrite(self, condition):
+        """
+        Overwrite rows matching the given filter condition with the contents of the data frame in
+        the output table.
+        """
+        self._jwriter.overwrite(condition)
+
+    @since(3.1)
+    def overwritePartitions(self):
+        """
+        Overwrite all partition for which the data frame contains at least one row with the contents
+        of the data frame in the output table.
+
+        This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
+        partitions dynamically depending on the contents of the data frame.
+        """
+        self._jwriter.overwritePartitions()
+
+
 def _test():
     import doctest
     import os
     import tempfile
     import py4j
     from pyspark.context import SparkContext
-    from pyspark.sql import SparkSession, Row
+    from pyspark.sql import SparkSession
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -954,7 +1507,7 @@ def _test():
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     try:
-        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+        spark = SparkSession.builder.getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
@@ -968,7 +1521,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     sc.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

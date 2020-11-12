@@ -25,10 +25,12 @@
 FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
 cd "$FWDIR"
 
-PYTHON_VERSION_CHECK=$(python -c 'import sys; print(sys.version_info < (2, 7, 0))')
+export PATH=/home/anaconda/envs/py36/bin:$PATH
+
+PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 6, 0))')
 if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
-  echo "Python versions prior to 2.7 are not supported."
+  echo "Python versions prior to 3.6 are not supported."
   exit -1
 fi
 
-exec python -u ./dev/run-tests-jenkins.py "$@"
+exec python3 -u ./dev/run-tests-jenkins.py "$@"

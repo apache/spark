@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 
 /**
@@ -221,7 +221,8 @@ private[columnar] object INT extends NativeColumnType(IntegerType, 4) {
   override def getField(row: InternalRow, ordinal: Int): Int = row.getInt(ordinal)
 
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
   }
 }
@@ -249,7 +250,8 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 
   override def getField(row: InternalRow, ordinal: Int): Long = row.getLong(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
   }
 }
@@ -277,7 +279,8 @@ private[columnar] object FLOAT extends NativeColumnType(FloatType, 4) {
 
   override def getField(row: InternalRow, ordinal: Int): Float = row.getFloat(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
   }
 }
@@ -305,7 +308,8 @@ private[columnar] object DOUBLE extends NativeColumnType(DoubleType, 8) {
 
   override def getField(row: InternalRow, ordinal: Int): Double = row.getDouble(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
   }
 }
@@ -331,7 +335,8 @@ private[columnar] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
 
   override def getField(row: InternalRow, ordinal: Int): Boolean = row.getBoolean(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
   }
 }
@@ -359,7 +364,8 @@ private[columnar] object BYTE extends NativeColumnType(ByteType, 1) {
 
   override def getField(row: InternalRow, ordinal: Int): Byte = row.getByte(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setByte(toOrdinal, from.getByte(fromOrdinal))
   }
 }
@@ -387,7 +393,8 @@ private[columnar] object SHORT extends NativeColumnType(ShortType, 2) {
 
   override def getField(row: InternalRow, ordinal: Int): Short = row.getShort(ordinal)
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     to.setShort(toOrdinal, from.getShort(fromOrdinal))
   }
 }
@@ -452,7 +459,8 @@ private[columnar] object STRING
     row.getUTF8String(ordinal)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 
@@ -496,7 +504,8 @@ private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
     row.setDecimal(ordinal, value, precision)
   }
 
-  override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
+  override def copyField(from: InternalRow, fromOrdinal: Int,
+      to: InternalRow, toOrdinal: Int): Unit = {
     setField(to, toOrdinal, getField(from, fromOrdinal))
   }
 }
@@ -696,6 +705,44 @@ private[columnar] case class MAP(dataType: MapType)
   override def clone(v: UnsafeMapData): UnsafeMapData = v.copy()
 }
 
+private[columnar] object CALENDAR_INTERVAL extends ColumnType[CalendarInterval] {
+
+  override def dataType: DataType = CalendarIntervalType
+
+  override def defaultSize: Int = 16
+
+  override def getField(row: InternalRow, ordinal: Int): CalendarInterval = row.getInterval(ordinal)
+
+  override def setField(row: InternalRow, ordinal: Int, value: CalendarInterval): Unit = {
+    row.setInterval(ordinal, value)
+  }
+
+  override def extract(buffer: ByteBuffer): CalendarInterval = {
+    val months = ByteBufferHelper.getInt(buffer)
+    val days = ByteBufferHelper.getInt(buffer)
+    val microseconds = ByteBufferHelper.getLong(buffer)
+    new CalendarInterval(months, days, microseconds)
+  }
+
+  // copy the bytes from ByteBuffer to UnsafeRow
+  override def extract(buffer: ByteBuffer, row: InternalRow, ordinal: Int): Unit = {
+    if (row.isInstanceOf[MutableUnsafeRow]) {
+      val cursor = buffer.position()
+      buffer.position(cursor + defaultSize)
+      row.asInstanceOf[MutableUnsafeRow].writer.write(ordinal, buffer.array(),
+        buffer.arrayOffset() + cursor, defaultSize)
+    } else {
+      setField(row, ordinal, extract(buffer))
+    }
+  }
+
+  override def append(v: CalendarInterval, buffer: ByteBuffer): Unit = {
+    ByteBufferHelper.putInt(buffer, v.months)
+    ByteBufferHelper.putInt(buffer, v.days)
+    ByteBufferHelper.putLong(buffer, v.microseconds)
+  }
+}
+
 private[columnar] object ColumnType {
   @tailrec
   def apply(dataType: DataType): ColumnType[_] = {
@@ -710,6 +757,7 @@ private[columnar] object ColumnType {
       case DoubleType => DOUBLE
       case StringType => STRING
       case BinaryType => BINARY
+      case i: CalendarIntervalType => CALENDAR_INTERVAL
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS => COMPACT_DECIMAL(dt)
       case dt: DecimalType => LARGE_DECIMAL(dt)
       case arr: ArrayType => ARRAY(arr)
@@ -717,7 +765,7 @@ private[columnar] object ColumnType {
       case struct: StructType => STRUCT(struct)
       case udt: UserDefinedType[_] => apply(udt.sqlType)
       case other =>
-        throw new Exception(s"Unsupported type: ${other.simpleString}")
+        throw new Exception(s"Unsupported type: ${other.catalogString}")
     }
   }
 }

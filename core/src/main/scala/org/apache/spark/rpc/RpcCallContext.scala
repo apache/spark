@@ -24,7 +24,7 @@ package org.apache.spark.rpc
 private[spark] trait RpcCallContext {
 
   /**
-   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its [[RpcEndpoint.receive]]
+   * Reply a message to the sender. If the sender is [[RpcEndpoint]], its `RpcEndpoint.receive`
    * will be called.
    */
   def reply(response: Any): Unit

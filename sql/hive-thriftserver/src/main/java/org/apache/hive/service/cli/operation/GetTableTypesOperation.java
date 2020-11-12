@@ -39,7 +39,7 @@ public class GetTableTypesOperation extends MetadataOperation {
   protected static TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addStringColumn("TABLE_TYPE", "Table type name.");
 
-  private final RowSet rowSet;
+  protected final RowSet rowSet;
   private final TableTypeMapping tableTypeMapping;
 
   protected GetTableTypesOperation(HiveSession parentSession) {
@@ -48,7 +48,7 @@ public class GetTableTypesOperation extends MetadataOperation {
       .getVar(HiveConf.ConfVars.HIVE_SERVER2_TABLE_TYPE_MAPPING);
     tableTypeMapping =
       TableTypeMappingFactory.getTableTypeMapping(tableMappingStr);
-    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override

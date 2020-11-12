@@ -17,16 +17,14 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * A collection of methods used to validate data before applying ML algorithms.
  */
-@DeveloperApi
 @Since("0.8.0")
 object DataValidators extends Logging {
 

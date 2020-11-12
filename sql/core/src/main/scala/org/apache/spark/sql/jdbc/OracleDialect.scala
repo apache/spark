@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +30,8 @@ private case object OracleDialect extends JdbcDialect {
   private[jdbc] val BINARY_DOUBLE = 101
   private[jdbc] val TIMESTAMPTZ = -101
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
   private def supportTimeZoneTypes: Boolean = {
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
@@ -63,6 +64,12 @@ private case object OracleDialect extends JdbcDialect {
         => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      // scalastyle:off line.size.limit
+      // According to the documentation for Oracle Database 19c:
+      // "Values of the ROWID pseudocolumn are strings representing the address of each row."
+      // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html#GUID-AEF1FE4C-2DE5-4BE7-BB53-83AD8F1E34EF
+      // scalastyle:on line.size.limit
+      case Types.ROWID => Some(StringType)
       case _ => None
     }
   }
@@ -95,4 +102,42 @@ private case object OracleDialect extends JdbcDialect {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  /**
+   * The SQL query used to truncate a table.
+   * @param table The table to truncate
+   * @param cascade Whether or not to cascade the truncation. Default value is the
+   *                value of isCascadingTruncateTable()
+   * @return The SQL query to use for truncating a table
+   */
+  override def getTruncateQuery(
+      table: String,
+      cascade: Option[Boolean] = isCascadingTruncateTable): String = {
+    cascade match {
+      case Some(true) => s"TRUNCATE TABLE $table CASCADE"
+      case _ => s"TRUNCATE TABLE $table"
+    }
+  }
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getAddColumnQuery(
+      tableName: String,
+      columnName: String,
+      dataType: String): String =
+    s"ALTER TABLE $tableName ADD ${quoteIdentifier(columnName)} $dataType"
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getUpdateColumnTypeQuery(
+    tableName: String,
+    columnName: String,
+    newDataType: String): String =
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $newDataType"
+
+  override def getUpdateColumnNullabilityQuery(
+    tableName: String,
+    columnName: String,
+    isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
+  }
 }

@@ -12,7 +12,7 @@ LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1 PARTITION (ds='1'
 INSERT OVERWRITE TABLE T1 PARTITION (ds='1') select key, val from T1 where ds = '1';
 
 -- The plan is not converted to a map-side, since although the sorting columns and grouping
--- columns match, the user is issueing a distinct.
+-- columns match, the user is issuing a distinct.
 -- However, after HIVE-4310, partial aggregation is performed on the mapper
 EXPLAIN
 select count(distinct key) from T1;

@@ -20,6 +20,7 @@ package org.apache.spark;
 import java.io.IOException;
 import java.io.Serializable;
 
+import org.apache.spark.sql.SparkSession$;
 import org.junit.After;
 import org.junit.Before;
 
@@ -42,7 +43,12 @@ public abstract class SharedSparkSession implements Serializable {
 
   @After
   public void tearDown() {
-    spark.stop();
-    spark = null;
+    try {
+      spark.stop();
+      spark = null;
+    } finally {
+      SparkSession.clearDefaultSession();
+      SparkSession$.MODULE$.clearActiveSessionInternal();
+    }
   }
 }

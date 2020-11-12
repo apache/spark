@@ -17,22 +17,46 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.language.existentials
+
+import org.mockito.Mockito._
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class JoinSuite extends QueryTest with SharedSQLContext {
+class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  private def attachCleanupResourceChecker(plan: SparkPlan): Unit = {
+    // SPARK-21492: Check cleanupResources are finally triggered in SortExec node for every
+    // test case
+    plan.foreachUp {
+      case s: SortExec =>
+        val sortExec = spy(s)
+        verify(sortExec, atLeastOnce).cleanupResources()
+        verify(sortExec.rowSorter, atLeastOnce).cleanupResources()
+      case _ =>
+    }
+  }
+
+  override protected def checkAnswer(df: => DataFrame, rows: Seq[Row]): Unit = {
+    attachCleanupResourceChecker(df.queryExecution.sparkPlan)
+    super.checkAnswer(df, rows)
+  }
 
   setupTestData()
 
@@ -48,8 +72,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
-  def assertJoin(pair: (String, Class[_])): Any = {
-    val (sqlString, c) = pair
+  def assertJoin(pair: (String, Class[_ <: BinaryExecNode])): Any = {
+    val sqlString = pair._1
+    val c = pair._2
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
@@ -64,12 +89,13 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     if (operators.head.getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
+    operators.head
   }
 
   test("join operator selection") {
     spark.sharedState.cacheManager.clearCache()
 
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
@@ -215,7 +241,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       bigDataX.join(bigDataY).where($"x.key" === $"y.key"),
-      testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      testData.rdd.flatMap { row =>
+        Seq.fill(16)(new GenericRow(Seq(row, row).flatMap(_.toSeq).toArray))
+      }.collect().toSeq)
   }
 
   test("cartesian product join") {
@@ -239,7 +267,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
+      assert(e.getMessage.contains("Detected implicit cartesian product for INNER join " +
         "between logical plans"))
     }
   }
@@ -375,94 +403,96 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
-    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+    withTempView("`left`", "`right`") {
+      upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
+      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
-    val left = UnresolvedRelation(TableIdentifier("left"))
-    val right = UnresolvedRelation(TableIdentifier("right"))
+      val left = UnresolvedRelation(TableIdentifier("left"))
+      val right = UnresolvedRelation(TableIdentifier("right"))
 
-    checkAnswer(
-      left.join(right, $"left.N" === $"right.N", "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, $"left.N" === $"right.N", "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", null, null) ::
+          Row(null, null, 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", null, null) ::
+          Row(3, "C", null, null) ::
+          Row(null, null, 3, "C") ::
+          Row(4, "D", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
-    // operator.
-    checkAnswer(
-      sql(
-        """
-        |SELECT l.a, count(*)
-        |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-        |GROUP BY l.a
-      """.
-          stripMargin),
-      Row(null, 10))
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.N, count(*)
+      // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+      // operator.
+      checkAnswer(
+        sql(
+          """
+          |SELECT l.a, count(*)
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY r.N
-        """.stripMargin),
-      Row
+          |GROUP BY l.a
+        """.
+            stripMargin),
+        Row(null, 10))
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.N, count(*)
+            |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+            |GROUP BY r.N
+          """.stripMargin),
+        Row
         (1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) ::
+          Row(null, 4) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.N, count(*)
+      checkAnswer(
+        sql(
+          """
+            |SELECT l.N, count(*)
+            |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+            |GROUP BY l.N
+          """.stripMargin),
+        Row(1
+          , 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) ::
+          Row(null, 4) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+          |SELECT r.a, count(*)
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY l.N
-        """.stripMargin),
-      Row(1
-        , 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
-
-    checkAnswer(
-      sql(
-        """
-        |SELECT r.a, count(*)
-        |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-        |GROUP BY r.a
-      """.
-          stripMargin),
-      Row(null, 10))
+          |GROUP BY r.a
+        """.
+            stripMargin),
+        Row(null, 10))
+    }
   }
 
   test("broadcasted existence join operator selection") {
@@ -499,10 +529,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
 
       assert(statisticSizeInByte(spark.table("testData2")) >
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       assert(statisticSizeInByte(spark.table("testData")) <
-        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+        spark.conf.get[Long](SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
@@ -588,67 +618,71 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("cross join detection") {
-    testData.createOrReplaceTempView("A")
-    testData.createOrReplaceTempView("B")
-    testData2.createOrReplaceTempView("C")
-    testData3.createOrReplaceTempView("D")
-    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
-    val cartesianQueries = Seq(
-      /** The following should error out since there is no explicit cross join */
-      "SELECT * FROM testData inner join testData2",
-      "SELECT * FROM testData left outer join testData2",
-      "SELECT * FROM testData right outer join testData2",
-      "SELECT * FROM testData full outer join testData2",
-      "SELECT * FROM testData, testData2",
-      "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
-      /** The following should fail because after reordering there are cartesian products */
-      "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
-      "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
-      /** Cartesian product involving C, which is not involved in a CROSS join */
-      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+    withTempView("A", "B", "C", "D") {
+      testData.createOrReplaceTempView("A")
+      testData.createOrReplaceTempView("B")
+      testData2.createOrReplaceTempView("C")
+      testData3.createOrReplaceTempView("D")
+      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      val cartesianQueries = Seq(
+        /** The following should error out since there is no explicit cross join */
+        "SELECT * FROM testData inner join testData2",
+        "SELECT * FROM testData left outer join testData2",
+        "SELECT * FROM testData right outer join testData2",
+        "SELECT * FROM testData full outer join testData2",
+        "SELECT * FROM testData, testData2",
+        "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
+        /** The following should fail because after reordering there are cartesian products */
+        "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
+        "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
+        /** Cartesian product involving C, which is not involved in a CROSS join */
+        "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
 
-     def checkCartesianDetection(query: String): Unit = {
-      val e = intercept[Exception] {
-        checkAnswer(sql(query), Nil);
+      def checkCartesianDetection(query: String): Unit = {
+        val e = intercept[Exception] {
+          checkAnswer(sql(query), Nil);
+        }
+        assert(e.getMessage.contains("Detected implicit cartesian product"))
       }
-      assert(e.getMessage.contains("Detected cartesian product"))
-    }
 
-    cartesianQueries.foreach(checkCartesianDetection)
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+        cartesianQueries.foreach(checkCartesianDetection)
+      }
 
-    // Check that left_semi, left_anti, existence joins without conditions do not throw
-    // an exception if cross joins are disabled
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
-      checkAnswer(
-        sql("SELECT * FROM testData3 LEFT SEMI JOIN testData2"),
-        Row(1, null) :: Row (2, 2) :: Nil)
-      checkAnswer(
-        sql("SELECT * FROM testData3 LEFT ANTI JOIN testData2"),
-        Nil)
-      checkAnswer(
-        sql(
-          """
-            |SELECT a FROM testData3
-            |WHERE
-            |  EXISTS (SELECT * FROM testData)
-            |OR
-            |  EXISTS (SELECT * FROM testData2)""".stripMargin),
-        Row(1) :: Row(2) :: Nil)
-      checkAnswer(
-        sql(
-          """
-            |SELECT key FROM testData
-            |WHERE
-            |  key IN (SELECT a FROM testData2)
-            |OR
-            |  key IN (SELECT a FROM testData3)""".stripMargin),
-        Row(1) :: Row(2) :: Row(3) :: Nil)
+      // Check that left_semi, left_anti, existence joins without conditions do not throw
+      // an exception if cross joins are disabled
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+        checkAnswer(
+          sql("SELECT * FROM testData3 LEFT SEMI JOIN testData2"),
+          Row(1, null) :: Row (2, 2) :: Nil)
+        checkAnswer(
+          sql("SELECT * FROM testData3 LEFT ANTI JOIN testData2"),
+          Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT a FROM testData3
+              |WHERE
+              |  EXISTS (SELECT * FROM testData)
+              |OR
+              |  EXISTS (SELECT * FROM testData2)""".stripMargin),
+          Row(1) :: Row(2) :: Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT key FROM testData
+              |WHERE
+              |  key IN (SELECT a FROM testData2)
+              |OR
+              |  key IN (SELECT a FROM testData3)""".stripMargin),
+          Row(1) :: Row(2) :: Row(3) :: Nil)
+      }
     }
   }
 
   test("test SortMergeJoin (without spill)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
-      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> Int.MaxValue.toString) {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString) {
 
       assertNotSpilled(sparkContext, "inner join") {
         checkAnswer(
@@ -680,7 +714,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -697,7 +731,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
     }
@@ -705,13 +739,29 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   test("test SortMergeJoin (with spill)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
-      "spark.sql.sortMergeJoinExec.buffer.in.memory.threshold" -> "0",
-      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
 
       assertSpilled(sparkContext, "inner join") {
         checkAnswer(
           sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
           Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      // LEFT SEMI JOIN without bound condition does not spill
+      assertNotSpilled(sparkContext, "left semi join") {
+        checkAnswer(
+          sql("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a WHERE key = 2"),
+          Row(2, "2") :: Nil
+        )
+      }
+
+      // LEFT ANTI JOIN without bound condition does not spill
+      assertNotSpilled(sparkContext, "left anti join") {
+        checkAnswer(
+          sql("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a WHERE key = 2"),
+          Nil
         )
       }
 
@@ -738,7 +788,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -755,7 +805,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
 
@@ -774,7 +824,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               |ON
               |  big.key = small.a
             """.stripMargin),
-          expected
+          expected.toSeq
         )
       }
     }
@@ -815,7 +865,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         case j: SortMergeJoinExec => j
       }
       val executed = df.queryExecution.executedPlan
-      val executedJoins = executed.collect {
+      val executedJoins = collect(executed) {
         case j: SortMergeJoinExec => j
       }
       // This only applies to the above tested queries, in which a child SortMergeJoin always
@@ -831,7 +881,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         case _ =>
       }
       val joinPairs = physicalJoins.zip(executedJoins)
-      val numOfJoins = sqlString.split(" ").count(_.toUpperCase == "JOIN")
+      val numOfJoins = sqlString.split(" ").count(_.toUpperCase(Locale.ROOT) == "JOIN")
       assert(joinPairs.size == numOfJoins)
 
       joinPairs.foreach {
@@ -880,6 +930,396 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       assert(joins(0).isInstanceOf[SortMergeJoinExec])
       assert(joins(1).isInstanceOf[BroadcastHashJoinExec])
       checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-24495: Join may return wrong result when having duplicated equal-join keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 100, 1, 2)
+      val df2 = spark.range(100).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
+    }
+  }
+
+  test("SPARK-27485: EnsureRequirements should not fail join with duplicate keys") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val tbl_a = spark.range(40)
+        .select($"id" as "x", $"id" % 10 as "y")
+        .repartition(2, $"x", $"y", $"x")
+        .as("tbl_a")
+
+      val tbl_b = spark.range(20)
+        .select($"id" as "x", $"id" % 2 as "y1", $"id" % 20 as "y2")
+        .as("tbl_b")
+
+      val res = tbl_a
+        .join(tbl_b,
+          $"tbl_a.x" === $"tbl_b.x" && $"tbl_a.y" === $"tbl_b.y1" && $"tbl_a.y" === $"tbl_b.y2")
+        .select($"tbl_a.x")
+      checkAnswer(res, Row(0L) :: Row(1L) :: Nil)
+    }
+  }
+
+  test("SPARK-26352: join reordering should not change the order of columns") {
+    withTable("tab1", "tab2", "tab3") {
+      spark.sql("select 1 as x, 100 as y").write.saveAsTable("tab1")
+      spark.sql("select 42 as i, 200 as j").write.saveAsTable("tab2")
+      spark.sql("select 1 as a, 42 as b").write.saveAsTable("tab3")
+
+      val df = spark.sql("""
+        with tmp as (select * from tab1 cross join tab2)
+        select * from tmp join tab3 on a = x and b = i
+      """)
+      checkAnswer(df, Row(1, 100, 42, 200, 1, 42))
+    }
+  }
+
+  test("NaN and -0.0 in join keys") {
+    withTempView("v1", "v2", "v3", "v4") {
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v1")
+      Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON v1.f = v2.f AND v1.d = v2.d
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with complicated join keys.
+      checkAnswer(
+        sql(
+          """
+            |SELECT v1.f, v1.d, v2.f, v2.d
+            |FROM v1 JOIN v2
+            |ON
+            |  array(v1.f) = array(v2.f) AND
+            |  struct(v1.d) = struct(v2.d) AND
+            |  array(struct(v1.f, v1.d)) = array(struct(v2.f, v2.d)) AND
+            |  struct(array(v1.f), array(v1.d)) = struct(array(v2.f), array(v2.d))
+          """.stripMargin),
+        Seq(
+          Row(Float.NaN, Double.NaN, Float.NaN, Double.NaN),
+          Row(0.0f, 0.0, 0.0f, 0.0),
+          Row(0.0f, 0.0, -0.0f, -0.0),
+          Row(-0.0f, -0.0, 0.0f, 0.0),
+          Row(-0.0f, -0.0, -0.0f, -0.0)))
+
+      // test with tables with complicated-type columns.
+      Seq((Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v3")
+      Seq((Array(0.0f, -0.0f), Tuple2(0.0d, 0.0/0.0), Seq(Tuple2(0.0d, 0.0/0.0))))
+        .toDF("arr", "stru", "arrOfStru").createTempView("v4")
+      checkAnswer(
+        sql(
+          """
+            |SELECT v3.arr, v3.stru, v3.arrOfStru, v4.arr, v4.stru, v4.arrOfStru
+            |FROM v3 JOIN v4
+            |ON v3.arr = v4.arr AND v3.stru = v4.stru AND v3.arrOfStru = v4.arrOfStru
+          """.stripMargin),
+        Seq(Row(
+          Seq(-0.0f, 0.0f),
+          Row(-0.0d, Double.NaN),
+          Seq(Row(-0.0d, Double.NaN)),
+          Seq(0.0f, -0.0f),
+          Row(0.0d, 0.0/0.0),
+          Seq(Row(0.0d, 0.0/0.0)))))
+    }
+  }
+
+  test("SPARK-28323: PythonUDF should be able to use in join condition") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.join(right, pythonTestUDF(left("a")) === pythonTestUDF(right.col("c")))
+
+    val joinNode = find(df.queryExecution.executedPlan)(_.isInstanceOf[BroadcastHashJoinExec])
+    assert(joinNode.isDefined)
+
+    // There are two PythonUDFs which use attribute from left and right of join, individually.
+    // So two PythonUDFs should be evaluated before the join operator, at left and right side.
+    val pythonEvals = collect(joinNode.get) {
+      case p: BatchEvalPythonExec => p
+    }
+    assert(pythonEvals.size == 2)
+
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+  }
+
+  test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
+
+    // Before optimization, there is a logical Filter operator.
+    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
+    assert(filterInAnalysis.isDefined)
+
+    // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
+    val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+    assert(filterExec.isEmpty)
+
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+  }
+
+  test("SPARK-21492: cleanupResource without code generation") {
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(0, 10, 1, 2)
+      val df2 = spark.range(10).select($"id".as("b1"), (- $"id").as("b2"))
+      val res = df1.join(df2, $"id" === $"b1" && $"id" === $"b2").select($"b1", $"b2", $"id")
+      checkAnswer(res, Row(0, 0, 0))
+    }
+  }
+
+  test("SPARK-29850: sort-merge-join an empty table should not memory leak") {
+    val df1 = spark.range(10).select($"id", $"id" % 3 as 'p)
+      .repartition($"id").groupBy($"id").agg(Map("p" -> "max"))
+    val df2 = spark.range(0)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      assert(df2.join(df1, "id").collect().isEmpty)
+    }
+  }
+
+  test("SPARK-32330: Preserve shuffled hash join build side partitioning") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df1 = spark.range(10).select($"id".as("k1"))
+      val df2 = spark.range(30).select($"id".as("k2"))
+      Seq("inner", "cross").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType).groupBy($"k1").count()
+          .queryExecution.executedPlan
+        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        // No extra shuffle before aggregate
+        assert(plan.collect { case _: ShuffleExchangeExec => true }.size === 2)
+      })
+    }
+  }
+
+  test("SPARK-32383: Preserve hash join (BHJ and SHJ) stream side ordering") {
+    val df1 = spark.range(100).select($"id".as("k1"))
+    val df2 = spark.range(100).select($"id".as("k2"))
+    val df3 = spark.range(3).select($"id".as("k3"))
+    val df4 = spark.range(100).select($"id".as("k4"))
+
+    // Test broadcast hash join
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50") {
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: BroadcastHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
+    }
+
+    // Test shuffled hash join
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+      val df3 = spark.range(10).select($"id".as("k3"))
+
+      Seq("inner", "left_outer").foreach(joinType => {
+        val plan = df1.join(df2, $"k1" === $"k2", joinType)
+          .join(df3, $"k1" === $"k3", joinType)
+          .join(df4, $"k1" === $"k4", joinType)
+          .queryExecution
+          .executedPlan
+        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
+        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        // No extra sort before last sort merge join
+        assert(plan.collect { case _: SortExec => true }.size === 3)
+      })
+    }
+  }
+
+  test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      // positive not in subquery case
+      var joinExec = assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative not in subquery case since multi-column is not supported
+      assertJoin((
+        "select * from testData where (key, key + 1) not in (select * from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+
+      // positive hand-written left anti join
+      // testData.key nullable false
+      // testData3.b nullable true
+      joinExec = assertJoin((
+        "select * from testData left anti join testData3 ON key = b or isnull(key = b)",
+        classOf[BroadcastHashJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative hand-written left anti join
+      // testData.key nullable false
+      // testData2.a nullable false
+      // isnull(key = a) will be optimized to true literal and removed
+      joinExec = assertJoin((
+        "select * from testData left anti join testData2 ON key = a or isnull(key = a)",
+        classOf[BroadcastHashJoinExec]))
+      assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+
+      // negative hand-written left anti join
+      // not match pattern Or(EqualTo(a=b), IsNull(EqualTo(a=b))
+      assertJoin((
+        "select * from testData2 left anti join testData3 ON testData2.a = testData3.b or " +
+          "isnull(testData2.b = testData3.b)",
+        classOf[BroadcastNestedLoopJoinExec]))
+    }
+  }
+
+  test("SPARK-32399: Full outer shuffled hash join") {
+    val inputDFs = Seq(
+      // Test unique join key
+      (spark.range(10).selectExpr("id as k1"),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
+      // Test non-unique join key
+      (spark.range(10).selectExpr("id % 5 as k1"),
+        spark.range(30).selectExpr("id % 5 as k2"),
+        $"k1" === $"k2"),
+      // Test empty build side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2"),
+        $"k1" === $"k2"),
+      // Test empty stream side
+      (spark.range(10).selectExpr("id as k1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
+      // Test empty build and stream side
+      (spark.range(10).selectExpr("id as k1").filter("k1 < -1"),
+        spark.range(30).selectExpr("id as k2").filter("k2 < -1"),
+        $"k1" === $"k2"),
+      // Test string join key
+      (spark.range(10).selectExpr("cast(id * 3 as string) as k1"),
+        spark.range(30).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
+      // Test build side at right
+      (spark.range(30).selectExpr("cast(id / 3 as string) as k1"),
+        spark.range(10).selectExpr("cast(id as string) as k2"),
+        $"k1" === $"k2"),
+      // Test NULL join key
+      (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr("value as k1"),
+        spark.range(30).map(i => if (i % 4 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
+      (spark.range(10).map(i => if (i % 3 == 0) i else null).selectExpr("value as k1"),
+        spark.range(30).map(i => if (i % 5 == 0) i else null).selectExpr("value as k2"),
+        $"k1" === $"k2"),
+      // Test multiple join keys
+      (spark.range(10).map(i => if (i % 2 == 0) i else null).selectExpr(
+        "value as k1", "cast(value % 5 as short) as k2", "cast(value * 3 as long) as k3"),
+        spark.range(30).map(i => if (i % 3 == 0) i else null).selectExpr(
+          "value as k4", "cast(value % 5 as short) as k5", "cast(value * 3 as long) as k6"),
+        $"k1" === $"k4" && $"k2" === $"k5" && $"k3" === $"k6")
+    )
+    inputDFs.foreach { case (df1, df2, joinExprs) =>
+      withSQLConf(
+        // Set broadcast join threshold and number of shuffle partitions,
+        // as shuffled hash join depends on these two configs.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val smjDF = df1.join(df2, joinExprs, "full")
+        assert(smjDF.queryExecution.executedPlan.collect {
+          case _: SortMergeJoinExec => true }.size === 1)
+        val smjResult = smjDF.collect()
+
+        withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
+          val shjDF = df1.join(df2, joinExprs, "full")
+          assert(shjDF.queryExecution.executedPlan.collect {
+            case _: ShuffledHashJoinExec => true }.size === 1)
+          // Same result between shuffled hash join and sort merge join
+          checkAnswer(shjDF, smjResult)
+        }
+      }
+    }
+  }
+
+  test("SPARK-32649: Optimize BHJ/SHJ inner/semi join with empty hashed relation") {
+    val inputDFs = Seq(
+      // Test empty build side for inner join
+      (spark.range(30).selectExpr("id as k1"),
+        spark.range(10).selectExpr("id as k2").filter("k2 < -1"),
+        "inner"),
+      // Test empty build side for semi join
+      (spark.range(30).selectExpr("id as k1"),
+        spark.range(10).selectExpr("id as k2").filter("k2 < -1"),
+        "semi")
+    )
+    inputDFs.foreach { case (df1, df2, joinType) =>
+      // Test broadcast hash join
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+        val bhjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+        assert(bhjCodegenDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : BroadcastHashJoinExec) => true
+          case WholeStageCodegenExec(ProjectExec(_, _ : BroadcastHashJoinExec)) => true
+        }.size === 1)
+        checkAnswer(bhjCodegenDF, Seq.empty)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          val bhjNonCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+          assert(bhjNonCodegenDF.queryExecution.executedPlan.collect {
+            case _: BroadcastHashJoinExec => true }.size === 1)
+          checkAnswer(bhjNonCodegenDF, Seq.empty)
+        }
+      }
+
+      // Test shuffled hash join
+      withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false",
+        // Set broadcast join threshold and number of shuffle partitions,
+        // as shuffled hash join depends on these two configs.
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+        val shjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+        assert(shjCodegenDF.queryExecution.executedPlan.collect {
+          case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+          case WholeStageCodegenExec(ProjectExec(_, _ : ShuffledHashJoinExec)) => true
+        }.size === 1)
+        checkAnswer(shjCodegenDF, Seq.empty)
+
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          val shjNonCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
+          assert(shjNonCodegenDF.queryExecution.executedPlan.collect {
+            case _: ShuffledHashJoinExec => true }.size === 1)
+          checkAnswer(shjNonCodegenDF, Seq.empty)
+        }
+      }
     }
   }
 }

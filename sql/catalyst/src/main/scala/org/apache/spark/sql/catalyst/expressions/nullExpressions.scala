@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -41,9 +42,10 @@ import org.apache.spark.sql.types._
     Examples:
       > SELECT _FUNC_(NULL, 1, NULL);
        1
-  """)
+  """,
+  since = "1.0.0")
 // scalastyle:on line.size.limit
-case class Coalesce(children: Seq[Expression]) extends Expression {
+case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   override def nullable: Boolean = children.forall(_.nullable)
@@ -60,8 +62,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     }
   }
 
-  override def dataType: DataType = children.head.dataType
-
   override def eval(input: InternalRow): Any = {
     var result: Any = null
     val childIterator = children.iterator
@@ -72,7 +72,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -87,14 +87,14 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
        """.stripMargin
     }
 
-    val resultType = ctx.javaType(dataType)
+    val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
       returnType = resultType,
       makeSplitFunction = func =>
         s"""
-           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+           |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
            |do {
            |  $func
            |} while (false);
@@ -111,9 +111,9 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 
     ev.copy(code =
-      s"""
+      code"""
          |${ev.isNull} = true;
-         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
@@ -128,7 +128,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
-  """)
+  """,
+  since = "2.0.0")
 case class IfNull(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -137,7 +138,7 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -147,7 +148,8 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
     Examples:
       > SELECT _FUNC_(2, 2);
        NULL
-  """)
+  """,
+  since = "2.0.0")
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -156,7 +158,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -166,7 +168,8 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
-  """)
+  """,
+  since = "2.0.0")
 case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
@@ -174,7 +177,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
   }
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
 }
 
 
@@ -185,7 +188,8 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
     Examples:
       > SELECT _FUNC_(NULL, 2, 1);
        1
-  """)
+  """,
+  since = "2.0.0")
 // scalastyle:on line.size.limit
 case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
   extends RuntimeReplaceable {
@@ -195,7 +199,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
   }
 
   override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
-  override def sql: String = s"$prettyName(${expr1.sql}, ${expr2.sql}, ${expr3.sql})"
+  override def exprsReplaced: Seq[Expression] = Seq(expr1, expr2, expr3)
 }
 
 
@@ -208,7 +212,8 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
     Examples:
       > SELECT _FUNC_(cast('NaN' as double));
        true
-  """)
+  """,
+  since = "1.5.0")
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
 
@@ -232,10 +237,10 @@ case class IsNaN(child: Expression) extends UnaryExpression
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${eval.code}
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = "false")
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
     }
   }
 }
@@ -250,7 +255,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
     Examples:
       > SELECT _FUNC_(cast('NaN' as double), 123);
        123.0
-  """)
+  """,
+  since = "1.5.0")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -278,10 +284,10 @@ case class NaNvl(left: Expression, right: Expression)
     val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(code = s"""
+        ev.copy(code = code"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (${leftGen.isNull}) {
             ${ev.isNull} = true;
           } else {
@@ -310,7 +316,8 @@ case class NaNvl(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(1);
        false
-  """)
+  """,
+  since = "1.0.0")
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -320,7 +327,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ExprCode(code = eval.code, isNull = "false", value = eval.isNull)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.isNull)
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
@@ -336,7 +343,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     Examples:
       > SELECT _FUNC_(1);
        true
-  """)
+  """,
+  since = "1.0.0")
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
 
@@ -346,7 +354,14 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ExprCode(code = eval.code, isNull = "false", value = s"(!(${eval.isNull}))")
+    val (value, newCode) = eval.isNull match {
+      case TrueLiteral => (FalseLiteral, EmptyBlock)
+      case FalseLiteral => (TrueLiteral, EmptyBlock)
+      case v =>
+        val value = ctx.freshName("value")
+        (JavaCode.variable(value, BooleanType), code"boolean $value = !$v;")
+    }
+    ExprCode(code = eval.code + newCode, isNull = FalseLiteral, value = value)
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
@@ -416,8 +431,8 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "atLeastNNonNulls",
-      extraArguments = (ctx.JAVA_INT, nonnull) :: Nil,
-      returnType = ctx.JAVA_INT,
+      extraArguments = (CodeGenerator.JAVA_INT, nonnull) :: Nil,
+      returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
            |do {
@@ -435,12 +450,12 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
       }.mkString)
 
     ev.copy(code =
-      s"""
-         |${ctx.JAVA_INT} $nonnull = 0;
+      code"""
+         |${CodeGenerator.JAVA_INT} $nonnull = 0;
          |do {
          |  $codes
          |} while (false);
-         |${ctx.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
-       """.stripMargin, isNull = "false")
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
+       """.stripMargin, isNull = FalseLiteral)
   }
 }

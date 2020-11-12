@@ -67,20 +67,20 @@ public class JavaRowSuite {
   public void constructSimpleRow() {
     Row simpleRow = RowFactory.create(
       byteValue,                 // ByteType
-      new Byte(byteValue),
+      Byte.valueOf(byteValue),
       shortValue,                // ShortType
-      new Short(shortValue),
+      Short.valueOf(shortValue),
       intValue,                  // IntegerType
-      new Integer(intValue),
+      Integer.valueOf(intValue),
       longValue,                 // LongType
-      new Long(longValue),
+      Long.valueOf(longValue),
       floatValue,                // FloatType
-      new Float(floatValue),
+      Float.valueOf(floatValue),
       doubleValue,               // DoubleType
-      new Double(doubleValue),
+      Double.valueOf(doubleValue),
       decimalValue,              // DecimalType
       booleanValue,              // BooleanType
-      new Boolean(booleanValue),
+      Boolean.valueOf(booleanValue),
       stringValue,               // StringType
       binaryValue,               // BinaryType
       dateValue,                 // DateType

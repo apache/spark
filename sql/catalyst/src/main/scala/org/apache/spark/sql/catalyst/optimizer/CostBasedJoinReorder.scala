@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, JoinType}
-import org.apache.spark.sql.catalyst.plans.logical.{BinaryNode, Join, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -34,23 +34,22 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def conf = SQLConf.get
-
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
       val result = plan transformDown {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
-        case j @ Join(_, _, _: InnerLike, Some(cond)) =>
+        // Avoid reordering if a join hint is present.
+        case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
           reorder(j, j.output)
-        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond)))
+        case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
-      // After reordering is finished, convert OrderedJoin back to Join
-      result transformDown {
-        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond)
+      // After reordering is finished, convert OrderedJoin back to Join.
+      result transform {
+        case OrderedJoin(left, right, jt, cond) => Join(left, right, jt, cond, JoinHint.NONE)
       }
     }
   }
@@ -74,27 +73,27 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
    * Extracts items of consecutive inner joins and join conditions.
    * This method works for bushy trees and left/right deep trees.
    */
-  private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
+  private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], ExpressionSet) = {
     plan match {
-      case Join(left, right, _: InnerLike, Some(cond)) =>
+      case Join(left, right, _: InnerLike, Some(cond), JoinHint.NONE) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
         val (rightPlans, rightConditions) = extractInnerJoins(right)
-        (leftPlans ++ rightPlans, splitConjunctivePredicates(cond).toSet ++
-          leftConditions ++ rightConditions)
-      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond)))
+        (leftPlans ++ rightPlans, leftConditions ++ rightConditions ++
+          splitConjunctivePredicates(cond))
+      case Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
         if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
-        (Seq(plan), Set())
+        (Seq(plan), ExpressionSet())
     }
   }
 
   private def replaceWithOrderedJoin(plan: LogicalPlan): LogicalPlan = plan match {
-    case j @ Join(left, right, jt: InnerLike, Some(cond)) =>
+    case j @ Join(left, right, jt: InnerLike, Some(cond), JoinHint.NONE) =>
       val replacedLeft = replaceWithOrderedJoin(left)
       val replacedRight = replaceWithOrderedJoin(right)
       OrderedJoin(replacedLeft, replacedRight, jt, Some(cond))
-    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond))) =>
+    case p @ Project(projectList, j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE)) =>
       p.copy(child = replaceWithOrderedJoin(j))
     case _ =>
       plan
@@ -113,7 +112,7 @@ case class OrderedJoin(
 /**
  * Reorder the joins using a dynamic programming algorithm. This implementation is based on the
  * paper: Access Path Selection in a Relational Database Management System.
- * http://www.inf.ed.ac.uk/teaching/courses/adbs/AccessPath.pdf
+ * https://dl.acm.org/doi/10.1145/582095.582099
  *
  * First we put all items (basic joined nodes) into level 0, then we build all two-way joins
  * at level 1 from plans at level 0 (single items), then build all 3-way joins from plans
@@ -142,16 +141,23 @@ object JoinReorderDP extends PredicateHelper with Logging {
   def search(
       conf: SQLConf,
       items: Seq[LogicalPlan],
-      conditions: Set[Expression],
+      conditions: ExpressionSet,
       output: Seq[Attribute]): LogicalPlan = {
 
     val startTime = System.nanoTime()
     // Level i maintains all found plans for i + 1 items.
     // Create the initial plans: each plan is a single item with zero cost.
     val itemIndex = items.zipWithIndex
-    val foundPlans = mutable.Buffer[JoinPlanMap](itemIndex.map {
-      case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set.empty, Cost(0, 0))
-    }.toMap)
+    val foundPlans = mutable.Buffer[JoinPlanMap]({
+      // SPARK-32687: Change to use `LinkedHashMap` to make sure that items are
+      // inserted and iterated in the same order.
+      val joinPlanMap = new JoinPlanMap
+      itemIndex.foreach {
+        case (item, id) =>
+          joinPlanMap.put(Set(id), JoinPlan(Set(id), item, ExpressionSet(), Cost(0, 0)))
+      }
+      joinPlanMap
+    })
 
     // Build filters from the join graph to be used by the search algorithm.
     val filters = JoinReorderDPFilters.buildJoinGraphInfo(conf, items, conditions, itemIndex)
@@ -161,7 +167,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     val topOutputSet = AttributeSet(output)
     while (foundPlans.size < items.length) {
       // Build plans for the next level.
-      foundPlans += searchLevel(foundPlans, conf, conditions, topOutputSet, filters)
+      foundPlans += searchLevel(foundPlans.toSeq, conf, conditions, topOutputSet, filters)
     }
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
@@ -175,8 +181,17 @@ object JoinReorderDP extends PredicateHelper with Logging {
         assert(topOutputSet == p.outputSet)
         // Keep the same order of final output attributes.
         p.copy(projectList = output)
+      case finalPlan if !sameOutput(finalPlan, output) =>
+        Project(output, finalPlan)
       case finalPlan =>
         finalPlan
+    }
+  }
+
+  private def sameOutput(plan: LogicalPlan, expectedOutput: Seq[Attribute]): Boolean = {
+    val thisOutput = plan.output
+    thisOutput.length == expectedOutput.length && thisOutput.zip(expectedOutput).forall {
+      case (a1, a2) => a1.semanticEquals(a2)
     }
   }
 
@@ -184,11 +199,11 @@ object JoinReorderDP extends PredicateHelper with Logging {
   private def searchLevel(
       existingLevels: Seq[JoinPlanMap],
       conf: SQLConf,
-      conditions: Set[Expression],
+      conditions: ExpressionSet,
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): JoinPlanMap = {
 
-    val nextLevel = mutable.Map.empty[Set[Int], JoinPlan]
+    val nextLevel = new JoinPlanMap
     var k = 0
     val lev = existingLevels.length - 1
     // Build plans for the next level from plans at level k (one side of the join) and level
@@ -221,7 +236,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       }
       k += 1
     }
-    nextLevel.toMap
+    nextLevel
   }
 
   /**
@@ -245,7 +260,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       oneJoinPlan: JoinPlan,
       otherJoinPlan: JoinPlan,
       conf: SQLConf,
-      conditions: Set[Expression],
+      conditions: ExpressionSet,
       topOutput: AttributeSet,
       filters: Option[JoinGraphInfo]): Option[JoinPlan] = {
 
@@ -285,7 +300,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     } else {
       (otherPlan, onePlan)
     }
-    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And))
+    val newJoin = Join(left, right, Inner, joinConds.reduceOption(And), JoinHint.NONE)
     val collectedJoinConds = joinConds ++ oneJoinPlan.joinConds ++ otherJoinPlan.joinConds
     val remainingConds = conditions -- collectedJoinConds
     val neededAttr = AttributeSet(remainingConds.flatMap(_.references)) ++ topOutput
@@ -306,7 +321,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
   }
 
   /** Map[set of item ids, join plan for these items] */
-  type JoinPlanMap = Map[Set[Int], JoinPlan]
+  type JoinPlanMap = mutable.LinkedHashMap[Set[Int], JoinPlan]
 
   /**
    * Partial join order in a specific level.
@@ -319,7 +334,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
   case class JoinPlan(
       itemIds: Set[Int],
       plan: LogicalPlan,
-      joinConds: Set[Expression],
+      joinConds: ExpressionSet,
       planCost: Cost) {
 
     /** Get the cost of the root node of this plan tree. */
@@ -377,7 +392,7 @@ object JoinReorderDPFilters extends PredicateHelper {
   def buildJoinGraphInfo(
       conf: SQLConf,
       items: Seq[LogicalPlan],
-      conditions: Set[Expression],
+      conditions: ExpressionSet,
       itemIndex: Seq[(LogicalPlan, Int)]): Option[JoinGraphInfo] = {
 
     if (conf.joinReorderDPStarFilter) {

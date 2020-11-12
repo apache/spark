@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.linalg import Matrices, Vectors
@@ -51,7 +49,7 @@ if __name__ == "__main__":
         [LabeledPoint(1.0, [1.0, 0.0, 3.0]),
          LabeledPoint(1.0, [1.0, 2.0, 0.0]),
          LabeledPoint(1.0, [-1.0, 0.0, -0.5])]
-    )  # LabeledPoint(feature, label)
+    )  # LabeledPoint(label, feature)
 
     # The contingency table is constructed from an RDD of LabeledPoint and used to conduct
     # the independence test. Returns an array containing the ChiSquaredTestResult for every feature

@@ -22,15 +22,13 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing specific pool details */
 private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val poolName = Option(UIUtils.stripXSS(request.getParameter("poolname"))).map { poolname =>
+    val poolName = Option(request.getParameter("poolname")).map { poolname =>
       UIUtils.decodeURLParameter(poolname)
     }.getOrElse {
       throw new IllegalArgumentException(s"Missing poolname parameter")
@@ -49,7 +47,7 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         "stages/pool", parent.isFairScheduler, parent.killEnabled, false)
 
     val poolTable = new PoolTable(Map(pool -> uiPool), parent)
-    var content = <h4>Summary </h4> ++ poolTable.toNodeSeq
+    var content = <h4>Summary </h4> ++ poolTable.toNodeSeq(request)
     if (activeStages.nonEmpty) {
       content ++=
         <span class="collapse-aggregated-poolActiveStages collapse-table"
@@ -65,6 +63,6 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         </div>
     }
 
-    UIUtils.headerSparkPage("Fair Scheduler Pool: " + poolName, content, parent)
+    UIUtils.headerSparkPage(request, "Fair Scheduler Pool: " + poolName, content, parent)
   }
 }

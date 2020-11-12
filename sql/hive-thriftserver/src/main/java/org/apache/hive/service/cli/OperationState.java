@@ -18,7 +18,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TOperationState;
+import org.apache.hive.service.rpc.thrift.TOperationState;
 
 /**
  * OperationState.
@@ -32,7 +32,8 @@ public enum OperationState {
   CLOSED(TOperationState.CLOSED_STATE, true),
   ERROR(TOperationState.ERROR_STATE, true),
   UNKNOWN(TOperationState.UKNOWN_STATE, false),
-  PENDING(TOperationState.PENDING_STATE, false);
+  PENDING(TOperationState.PENDING_STATE, false),
+  TIMEDOUT(TOperationState.TIMEDOUT_STATE, true);
 
   private final TOperationState tOperationState;
   private final boolean terminal;
@@ -57,6 +58,7 @@ public enum OperationState {
       case RUNNING:
       case CANCELED:
       case CLOSED:
+      case TIMEDOUT:
         return;
       }
       break;
@@ -67,6 +69,7 @@ public enum OperationState {
       case CANCELED:
       case ERROR:
       case CLOSED:
+      case TIMEDOUT:
         return;
       }
       break;
@@ -76,11 +79,13 @@ public enum OperationState {
       case CANCELED:
       case ERROR:
       case CLOSED:
+      case TIMEDOUT:
         return;
       }
       break;
     case FINISHED:
     case CANCELED:
+    case TIMEDOUT:
     case ERROR:
       if (OperationState.CLOSED.equals(newState)) {
         return;

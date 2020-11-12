@@ -34,7 +34,11 @@ import org.apache.spark.util.Utils
  * Delivery will only begin when the `start()` method is called. The `stop()` method should be
  * called when no more events need to be delivered.
  */
-private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveListenerBusMetrics)
+private class AsyncEventQueue(
+    val name: String,
+    conf: SparkConf,
+    metrics: LiveListenerBusMetrics,
+    bus: LiveListenerBus)
   extends SparkListenerBus
   with Logging {
 
@@ -42,19 +46,32 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
 
   // Cap the capacity of the queue so we get an explicit error (rather than an OOM exception) if
   // it's perpetually being added to more quickly than it's being drained.
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](
-    conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  // The capacity can be configured by spark.scheduler.listenerbus.eventqueue.${name}.capacity,
+  // if no such conf is specified, use the value specified in
+  // LISTENER_BUS_EVENT_QUEUE_CAPACITY
+  private[scheduler] def capacity: Int = {
+    val queueSize = conf.getInt(s"$LISTENER_BUS_EVENT_QUEUE_PREFIX.$name.capacity",
+      conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+    assert(queueSize > 0, s"capacity for event queue $name must be greater than 0, " +
+      s"but $queueSize is configured.")
+    queueSize
+  }
+
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
 
   // Keep the event count separately, so that waitUntilEmpty() can be implemented properly;
   // this allows that method to return only when the events in the queue have been fully
   // processed (instead of just dequeued).
   private val eventCount = new AtomicLong()
 
-  /** A counter for dropped events. It will be reset every time we log it. */
+  /** A counter for dropped events. */
   private val droppedEventsCounter = new AtomicLong(0L)
 
+  /** A counter to keep number of dropped events last time it was logged */
+  @volatile private var lastDroppedEventsCounter: Long = 0L
+
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
+  private val lastReportTimestamp = new AtomicLong(0L)
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
@@ -81,23 +98,18 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
   }
 
   private def dispatch(): Unit = LiveListenerBus.withinListenerThread.withValue(true) {
-    try {
-      var next: SparkListenerEvent = eventQueue.take()
-      while (next != POISON_PILL) {
-        val ctx = processingTime.time()
-        try {
-          super.postToAll(next)
-        } finally {
-          ctx.stop()
-        }
-        eventCount.decrementAndGet()
-        next = eventQueue.take()
+    var next: SparkListenerEvent = eventQueue.take()
+    while (next != POISON_PILL) {
+      val ctx = processingTime.time()
+      try {
+        super.postToAll(next)
+      } finally {
+        ctx.stop()
       }
       eventCount.decrementAndGet()
-    } catch {
-      case ie: InterruptedException =>
-        logInfo(s"Stopping listener queue $name.", ie)
+      next = eventQueue.take()
     }
+    eventCount.decrementAndGet()
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
@@ -130,7 +142,11 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
-    dispatchThread.join()
+    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // in that case.
+    if (Thread.currentThread() != dispatchThread) {
+      dispatchThread.join()
+    }
   }
 
   def post(event: SparkListenerEvent): Unit = {
@@ -154,20 +170,19 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
     }
     logTrace(s"Dropping event $event")
 
-    val droppedCount = droppedEventsCounter.get
-    if (droppedCount > 0) {
-      // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedCount, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
-          val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Dropped $droppedEvents events from $name since $previous.")
-        }
+    val droppedEventsCount = droppedEventsCounter.get
+    val droppedCountIncreased = droppedEventsCount - lastDroppedEventsCounter
+    val lastReportTime = lastReportTimestamp.get
+    val curTime = System.currentTimeMillis()
+    // Don't log too frequently
+    if (droppedCountIncreased > 0 && curTime - lastReportTime >= LOGGING_INTERVAL) {
+      // There may be multiple threads trying to logging dropped events,
+      // Use 'compareAndSet' to make sure only one thread can win.
+      if (lastReportTimestamp.compareAndSet(lastReportTime, curTime)) {
+        val previous = new java.util.Date(lastReportTime)
+        lastDroppedEventsCounter = droppedEventsCount
+        logWarning(s"Dropped $droppedCountIncreased events from $name since " +
+          s"${if (lastReportTime == 0) "the application started" else s"$previous"}.")
       }
     }
   }
@@ -187,10 +202,17 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
     true
   }
 
+  override def removeListenerOnError(listener: SparkListenerInterface): Unit = {
+    // the listener failed in an unrecoverably way, we want to remove it from the entire
+    // LiveListenerBus (potentially stopping a queue if it is empty)
+    bus.removeListener(listener)
+  }
+
 }
 
 private object AsyncEventQueue {
 
   val POISON_PILL = new SparkListenerEvent() { }
 
+  val LOGGING_INTERVAL = 60 * 1000
 }

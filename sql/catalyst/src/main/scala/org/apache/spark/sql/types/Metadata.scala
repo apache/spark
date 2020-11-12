@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 
 
 /**
@@ -37,7 +37,7 @@ import org.apache.spark.annotation.InterfaceStability
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
   extends Serializable {
 
@@ -88,7 +88,7 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
         map.keysIterator.forall { key =>
           that.map.get(key) match {
             case Some(otherValue) =>
-              val ourValue = map.get(key).get
+              val ourValue = map(key)
               (ourValue, otherValue) match {
                 case (v0: Array[Long], v1: Array[Long]) => java.util.Arrays.equals(v0, v1)
                 case (v0: Array[Double], v1: Array[Double]) => java.util.Arrays.equals(v0, v1)
@@ -117,7 +117,7 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object Metadata {
 
   private[this] val _empty = new Metadata(Map.empty)
@@ -190,6 +190,8 @@ object Metadata {
         JBool(x)
       case x: String =>
         JString(x)
+      case null =>
+        JNull
       case x: Metadata =>
         toJsonValue(x.map)
       case other =>
@@ -200,8 +202,10 @@ object Metadata {
   /** Computes the hash code for the types we support. */
   private def hash(obj: Any): Int = {
     obj match {
+      // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
+      // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
-        map.mapValues(hash).##
+        map.mapValues(hash).toMap.##
       case arr: Array[_] =>
         // Seq.empty[T] has the same hashCode regardless of T.
         arr.toSeq.map(hash).##
@@ -215,6 +219,8 @@ object Metadata {
         x.##
       case x: Metadata =>
         hash(x.map)
+      case null =>
+        0
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -226,7 +232,7 @@ object Metadata {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty

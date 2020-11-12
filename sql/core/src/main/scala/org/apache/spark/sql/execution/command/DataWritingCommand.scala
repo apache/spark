@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -42,18 +41,14 @@ trait DataWritingCommand extends Command {
 
   override final def children: Seq[LogicalPlan] = query :: Nil
 
-  // Output columns of the analyzed input query plan
-  def outputColumns: Seq[Attribute]
+  // Output column names of the analyzed input query plan.
+  def outputColumnNames: Seq[String]
 
-  lazy val metrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
-      "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-      "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "bytes of written output"),
-      "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      "numParts" -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
+  // Output columns of the analyzed input query plan.
+  def outputColumns: Seq[Attribute] =
+    DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
+
+  lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -61,4 +56,22 @@ trait DataWritingCommand extends Command {
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
+}
+
+object DataWritingCommand {
+  /**
+   * Returns output attributes with provided names.
+   * The length of provided names should be the same of the length of [[LogicalPlan.output]].
+   */
+  def logicalPlanOutputWithNames(
+      query: LogicalPlan,
+      names: Seq[String]): Seq[Attribute] = {
+    // Save the output attributes to a variable to avoid duplicated function calls.
+    val outputAttributes = query.output
+    assert(outputAttributes.length == names.length,
+      "The length of provided names doesn't match the length of output attributes.")
+    outputAttributes.zip(names).map { case (attr, outputName) =>
+      attr.withName(outputName)
+    }
+  }
 }

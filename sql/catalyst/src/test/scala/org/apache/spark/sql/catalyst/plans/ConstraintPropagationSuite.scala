@@ -187,7 +187,7 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
 
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .intersect(tr2.where('b.attr < 100))
+      .intersect(tr2.where('b.attr < 100), isAll = false)
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         resolveColumn(tr1, "b") < 100,
@@ -200,7 +200,7 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     val tr2 = LocalRelation('a.int, 'b.int, 'c.int)
     verifyConstraints(tr1
       .where('a.attr > 10)
-      .except(tr2.where('b.attr < 100))
+      .except(tr2.where('b.attr < 100), isAll = false)
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         IsNotNull(resolveColumn(tr1, "a")))))

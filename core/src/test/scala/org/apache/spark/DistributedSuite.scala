@@ -17,10 +17,13 @@
 
 package org.apache.spark
 
-import org.scalatest.Matchers
+import org.scalatest.Assertions._
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.{Millis, Span}
 
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -35,18 +38,18 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  val clusterUrl = "local-cluster[2,1,1024]"
+  val clusterUrl = "local-cluster[3,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
     // this test will hang. Correct behavior is that executors don't crash but fail tasks
     // and the scheduler throws a SparkException.
 
-    // numSlaves must be less than numPartitions
-    val numSlaves = 3
+    // numWorkers must be less than numPartitions
+    val numWorkers = 3
     val numPartitions = 10
 
-    sc = new SparkContext("local-cluster[%s,1,1024]".format(numSlaves), "test")
+    sc = new SparkContext("local-cluster[%s,1,1024]".format(numWorkers), "test")
     val data = sc.parallelize(1 to 100, numPartitions).
       map(x => throw new NotSerializableExn(new NotSerializableClass))
     intercept[SparkException] {
@@ -66,16 +69,16 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     )
 
     masterStrings.foreach {
-      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
-        assert(numSlaves.toInt == 2)
-        assert(coresPerSlave.toInt == 1)
-        assert(memoryPerSlave.toInt == 1024)
+      case LOCAL_CLUSTER_REGEX(numWorkers, coresPerWorker, memoryPerWorker) =>
+        assert(numWorkers.toInt == 2)
+        assert(coresPerWorker.toInt == 1)
+        assert(memoryPerWorker.toInt == 1024)
     }
   }
 
   test("simple groupByKey") {
     sc = new SparkContext(clusterUrl, "test")
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 5)
+    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 5)
     val groups = pairs.groupByKey(5).collect()
     assert(groups.size === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
@@ -85,7 +88,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("groupByKey where map output sizes exceed maxMbInFlight") {
-    val conf = new SparkConf().set("spark.reducer.maxSizeInFlight", "1m")
+    val conf = new SparkConf().set(config.REDUCER_MAX_SIZE_IN_FLIGHT.key, "1m")
     sc = new SparkContext(clusterUrl, "test", conf)
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
     // file should be about 2.5 MB
@@ -154,9 +157,24 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc.parallelize(1 to 10).count()
   }
 
+  private def testCaching(testName: String, conf: SparkConf, storageLevel: StorageLevel): Unit = {
+    test(testName) {
+      testCaching(conf, storageLevel)
+    }
+    if (storageLevel.replication > 1) {
+      // also try with block replication as a stream
+      val uploadStreamConf = new SparkConf()
+      uploadStreamConf.setAll(conf.getAll)
+      uploadStreamConf.set(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1L)
+      test(s"$testName (with replication as stream)") {
+        testCaching(uploadStreamConf, storageLevel)
+      }
+    }
+  }
+
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    TestUtils.waitUntilExecutorsUp(sc, 2, 30000)
+    TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
@@ -169,14 +187,17 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = blockManager.blockTransferService
     val serializerManager = SparkEnv.get.serializerManager
-    blockManager.master.getLocations(blockId).foreach { cmId =>
+    val locations = blockManager.master.getLocations(blockId)
+    assert(locations.size === storageLevel.replication,
+      s"; got ${locations.size} replicas instead of ${storageLevel.replication}")
+    locations.foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString, null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    // This will exercise the getRemoteValues code path:
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
@@ -185,27 +206,30 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching on disk" -> StorageLevel.DISK_ONLY,
     "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
     "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 2" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 3" -> StorageLevel.DISK_ONLY_3,
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>
-    encryptionTest(testName) { conf =>
-      testCaching(conf, storageLevel)
+    encryptionTestHelper(testName) { case (name, conf) =>
+      testCaching(name, conf, storageLevel)
     }
   }
 
   test("compute without caching when no partitions fit in memory") {
     val size = 10000
     val conf = new SparkConf()
-      .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", (size / 2).toString)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
+      .set(TEST_MEMORY, size.toLong / 2)
+
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, 2).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size === 0, s"expected no RDD blocks, found ${rddBlocks.size}")
   }
 
@@ -213,15 +237,17 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val size = 10000
     val numPartitions = 20
     val conf = new SparkConf()
-      .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", size.toString)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
+      .set(TEST_MEMORY, size.toLong)
+
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
     assert(data.count() === size)
     assert(data.count() === size)
     // ensure only a subset of partitions were cached
-    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD,
+      askStorageEndpoints = true)
     assert(rddBlocks.size > 0, "no RDD blocks found")
     assert(rddBlocks.size < numPartitions, s"too many RDD blocks found, expected <$numPartitions")
   }
@@ -300,9 +326,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
-    assert(sc.persistentRdds.isEmpty === false)
-    data.unpersist()
-    assert(sc.persistentRdds.isEmpty === true)
+    assert(sc.persistentRdds.nonEmpty)
+    data.unpersist(blocking = true)
+    assert(sc.persistentRdds.isEmpty)
 
     failAfter(Span(3000, Millis)) {
       try {
@@ -315,6 +341,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
           // is racing this thread to remove entries from the driver.
       }
     }
+  }
+
+  test("reference partitions inside a task") {
+    // Run a simple job which just makes sure there is no failure if we touch rdd.partitions
+    // inside a task.  This requires the stateLock to be serializable.  This is very convoluted
+    // use case, it's just a check for backwards-compatibility after the fix for SPARK-28917.
+    sc = new SparkContext("local-cluster[1,1,1024]", "test")
+    val rdd1 = sc.parallelize(1 to 10, 1)
+    val rdd2 = rdd1.map { x => x + 1}
+    // ensure we can force computation of rdd2.dependencies inside a task.  Just touching
+    // it will force computation and touching the stateLock.  The check for null is to just
+    // to make sure that we've setup our test correctly, and haven't precomputed dependencies
+    // in the driver
+    val dependencyComputeCount = rdd1.map { x => if (rdd2.dependencies == null) 1 else 0}.sum()
+    assert(dependencyComputeCount > 0)
   }
 
 }

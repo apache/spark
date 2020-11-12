@@ -150,12 +150,12 @@ class BitSet(numBits: Int) extends Serializable {
    * Sets the bit at the specified index to true.
    * @param index the bit index
    */
-  def set(index: Int) {
+  def set(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
 
-  def unset(index: Int) {
+  def unset(index: Int): Unit = {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) &= ~bitmask        // div by 64 and mask
   }

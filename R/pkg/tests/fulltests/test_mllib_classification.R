@@ -34,7 +34,7 @@ test_that("spark.svmLinear", {
   summary <- summary(model)
 
   # test summary coefficients return matrix type
-  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(any(class(summary$coefficients) == "matrix"))
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   coefs <- summary$coefficients[, "Estimate"]
@@ -130,7 +130,7 @@ test_that("spark.logit", {
   summary <- summary(model)
 
   # test summary coefficients return matrix type
-  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(any(class(summary$coefficients) == "matrix"))
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
@@ -242,8 +242,8 @@ test_that("spark.logit", {
   # Test binomial logistic regression against two classes with upperBoundsOnCoefficients
   # and upperBoundsOnIntercepts
   u <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
-                       upperBoundsOnIntercepts = 1.0)
+  model <- suppressWarnings(spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
+                                        upperBoundsOnIntercepts = 1.0))
   summary <- summary(model)
   coefsR <- c(-11.13331, 1.00000, 0.00000, 1.00000, 0.00000)
   coefs <- summary$coefficients[, "Estimate"]
@@ -255,8 +255,8 @@ test_that("spark.logit", {
   # Test binomial logistic regression against two classes with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
-                       lowerBoundsOnIntercepts = 0.0)
+  model <- suppressWarnings(spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
+                                        lowerBoundsOnIntercepts = 0.0))
   summary <- summary(model)
   coefsR <- c(0, 0, -1, 0, 1.902192)
   coefs <- summary$coefficients[, "Estimate"]
@@ -268,9 +268,9 @@ test_that("spark.logit", {
   # Test multinomial logistic regression with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1.0), nrow = 2, ncol = 4)
-  model <- spark.logit(training, Species ~ ., family = "multinomial",
-                       lowerBoundsOnCoefficients = l,
-                       lowerBoundsOnIntercepts = as.array(c(0.0, 0.0)))
+  model <- suppressWarnings(spark.logit(training, Species ~ ., family = "multinomial",
+                                        lowerBoundsOnCoefficients = l,
+                                        lowerBoundsOnIntercepts = as.array(c(0.0, 0.0))))
   summary <- summary(model)
   versicolorCoefsR <- c(42.639465, 7.258104, 14.330814, 16.298243, 11.716429)
   virginicaCoefsR <- c(0.0002970796, 4.79274, 7.65047, 25.72793, 30.0021)
@@ -299,7 +299,7 @@ test_that("spark.mlp", {
   df <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                 source = "libsvm")
   model <- spark.mlp(df, label ~ features, blockSize = 128, layers = c(4, 5, 4, 3),
-                     solver = "l-bfgs", maxIter = 100, tol = 0.5, stepSize = 1, seed = 1)
+                     solver = "l-bfgs", maxIter = 100, tol = 0.00001, stepSize = 1, seed = 1)
 
   # Test summary method
   summary <- summary(model)
@@ -307,13 +307,13 @@ test_that("spark.mlp", {
   expect_equal(summary$numOfOutputs, 3)
   expect_equal(summary$layers, c(4, 5, 4, 3))
   expect_equal(length(summary$weights), 64)
-  expect_equal(head(summary$weights, 5), list(-0.878743, 0.2154151, -1.16304, -0.6583214, 1.009825),
-               tolerance = 1e-6)
+  expect_equal(head(summary$weights, 5), list(-24.28415, 107.8701, 16.86376, 1.103736, 9.244488),
+               tolerance = 1e-1)
 
   # Test predict method
   mlpTestDF <- df
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
-  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "0.0", "0.0", "0.0", "0.0", "0.0"))
+  expect_equal(head(mlpPredictions$prediction, 6), c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0"))
 
   # Test model save/load
   if (windows_with_hadoop()) {
@@ -348,12 +348,12 @@ test_that("spark.mlp", {
 
   # Test random seed
   # default seed
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
   # seed equals 10
-  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 10, seed = 10)
+  model <- spark.mlp(df, label ~ features, layers = c(4, 5, 4, 3), maxIter = 100, seed = 10)
   mlpPredictions <- collect(select(predict(model, mlpTestDF), "prediction"))
   expect_equal(head(mlpPredictions$prediction, 10),
                c("1.0", "1.0", "1.0", "1.0", "0.0", "1.0", "2.0", "2.0", "1.0", "0.0"))
@@ -382,10 +382,10 @@ test_that("spark.mlp", {
   trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
   traindf <- as.DataFrame(data[trainidxs, ])
   testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
-  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3))
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2))
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
-  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 3), handleInvalid = "skip")
+  model <- spark.mlp(traindf, clicked ~ ., layers = c(1, 2), handleInvalid = "skip")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "list")
 
@@ -486,6 +486,40 @@ test_that("spark.naiveBayes", {
   model <- spark.naiveBayes(traindf, clicked ~ ., smoothing = 0.0, handleInvalid = "keep")
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
+})
+
+test_that("spark.fmClassifier", {
+  df <- withColumn(
+    suppressWarnings(createDataFrame(iris)),
+    "Species", otherwise(when(column("Species") == "Setosa", "Setosa"), "Not-Setosa")
+  )
+
+  model1 <- spark.fmClassifier(
+    df,  Species ~ .,
+    regParam = 0.01, maxIter = 10, fitLinear = TRUE, factorSize = 3
+  )
+
+  prediction1 <- predict(model1, df)
+  expect_is(prediction1, "SparkDataFrame")
+  expect_equal(summary(model1)$factorSize, 3)
+
+  # Test model save/load
+  if (windows_with_hadoop()) {
+    modelPath <- tempfile(pattern = "spark-fmclassifier", fileext = ".tmp")
+    write.ml(model1, modelPath)
+    model2 <- read.ml(modelPath)
+
+    expect_is(model2, "FMClassificationModel")
+
+    expect_equal(summary(model1), summary(model2))
+
+    prediction2 <- predict(model2, df)
+    expect_equal(
+      collect(drop(prediction1, c("rawPrediction", "probability"))),
+      collect(drop(prediction2, c("rawPrediction", "probability")))
+    )
+    unlink(modelPath)
+  }
 })
 
 sparkR.session.stop()

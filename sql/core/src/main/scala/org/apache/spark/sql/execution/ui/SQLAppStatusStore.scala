@@ -42,6 +42,10 @@ class SQLAppStatusStore(
     store.view(classOf[SQLExecutionUIData]).asScala.toSeq
   }
 
+  def executionsList(offset: Int, length: Int): Seq[SQLExecutionUIData] = {
+    store.view(classOf[SQLExecutionUIData]).skip(offset).max(length).asScala.toSeq
+  }
+
   def execution(executionId: Long): Option[SQLExecutionUIData] = {
     try {
       Some(store.read(classOf[SQLExecutionUIData], executionId))
@@ -52,6 +56,10 @@ class SQLAppStatusStore(
 
   def executionsCount(): Long = {
     store.count(classOf[SQLExecutionUIData])
+  }
+
+  def planGraphCount(): Long = {
+    store.count(classOf[SparkPlanGraphWrapper])
   }
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
@@ -129,7 +137,7 @@ class SparkPlanGraphNodeWrapper(
     val cluster: SparkPlanGraphClusterWrapper) {
 
   def toSparkPlanGraphNode(): SparkPlanGraphNode = {
-    assert(node == null ^ cluster == null, "One and only of of nore or cluster must be set.")
+    assert(node == null ^ cluster == null, "Exactly one of node, cluster values to be set.")
     if (node != null) node else cluster.toSparkPlanGraphCluster()
   }
 

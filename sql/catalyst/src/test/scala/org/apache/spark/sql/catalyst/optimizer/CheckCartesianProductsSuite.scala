@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -56,7 +56,7 @@ class CheckCartesianProductsSuite extends PlanTest {
         val thrownException = the [AnalysisException] thrownBy {
           performCartesianProductCheck(joinType)
         }
-        assert(thrownException.message.contains("Detected cartesian product"))
+        assert(thrownException.message.contains("Detected implicit cartesian product"))
       }
     }
   }

@@ -36,7 +36,7 @@ class StatsReportListener extends SparkListener with Logging {
 
   private val taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     val info = taskEnd.taskInfo
     val metrics = taskEnd.taskMetrics
     if (info != null && metrics != null) {
@@ -44,22 +44,22 @@ class StatsReportListener extends SparkListener with Logging {
     }
   }
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
     implicit val sc = stageCompleted
     this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
-    showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics)
+    showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics.toSeq)
 
     // Shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_, metric) => metric.shuffleWriteMetrics.bytesWritten, taskInfoMetrics)
+      (_, metric) => metric.shuffleWriteMetrics.bytesWritten, taskInfoMetrics.toSeq)
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",
-      (_, metric) => metric.shuffleReadMetrics.fetchWaitTime, taskInfoMetrics)
+      (_, metric) => metric.shuffleReadMetrics.fetchWaitTime, taskInfoMetrics.toSeq)
     showBytesDistribution("remote bytes read:",
-      (_, metric) => metric.shuffleReadMetrics.remoteBytesRead, taskInfoMetrics)
+      (_, metric) => metric.shuffleReadMetrics.remoteBytesRead, taskInfoMetrics.toSeq)
     showBytesDistribution("task result size:",
-      (_, metric) => metric.resultSize, taskInfoMetrics)
+      (_, metric) => metric.resultSize, taskInfoMetrics.toSeq)
 
     // Runtime breakdown
     val runtimePcts = taskInfoMetrics.map { case (info, metrics) =>
@@ -108,7 +108,7 @@ private[spark] object StatsReportListener extends Logging {
       (info, metric) => { getMetric(info, metric).toDouble })
   }
 
-  def showDistribution(heading: String, d: Distribution, formatNumber: Double => String) {
+  def showDistribution(heading: String, d: Distribution, formatNumber: Double => String): Unit = {
     val stats = d.statCounter
     val quantiles = d.getQuantiles(probabilities).map(formatNumber)
     logInfo(heading + stats)
@@ -119,11 +119,11 @@ private[spark] object StatsReportListener extends Logging {
   def showDistribution(
       heading: String,
       dOpt: Option[Distribution],
-      formatNumber: Double => String) {
+      formatNumber: Double => String): Unit = {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], format: String) {
+  def showDistribution(heading: String, dOpt: Option[Distribution], format: String): Unit = {
     def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
@@ -132,26 +132,26 @@ private[spark] object StatsReportListener extends Logging {
       heading: String,
       format: String,
       getMetric: (TaskInfo, TaskMetrics) => Double,
-      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]): Unit = {
     showDistribution(heading, extractDoubleDistribution(taskInfoMetrics, getMetric), format)
   }
 
   def showBytesDistribution(
       heading: String,
       getMetric: (TaskInfo, TaskMetrics) => Long,
-      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]): Unit = {
     showBytesDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
   }
 
-  def showBytesDistribution(heading: String, dOpt: Option[Distribution]) {
+  def showBytesDistribution(heading: String, dOpt: Option[Distribution]): Unit = {
     dOpt.foreach { dist => showBytesDistribution(heading, dist) }
   }
 
-  def showBytesDistribution(heading: String, dist: Distribution) {
+  def showBytesDistribution(heading: String, dist: Distribution): Unit = {
     showDistribution(heading, dist, (d => Utils.bytesToString(d.toLong)): Double => String)
   }
 
-  def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {
+  def showMillisDistribution(heading: String, dOpt: Option[Distribution]): Unit = {
     showDistribution(heading, dOpt,
       (d => StatsReportListener.millisToString(d.toLong)): Double => String)
   }
@@ -159,7 +159,7 @@ private[spark] object StatsReportListener extends Logging {
   def showMillisDistribution(
       heading: String,
       getMetric: (TaskInfo, TaskMetrics) => Long,
-      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]): Unit = {
     showMillisDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
   }
 

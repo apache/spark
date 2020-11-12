@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
@@ -47,6 +48,15 @@ private[sql] object Column {
       case expr => toPrettySQL(expr)
     }
   }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.DATASET_ID_KEY)
+      .remove(Dataset.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
+  }
 }
 
 /**
@@ -59,7 +69,7 @@ private[sql] object Column {
  *
  * @since 1.6.0
  */
-@InterfaceStability.Stable
+@Stable
 class TypedColumn[-T, U](
     expr: Expression,
     private[sql] val encoder: ExpressionEncoder[U])
@@ -73,6 +83,9 @@ class TypedColumn[-T, U](
       inputEncoder: ExpressionEncoder[_],
       inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
     val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
+
+    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
+    // the resolving is handled in the analyzer directly.
     val newExpr = expr transform {
       case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
         ta.withInputInfo(
@@ -103,7 +116,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific `df` DataFrame.
- *   col("columnName")           // A generic column no yet associated with a DataFrame.
+ *   col("columnName")           // A generic column not yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -126,7 +139,7 @@ class TypedColumn[-T, U](
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class Column(val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
@@ -140,11 +153,15 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.normalizedExpr() == this.normalizedExpr()
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.hashCode()
+  override def hashCode: Int = this.normalizedExpr().hashCode()
+
+  private def normalizedExpr(): Expression = expr transform {
+    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -182,7 +199,7 @@ class Column(val expr: Expression) extends Logging {
       UnresolvedAlias(a, Some(Column.generateAlias))
 
     // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
+    case struct: CreateNamedStruct => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
@@ -198,13 +215,13 @@ class Column(val expr: Expression) extends Logging {
   /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   *
-   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
-   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   *  - Given a Struct, a string fieldName can be used to extract that field.
-   *  - Given an Array of Structs, a string fieldName can be used to extract filed
-   *    of every struct in that array, and return an Array of fields
-   *
+   * <ul>
+   * <li>Given an Array, an integer ordinal can be used to retrieve a single value.</li>
+   * <li>Given a Map, a key of the correct type can be used to retrieve an individual value.</li>
+   * <li>Given a Struct, a string fieldName can be used to extract that field.</li>
+   * <li>Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields.</li>
+   * </ul>
    * @group expr_ops
    * @since 1.4.0
    */
@@ -344,7 +361,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group expr_ops
@@ -360,7 +377,7 @@ class Column(val expr: Expression) extends Logging {
    *
    *   // Java:
    *   import static org.apache.spark.sql.functions.*;
-   *   people.select( people("age").gt(21) );
+   *   people.select( people.col("age").gt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -375,7 +392,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group expr_ops
@@ -390,7 +407,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") < 21 )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   people.select( people.col("age").lt(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -405,7 +422,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group expr_ops
@@ -420,7 +437,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") <= 21 )
    *
    *   // Java:
-   *   people.select( people("age").leq(21) );
+   *   people.select( people.col("age").leq(21) );
    * }}}
    *
    * @group java_expr_ops
@@ -435,7 +452,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group expr_ops
@@ -450,7 +467,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("age") >= 21 )
    *
    *   // Java:
-   *   people.select( people("age").geq(21) )
+   *   people.select( people.col("age").geq(21) )
    * }}}
    *
    * @group java_expr_ops
@@ -587,7 +604,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -602,7 +619,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.filter( people("inSchool") || people("isEmployed") )
    *
    *   // Java:
-   *   people.filter( people("inSchool").or(people("isEmployed")) );
+   *   people.filter( people.col("inSchool").or(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -617,7 +634,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group expr_ops
@@ -632,7 +649,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("inSchool") && people("isEmployed") )
    *
    *   // Java:
-   *   people.select( people("inSchool").and(people("isEmployed")) );
+   *   people.select( people.col("inSchool").and(people.col("isEmployed")) );
    * }}}
    *
    * @group java_expr_ops
@@ -647,7 +664,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -662,7 +679,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") + people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").plus(people("weight")) );
+   *   people.select( people.col("height").plus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -677,7 +694,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -692,7 +709,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") - people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").minus(people("weight")) );
+   *   people.select( people.col("height").minus(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -707,7 +724,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -722,7 +739,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") * people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").multiply(people("weight")) );
+   *   people.select( people.col("height").multiply(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -737,7 +754,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group expr_ops
@@ -752,7 +769,7 @@ class Column(val expr: Expression) extends Logging {
    *   people.select( people("height") / people("weight") )
    *
    *   // Java:
-   *   people.select( people("height").divide(people("weight")) );
+   *   people.select( people.col("height").divide(people.col("weight")) );
    * }}}
    *
    * @group java_expr_ops
@@ -780,6 +797,14 @@ class Column(val expr: Expression) extends Logging {
    * A boolean expression that is evaluated to true if the value of this expression is contained
    * by the evaluated values of the arguments.
    *
+   * Note: Since the type of the elements in the list are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
    * @group expr_ops
    * @since 1.5.0
    */
@@ -787,12 +812,46 @@ class Column(val expr: Expression) extends Logging {
   def isin(list: Any*): Column = withExpr { In(expr, list.map(lit(_).expr)) }
 
   /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: scala.collection.Iterable[_]): Column = isin(values.toSeq: _*)
+
+  /**
+   * A boolean expression that is evaluated to true if the value of this expression is contained
+   * by the provided collection.
+   *
+   * Note: Since the type of the elements in the collection are inferred only during the run time,
+   * the elements will be "up-casted" to the most common type for comparison.
+   * For eg:
+   *   1) In the case of "Int vs String", the "Int" will be up-casted to "String" and the
+   * comparison will look like "String vs String".
+   *   2) In the case of "Float vs Double", the "Float" will be up-casted to "Double" and the
+   * comparison will look like "Double vs Double"
+   *
+   * @group java_expr_ops
+   * @since 2.4.0
+   */
+  def isInCollection(values: java.lang.Iterable[_]): Column = isInCollection(values.asScala)
+
+  /**
    * SQL like expression. Returns a boolean column based on a SQL LIKE match.
    *
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
@@ -811,6 +870,129 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def getItem(key: Any): Column = withExpr { UnresolvedExtractValue(expr, Literal(key)) }
+
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that adds/replaces field in `StructType` by name.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: {"a":1,"b":2,"c":3}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".withField("b", lit(3)))
+   *   // result: {"a":1,"b":3}
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".withField("c", lit(3)))
+   *   // result: null of type struct<a:int,b:int,c:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".withField("b", lit(100)))
+   *   // result: {"a":1,"b":100,"b":100}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: {"a":{"a":1,"b":2,"c":3}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * This method supports adding/replacing nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a.c", lit(3)).withField("a.d", lit(4)))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
+   * However, if you are going to add/replace multiple nested fields, it is more optimal to extract
+   * out the nested struct before adding/replacing multiple fields e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".withField("c", lit(3)).withField("d", lit(4))))
+   *   // result: {"a":{"a":1,"b":2,"c":3,"d":4}}
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def withField(fieldName: String, col: Column): Column = withExpr {
+    require(fieldName != null, "fieldName cannot be null")
+    require(col != null, "col cannot be null")
+    UpdateFields(expr, fieldName, col.expr)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * An expression that drops fields in `StructType` by name.
+   * This is a no-op if schema doesn't contain field name(s).
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("c"))
+   *   // result: {"a":1,"b":2}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'c', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b", "c"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2) struct_col")
+   *   df.select($"struct_col".dropFields("a", "b"))
+   *   // result: org.apache.spark.sql.AnalysisException: cannot resolve 'update_fields(update_fields(`struct_col`))' due to data type mismatch: cannot drop all fields in struct
+   *
+   *   val df = sql("SELECT CAST(NULL AS struct<a:int,b:int>) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: null of type struct<a:int>
+   *
+   *   val df = sql("SELECT named_struct('a', 1, 'b', 2, 'b', 3) struct_col")
+   *   df.select($"struct_col".dropFields("b"))
+   *   // result: {"a":1}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b"))
+   *   // result: {"a":{"a":1}}
+   *
+   *   val df = sql("SELECT named_struct('a', named_struct('b', 1), 'a', named_struct('c', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.c"))
+   *   // result: org.apache.spark.sql.AnalysisException: Ambiguous reference to fields
+   * }}}
+   *
+   * This method supports dropping multiple nested fields directly e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".dropFields("a.b", "a.c"))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * However, if you are going to drop multiple nested fields, it is more optimal to extract
+   * out the nested struct before dropping multiple fields from it e.g.
+   *
+   * {{{
+   *   val df = sql("SELECT named_struct('a', named_struct('a', 1, 'b', 2)) struct_col")
+   *   df.select($"struct_col".withField("a", $"struct_col.a".dropFields("b", "c")))
+   *   // result: {"a":{"a":1}}
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.1.0
+   */
+  // scalastyle:on line.size.limit
+  def dropFields(fieldNames: String*): Column = withExpr {
+    fieldNames.tail.foldLeft(UpdateFields(expr, fieldNames.head)) {
+      (resExpr, fieldName) => UpdateFields(resExpr, fieldName)
+    }
+  }
 
   /**
    * An expression that gets a field by name in a `StructType`.
@@ -906,7 +1088,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -945,7 +1128,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -974,16 +1158,14 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    Alias(normalizedExpr(), alias)()
   }
 
   /**
@@ -1083,10 +1265,10 @@ class Column(val expr: Expression) extends Logging {
    * and null values return before non-null values.
    * {{{
    *   // Scala: sort a DataFrame by age column in ascending order and null values appearing first.
-   *   df.sort(df("age").asc_nulls_last)
+   *   df.sort(df("age").asc_nulls_first)
    *
    *   // Java
-   *   df.sort(df.col("age").asc_nulls_last());
+   *   df.sort(df.col("age").asc_nulls_first());
    * }}}
    *
    * @group expr_ops
@@ -1199,7 +1381,7 @@ class Column(val expr: Expression) extends Logging {
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class ColumnName(name: String) extends Column(name) {
 
   /**

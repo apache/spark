@@ -22,10 +22,11 @@ import java.io.File
 import com.google.common.io.Files
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 
@@ -167,9 +168,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -178,10 +176,12 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
           checkAnswer(spark.read.orc(path), Row(1, 2))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-            withTable("t") {
-              sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
-              checkAnswer(spark.table("t"), Row(2, 1))
+          Seq(true, false).foreach { convertMetastoreOrc =>
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+              withTable("t") {
+                sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+                checkAnswer(spark.table("t"), Row(2, 1))
+              }
             }
           }
         }
@@ -189,9 +189,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-19809 NullPointerException on zero-size ORC file") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -200,9 +197,117 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
             Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
 
-            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-              checkAnswer(spark.table("spark_19809"), Seq.empty)
+            Seq(true, false).foreach { convertMetastoreOrc =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+                checkAnswer(spark.table("spark_19809"), Seq.empty)
+              }
             }
+          }
+        }
+      }
+    }
+  }
+
+  // SPARK-28885 String value is not allowed to be stored as numeric type with
+  // ANSI store assignment policy.
+  // TODO: re-enable the test case when SPARK-29462 is fixed.
+  ignore("SPARK-23340 Empty float/double array columns raise EOFException") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      withTable("spark_23340") {
+        sql("CREATE TABLE spark_23340(a array<float>, b array<double>) STORED AS ORC")
+        sql("INSERT INTO spark_23340 VALUES (array(), array())")
+        checkAnswer(spark.table("spark_23340"), Seq(Row(Array.empty[Float], Array.empty[Double])))
+      }
+    }
+  }
+
+  test("SPARK-26437 Can not query decimal type when value is 0") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+      withTable("spark_26437") {
+        sql("CREATE TABLE spark_26437 STORED AS ORCFILE AS SELECT 0.00 AS c1")
+        checkAnswer(spark.table("spark_26437"), Seq(Row(0.00)))
+      }
+    }
+  }
+
+  private def getCachedDataSourceTable(table: TableIdentifier) = {
+    spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+      .getCachedDataSourceTable(table)
+  }
+
+  private def checkCached(tableIdentifier: TableIdentifier): Unit = {
+    getCachedDataSourceTable(tableIdentifier) match {
+      case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
+      case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
+      case other =>
+        fail(
+          s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +
+            s"However, $other is returned form the cache.")
+    }
+  }
+
+  test("SPARK-28573 ORC conversation could be applied for partitioned table insertion") {
+    withTempView("single") {
+      val singleRowDF = Seq((0, "foo")).toDF("key", "value")
+      singleRowDF.createOrReplaceTempView("single")
+      Seq("true", "false").foreach { conversion =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
+          HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> conversion) {
+          withTable("dummy_orc_partitioned") {
+            spark.sessionState.refreshTable("dummy_orc_partitioned")
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)
+                 |PARTITIONED by (`date` STRING)
+                 |STORED AS ORC
+                 """.stripMargin)
+
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc_partitioned
+                 |PARTITION (`date` = '2019-04-01')
+                 |SELECT key, value FROM single
+                 """.stripMargin)
+
+            val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
+            if (conversion == "true") {
+              // if converted, we refresh the cached relation.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
+            } else {
+              // otherwise, not cached.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
+            }
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
+            checkAnswer(df, singleRowDF)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32234 read ORC table with column names all starting with '_col'") {
+    Seq("native", "hive").foreach { orcImpl =>
+      Seq("false", "true").foreach { vectorized =>
+        withSQLConf(
+          SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+          SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized) {
+          withTable("test_hive_orc_impl") {
+            spark.sql(
+              s"""
+                 | CREATE TABLE test_hive_orc_impl
+                 | (_col1 INT, _col2 STRING, _col3 INT)
+                 | STORED AS ORC
+               """.stripMargin)
+            spark.sql(
+              s"""
+                 | INSERT INTO
+                 | test_hive_orc_impl
+                 | VALUES(9, '12', 2020)
+               """.stripMargin)
+
+            val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
+            checkAnswer(df, Row("12"))
           }
         }
       }
