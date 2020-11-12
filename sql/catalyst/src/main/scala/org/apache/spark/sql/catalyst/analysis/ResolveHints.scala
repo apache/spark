@@ -51,9 +51,9 @@ object ResolveHints {
    * This rule must happen before common table expressions.
    */
   object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
-    private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
+    private def STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private def hintErrorHandler = conf.hintErrorHandler
 
     def resolver: Resolver = conf.resolver
 
@@ -268,7 +268,7 @@ object ResolveHints {
    */
   class RemoveAllHints extends Rule[LogicalPlan] {
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private def hintErrorHandler = conf.hintErrorHandler
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
