@@ -23,7 +23,6 @@ import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient, DownloadFileManager}
 import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}

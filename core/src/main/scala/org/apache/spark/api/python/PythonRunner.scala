@@ -24,12 +24,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
-
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
