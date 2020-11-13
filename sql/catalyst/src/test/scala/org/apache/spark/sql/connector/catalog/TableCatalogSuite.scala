@@ -813,10 +813,9 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val errMsg = intercept[NoSuchNamespaceException] {
-      catalog.dropNamespace(testNs)
-    }.getMessage
-    assert(errMsg.contains("Namespace '````.`.`' not found"))
+    val ret = catalog.dropNamespace(testNs)
+
+    assert(ret === false)
   }
 
   test("dropNamespace: drop empty namespace") {
