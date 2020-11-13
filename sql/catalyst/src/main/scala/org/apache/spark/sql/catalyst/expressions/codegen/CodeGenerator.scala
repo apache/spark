@@ -1734,15 +1734,17 @@ object CodeGenerator extends Logging {
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
   def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
-    if (dataType.isInstanceOf[StructType]) {
-      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
-      // `ordinal` parameter.
-      s"$vector.getStruct($rowId)"
-    } else {
-      getValue(vector, dataType, rowId)
+    dataType match {
+      case udt: UserDefinedType[_] => getValueFromVector(vector, udt.sqlType, rowId)
+      case _ => if (dataType.isInstanceOf[StructType]) {
+        // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+        // `ordinal` parameter.
+        s"$vector.getStruct($rowId)"
+      } else {
+        getValue(vector, dataType, rowId)
+      }
     }
   }
-
   /**
    * This methods returns two values in a Tuple.
    *
