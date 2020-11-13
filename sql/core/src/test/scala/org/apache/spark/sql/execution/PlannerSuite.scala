@@ -914,6 +914,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           """.stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
         assert(exchanges.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+            HashPartitioning(Seq(k2: AttributeReference), _))) if k1.name == "t1id" =>
+            true
+          case _ => false
+        }))
       }
     }
   }
@@ -959,7 +967,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val projects = planned.collect { case p: ProjectExec => p }
       assert(projects.exists(_.outputPartitioning match {
-        case RangePartitioning(Seq(_@SortOrder(ar: AttributeReference, _, _, _)), _) =>
+        case RangePartitioning(Seq(SortOrder(ar: AttributeReference, _, _, _)), _) =>
           ar.name == "id1"
         case _ => false
       }))
@@ -970,23 +978,37 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     "for partitioning and sortorder involving complex expressions") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("t1", "t2", "t3") {
-        spark.range(10).createTempView("t1")
-        spark.range(20).createTempView("t2")
-        spark.range(30).createTempView("t3")
+        spark.range(10).select(col("id").as("id1")).createTempView("t1")
+        spark.range(20).select(col("id").as("id2")).createTempView("t2")
+        spark.range(30).select(col("id").as("id3")).createTempView("t3")
         val planned = sql(
           """
-            |SELECT t3.id as t3id
+            |SELECT t3.id3 as t3id
             |FROM (
-            |    SELECT t1.id as t1id
+            |    SELECT t1.id1 as t1id, t2.id2 as t2id
             |    FROM t1, t2
-            |    WHERE t1.id % 10 = t2.id % 10
+            |    WHERE t1.id1 * 10 = t2.id2 * 10
             |) t12, t3
-            |WHERE t1id % 10 = t3.id % 10
+            |WHERE t1id * 10 = t3.id3 * 10
           """.stripMargin).queryExecution.executedPlan
         val sortNodes = planned.collect { case s: SortExec => s }
         assert(sortNodes.size == 3)
         val exchangeNodes = planned.collect { case e: ShuffleExchangeExec => e }
         assert(exchangeNodes.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(Multiply(ar1, _, _)), _),
+            HashPartitioning(Seq(Multiply(ar2, _, _)), _))) =>
+            Seq(ar1, ar2) match {
+              case Seq(ar1: AttributeReference, ar2: AttributeReference) =>
+                ar1.name == "t1id" && ar2.name == "id2"
+              case _ =>
+                false
+            }
+          case _ => false
+        }))
+
       }
     }
   }
@@ -1025,6 +1047,14 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           """.stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
         assert(exchanges.size == 2)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            k1.name == "t1id" && k2.name == "t2id"
+          case _ => false
+        }))
       }
     }
   }
