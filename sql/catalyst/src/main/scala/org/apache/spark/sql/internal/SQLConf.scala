@@ -2875,14 +2875,15 @@ object SQLConf {
     .stringConf
     .createWithDefault("")
 
-  val DISABLED_STREAMING_UI_CUSTOM_METRICS_LIST =
-    buildConf("spark.sql.streaming.disabledUICustomMetricsList")
+  val DISABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
+    buildConf("spark.sql.streaming.disabledUICustomMetricList")
       .internal()
       .doc("Configures a list of custom metrics on Structured Streaming UI, which are disabled. " +
         "The list contains the name of the custom metrics separated by comma.")
       .version("3.1.0")
       .stringConf
-      .createWithDefault("loadedMapCacheHitCount")
+      .toSequence
+      .createWithDefault(Seq("loadedMapCacheHitCount"))
 
   /**
    * Holds information about keys that have been deprecated.
@@ -3520,9 +3521,6 @@ class SQLConf extends Serializable with Logging {
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
-
-  def disabledStreamingCustomMetrics: String =
-    getConf(SQLConf.DISABLED_STREAMING_UI_CUSTOM_METRICS_LIST)
 
   /** ********************** SQLConf functionality methods ************ */
 

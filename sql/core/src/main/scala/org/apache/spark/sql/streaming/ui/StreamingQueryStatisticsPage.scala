@@ -250,15 +250,17 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   }
 
   def generateAggregatedCustomMetrics(
-   query: StreamingQueryUIData,
-   minBatchTime: Long,
-   maxBatchTime: Long,
-   jsCollector: JsCollector): NodeBuffer = {
+     query: StreamingQueryUIData,
+     minBatchTime: Long,
+     maxBatchTime: Long,
+     jsCollector: JsCollector): NodeBuffer = {
     val result: NodeBuffer = new NodeBuffer
 
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress.stateOperators.nonEmpty)
-    val disabledCustomMetrics = Utils.stringToSeq(SQLConf.get.disabledStreamingCustomMetrics)
+    val disabledCustomMetrics =
+      SQLConf.get.getConf(SQLConf.DISABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
+    logDebug(s"Disabled custom metrics: $disabledCustomMetrics")
     query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
       .filterNot(disabledCustomMetrics.contains(_)).map { metricName =>
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
