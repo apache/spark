@@ -17,12 +17,32 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.ShowPartitionsStatement
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsParserSuite extends SharedSparkSession {
+class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
+  test("SHOW PARTITIONS") {
+    Seq(
+      "SHOW PARTITIONS t1" -> ShowPartitionsStatement(Seq("t1"), None),
+      "SHOW PARTITIONS db1.t1" -> ShowPartitionsStatement(Seq("db1", "t1"), None),
+      "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
+        ShowPartitionsStatement(
+          Seq("t1"),
+          Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue"))),
+      "SHOW PARTITIONS a.b.c" -> ShowPartitionsStatement(Seq("a", "b", "c"), None),
+      "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
+        ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
+    ).foreach { case (sql, expected) =>
+      val parsed = parsePlan(sql)
+      comparePlans(parsed, expected)
+    }
+  }
+
   test("empty values in non-optional partition specs") {
     val parser = new SparkSqlParser(new SQLConf)
     val e = intercept[ParseException] {
