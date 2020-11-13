@@ -375,14 +375,14 @@ def main(infile, outfile):
             profiler.profile(process)
         else:
             process()
-    except Exception:
+    except BaseException:
         try:
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
             write_with_length(traceback.format_exc().encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass
-        except Exception:
+        except BaseException:
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
