@@ -321,7 +321,17 @@ def _convert_map_items_to_dict(s):
     """
     Convert a series with items as list of (key, value), as made from an Arrow column of map type,
     to dict for compatibility with non-arrow MapType columns.
-    :param s: a pandas.Series
-    :return: pandas.Series with each record as a dict
+    :param s: pandas.Series of lists of (key, value) pairs
+    :return: pandas.Series of dictionaries
     """
     return s.apply(lambda m: None if m is None else {k: v for k, v in m})
+
+
+def _convert_dict_to_map_items(s):
+    """
+    Convert a series of dictionaries to list of (key, value) pairs to match expected data
+    for Arrow column of map type.
+    :param s: pandas.Series of dictionaries
+    :return: pandas.Series of lists of (key, value) pairs
+    """
+    return s.apply(lambda d: list(d.items()) if d is not None else None)

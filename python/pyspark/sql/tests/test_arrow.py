@@ -346,9 +346,6 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf, schema=schema)
 
-        # pyarrow currently requires a list of pairs for each map
-        pdf["m"] = [list(m.items()) if m is not None else None for m in map_data]
-
         df_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
         result = df.collect()
