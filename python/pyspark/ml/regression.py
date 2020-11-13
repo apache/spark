@@ -107,7 +107,7 @@ class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam,
     def __init__(self, *args):
         super(_LinearRegressionParams, self).__init__(*args)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35,
-                         blockSize=1)
+                         maxBlockSizeInMB=0.0)
 
     @since("2.3.0")
     def getEpsilon(self):
