@@ -17,13 +17,12 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
-import java.time.format.DateTimeParseException
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, PodBuilder}
+import io.fabric8.kubernetes.api.model.{PersistentVolumeClaim, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}

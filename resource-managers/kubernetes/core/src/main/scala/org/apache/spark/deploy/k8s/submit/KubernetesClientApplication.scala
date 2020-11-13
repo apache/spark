@@ -17,8 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.StringWriter
-import java.util.{Collections, UUID}
-import java.util.Properties
+import java.util.{Properties, UUID}
 
 import scala.collection.mutable
 import scala.util.control.Breaks._
