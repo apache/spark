@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 
 import scala.language.implicitConversions
+
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
