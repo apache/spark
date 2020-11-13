@@ -51,9 +51,6 @@ class StreamingContext(object):
     _activeContext = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
-        """
-        Create a new StreamingContext.
-        """
 
         self._sc = sparkContext
         self._jvm = self._sc._jvm
@@ -98,7 +95,7 @@ class StreamingContext(object):
         ----------
         checkpointPath : str
             Checkpoint directory used in an earlier streaming program
-        setupFunc : funcion
+        setupFunc : function
             Function to create a new context and setup DStreams
         """
         cls._ensure_initialized()
@@ -274,7 +271,7 @@ class StreamingContext(object):
             Hostname to connect to for receiving data
         port : int
             Port to connect to for receiving data
-        storageLevel : :class:`pyspark.StorageLevel`
+        storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)

@@ -464,9 +464,9 @@ class DStream(object):
 
         Parameters
         ----------
-        reduceFunc : funcion
+        reduceFunc : function
             associative and commutative reduce function
-        invReduceFunc : funcion
+        invReduceFunc : function
             inverse reduce function of `reduceFunc`; such that for all y,
             and invertible x:
             `invReduceFunc(reduceFunc(x, y), x) = y`
@@ -566,7 +566,7 @@ class DStream(object):
             DStream's batching interval
         numPartitions : int, optional
             number of partitions of each RDD in the new DStream.
-        filterFunc : funcion, optional
+        filterFunc : function, optional
             function to filter expired key-value pairs;
             only pairs that satisfy the function are retained
             set this to null if you do not want to filter
