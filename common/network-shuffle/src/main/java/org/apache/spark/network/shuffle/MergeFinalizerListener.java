@@ -21,6 +21,12 @@ import java.util.EventListener;
 
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 
+/**
+ * :: DeveloperApi ::
+ *
+ * Listener providing a callback function to invoke when driver receives the response for the finalize
+ * shuffle merge request sent to remote shuffle service.
+ */
 public interface MergeFinalizerListener extends EventListener {
   /**
    * Called once upon successful response on finalize shuffle merge on a remote shuffle service.
@@ -29,7 +35,7 @@ public interface MergeFinalizerListener extends EventListener {
   void onShuffleMergeSuccess(MergeStatuses statuses);
 
   /**
-   * Called once upon failure
+   * Called once upon failure response on finalize shuffle merge on a remote shuffle service.
    */
   void onShuffleMergeFailure(Throwable e);
 }
