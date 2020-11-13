@@ -130,7 +130,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+      RefreshTableExec(session, catalog, ident) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
