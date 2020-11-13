@@ -45,6 +45,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var deployMode: String = null
   var executorMemory: String = null
   var executorCores: String = null
+  var executorCoresOverhead: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
   var driverMemory: String = null
@@ -177,6 +178,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get(config.EXECUTOR_CORES.key))
       .orElse(env.get("SPARK_EXECUTOR_CORES"))
       .orNull
+    executorCoresOverhead = Option(executorCoresOverhead)
+      .orElse(sparkProperties.get(config.EXECUTOR_CORES_OVERHEAD.key))
+      .orElse(env.get("SPARK_EXECUTOR_CORES_OVERHEAD"))
+      .orNull
     totalExecutorCores = Option(totalExecutorCores)
       .orElse(sparkProperties.get(config.CORES_MAX.key))
       .orNull
@@ -298,6 +303,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     |  deployMode              $deployMode
     |  executorMemory          $executorMemory
     |  executorCores           $executorCores
+    |  executorCoresOverhead   $executorCoresOverhead
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
     |  driverMemory            $driverMemory
@@ -353,6 +359,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case EXECUTOR_CORES =>
         executorCores = value
+
+      case EXECUTOR_CORES_OVERHEAD =>
+        executorCoresOverhead = value
 
       case EXECUTOR_MEMORY =>
         executorMemory = value
@@ -551,6 +560,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --executor-cores NUM        Number of cores used by each executor. (Default: 1 in
         |                              YARN and K8S modes, or all available cores on the worker
         |                              in standalone mode).
+        |  --executor-coresOverhead NUM Number of overhead cores per executor. (Default: 0).
         |
         | Spark on YARN and Kubernetes only:
         |  --num-executors NUM         Number of executors to launch (Default: 2).

@@ -295,6 +295,12 @@ package object config {
     .intConf
     .createWithDefault(1)
 
+  private[spark] val EXECUTOR_CORES_OVERHEAD = ConfigBuilder("spark.executor.coresOverhead")
+    .version("3.1.0")
+    .doc("Extra cores allocated per executor.")
+    .intConf
+    .createWithDefault(0)
+
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .version("0.7.0")

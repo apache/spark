@@ -600,6 +600,8 @@ private[spark] class SparkSubmit extends Logging {
         confKey = EXECUTOR_INSTANCES.key),
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_CORES.key),
+      OptionAssigner(args.executorCoresOverhead, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
+        confKey = "spark.executor.coresOverhead"),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = EXECUTOR_MEMORY.key),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,

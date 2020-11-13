@@ -71,6 +71,7 @@ class SparkSubmitOptionParser {
   // YARN-only options.
   protected final String ARCHIVES = "--archives";
   protected final String EXECUTOR_CORES = "--executor-cores";
+  protected final String EXECUTOR_CORES_OVERHEAD = "--executor-coresOverhead";
   protected final String KEYTAB = "--keytab";
   protected final String NUM_EXECUTORS = "--num-executors";
   protected final String PRINCIPAL = "--principal";
@@ -97,6 +98,7 @@ class SparkSubmitOptionParser {
     { DRIVER_LIBRARY_PATH },
     { DRIVER_MEMORY },
     { EXECUTOR_CORES },
+    { EXECUTOR_CORES_OVERHEAD },
     { EXECUTOR_MEMORY },
     { FILES },
     { JARS },

@@ -177,6 +177,9 @@ private[yarn] class YarnAllocator(
   // Number of cores per executor for the default profile
   protected val defaultExecutorCores = sparkConf.get(EXECUTOR_CORES)
 
+  // Additional cores overhead
+  protected val coresOverhead = sparkConf.get(EXECUTOR_CORES_OVERHEAD)
+
   private val executorResourceRequests =
     getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
     getYarnResourcesFromSparkResources(SPARK_EXECUTOR_PREFIX, sparkConf)
@@ -185,7 +188,8 @@ private[yarn] class YarnAllocator(
   private[yarn] val defaultResource: Resource = {
     val resource: Resource = Resource.newInstance(
       executorMemory + executorOffHeapMemory + memoryOverhead + pysparkWorkerMemory,
-      defaultExecutorCores)
+      defaultExecutorCores + coresOverhead)
+
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, resource)
     logDebug(s"Created resource capability: $resource")
     resource
@@ -476,7 +480,7 @@ private[yarn] class YarnAllocator(
         if (log.isInfoEnabled()) {
           var requestContainerMessage = s"Will request $missing executor container(s) for " +
             s" ResourceProfile Id: $rpId, each with " +
-            s"${resource.getVirtualCores} core(s) and " +
+            s"${resource.getVirtualCores} core(s) (including $coresOverhead overhead) and " +
             s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
           if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
             ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {

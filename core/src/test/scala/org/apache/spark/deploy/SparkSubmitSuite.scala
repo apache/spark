@@ -259,6 +259,7 @@ class SparkSubmitSuite
       "--master", "yarn",
       "--executor-memory", "5g",
       "--executor-cores", "5",
+      "--executor-coresOverhead", "3",
       "--class", "org.SomeClass",
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
@@ -287,6 +288,7 @@ class SparkSubmitSuite
     conf.get("spark.executor.memory") should be ("5g")
     conf.get("spark.driver.memory") should be ("4g")
     conf.get("spark.executor.cores") should be ("5")
+    conf.get("spark.executor.coresOverhead") should be ("3")
     conf.get("spark.yarn.queue") should be ("thequeue")
     conf.get("spark.yarn.dist.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
     conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
