@@ -3268,7 +3268,7 @@
       <properties>
         <scala.version>2.13.3</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
-        <scalac.arg.unused-imports>-Wconf:cat=unused-imports:ws</scalac.arg.unused-imports>
+        <scalac.arg.unused-imports>-Wconf:cat=unused-imports:e</scalac.arg.unused-imports>
       </properties>
       <dependencyManagement>
         <dependencies>
