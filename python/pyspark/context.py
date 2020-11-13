@@ -74,7 +74,7 @@ class SparkContext(object):
         A name for your job, to display on the cluster web UI.
     sparkHome : str, optional
         Location where Spark is installed on cluster nodes.
-    pyFiles : str, optional
+    pyFiles : list, optional
         Collection of .zip or .py files to send to the cluster
         and add to PYTHONPATH.  These can be paths on the local file
         system or HDFS, HTTP, HTTPS, or FTP URLs.
@@ -88,14 +88,14 @@ class SparkContext(object):
         batch size
     serializer : :class:`pyspark.serializers.Serializer`, optional
         The serializer for RDDs.
-    conf : dict, optional
-        A :class:`SparkConf` object setting Spark properties.
-    gateway : optional
+    conf : :py:class:`pyspark.SparkConf`, optional
+        An object setting Spark properties.
+    gateway : :py:class:`py4j.java_gateway.JavaGateway`,  optional
         Use an existing gateway and JVM, otherwise a new JVM
         will be instantiated. This is only used internally.
-    jsc : optional
+    jsc : :py:class:`py4j.java_gateway.JavaObject`, optional
         The JavaSparkContext instance. This is only used internally.
-    profiler_cls : :class:`pyspark.profiler.Profiler`, optional
+    profiler_cls : type, optional
         A class of custom Profiler used to do profiling
         (default is :class:`pyspark.profiler.BasicProfiler`).
 
@@ -570,11 +570,12 @@ class SparkContext(object):
         Examples
         --------
         data
-        serializer
+            object to be serialized
+        serializer : :py:class:`pyspark.serializers.Serializer`
         reader_func : function
             A function which takes a filename and reads in the data in the jvm and
             returns a JavaRDD. Only used when encryption is disabled.
-        createRDDServer
+        createRDDServer : function
             A function which creates a PythonRDDServer in the jvm to
             accept the serialized data, for use when encryption is enabled.
         """
