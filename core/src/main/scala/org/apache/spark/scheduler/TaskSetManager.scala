@@ -824,8 +824,6 @@ private[spark] class TaskSetManager(
         if (fetchFailed.bmAddress != null) {
           healthTracker.foreach(_.updateExcludedForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
-          // Remove fetchFailed host in the shuffle push merger list for push based shuffle
-          env.blockManager.master.removeShufflePushMergerLocation(fetchFailed.bmAddress.host)
         }
 
         None

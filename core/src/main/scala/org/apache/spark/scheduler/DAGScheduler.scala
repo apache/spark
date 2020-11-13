@@ -1270,14 +1270,13 @@ private[spark] class DAGScheduler(
 
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
-      logInfo("Shuffle merge enabled for %s (%s) with %d merger locations"
-        .format(stage, stage.name, stage.shuffleDep.getMergerLocs.size))
+      logInfo(s"Shuffle merge enabled for $stage (${stage.name}) with" +
+        s" ${stage.shuffleDep.getMergerLocs.size} merger locations")
 
-      logDebug(s"List of shuffle push merger locations " +
+      logDebug("List of shuffle push merger locations " +
         s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     } else {
-      logInfo(("No available merger locations." +
-        " Shuffle merge disabled for %s (%s)").format(stage, stage.name))
+      logInfo(s"No available merger locations. Shuffle merge disabled for $stage (${stage.name})")
     }
   }
 
@@ -1889,6 +1888,11 @@ private[spark] class DAGScheduler(
               // host, including from those that we still haven't confirmed as lost due to heartbeat
               // delays.
               ignoreShuffleFileLostEpoch = isHostDecommissioned)
+
+            if (pushBasedShuffleEnabled) {
+              // Remove fetchFailed host in the shuffle push merger list for push based shuffle
+              env.blockManager.master.removeShufflePushMergerLocation(bmAddress.host)
+            }
           }
         }
 

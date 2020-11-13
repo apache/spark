@@ -2040,7 +2040,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   class MockBlockTransferService(
       val maxFailures: Int,
-      hostname: String = "MockBlockTransferServiceHost") extends BlockTransferService {
+      override val hostName: String = "MockBlockTransferServiceHost") extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null
 
@@ -2057,8 +2057,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
 
     override def close(): Unit = {}
-
-    override def hostName: String = { hostname }
 
     override def port: Int = { 63332 }
 
