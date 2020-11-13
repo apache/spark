@@ -142,9 +142,7 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
-  private lazy val catalystSqlParser = new CatalystSqlParser()
-
   def parseColumnPath(name: String): Seq[String] = {
-    catalystSqlParser.parseMultipartIdentifier(name)
+    CatalystSqlParser.parseMultipartIdentifier(name)
   }
 }

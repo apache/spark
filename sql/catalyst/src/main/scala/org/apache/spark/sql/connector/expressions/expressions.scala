@@ -28,9 +28,6 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
  * logical and internal expressions are used.
  */
 private[sql] object LogicalExpressions {
-  // a generic parser that is only used for parsing multi-part field names.
-  private lazy val parser = new CatalystSqlParser()
-
   def literal[T](value: T): LiteralValue[T] = {
     val internalLit = catalyst.expressions.Literal(value)
     literal(value, internalLit.dataType)
@@ -39,7 +36,7 @@ private[sql] object LogicalExpressions {
   def literal[T](value: T, dataType: DataType): LiteralValue[T] = LiteralValue(value, dataType)
 
   def parseReference(name: String): NamedReference =
-    FieldReference(parser.parseMultipartIdentifier(name))
+    FieldReference(CatalystSqlParser.parseMultipartIdentifier(name))
 
   def reference(nameParts: Seq[String]): NamedReference = FieldReference(nameParts)
 
