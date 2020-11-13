@@ -41,7 +41,7 @@ class StreamingContext(object):
     ----------
     sparkContext : :class:`SparkContext`
         SparkContext object.
-    batchDuration : int, optional
+    batchDuration : int, float, optional
         the time interval (in seconds) at which streaming
         data will be divided into batches
     """
@@ -272,7 +272,7 @@ class StreamingContext(object):
         ----------
         hostname : str
             Hostname to connect to for receiving data
-        port : str
+        port : int
             Port to connect to for receiving data
         storageLevel : :class:`pyspark.StorageLevel`
             Storage level to use for storing the received objects
@@ -303,7 +303,7 @@ class StreamingContext(object):
         ----------
         directory : str
             Directory to load data from
-        recordLength : bytes
+        recordLength : int
             Length of each record in bytes
         """
         return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
@@ -323,11 +323,11 @@ class StreamingContext(object):
 
         Parameters
         ----------
-        rdds : :class:`RDD`, list
+        rdds : :class:`pyspark.RDD`, list
             Queue of RDDs
-        oneAtATime : int, optional
+        oneAtATime : bool, optional
             pick one rdd each time or pick all of them once.
-        default : :class:`RDD`, optional
+        default : :class:`pyspark.RDD`, optional
             The default rdd if no more in rdds
 
         Notes

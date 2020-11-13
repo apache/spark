@@ -228,7 +228,7 @@ class DStream(object):
 
         Parameters
         ----------
-        interval : int
+        interval : int, float
             time in seconds, after each period of that, generated
             RDD will be checkpointed
         """
@@ -437,7 +437,7 @@ class DStream(object):
         windowDuration : int
             width of the window; must be a multiple of this DStream's
             batching interval
-        slideDuration : int
+        slideDuration : int, optional
             sliding interval of the window (i.e., the interval after which
             the new DStream will generate RDDs); must be a multiple of this
             DStream's batching interval
@@ -464,9 +464,9 @@ class DStream(object):
 
         Parameters
         ----------
-        reduceFunc : func
+        reduceFunc : funcion
             associative and commutative reduce function
-        invReduceFunc : func
+        invReduceFunc : funcion
             inverse reduce function of `reduceFunc`; such that for all y,
             and invertible x:
             `invReduceFunc(reduceFunc(x, y), x) = y`
@@ -566,7 +566,7 @@ class DStream(object):
             DStream's batching interval
         numPartitions : int, optional
             number of partitions of each RDD in the new DStream.
-        filterFunc : func, optional
+        filterFunc : funcion, optional
             function to filter expired key-value pairs;
             only pairs that satisfy the function are retained
             set this to null if you do not want to filter
