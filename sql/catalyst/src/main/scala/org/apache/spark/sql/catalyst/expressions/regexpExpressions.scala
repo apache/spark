@@ -185,7 +185,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
  */
 abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  protected def patterns: Seq[Any]
+  protected def patterns: Seq[UTF8String]
 
   protected def isNotDefined: Boolean
 
@@ -256,11 +256,11 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
   }
 }
 
-case class LikeAll(child: Expression, patterns: Seq[Any]) extends LikeAllBase {
+case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotDefined: Boolean = false
 }
 
-case class NotLikeAll(child: Expression, patterns: Seq[Any]) extends LikeAllBase {
+case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
   override def isNotDefined: Boolean = true
 }
 
