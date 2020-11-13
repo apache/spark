@@ -264,10 +264,7 @@ class SparkSession(SparkConversionMixin):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
-            self._jvm.java.lang.Class.forName("org.apache.spark.sql.SparkSession$")\
-                .getDeclaredField("MODULE$")\
-                .get(None)\
-                .setActiveSessionInternal(self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -652,10 +649,7 @@ class SparkSession(SparkConversionMixin):
         Py4JJavaError: ...
         """
         SparkSession._activeSession = self
-        self._jvm.java.lang.Class.forName("org.apache.spark.sql.SparkSession$")\
-            .getDeclaredField("MODULE$")\
-            .get(None)\
-            .setActiveSessionInternal(self._jsparkSession)
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -800,10 +794,7 @@ class SparkSession(SparkConversionMixin):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
-        self._jvm.java.lang.Class.forName("org.apache.spark.sql.SparkSession$")\
-            .getDeclaredField("MODULE$")\
-            .get(None)\
-            .clearActiveSessionInternal()
+        self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
         SparkSession._activeSession = None
         SQLContext._instantiatedContext = None

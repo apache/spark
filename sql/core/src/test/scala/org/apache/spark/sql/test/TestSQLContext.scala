@@ -35,7 +35,7 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
   }
 
   SparkSession.setDefaultSession(this)
-  SparkSession.setActiveSessionInternal(this)
+  SparkSession.setActiveSession(this)
 
   @transient
   override lazy val sessionState: SessionState = {
