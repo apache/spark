@@ -43,7 +43,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
 
-  test("V2 does not support SHOW PARTITIONS") {
+  test("not supported SHOW PARTITIONS") {
     def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
       val e = intercept[AnalysisException] {
         sql(s"$sqlCommand $sqlParams")

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,6 +38,17 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
     showRows.map {
       case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
+    }
+  }
+
+  test("issue exceptions on the temporary view") {
+    val viewName = "test_view"
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+      val errMsg = intercept[NoSuchTableException] {
+        sql(s"SHOW PARTITIONS $viewName")
+      }.getMessage
+      assert(errMsg.contains(s"Table or view '$viewName' not found"))
     }
   }
 }
