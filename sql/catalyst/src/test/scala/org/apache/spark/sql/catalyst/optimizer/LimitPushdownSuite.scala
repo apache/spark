@@ -74,7 +74,7 @@ class LimitPushdownSuite extends PlanTest {
       Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Limit(2, Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1))).analyze
+      Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1)).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
