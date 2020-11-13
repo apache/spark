@@ -178,7 +178,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
-
+    //如果格式为json则 source为json
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[TableProvider].isAssignableFrom(cls)) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]

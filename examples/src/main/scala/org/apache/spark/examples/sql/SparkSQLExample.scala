@@ -21,7 +21,7 @@ object SparkSQLExample {
   def main(args: Array[String]) {
     // $example on:init_session$
     val spark = SparkSession
-      .builder()
+      .builder().master("local[*]")
       .appName("Spark SQL basic example")
       .config("spark.some.config.option", "some-value")
       .getOrCreate()

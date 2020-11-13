@@ -299,7 +299,7 @@ case class DataSource(
   /**
    * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
    * [[DataSource]]
-   *
+   * 创建一个已解析的[[BaseRelation]]，可用于从此* [[DataSource]]读取数据或向其中写入数据
    * @param checkFilesExist Whether to confirm that the files exist when generating the
    *                        non-streaming file based datasource. StructuredStreaming jobs already
    *                        list file existence, and when generating incremental jobs, the batch
