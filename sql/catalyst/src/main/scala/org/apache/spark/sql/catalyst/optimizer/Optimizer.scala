@@ -1458,7 +1458,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object EliminateLimits extends Rule[LogicalPlan] {
   private def canEliminate(limitExpr: Expression, childMaxRow: Option[Long]): Boolean = {
-    limitExpr.foldable && childMaxRow.exists { _ <= limitExpr.eval().toString.toInt }
+    limitExpr.foldable && childMaxRow.exists { _ <= limitExpr.eval().toString.toLong }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
