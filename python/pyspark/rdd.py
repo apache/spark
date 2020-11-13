@@ -2731,7 +2731,11 @@ class RDD(object):
         Please read the linked SPIP and design docs to understand the limitations and future plans.
 
         .. versionadded:: 2.4.0
-        .. note:: Experimental
+
+        Returns
+        -------
+        :class:`RDDBarrier`
+            instance that provides actions within a barrier stage.
 
         See Also
         --------
@@ -2744,10 +2748,7 @@ class RDD(object):
         - `SPIP: Barrier Execution Mode <http://jira.apache.org/jira/browse/SPARK-24374>`_
         - `Design Doc <https://jira.apache.org/jira/browse/SPARK-24582>`_
 
-        Returns
-        -------
-        :class:`RDDBarrier`
-            instance that provides actions within a barrier stage.
+        This API is experimental
         """
         return RDDBarrier(self)
 
@@ -2765,7 +2766,10 @@ class RDD(object):
         being acquired to calculate the RDD.
 
         .. versionadded:: 3.1.0
-        .. note:: Experimental
+
+        Notes
+        -----
+        This API is experimental
         """
         self.has_resource_profile = True
         if profile._java_resource_profile is not None:
@@ -2787,12 +2791,15 @@ class RDD(object):
         if it wasn't specified.
 
         .. versionadded:: 3.1.0
-        .. note:: Experimental
 
         Returns
         -------
         :py:class:`pyspark.resource.ResourceProfile`
             The the user specified profile or None if none were specified
+
+        Notes
+        -----
+        This API is experimental
         """
         rp = self._jrdd.getResourceProfile()
         if rp is not None:
@@ -2830,7 +2837,10 @@ class RDDBarrier(object):
     :class:`RDDBarrier` instances are created by :func:`RDD.barrier`.
 
     .. versionadded:: 2.4.0
-    .. note:: Experimental
+
+    Notes
+    -----
+    This API is experimental
     """
 
     def __init__(self, rdd):
@@ -2844,7 +2854,10 @@ class RDDBarrier(object):
         Please see the API doc there.
 
         .. versionadded:: 2.4.0
-        .. note:: Experimental
+
+        Notes
+        -----
+        This API is experimental
         """
         def func(s, iterator):
             return f(iterator)
@@ -2859,7 +2872,10 @@ class RDDBarrier(object):
         Please see the API doc there.
 
         .. versionadded:: 3.0.0
-        .. note:: Experimental
+
+        Notes
+        -----
+        This API is experimental
         """
         return PipelinedRDD(self.rdd, f, preservesPartitioning, isFromBarrier=True)
 
