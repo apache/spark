@@ -38,7 +38,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
 
     Parameters
     ----------
-    conf : :py:class:`pyspark.SpparkConf`
+    conf : :py:class:`pyspark.SparkConf`
         spark configuration passed to spark-submit
     popen_kwargs : dict
         Dictionary of kwargs to pass to Popen when spawning
