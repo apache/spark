@@ -51,9 +51,6 @@ class StreamingContext(object):
     _activeContext = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
-        """
-        Create a new StreamingContext.
-        """
 
         self._sc = sparkContext
         self._jvm = self._sc._jvm
@@ -98,7 +95,7 @@ class StreamingContext(object):
         ----------
         checkpointPath : str
             Checkpoint directory used in an earlier streaming program
-        setupFunc : funcion
+        setupFunc : function
             Function to create a new context and setup DStreams
         """
         cls._ensure_initialized()
@@ -272,9 +269,9 @@ class StreamingContext(object):
         ----------
         hostname : str
             Hostname to connect to for receiving data
-        port : str
+        port : int
             Port to connect to for receiving data
-        storageLevel : :class:`pyspark.StorageLevel`
+        storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -303,7 +300,7 @@ class StreamingContext(object):
         ----------
         directory : str
             Directory to load data from
-        recordLength : bytes
+        recordLength : int
             Length of each record in bytes
         """
         return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
@@ -323,9 +320,9 @@ class StreamingContext(object):
 
         Parameters
         ----------
-        rdds : :class:`RDD`, list
+        rdds : list
             Queue of RDDs
-        oneAtATime : int, optional
+        oneAtATime : bool, optional
             pick one rdd each time or pick all of them once.
         default : :class:`RDD`, optional
             The default rdd if no more in rdds
