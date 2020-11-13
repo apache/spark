@@ -1982,7 +1982,7 @@ object SQLConf {
       .version("3.1.0")
       .intConf
       .checkValue(_ > 0, "The value of maxCommonExprsInCollapseProject must be larger than zero.")
-      .createWithDefault(20)
+      .createWithDefault(Int.MaxValue)
 
   val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
