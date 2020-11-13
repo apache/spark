@@ -1382,6 +1382,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
+      .internal()
+      .doc("When true, the stateful operators for streaming query will be checked for possible " +
+        "correctness issue due to global watermark. The correctness issue comes from queries " +
+        "containing stateful operation which can emit rows older than the current watermark " +
+        "plus allowed late record delay, which are \"late rows\" in downstream stateful " +
+        "operations and these rows can be discarded. Please refer the programming guide doc for " +
+        "more details. Once the issue is detected, Spark will throw analysis exception. " +
+        "When this config is disabled, Spark will just print warning message for users. " +
+        "Prior to Spark 3.1.0, the behavior is disabling this config.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -2144,9 +2159,10 @@ object SQLConf {
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
+      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
+      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
+      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -3015,6 +3031,9 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def statefulOperatorCorrectnessCheckEnabled: Boolean =
+    getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 

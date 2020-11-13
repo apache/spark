@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import org.apache.log4j.Level
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
@@ -389,6 +391,30 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
+    }
+  }
+
+  test("CREATE TABLE with table comment") {
+    withTable("h2.test.new_table") {
+      val logAppender = new LogAppender("table comment")
+      withLogAppender(logAppender) {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _ COMMENT 'this is a comment'")
+      }
+      val createCommentWarning = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getRenderedMessage)
+        .exists(_.contains("Cannot create JDBC table comment"))
+      assert(createCommentWarning === false)
+    }
+  }
+
+  test("CREATE TABLE with table property") {
+    withTable("h2.test.new_table") {
+      val m = intercept[AnalysisException] {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _" +
+          " TBLPROPERTIES('ENGINE'='tableEngineName')")
+      }.cause.get.getMessage
+      assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
 }

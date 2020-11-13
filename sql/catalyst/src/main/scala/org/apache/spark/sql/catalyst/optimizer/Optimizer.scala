@@ -82,6 +82,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator combine
         CollapseRepartition,
         CollapseProject,
+        OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
         CombineLimits,
@@ -807,6 +808,18 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replaces first(col) to nth_value(col, 1) for better performance.
+ */
+object OptimizeWindowFunctions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), spec)
+      if spec.orderSpec.nonEmpty &&
+        spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame].frameType == RowFrame =>
+      we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
+  }
+}
+
+/**
  * Collapse Adjacent Window Expression.
  * - If the partition specs and order specs are the same and the window expression are
  *   independent and are of the same window function type, collapse into the parent.
@@ -1269,6 +1282,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Sort => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: Expand => true
     case _ => false
   }
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
@@ -42,6 +42,7 @@ class ResolveSessionCatalog(
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AlterTableAddColumnsStatement(
@@ -312,8 +313,8 @@ class ResolveSessionCatalog(
           ignoreIfExists = c.ifNotExists)
       }
 
-    case RefreshTable(r @ ResolvedTable(_, _, _: V1Table)) if isSessionCatalog(r.catalog) =>
-      RefreshTableCommand(r.identifier.asTableIdentifier)
+    case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
+      RefreshTableCommand(ident.asTableIdentifier)
 
     case RefreshTable(r: ResolvedView) =>
       RefreshTableCommand(r.identifier.asTableIdentifier)
@@ -358,9 +359,8 @@ class ResolveSessionCatalog(
           orCreate = c.orCreate)
       }
 
-    case DropTable(
-        r @ ResolvedTable(_, _, _: V1Table), ifExists, purge) if isSessionCatalog(r.catalog) =>
-      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
+    case DropTable(ResolvedV1TableIdentifier(ident), ifExists, purge) =>
+      DropTableCommand(ident.asTableIdentifier, ifExists, isView = false, purge = purge)
 
     // v1 DROP TABLE supports temp view.
     case DropTable(r: ResolvedView, ifExists, purge) =>
@@ -427,22 +427,20 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "MSCK REPAIR TABLE")
 
-    case LoadDataStatement(tbl, path, isLocal, isOverwrite, partition) =>
-      val v1TableName = parseV1Table(tbl, "LOAD DATA")
+    case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         path,
         isLocal,
         isOverwrite,
         partition)
 
-    case ShowCreateTableStatement(tbl, asSerde) if !asSerde =>
-      val name = parseTempViewOrV1Table(tbl, "SHOW CREATE TABLE")
-      ShowCreateTableCommand(name.asTableIdentifier)
-
-    case ShowCreateTableStatement(tbl, asSerde) if asSerde =>
-      val v1TableName = parseV1Table(tbl, "SHOW CREATE TABLE AS SERDE")
-      ShowCreateTableAsSerdeCommand(v1TableName.asTableIdentifier)
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+      if (asSerde) {
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+      } else {
+        ShowCreateTableCommand(ident.asTableIdentifier)
+      }
 
     case CacheTableStatement(tbl, plan, isLazy, options) =>
       val name = if (plan.isDefined) {
@@ -500,11 +498,10 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartitionStatement(tbl, partitionSpecsAndLocs, ifNotExists) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE ADD PARTITION")
+    case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
-        v1TableName.asTableIdentifier,
-        partitionSpecsAndLocs,
+        ident.asTableIdentifier,
+        partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
     case AlterTableRenamePartitionStatement(tbl, from, to) =>
@@ -514,11 +511,11 @@ class ResolveSessionCatalog(
         from,
         to)
 
-    case AlterTableDropPartitionStatement(tbl, specs, ifExists, purge, retainData) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE DROP PARTITION")
+    case AlterTableDropPartition(
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
       AlterTableDropPartitionCommand(
-        v1TableName.asTableIdentifier,
-        specs,
+        ident.asTableIdentifier,
+        specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
         retainData)
@@ -573,9 +570,8 @@ class ResolveSessionCatalog(
             "SHOW VIEWS, only SessionCatalog supports this command.")
       }
 
-    case ShowTableProperties(
-        r @ ResolvedTable(_, _, _: V1Table), propertyKey) if isSessionCatalog(r.catalog) =>
-      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
+    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey) =>
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
 
     case ShowTableProperties(r: ResolvedView, propertyKey) =>
       ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
@@ -696,9 +692,16 @@ class ResolveSessionCatalog(
       }
   }
 
-  object ResolvedV1TableOrViewIdentifier {
+  object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case _ => None
+    }
+  }
+
+  object ResolvedV1TableOrViewIdentifier {
+    def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
+      case ResolvedV1TableIdentifier(ident) => Some(ident)
       case ResolvedView(ident, _) => Some(ident)
       case _ => None
     }

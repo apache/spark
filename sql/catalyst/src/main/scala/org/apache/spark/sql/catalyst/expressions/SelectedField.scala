@@ -119,7 +119,7 @@ object SelectedField {
             throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
         }
         selectField(child, opt)
-      case GetArrayItem(child, _) =>
+      case GetArrayItem(child, _, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val ArrayType(_, containsNull) = child.dataType

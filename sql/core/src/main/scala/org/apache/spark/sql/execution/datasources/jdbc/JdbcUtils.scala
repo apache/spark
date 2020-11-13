@@ -863,6 +863,7 @@ object JdbcUtils extends Logging {
       schema: StructType,
       caseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
       schema, caseSensitive, options.url, options.createTableColumnTypes)
     val createTableOptions = options.createTableOptions
@@ -872,6 +873,15 @@ object JdbcUtils extends Logging {
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
     val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
     executeStatement(conn, options, sql)
+    if (options.tableComment.nonEmpty) {
+      try {
+        executeStatement(
+          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
+      } catch {
+        case e: Exception =>
+          logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
+      }
+    }
   }
 
   /**

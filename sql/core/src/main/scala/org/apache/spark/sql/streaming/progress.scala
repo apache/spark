@@ -231,7 +231,7 @@ class SinkProgress protected[sql](
     val numOutputRows: Long) extends Serializable {
 
   /** SinkProgress without custom metrics. */
-  protected[sql] def this(description: String) {
+  protected[sql] def this(description: String) = {
     this(description, DEFAULT_NUM_OUTPUT_ROWS)
   }
 

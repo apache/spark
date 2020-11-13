@@ -62,6 +62,8 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBC
 
   override def dataPreparation(conn: Connection): Unit = {}
 
+  override def notSupportsTableComment: Boolean = true
+
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
     var t = spark.table(tbl)

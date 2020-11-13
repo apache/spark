@@ -173,7 +173,7 @@ case class CreateViewCommand(
       // added/generated from a temporary view.
       // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
       // package (e.g., HiveGenericUDF).
-      def verify(child: LogicalPlan) {
+      def verify(child: LogicalPlan): Unit = {
         child.collect {
           // Disallow creating permanent views based on temporary views.
           case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
