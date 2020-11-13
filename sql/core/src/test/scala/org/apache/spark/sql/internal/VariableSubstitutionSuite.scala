@@ -18,7 +18,6 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 
 class VariableSubstitutionSuite extends SparkFunSuite {
 

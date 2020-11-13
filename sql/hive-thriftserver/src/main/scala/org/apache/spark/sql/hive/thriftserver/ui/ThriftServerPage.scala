@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Calendar
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node

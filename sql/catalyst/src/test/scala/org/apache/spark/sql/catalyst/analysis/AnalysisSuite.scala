@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag

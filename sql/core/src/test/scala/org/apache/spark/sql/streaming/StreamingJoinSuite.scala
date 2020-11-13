@@ -26,19 +26,11 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
-import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 abstract class StreamingJoinSuite

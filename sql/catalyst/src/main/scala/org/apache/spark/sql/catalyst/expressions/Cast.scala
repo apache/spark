@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
