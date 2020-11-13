@@ -25,7 +25,7 @@ class ResourceInformation(object):
     One example is GPUs, where the addresses would be the indices of the GPUs
 
     .. versionadded:: 3.0.0
-    
+
     Parameters
     ----------
     name : str
