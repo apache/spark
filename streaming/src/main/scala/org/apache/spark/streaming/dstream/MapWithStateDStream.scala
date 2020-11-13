@@ -130,7 +130,7 @@ class InternalMapWithStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: Clas
     // Get the previous state or create a new empty state RDD
     val prevStateRDD = getOrCompute(validTime - slideDuration) match {
       case Some(rdd) =>
-        if (rdd.partitioner != Some(partitioner)) {
+        if (!rdd.partitioner.contains(partitioner)) {
           // If the RDD is not partitioned the right way, let us repartition it using the
           // partition index as the key. This is to ensure that state RDD is always partitioned
           // before creating another state RDD using it
