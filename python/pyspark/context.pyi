@@ -77,7 +77,7 @@ class SparkContext:
         self,
         start: int,
         end: Optional[int] = ...,
-        step: int = ...,
+        step: Optional[int] = ...,
         numSlices: Optional[int] = ...,
     ) -> RDD[int]: ...
     def parallelize(self, c: Iterable[T], numSlices: Optional[int] = ...) -> RDD[T]: ...
@@ -100,7 +100,7 @@ class SparkContext:
         keyConverter: Optional[str] = ...,
         valueConverter: Optional[str] = ...,
         minSplits: Optional[int] = ...,
-        batchSize: int = ...,
+        batchSize: Optional[int] = ...,
     ) -> RDD[Tuple[T, U]]: ...
     def newAPIHadoopFile(
         self,
@@ -111,7 +111,7 @@ class SparkContext:
         keyConverter: Optional[str] = ...,
         valueConverter: Optional[str] = ...,
         conf: Optional[Dict[str, str]] = ...,
-        batchSize: int = ...,
+        batchSize: Optional[int] = ...,
     ) -> RDD[Tuple[T, U]]: ...
     def newAPIHadoopRDD(
         self,
@@ -121,7 +121,7 @@ class SparkContext:
         keyConverter: Optional[str] = ...,
         valueConverter: Optional[str] = ...,
         conf: Optional[Dict[str, str]] = ...,
-        batchSize: int = ...,
+        batchSize: Optional[int] = ...,
     ) -> RDD[Tuple[T, U]]: ...
     def hadoopFile(
         self,
@@ -132,7 +132,7 @@ class SparkContext:
         keyConverter: Optional[str] = ...,
         valueConverter: Optional[str] = ...,
         conf: Optional[Dict[str, str]] = ...,
-        batchSize: int = ...,
+        batchSize: Optional[int] = ...,
     ) -> RDD[Tuple[T, U]]: ...
     def hadoopRDD(
         self,
@@ -142,7 +142,7 @@ class SparkContext:
         keyConverter: Optional[str] = ...,
         valueConverter: Optional[str] = ...,
         conf: Optional[Dict[str, str]] = ...,
-        batchSize: int = ...,
+        batchSize: Optional[int] = ...,
     ) -> RDD[Tuple[T, U]]: ...
     def union(self, rdds: Iterable[RDD[T]]) -> RDD[T]: ...
     def broadcast(self, value: T) -> Broadcast[T]: ...
