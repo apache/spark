@@ -503,7 +503,7 @@ class RDD(object):
             expected size of the sample as a fraction of this RDD's size
             without replacement: probability that each element is chosen; fraction must be [0, 1]
             with replacement: expected number of times each element is chosen; fraction must be >= 0
-        seed : int
+        seed : int, optional
             seed for the random number generator
 
         Notes
@@ -526,7 +526,7 @@ class RDD(object):
 
         weights : list
             weights for splits, will be normalized if they don't sum to 1
-        seed : int
+        seed : int, optional
             random seed
 
         Returns
@@ -863,7 +863,9 @@ class RDD(object):
         Parameters
         ----------
         command : str
+            command to run.
         env : dict, optional
+            environment variables to set.
         checkCode : bool, optional
             whether or not to check the return value of the shell command.
 
@@ -2744,7 +2746,8 @@ class RDD(object):
 
         Returns
         -------
-        :return: an :class:`RDDBarrier` instance that provides actions within a barrier stage.
+        :class:`RDDBarrier`
+            instance that provides actions within a barrier stage.
         """
         return RDDBarrier(self)
 
