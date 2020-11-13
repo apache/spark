@@ -818,11 +818,14 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
     buildStaticConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
-        "Metastore. Larger values may cause Hive metastore stack overflow.")
+        "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
+        "to be greater than or equal to the minimum value in set and less than or equal to the " +
+        "maximum value in set. Larger values may cause Hive Metastore stack overflow.")
       .version("3.1.0")
+      .internal()
       .intConf
       .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(1000)
 
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
