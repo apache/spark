@@ -21,6 +21,7 @@ private[spark] object Constants {
   // Labels
   val SPARK_APP_ID_LABEL = "spark-app-selector"
   val SPARK_EXECUTOR_ID_LABEL = "spark-exec-id"
+  val SPARK_RESOURCE_PROFILE_ID_LABEL = "spark-exec-resourceprofile-id"
   val SPARK_ROLE_LABEL = "spark-role"
   val SPARK_POD_DRIVER_ROLE = "driver"
   val SPARK_POD_EXECUTOR_ROLE = "executor"
@@ -63,6 +64,7 @@ private[spark] object Constants {
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   val ENV_SPARK_USER = "SPARK_USER"
+  val ENV_RESOURCE_PROFILE_ID = "SPARK_RESOURCE_PROFILE_ID"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
@@ -84,7 +86,6 @@ private[spark] object Constants {
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
-  val MEMORY_OVERHEAD_MIN_MIB = 384L
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
 
   // Hadoop Configuration
