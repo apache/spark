@@ -135,6 +135,26 @@ abstract class RemoveRedundantSortsSuiteBase
       }
     }
   }
+
+  test("shuffled join with different left and right side partition numbers") {
+    withTempView("t1", "t2") {
+      spark.range(0, 100, 1, 2).select('id as "key").createOrReplaceTempView("t1")
+      (0 to 100).toDF("key").createOrReplaceTempView("t2")
+
+      // left side partitioning: RangePartitioning(key ASC, 2)
+      // right side partitioning: UnknownPartitioning(0)
+      val queryTemplate = """
+        |SELECT /*+ %s(t1) */ t1.key
+        |FROM t1 JOIN t2 ON t1.key = t2.key
+        |WHERE t1.key > 10 AND t2.key < 50
+        |ORDER BY t1.key ASC
+      """.stripMargin
+
+      Seq(("MERGE", 3), ("SHUFFLE_HASH", 1)).foreach { case (hint, count) =>
+        checkSorts(queryTemplate.format(hint), count, count)
+      }
+    }
+  }
 }
 
 class RemoveRedundantSortsSuite extends RemoveRedundantSortsSuiteBase
