@@ -119,6 +119,7 @@ package object config {
         "The specified queue must be added to the dispatcher " +
         "with \"spark.mesos.dispatcher.queue.[QueueName]\". If no queue is specified, then " +
         "the application is submitted to the \"default\" queue with 0.0 priority.")
+      .version("3.1.0")
       .stringConf
       .createOptional
 
