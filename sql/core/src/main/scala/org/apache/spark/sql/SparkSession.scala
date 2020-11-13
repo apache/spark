@@ -775,6 +775,11 @@ class SparkSession private(
 @Stable
 object SparkSession extends Logging {
 
+  private final val activeSessionModifiedErrMsg = "Not allowed to modify active Spark session. " +
+    "`SparkSession.setActiveSession` and `SparkSession.clearActiveSession` are deprecated and " +
+    s"no longer supported. Set ${StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION.key} to true " +
+    "could restore legacy behaviors, which is not recommended, please use these API with caution!"
+
   /**
    * Builder for [[SparkSession]].
    */
@@ -988,7 +993,7 @@ object SparkSession extends Logging {
     if (SQLConf.get.legacyAllowModifyActiveSession) {
       setActiveSessionInternal(session)
     } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+      throw new UnsupportedOperationException(activeSessionModifiedErrMsg)
     }
   }
 
@@ -1007,7 +1012,7 @@ object SparkSession extends Logging {
     if (SQLConf.get.legacyAllowModifyActiveSession) {
       clearActiveSessionInternal()
     } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
+      throw new UnsupportedOperationException(activeSessionModifiedErrMsg)
     }
   }
 
