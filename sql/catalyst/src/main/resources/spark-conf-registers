@@ -1,0 +1,2 @@
+org.apache.spark.sql.internal.SQLConf
+org.apache.spark.sql.internal.StaticSQLConf

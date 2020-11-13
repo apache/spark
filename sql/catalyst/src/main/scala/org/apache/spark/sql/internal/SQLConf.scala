@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfRegisterLoader, Utils}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -56,6 +56,9 @@ object SQLConf {
 
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
+
+  // Eagerly load conf objects to force the conf entries registering
+  SparkConfRegisterLoader.load(Utils.getContextOrSparkClassLoader)
 
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
