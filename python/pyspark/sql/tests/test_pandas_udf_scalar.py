@@ -379,6 +379,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
 
+    def test_vectorized_udf_map_type(self):
+        data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
+        schema = StructType([StructField("map", MapType(StringType(), LongType()))])
+        df = self.spark.createDataFrame(data, schema=schema)
+        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
+            map_f = pandas_udf(lambda x: x, MapType(StringType(), LongType()), udf_type)
+            result = df.select(map_f(col('map')))
+            self.assertEquals(df.collect(), result.collect())
+
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
             col('id').cast('int').alias('a'),
