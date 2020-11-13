@@ -741,9 +741,9 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
   """,
   group = "json_funcs",
   since = "2.4.0")
@@ -801,7 +801,7 @@ case class SchemaOfJson(
       }
     }
 
-    UTF8String.fromString(dt.catalogString)
+    UTF8String.fromString(dt.sql)
   }
 
   override def prettyName: String = "schema_of_json"

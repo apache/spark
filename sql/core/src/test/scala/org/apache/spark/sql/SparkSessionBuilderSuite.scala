@@ -300,4 +300,58 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       session.stop()
     }
   }
+
+  test("SPARK-32991: Use conf in shared state as the original configuration for RESET") {
+    val wh = "spark.sql.warehouse.dir"
+    val td = "spark.sql.globalTempDatabase"
+    val custom = "spark.sql.custom"
+
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("SPARK-32991")
+      .set(wh, "./data1")
+      .set(td, "bob")
+
+    val sc = new SparkContext(conf)
+
+    val spark = SparkSession.builder()
+      .config(wh, "./data2")
+      .config(td, "alice")
+      .config(custom, "kyao")
+      .getOrCreate()
+
+    // When creating the first session like above, we will update the shared spark conf to the
+    // newly specified values
+    val sharedWH = spark.sharedState.conf.get(wh)
+    val sharedTD = spark.sharedState.conf.get(td)
+    val sharedCustom = spark.sharedState.conf.get(custom)
+    assert(sharedWH === "./data2",
+      "The warehouse dir in shared state should be determined by the 1st created spark session")
+    assert(sharedTD === "alice",
+      "Static sql configs in shared state should be determined by the 1st created spark session")
+    assert(sharedCustom === "kyao",
+      "Dynamic sql configs in shared state should be determined by the 1st created spark session")
+
+    assert(spark.conf.get(wh) === sharedWH,
+      "The warehouse dir in session conf and shared state conf should be consistent")
+    assert(spark.conf.get(td) === sharedTD,
+      "Static sql configs in session conf and shared state conf should be consistent")
+    assert(spark.conf.get(custom) === sharedCustom,
+      "Dynamic sql configs in session conf and shared state conf should be consistent before" +
+        " setting to new ones")
+
+    spark.sql("RESET")
+
+    assert(spark.conf.get(wh) === sharedWH,
+      "The warehouse dir in shared state should be respect after RESET")
+    assert(spark.conf.get(td) === sharedTD,
+      "Static sql configs in shared state should be respect after RESET")
+    assert(spark.conf.get(custom) === sharedCustom,
+      "Dynamic sql configs in shared state should be respect after RESET")
+
+    val spark2 = SparkSession.builder().getOrCreate()
+    assert(spark2.conf.get(wh) === sharedWH)
+    assert(spark2.conf.get(td) === sharedTD)
+    assert(spark2.conf.get(custom) === sharedCustom)
+  }
 }

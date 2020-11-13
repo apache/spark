@@ -171,7 +171,8 @@ private[deploy] class ExecutorRunner(
       // Add webUI log urls
       val baseUrl =
         if (conf.get(UI_REVERSE_PROXY)) {
-          s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
+          conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
+            s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
           s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }

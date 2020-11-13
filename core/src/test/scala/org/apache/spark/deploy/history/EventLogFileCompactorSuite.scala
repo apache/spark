@@ -219,10 +219,10 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       override def acceptFn(): PartialFunction[SparkListenerEvent, Boolean] = {
         case _: SparkListenerApplicationEnd => true
         case _: SparkListenerEnvironmentUpdate => true
-        case _: SparkListenerNodeBlacklisted => true
+        case _: SparkListenerNodeExcluded => true
         case _: SparkListenerBlockManagerAdded => false
         case _: SparkListenerApplicationStart => false
-        case _: SparkListenerNodeUnblacklisted => false
+        case _: SparkListenerNodeUnexcluded => false
       }
 
       override def statistics(): Option[EventFilter.FilterStatistics] = None
@@ -254,11 +254,11 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
       // filterApplicationStart: Some(false) & Some(false) => filter out
       writeEventToWriter(writer, SparkListenerApplicationStart("app", None, 0, "user", None))
 
-      // filterNodeBlacklisted: None & Some(true) => filter in
-      expectedLines += writeEventToWriter(writer, SparkListenerNodeBlacklisted(0, "host1", 1))
+      // filterNodeExcluded: None & Some(true) => filter in
+      expectedLines += writeEventToWriter(writer, SparkListenerNodeExcluded(0, "host1", 1))
 
-      // filterNodeUnblacklisted: None & Some(false) => filter out
-      writeEventToWriter(writer, SparkListenerNodeUnblacklisted(0, "host1"))
+      // filterNodeUnexcluded: None & Some(false) => filter out
+      writeEventToWriter(writer, SparkListenerNodeUnexcluded(0, "host1"))
 
       // other events: None & None => filter in
       expectedLines += writeEventToWriter(writer, SparkListenerUnpersistRDD(0))

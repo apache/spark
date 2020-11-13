@@ -163,8 +163,14 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
-      decommissionBlockManagers(bmIds)
+      // Mark corresponding BlockManagers as being decommissioning by adding them to
+      // decommissioningBlockManagerSet, so they won't be used to replicate or migrate blocks.
+      // Note that BlockManagerStorageEndpoint will be notified about decommissioning when the
+      // executor is notified(see BlockManager.decommissionSelf), so we don't need to send the
+      // notification here.
+      val bms = executorIds.flatMap(blockManagerIdByExecutor.get)
+      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as being decommissioning.")
+      decommissioningBlockManagerSet ++= bms
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -357,21 +363,6 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
-  /**
-   * Decommission the given Seq of blockmanagers
-   *    - Adds these block managers to decommissioningBlockManagerSet Set
-   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerReplicaEndpoint]]
-   */
-  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
-    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
-    val futures = newBlockManagersToDecommission.map { blockManagerId =>
-      decommissioningBlockManagerSet.add(blockManagerId)
-      val info = blockManagerInfo(blockManagerId)
-      info.storageEndpoint.ask[Unit](DecommissionBlockManager)
-    }
-    Future.sequence{ futures.toSeq }
   }
 
   /**
@@ -746,7 +737,6 @@ private[spark] class BlockManagerInfo(
     if (storageLevel.isValid) {
       /* isValid means it is either stored in-memory or on-disk.
        * The memSize here indicates the data size in or dropped from memory,
-       * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */

@@ -80,4 +80,16 @@ class SourceConfigSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-31711: Test executor source registration in local mode") {
+    val conf = new SparkConf()
+    val sc = new SparkContext("local", "test", conf)
+    try {
+      val metricsSystem = sc.env.metricsSystem
+
+      // Executor source should be registered
+      assert (metricsSystem.getSourcesByName("executor").nonEmpty)
+    } finally {
+      sc.stop()
+    }
+  }
 }

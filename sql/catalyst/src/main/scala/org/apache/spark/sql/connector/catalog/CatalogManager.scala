@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
@@ -82,15 +81,8 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
-      try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-      } catch {
-        case NonFatal(_) =>
-          logError(
-            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
-          defaultSessionCatalog
-      }
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
+      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
     }.getOrElse(defaultSessionCatalog)
   }
 

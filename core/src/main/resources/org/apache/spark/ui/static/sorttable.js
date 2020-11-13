@@ -99,12 +99,12 @@ sorttable = {
                                                     'sorttable_sorted_reverse');
             rowlists = this.parentNode.getElementsByTagName("span");
             for (var j=0; j < rowlists.length; j++) {
-                if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/)) {
+                if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1) {
                     rowlists[j].parentNode.removeChild(rowlists[j]);
                 }
             }
             sortrevind = document.createElement('span');
-            sortrevind.class = "sorttable_sortrevind";
+            sortrevind.className = "sorttable_sortrevind";
             sortrevind.innerHTML = stIsIE ? '&nbsp<font face="webdings">5</font>' : '&nbsp;&#x25BE;';
             this.appendChild(sortrevind);
             return;
@@ -117,12 +117,12 @@ sorttable = {
                                                   'sorttable_sorted');
             rowlists = this.parentNode.getElementsByTagName("span");
             for (var j=0; j < rowlists.length; j++) {
-                if (rowlists[j].className.search(/\sorttable_sortrevind\b/)) {
+                if (rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
                     rowlists[j].parentNode.removeChild(rowlists[j]);
                 }
             }
             sortfwdind = document.createElement('span');
-            sortfwdind.class = "sorttable_sortfwdind";
+            sortfwdind.className = "sorttable_sortfwdind";
             sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
             this.appendChild(sortfwdind);
             return;
@@ -138,15 +138,15 @@ sorttable = {
           });
           rowlists = this.parentNode.getElementsByTagName("span");
           for (var j=0; j < rowlists.length; j++) {
-              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/)
-                  || rowlists[j].className.search(/\sorttable_sortrevind\b/) ) {
+              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1
+                  || rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
                   rowlists[j].parentNode.removeChild(rowlists[j]);
               }
           }
 
           this.className += ' sorttable_sorted';
           sortfwdind = document.createElement('span');
-          sortfwdind.class = "sorttable_sortfwdind";
+          sortfwdind.className = "sorttable_sortfwdind";
           sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
           this.appendChild(sortfwdind);
 
