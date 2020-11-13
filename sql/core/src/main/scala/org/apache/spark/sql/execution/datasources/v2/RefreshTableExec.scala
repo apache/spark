@@ -30,7 +30,7 @@ case class RefreshTableExec(
     catalog.invalidateTable(ident)
 
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(table)
+      val table = catalog.loadTable(ident)
       // invalidate all caches referencing the given table
       // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
       val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
