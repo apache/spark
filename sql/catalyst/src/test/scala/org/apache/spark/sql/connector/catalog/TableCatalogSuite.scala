@@ -64,12 +64,12 @@ class TableCatalogSuite extends SparkFunSuite {
     val ident2 = Identifier.of(Array("ns"), "test_table_2")
     val ident3 = Identifier.of(Array("ns2"), "test_table_1")
 
-    assert(catalog.listTables(Array("ns")).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns")))
 
     catalog.createTable(ident1, schema, Array.empty, emptyProps)
 
     assert(catalog.listTables(Array("ns")).toSet == Set(ident1))
-    assert(catalog.listTables(Array("ns2")).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2")))
 
     catalog.createTable(ident3, schema, Array.empty, emptyProps)
     catalog.createTable(ident2, schema, Array.empty, emptyProps)
@@ -813,9 +813,10 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val ret = catalog.dropNamespace(testNs)
-
-    assert(ret === false)
+    val errMsg = intercept[NoSuchNamespaceException] {
+      catalog.dropNamespace(testNs)
+    }.getMessage
+    assert(errMsg.contains("Namespace '````.`.`' not found"))
   }
 
   test("dropNamespace: drop empty namespace") {
@@ -841,7 +842,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.dropNamespace(testNs))
 
     assert(!catalog.namespaceExists(testNs))
-    assert(catalog.listTables(testNs).isEmpty)
+    intercept[NoSuchNamespaceException](catalog.listTables(testNs))
   }
 
   test("alterNamespace: basic behavior") {
