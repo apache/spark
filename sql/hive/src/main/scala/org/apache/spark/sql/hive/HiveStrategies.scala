@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
  * properties.
  */
-object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
+class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   private def determineHiveSerde(table: CatalogTable): CatalogTable = {
     if (table.storage.serde.nonEmpty) {
       table
@@ -90,7 +90,7 @@ object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
-      val dbName = t.identifier.database.getOrElse(SparkSession.active.catalog.currentDatabase)
+      val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
       val table = t.copy(identifier = t.identifier.copy(database = Some(dbName)))
 
       // Determines the serde/format of Hive tables

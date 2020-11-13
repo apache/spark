@@ -75,8 +75,8 @@ class HiveSessionStateBuilder(
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      ResolveHiveSerdeTable +:
-        FindDataSourceTable +:
+      new ResolveHiveSerdeTable(session) +:
+        new FindDataSourceTable(session) +:
         ResolveSQLOnFile +:
         FallBackFileSourceV2 +:
         ResolveEncodersInScalaAgg +:
@@ -88,7 +88,7 @@ class HiveSessionStateBuilder(
       DetectAmbiguousSelfJoin +:
         DetermineTableStats +:
         RelationConversions(catalog) +:
-        PreprocessTableCreation +:
+        PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
         HiveAnalysis +:
@@ -103,7 +103,7 @@ class HiveSessionStateBuilder(
   }
 
   override def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
-    Seq(PruneHiveTablePartitions)
+    Seq(new PruneHiveTablePartitions(session))
 
   /**
    * Planner that takes into account Hive-specific strategies.
