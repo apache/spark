@@ -26,10 +26,9 @@ import scala.collection.JavaConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.internal.config.UI.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
-import org.apache.spark.util.Utils
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
@@ -258,11 +257,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress.stateOperators.nonEmpty)
-    val disabledCustomMetrics =
-      SQLConf.get.getConf(SQLConf.DISABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
-    logDebug(s"Disabled custom metrics: $disabledCustomMetrics")
+    val enabledCustomMetrics = parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
+    logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
     query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
-      .filterNot(disabledCustomMetrics.contains(_)).map { metricName =>
+      .filter(enabledCustomMetrics.contains(_)).map { metricName =>
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
           p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
         val max = data.maxBy(_._2)._2

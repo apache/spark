@@ -2875,16 +2875,6 @@ object SQLConf {
     .stringConf
     .createWithDefault("")
 
-  val DISABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
-    buildConf("spark.sql.streaming.disabledUICustomMetricList")
-      .internal()
-      .doc("Configures a list of custom metrics on Structured Streaming UI, which are disabled. " +
-        "The list contains the name of the custom metrics separated by comma.")
-      .version("3.1.0")
-      .stringConf
-      .toSequence
-      .createWithDefault(Seq("loadedMapCacheHitCount"))
-
   /**
    * Holds information about keys that have been deprecated.
    *

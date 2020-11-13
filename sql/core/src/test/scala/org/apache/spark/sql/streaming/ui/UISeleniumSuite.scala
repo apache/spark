@@ -27,7 +27,7 @@ import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
-import org.apache.spark.internal.config.UI.{UI_ENABLED, UI_PORT}
+import org.apache.spark.internal.config.UI.{ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST, UI_ENABLED, UI_PORT}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
@@ -53,6 +53,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .setAppName("ui-test")
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
+      .set(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST, Seq("stateOnCurrentVersionSizeBytes"))
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val spark = SparkSession.builder().master(master).config(conf).getOrCreate()
     assert(spark.sparkContext.ui.isDefined)
@@ -125,25 +126,25 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             findAll(cssSelector("h3"))
               .map(_.text).toSeq should contain("Streaming Query Statistics")
             val summaryText = findAll(cssSelector("div strong")).map(_.text).toSeq
-            summaryText should contain ("Name:")
-            summaryText should contain ("Id:")
-            summaryText should contain ("RunId:")
+            summaryText should contain("Name:")
+            summaryText should contain("Id:")
+            summaryText should contain("RunId:")
             findAll(cssSelector("""#stat-table th""")).map(_.text).toSeq should be {
               List("", "Timelines", "Histograms")
             }
-            summaryText should contain ("Input Rate (?)")
-            summaryText should contain ("Process Rate (?)")
-            summaryText should contain ("Input Rows (?)")
-            summaryText should contain ("Batch Duration (?)")
-            summaryText should contain ("Operation Duration (?)")
-            summaryText should contain ("Aggregated Number Of Total State Rows (?)")
-            summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
-            summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
-            summaryText should contain ("Aggregated Number Of State Rows Dropped By Watermark (?)")
-            summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
+            summaryText should contain("Input Rate (?)")
+            summaryText should contain("Process Rate (?)")
+            summaryText should contain("Input Rows (?)")
+            summaryText should contain("Batch Duration (?)")
+            summaryText should contain("Operation Duration (?)")
+            summaryText should contain("Aggregated Number Of Total State Rows (?)")
+            summaryText should contain("Aggregated Number Of Updated State Rows (?)")
+            summaryText should contain("Aggregated State Memory Used In Bytes (?)")
+            summaryText should contain("Aggregated Number Of State Rows Dropped By Watermark (?)")
+            summaryText should contain("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
               " (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")
-            summaryText should contain ("Aggregated Custom Metric loadedMapCacheMissCount (?)")
+            summaryText should not contain("Aggregated Custom Metric loadedMapCacheMissCount (?)")
           }
         } finally {
           spark.streams.active.foreach(_.stop())
