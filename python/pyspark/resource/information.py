@@ -25,14 +25,17 @@ class ResourceInformation(object):
     One example is GPUs, where the addresses would be the indices of the GPUs
 
     .. versionadded:: 3.0.0
-    .. note:: Evolving
-
+    
     Parameters
     ----------
     name : str
         the name of the resource
     addresses : list
         an array of strings describing the addresses of the resource
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, name, addresses):

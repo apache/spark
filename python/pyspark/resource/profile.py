@@ -28,7 +28,10 @@ class ResourceProfile(object):
     stages. This is meant to be immutable so user cannot change it after building.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, _java_resource_profile=None, _exec_req={}, _task_req={}):
@@ -80,7 +83,10 @@ class ResourceProfileBuilder(object):
     resource requirements between stages.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self):

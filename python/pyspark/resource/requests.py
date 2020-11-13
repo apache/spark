@@ -42,7 +42,6 @@ class ExecutorResourceRequest(object):
     Use :py:class:`pyspark.ExecutorResourceRequests` class as a convenience API.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
 
     Parameters
     ----------
@@ -57,6 +56,10 @@ class ExecutorResourceRequest(object):
         of the resources available.
     vendor : str, optional
         Vendor, required for some cluster managers
+
+    Notes
+    -----
+    This API is evolving.
     """
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
         self._name = resourceName
@@ -89,7 +92,10 @@ class ExecutorResourceRequests(object):
     resources needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
+
+    Notes
+    -----
+    This API is evolving.
     """
     _CORES = "cores"
     _MEMORY = "memory"
@@ -199,7 +205,10 @@ class TaskResourceRequest(object):
         Valid values are less than or equal to 0.5 or whole numbers.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
+
+    Notes
+    -----
+    This API is evolving.
     """
     def __init__(self, resourceName, amount):
         self._name = resourceName
@@ -222,7 +231,10 @@ class TaskResourceRequests(object):
     needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
-    .. note:: Evolving
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     _CPUS = "cpus"

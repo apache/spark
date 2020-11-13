@@ -79,9 +79,6 @@ class Profiler(object):
 
     The profiler class is chosen when creating a SparkContext
 
-
-    .. note:: DeveloperApi
-
     Examples
     --------
     >>> from pyspark import SparkConf, SparkContext
@@ -100,6 +97,10 @@ class Profiler(object):
     My custom profiles for RDD:1
     My custom profiles for RDD:3
     >>> sc.stop()
+
+    Notes
+    -----
+    This API is a developer API.
     """
 
     def __init__(self, ctx):
