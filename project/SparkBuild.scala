@@ -219,7 +219,7 @@ object SparkBuild extends PomBuild {
     scalacOptions in Compile ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
         Seq(
-          // "-Xfatal-warnings",
+          "-Xfatal-warnings",
           "-deprecation",
           "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and supress them
         )
