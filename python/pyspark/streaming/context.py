@@ -320,7 +320,7 @@ class StreamingContext(object):
 
         Parameters
         ----------
-        rdds : :class:`pyspark.RDD`, list
+        rdds : list
             Queue of RDDs
         oneAtATime : bool, optional
             pick one rdd each time or pick all of them once.
