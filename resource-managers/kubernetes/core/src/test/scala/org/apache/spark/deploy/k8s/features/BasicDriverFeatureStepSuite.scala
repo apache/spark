@@ -192,7 +192,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     test(s"memory overhead factor: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
       val driverMem =
-        ResourceProfile.MEMORY_OVERHEAD_MIN / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)

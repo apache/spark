@@ -286,11 +286,28 @@ private[yarn] class YarnAllocator(
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)
         }
-      // YARN specified resources are only supported with the default profile and we only
-      // pick up Spark custom resources for GPU and FPGA with the default profile
-      // to allow option of them being scheduled off of or not.
-      // We don't currently have a way to specify just YARN custom resources via the
-      // ResourceProfile so we send along all custom resources defined.
+      // There is a difference in the way custom resources are handled between
+      // the base default profile and custom ResourceProfiles. To allow for the user
+      // to request YARN containers with extra resources without Spark scheduling on
+      // them, the user can specify resources via the <code>spark.yarn.executor.resource.</code>
+      // config. Those configs are only used in the base default profile though and do
+      // not get propogated into any other custom ResourceProfiles. This is because
+      // there would be no way to remove them if you wanted a stage to not have them.
+      // This results in your default profile getting custom resources defined in
+      // <code>spark.yarn.executor.resource.</code> plus spark defined resources of
+      // GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in
+      // types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not
+      // know the mapping of any other resources. Any other Spark custom resources
+      // are not propogated to YARN for the default profile. So if you want Spark
+      // to schedule based off a custom resource and have it requested from YARN, you
+      // must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>)
+      // and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark
+      // config off if you only want YARN containers with the extra resources but Spark not to
+      // schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way
+      // to only specify YARN resources without Spark scheduling off of them. This means for
+      // custom ResourceProfiles we propogate all the resources defined in the ResourceProfile
+      // to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires
+      // that the name of any custom resources you specify match what they are defined as in YARN.
       val customResources = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
         getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
           customSparkResources.filterKeys { r =>

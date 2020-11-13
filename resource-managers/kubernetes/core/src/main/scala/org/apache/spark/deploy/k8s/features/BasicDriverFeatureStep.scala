@@ -68,7 +68,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((overheadFactor * driverMemoryMiB).toInt,
-      ResourceProfile.MEMORY_OVERHEAD_MIN))
+      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {

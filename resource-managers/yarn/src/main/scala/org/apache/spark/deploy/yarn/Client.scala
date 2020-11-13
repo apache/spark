@@ -89,7 +89,7 @@ private[spark] class Client(
     val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
     sparkConf.get(amMemoryOverheadEntry).getOrElse(
       math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong,
-        ResourceProfile.MEMORY_OVERHEAD_MIN)).toInt
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
   }
   private val amCores = if (isClusterMode) {
     sparkConf.get(DRIVER_CORES)
@@ -103,7 +103,7 @@ private[spark] class Client(
   protected val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong,
-      ResourceProfile.MEMORY_OVERHEAD_MIN)).toInt
+      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {

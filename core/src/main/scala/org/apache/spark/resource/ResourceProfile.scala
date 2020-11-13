@@ -257,7 +257,7 @@ object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  private[spark] val MEMORY_OVERHEAD_MIN = 384L
+  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
 
   private lazy val nextProfileId = new AtomicInteger(0)
   private val DEFAULT_PROFILE_LOCK = new Object()
@@ -316,21 +316,15 @@ object ResourceProfile extends Logging {
     val offheapMem = Utils.executorOffHeapMemorySizeAsMb(conf)
     ereqs.offHeapMemory(offheapMem.toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
-    val customResources = new mutable.HashMap[String, ExecutorResourceRequest]
     execReq.foreach { req =>
-      val name = req.id.resourceName
-      customResources(name) =
-        new ExecutorResourceRequest(
-          req.id.resourceName,
-          req.amount,
-          req.discoveryScript.orElse(""),
-          req.vendor.orElse(""))
-      ereqs.resource(name, req.amount, req.discoveryScript.orElse(""),
+      ereqs.resource(req.id.resourceName, req.amount, req.discoveryScript.orElse(""),
         req.vendor.orElse(""))
     }
+    val customResourceNames = execReq.map(_.id.resourceName).toSet
+    val customResources = ereqs.requests.filter(v => customResourceNames.contains(v._1))
     defaultProfileExecutorResources =
       Some(DefaultProfileExecutorResources(cores, memory, offheapMem, pysparkMem,
-        overheadMem, customResources.toMap))
+        overheadMem, customResources))
     ereqs.requests
   }
 
@@ -398,7 +392,7 @@ object ResourceProfile extends Logging {
       executorMemoryMiB: Long,
       overheadFactor: Double): Long = {
     overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
-        ResourceProfile.MEMORY_OVERHEAD_MIN))
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   }
 
   /**
@@ -415,31 +409,15 @@ object ResourceProfile extends Logging {
       isPythonApp: Boolean,
       resourceMappings: Map[String, String]): ExecutorResourcesOrDefaults = {
     val defaultResources = getDefaultProfileExecutorResources(conf)
-    if (rpId == DEFAULT_RESOURCE_PROFILE_ID) {
-      val memoryOverheadMiB = ResourceProfile.calculateOverHeadMemory(
-        defaultResources.memoryOverheadMiB, defaultResources.executorMemoryMiB, overheadFactor)
-      val pysparkMemToUseMiB = if (isPythonApp) {
-        defaultResources.pysparkMemoryMiB.getOrElse(0L)
-      } else {
-        0L
-      }
-      val execMem = defaultResources.executorMemoryMiB
-      val offHeap = defaultResources.memoryOffHeapMiB
-      val totalMemMiB = execMem + offHeap + pysparkMemToUseMiB + memoryOverheadMiB
-      val customResources = defaultResources.customResources.map { case (rName, execReq) =>
-        val nameToUse = resourceMappings.get(rName).getOrElse(rName)
-        (nameToUse, execReq)
-      }
-      ExecutorResourcesOrDefaults(defaultResources.cores, defaultResources.executorMemoryMiB,
-        defaultResources.memoryOffHeapMiB, pysparkMemToUseMiB, memoryOverheadMiB,
-        totalMemMiB, customResources)
-    } else {
-      var executorMemoryMiB = defaultResources.executorMemoryMiB
-      var cores = defaultResources.cores
-      var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
-      var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
-        executorMemoryMiB, overheadFactor)
-      var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
+    // set all the default values, which may change for custom ResourceProfiles
+    var cores = defaultResources.cores
+    var executorMemoryMiB = defaultResources.executorMemoryMiB
+    var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
+    var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
+    var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
+      executorMemoryMiB, overheadFactor)
+
+    val finalCustomResources = if (rpId != DEFAULT_RESOURCE_PROFILE_ID) {
       val customResources = new mutable.HashMap[String, ExecutorResourceRequest]
       execResources.foreach { case (r, execReq) =>
         r match {
@@ -458,17 +436,23 @@ object ResourceProfile extends Logging {
             customResources(nameToUse) = execReq
         }
       }
-      // only add in pyspark memory if actually a python application
-      val pysparkMemToUseMiB = if (isPythonApp) {
-        pysparkMemoryMiB
-      } else {
-        0L
+      customResources.toMap
+    } else {
+      defaultResources.customResources.map { case (rName, execReq) =>
+        val nameToUse = resourceMappings.get(rName).getOrElse(rName)
+        (nameToUse, execReq)
       }
-      val totalMemMiB =
-        (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)
-      ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
-        pysparkMemToUseMiB, memoryOverheadMiB, totalMemMiB, customResources.toMap)
     }
+    // only add in pyspark memory if actually a python application
+    val pysparkMemToUseMiB = if (isPythonApp) {
+      pysparkMemoryMiB
+    } else {
+      0L
+    }
+    val totalMemMiB =
+      (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)
+    ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
+      pysparkMemToUseMiB, memoryOverheadMiB, totalMemMiB, finalCustomResources)
   }
 
   private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"
