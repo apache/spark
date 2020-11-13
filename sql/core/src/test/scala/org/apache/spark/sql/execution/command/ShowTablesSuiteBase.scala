@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuite extends SharedSparkSession {
+trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
@@ -40,7 +40,7 @@ trait ShowTablesSuite extends SharedSparkSession {
   protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
-    assert(df.collect() === getRows(expected))
+    checkAnswer(df, getRows(expected))
   }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
@@ -71,30 +71,36 @@ trait ShowTablesSuite extends SharedSparkSession {
       sql(s"CREATE NAMESPACE $catalog.ns2")
       withTable(
         s"$catalog.ns1.table",
-        s"$catalog.ns1.table_name_1",
-        s"$catalog.ns1.table_name_2",
-        s"$catalog.ns2.table_name_2") {
+        s"$catalog.ns1.table_name_1a",
+        s"$catalog.ns1.table_name_2b",
+        s"$catalog.ns2.table_name_2b") {
         sql(s"CREATE TABLE $catalog.ns1.table (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns1.table_name_1 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns1.table_name_2 (id bigint, data string) $defaultUsing")
-        sql(s"CREATE TABLE $catalog.ns2.table_name_2 (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_1a (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns1.table_name_2b (id bigint, data string) $defaultUsing")
+        sql(s"CREATE TABLE $catalog.ns2.table_name_2b (id bigint, data string) $defaultUsing")
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1",
           Seq(
             ShowRow("ns1", "table", false),
-            ShowRow("ns1", "table_name_1", false),
-            ShowRow("ns1", "table_name_2", false)))
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
           Seq(
-            ShowRow("ns1", "table_name_1", false),
-            ShowRow("ns1", "table_name_2", false)))
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2'",
-          Seq(ShowRow("ns1", "table_name_2", false)))
+          s"SHOW TABLES FROM $catalog.ns1 LIKE 'table_name_1*|table_name_2*'",
+          Seq(
+            ShowRow("ns1", "table_name_1a", false),
+            ShowRow("ns1", "table_name_2b", false)))
+
+        runShowTablesSql(
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2b'",
+          Seq(ShowRow("ns1", "table_name_2b", false)))
       }
     }
   }

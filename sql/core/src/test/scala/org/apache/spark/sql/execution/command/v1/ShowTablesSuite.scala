@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
-class ShowTablesSuite extends CommonShowTablesSuite {
+trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultNamespace: Seq[String] = Seq("default")
@@ -84,3 +85,5 @@ class ShowTablesSuite extends CommonShowTablesSuite {
     }
   }
 }
+
+class ShowTablesSuite extends ShowTablesSuiteBase with SharedSparkSession

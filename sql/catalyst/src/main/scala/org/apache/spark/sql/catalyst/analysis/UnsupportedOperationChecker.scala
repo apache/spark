@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -40,10 +41,15 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
+  /**
+   * Checks for possible correctness issue in chained stateful operators. The behavior is
+   * controlled by SQL config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled`.
+   * Once it is enabled, an analysis exception will be thrown. Otherwise, Spark will just
+   * print a warning message.
+   */
   def checkStreamingQueryGlobalWatermarkLimit(
       plan: LogicalPlan,
-      outputMode: OutputMode,
-      failWhenDetected: Boolean): Unit = {
+      outputMode: OutputMode): Unit = {
     def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
       case s: Aggregate
         if s.isStreaming && outputMode == InternalOutputModes.Append => true
@@ -62,6 +68,8 @@ object UnsupportedOperationChecker extends Logging {
       case _ => false
     }
 
+    val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled
+
     try {
       plan.foreach { subPlan =>
         if (isStatefulOperation(subPlan)) {
@@ -73,7 +81,10 @@ object UnsupportedOperationChecker extends Logging {
               "The query contains stateful operation which can emit rows older than " +
               "the current watermark plus allowed late record delay, which are \"late rows\"" +
               " in downstream stateful operations and these rows can be discarded. " +
-              "Please refer the programming guide doc for more details."
+              "Please refer the programming guide doc for more details. If you understand " +
+              "the possible risk of correctness issue and still need to run the query, " +
+              "you can disable this check by setting the config " +
+              "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false."
             throwError(errorMsg)(plan)
           }
         }
@@ -388,7 +399,7 @@ object UnsupportedOperationChecker extends Logging {
       checkUnsupportedExpressions(subPlan)
     }
 
-    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode, failWhenDetected = false)
+    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode)
   }
 
   def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {

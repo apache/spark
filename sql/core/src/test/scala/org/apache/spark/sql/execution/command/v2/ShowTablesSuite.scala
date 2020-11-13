@@ -21,10 +21,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.InMemoryTableCatalog
-import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class ShowTablesSuite extends CommonShowTablesSuite {
+class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSession {
   override def version: String = "V2"
   override def catalog: String = "test_catalog"
   override def defaultNamespace: Seq[String] = Nil
