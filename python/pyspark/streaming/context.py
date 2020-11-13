@@ -36,6 +36,14 @@ class StreamingContext(object):
     be started and stopped using `context.start()` and `context.stop()`,
     respectively. `context.awaitTermination()` allows the current thread
     to wait for the termination of the context by `stop()` or by an exception.
+
+    Parameters
+    ----------
+    sparkContext : :class:`SparkContext`
+        SparkContext object.
+    batchDuration : int, optional
+        the time interval (in seconds) at which streaming
+        data will be divided into batches
     """
     _transformerSerializer = None
 
@@ -45,14 +53,6 @@ class StreamingContext(object):
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
         Create a new StreamingContext.
-
-        Parameters
-        ----------
-        sparkContext : :class:`SparkContext`
-            SparkContext object.
-        batchDuration : int, optional
-            the time interval (in seconds) at which streaming
-            data will be divided into batches
         """
 
         self._sc = sparkContext
@@ -274,7 +274,7 @@ class StreamingContext(object):
             Hostname to connect to for receiving data
         port : str
             Port to connect to for receiving data
-        storageLevel : :class:`StorageLevel`
+        storageLevel : :class:`pyspark.StorageLevel`
             Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)

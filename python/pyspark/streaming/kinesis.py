@@ -67,7 +67,7 @@ class KinesisUtils(object):
             Checkpoint interval for Kinesis checkpointing. See the Kinesis
             Spark Streaming documentation for more details on the different
             types of checkpoints.
-        storageLevel : :class:`StorageLevel`, optional
+        storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects (default is
             StorageLevel.MEMORY_AND_DISK_2)
         awsAccessKeyId : str, optional
