@@ -33,7 +33,7 @@ class LimitPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Limit pushdown", FixedPoint(100),
         LimitPushDown,
-        CombineLimits,
+        EliminateLimits,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }

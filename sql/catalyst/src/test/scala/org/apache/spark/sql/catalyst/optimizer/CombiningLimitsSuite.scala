@@ -30,8 +30,8 @@ class CombiningLimitsSuite extends PlanTest {
       Batch("Column Pruning", FixedPoint(100),
         ColumnPruning,
         RemoveNoopOperators) ::
-      Batch("Combine Limit", FixedPoint(10),
-        CombineLimits) ::
+      Batch("Eliminate Limit", FixedPoint(10),
+        EliminateLimits) ::
       Batch("Constant Folding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
@@ -89,5 +89,23 @@ class CombiningLimitsSuite extends PlanTest {
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33442: Change Combine Limit to Eliminate limit using max row") {
+    // test child max row <= limit.
+    val query1 = testRelation.select().groupBy()(count(1)).limit(1).analyze
+    val optimized1 = Optimize.execute(query1)
+    val expected1 = testRelation.select().groupBy()(count(1)).analyze
+    comparePlans(optimized1, expected1)
+
+    // test child max row > limit.
+    val query2 = testRelation.select().groupBy()(count(1)).limit(0).analyze
+    val optimized2 = Optimize.execute(query2)
+    comparePlans(optimized2, query2)
+
+    // test child max row is none
+    val query3 = testRelation.select(Symbol("a")).limit(1).analyze
+    val optimized3 = Optimize.execute(query3)
+    comparePlans(optimized3, query3)
   }
 }

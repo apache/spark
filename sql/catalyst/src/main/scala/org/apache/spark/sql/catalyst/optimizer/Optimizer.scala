@@ -85,7 +85,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
-        CombineLimits,
+        EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
         TransposeWindow,
@@ -1452,11 +1452,23 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Combines two adjacent [[Limit]] operators into one, merging the
- * expressions into one single expression.
+ * 1. Eliminate [[Limit]] operators if it's child max row <= limit.
+ * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ *    expressions into one single expression.
  */
-object CombineLimits extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+object EliminateLimits extends Rule[LogicalPlan] {
+  private def canEliminate(limitExpr: Expression, childMaxRow: Option[Long]): Boolean = {
+    limitExpr.foldable &&
+      childMaxRow.isDefined &&
+      childMaxRow.get <= limitExpr.eval().toString.toInt
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case GlobalLimit(l, child) if canEliminate(l, child.maxRows) =>
+      child
+    case LocalLimit(l, child) if canEliminate(l, child.maxRows) =>
+      child
+
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Least(Seq(ne, le)), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>
