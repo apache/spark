@@ -35,7 +35,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   import InterpretedUnsafeProjection._
 
   private[this] val subExprElimination = SQLConf.get.subexpressionEliminationEnabled
-  private[this] lazy val runtime = new EvaluationRuntime()
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
   private[this] val proxyExpressions = if (subExprElimination) {
     runtime.proxyExpressions(expressions)
   } else {

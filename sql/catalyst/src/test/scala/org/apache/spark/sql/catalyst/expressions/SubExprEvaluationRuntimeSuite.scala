@@ -18,10 +18,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 
-class EvaluationRuntimeSuite extends SparkFunSuite {
+class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
   test("Evaluate ExpressionProxy should create cached result") {
-    val runtime = new EvaluationRuntime()
+    val runtime = new SubExprEvaluationRuntime(1)
     val proxy = ExpressionProxy(Literal(1), runtime)
     assert(runtime.cache.size() == 0)
     proxy.eval()
@@ -30,7 +30,7 @@ class EvaluationRuntimeSuite extends SparkFunSuite {
   }
 
   test("setInput should empty cached result") {
-    val runtime = new EvaluationRuntime()
+    val runtime = new SubExprEvaluationRuntime(2)
     val proxy1 = ExpressionProxy(Literal(1), runtime)
     assert(runtime.cache.size() == 0)
     proxy1.eval()
@@ -47,7 +47,7 @@ class EvaluationRuntimeSuite extends SparkFunSuite {
   }
 
   test("Wrap ExpressionProxy on subexpressions") {
-    val runtime = new EvaluationRuntime()
+    val runtime = new SubExprEvaluationRuntime(1)
 
     val one = Literal(1)
     val two = Literal(2)
@@ -62,13 +62,13 @@ class EvaluationRuntimeSuite extends SparkFunSuite {
       case p: ExpressionProxy => p
     })
     // ( (one * two) * (one * two) )
-    assert(proxys.size == 1)
+    assert(proxys.size == 2)
     val expected = ExpressionProxy(mul2, runtime)
     assert(proxys.head == expected)
   }
 
   test("ExpressionProxy won't be on non deterministic") {
-    val runtime = new EvaluationRuntime()
+    val runtime = new SubExprEvaluationRuntime(1)
 
     val sum = Add(Rand(0), Rand(0))
     val proxys = runtime.proxyExpressions(Seq(sum, sum)).flatMap(_.collect {
