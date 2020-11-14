@@ -876,7 +876,7 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 
 
 -- !query
-select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
+select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
 struct<>
 -- !query output
@@ -885,7 +885,7 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 
 
 -- !query
-select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'))
+select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
 struct<>
 -- !query output
@@ -894,7 +894,7 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 
 
 -- !query
-select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
+select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
 struct<>
 -- !query output
@@ -903,7 +903,7 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 
 
 -- !query
-select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'))
+select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
 struct<>
 -- !query output
