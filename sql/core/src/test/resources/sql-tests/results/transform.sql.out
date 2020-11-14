@@ -105,10 +105,11 @@ SELECT TRANSFORM(a)
 USING 'cat'
 FROM t
 -- !query schema
-struct<>
+struct<key:string,value:string>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
-1
+1	NULL
+2	NULL
+3	NULL
 
 
 -- !query
