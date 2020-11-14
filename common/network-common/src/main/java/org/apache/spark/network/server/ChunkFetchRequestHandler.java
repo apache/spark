@@ -92,7 +92,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       long chunksBeingTransferred = streamManager.chunksBeingTransferred();
       if (chunksBeingTransferred >= maxChunksBeingTransferred) {
         logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-            chunksBeingTransferred, maxChunksBeingTransferred);
+          chunksBeingTransferred, maxChunksBeingTransferred);
         channel.close();
         return;
       }
