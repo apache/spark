@@ -112,6 +112,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
+  private static final String MERGE_MANAGER_FILE_NAME = "mergeManager.ldb";
 
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
@@ -166,6 +167,10 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File secretsFile;
 
+  // Where to store & reload merge manager info for recovering state after an NM restart
+  @VisibleForTesting
+  File mergeManagerFile;
+
   private DB db;
 
   public YarnShuffleService() {
@@ -215,11 +220,12 @@ public class YarnShuffleService extends AuxiliaryService {
       // when it comes back
       if (_recoveryPath != null) {
         registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
+        mergeManagerFile = initRecoveryDb(MERGE_MANAGER_FILE_NAME);
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
       MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf);
+        transportConf, mergeManagerFile);
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 

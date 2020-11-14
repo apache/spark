@@ -21,8 +21,10 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,6 +39,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -47,6 +53,12 @@ import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.spark.network.protocol.Encoders;
+import org.apache.spark.network.util.LevelDBProvider;
+import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +71,7 @@ import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -74,6 +87,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   static final String MERGE_MANAGER_DIR = "merge_manager";
 
+  private static final ObjectMapper mapper = new ObjectMapper();
+  /**
+   * This a common prefix to the key for each app shuffle partition we stick in leveldb, so they
+   * are easy to find, since leveldb lets you search based on prefix.
+   */
+  private static final String APP_SHUFFLE_PART_KEY_PREFIX = "AppShufflePartitionInfo";
+  private static final String APP_PATH_KEY_PREFIX = "AppPathInfo";
+  private static final LevelDBProvider.StoreVersion
+    CURRENT_VERSION = new LevelDBProvider.StoreVersion(1, 0);
+
   private final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
   private final ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> partitions;
 
@@ -86,11 +109,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<File, ShuffleIndexInformation> indexCache;
 
+  @VisibleForTesting
+  final File recoveryFile;
+
+  @VisibleForTesting
+  final DB db;
+
   @SuppressWarnings("UnstableApiUsage")
-  public RemoteBlockPushResolver(TransportConf conf) {
+  public RemoteBlockPushResolver(TransportConf conf,  File recoveryFile) {
     this.conf = conf;
-    this.partitions = Maps.newConcurrentMap();
-    this.appsPathInfo = Maps.newConcurrentMap();
     this.directoryCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
@@ -107,6 +134,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
+
+    this.recoveryFile = recoveryFile;
+    db = LevelDBProvider.initLevelDB(this.recoveryFile, CURRENT_VERSION, mapper);
+    if (db != null) {
+      this.appsPathInfo = reloadActiveAppPathInfo(db);
+      this.partitions = reloadActiveAppShufflePartitions(db);
+    } else {
+      this.appsPathInfo = Maps.newConcurrentMap();
+      this.partitions = Maps.newConcurrentMap();
+    }
   }
 
   /**
@@ -114,7 +151,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * application, retrieves the associated metadata. If not present and the corresponding merged
    * shuffle does not exist, initializes the metadata.
    */
-  private AppShufflePartitionInfo getOrCreateAppShufflePartitionInfo(
+  @VisibleForTesting
+  AppShufflePartitionInfo getOrCreateAppShufflePartitionInfo(
       AppShuffleId appShuffleId,
       int reduceId) {
     File dataFile = getMergedShuffleDataFile(appShuffleId, reduceId);
@@ -136,6 +174,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (dataFile.exists()) {
           return null;
         } else {
+          try {
+            if (db != null) {
+              byte[] dbKey = dbAppShufflePartKey(key);
+              // We can reload a partition's state solely from the partition ID. Thus only the
+              // partition Ids are stored in levelDB.
+              db.put(dbKey, new byte[0]);
+            }
+          } catch (Exception e) {
+            logger.error("Error saving active app shuffle partition", e);
+          }
           return newAppShufflePartitionInfo(appShuffleId, reduceId, dataFile, indexFile, metaFile);
         }
       } catch (IOException e) {
@@ -212,9 +260,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
    */
   private File getFile(String appId, String filename) {
-    // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
-    AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
-      "application " + appId + " is not registered or NM was restarted.");
+    AppPathsInfo appPathsInfo = appsPathInfo.get(appId);
+    Preconditions.checkArgument(appPathsInfo != null,
+      "application " + appId + " is not registered.");
     File targetFile = ExecutorDiskUtils.getFile(appPathsInfo.activeLocalDirs,
       appPathsInfo.subDirsPerLocalDir, filename);
     logger.debug("Get merged file {}", targetFile.getAbsolutePath());
@@ -238,8 +286,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   @Override
   public String[] getMergedBlockDirs(String appId) {
-    AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
-      "application " + appId + " is not registered or NM was restarted.");
+    AppPathsInfo appPathsInfo = appsPathInfo.get(appId);
+    Preconditions.checkArgument(appPathsInfo != null,
+      "application " + appId + " is not registered.");
     String[] activeLocalDirs = Preconditions.checkNotNull(appPathsInfo.activeLocalDirs,
       "application " + appId
       + " active local dirs list has not been updated by any executor registration");
@@ -249,9 +298,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public void applicationRemoved(String appId, boolean cleanupLocalDirs) {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
-    // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
-    AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.remove(appId),
-      "application " + appId + " is not registered or NM was restarted.");
+    AppPathsInfo appPathsInfo = appsPathInfo.remove(appId);
+    Preconditions.checkArgument(appPathsInfo != null, "application " + appId + " is not registered.");
+    if (db != null) {
+      try {
+        db.delete(dbAppPathsKey(appId));
+      } catch (Exception e) {
+        logger.error("Error deleting {} from application paths info db", appId, e);
+      }
+    }
     Iterator<Map.Entry<AppShuffleId, Map<Integer, AppShufflePartitionInfo>>> iterator =
       partitions.entrySet().iterator();
     while (iterator.hasNext()) {
@@ -260,6 +315,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (appId.equals(appShuffleId.appId)) {
         iterator.remove();
         for (AppShufflePartitionInfo partitionInfo : entry.getValue().values()) {
+          if (db != null) {
+            try {
+              db.delete(dbAppShufflePartKey(partitionId));
+            } catch (Exception e) {
+              logger.error("Error deleting {} from app shuffle partition db", partitionId, e);
+            }
+          }
           partitionInfo.closeAllFiles();
         }
       }
@@ -406,6 +468,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // The partition should be removed after the files are written so that any new stream
             // for the same reduce partition will see that the data file exists.
             partitionsIter.remove();
+            if (db != null) {
+              try {
+                db.delete(dbAppShufflePartKey(partitionId));
+              } catch (Exception e) {
+                logger.error("Error deleting {} from app shuffle partition db", partitionId, e);
+              }
+            }
           }
         }
       }
@@ -428,9 +497,159 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     appsPathInfo.computeIfAbsent(appId, id -> new AppPathsInfo(appId, executorInfo.localDirs,
       executorInfo.subDirsPerLocalDir));
   }
+
   private static String generateFileName(AppShuffleId appShuffleId, int reduceId) {
     return String.format("mergedShuffle_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
       reduceId);
+  }
+
+  @Override
+  public void close() {
+    if (db != null) {
+      try {
+        db.close();
+      } catch (IOException e) {
+        logger.error("Exception closing leveldb with registered app paths info and "
+          + "shuffle partition info", e);
+      }
+    }
+    for (AppShufflePartitionInfo partitionInfo : partitions.values()) {
+      partitionInfo.closeAllFiles();
+    }
+  }
+
+  private static byte[] dbAppShufflePartKey(AppShufflePartitionId id) throws IOException {
+    // we stick a common prefix on all the keys so we can find them in the DB
+    String appShuffleParJson = mapper.writeValueAsString(id);
+    String key = (APP_SHUFFLE_PART_KEY_PREFIX + ";" + appShuffleParJson);
+    return key.getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static byte[] dbAppPathsKey(String appId) {
+    // we stick a common prefix on all the keys so we can find them in the DB
+    String key = (APP_PATH_KEY_PREFIX + ";" + appId);
+    return key.getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static AppShufflePartitionId parseDbAppShufflePartKey(String s) throws IOException {
+    if (!s.startsWith(APP_SHUFFLE_PART_KEY_PREFIX)) {
+      throw new IllegalArgumentException("expected a string starting with "
+        + APP_SHUFFLE_PART_KEY_PREFIX);
+    }
+    String json = s.substring(APP_SHUFFLE_PART_KEY_PREFIX.length() + 1);
+    return mapper.readValue(json, AppShufflePartitionId.class);
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<String, AppPathsInfo> reloadActiveAppPathInfo(DB db) throws IOException {
+    ConcurrentMap<String, AppPathsInfo> appsPathInfo = Maps.newConcurrentMap();
+    if (db != null) {
+      DBIterator itr = db.iterator();
+      itr.seek(APP_PATH_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_PATH_KEY_PREFIX)) {
+          break;
+        }
+        String appId = key.substring(APP_PATH_KEY_PREFIX.length() + 1);
+        logger.info("Reloading registered app paths info for application {}", appId);
+        AppPathsInfo appPathsInfo = mapper.readValue(e.getValue(), AppPathsInfo.class);
+        appsPathInfo.put(appId, appPathsInfo);
+      }
+    }
+    return appsPathInfo;
+  }
+
+  @VisibleForTesting
+  ConcurrentMap<AppShufflePartitionId, AppShufflePartitionInfo>
+  reloadActiveAppShufflePartitions(DB db) throws IOException {
+    ConcurrentMap<AppShufflePartitionId, AppShufflePartitionInfo> partitions =
+      Maps.newConcurrentMap();
+    if (db != null) {
+      DBIterator itr = db.iterator();
+      itr.seek(APP_SHUFFLE_PART_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_SHUFFLE_PART_KEY_PREFIX)) {
+          break;
+        }
+        AppShufflePartitionId partitionId = parseDbAppShufflePartKey(key);
+        try {
+          File dataFile = getFile(partitionId.appId, partitionId.generateFileName());
+          File metaFile = getFile(partitionId.appId, partitionId.generateMetaFileName());
+          File indexFile = getFile(partitionId.appId, partitionId.generateIndexFileName());
+          logger.debug("Reloading active application shuffle partition info for partition {} "
+              + "with data file {}, meta file {}, and index file {}.",
+            partitionId, dataFile.getAbsolutePath(), metaFile.getAbsolutePath(),
+            indexFile.getAbsolutePath());
+          partitions.put(partitionId, reloadPartitionInfo(partitionId, dataFile,
+            metaFile, indexFile));
+        } catch (Exception ex) {
+          // Do not propagate exceptions from reloading individual shuffle partitions.
+          // If exception is encountered, the corresponding files for this partition is
+          // in corrupted state. Instead of throwing the exception, which would fail the
+          // shuffle service start and even NM restart in the YARN case, we just skip this
+          // shuffle partition and leave the partition files untouched. This way, no new
+          // blocks will be merged for this shuffle partition.
+          logger.warn("Fail to reload partition {}.", partitionId, ex);
+        }
+      }
+    }
+    return partitions;
+  }
+
+  private AppShufflePartitionInfo reloadPartitionInfo(
+    AppShufflePartitionId partitionId,
+    File dataFile,
+    File metaFile,
+    File indexFile) throws IOException {
+    Preconditions.checkArgument(dataFile.exists() && indexFile.exists() && metaFile.exists(),
+      "Not all files for reloading partition " + partitionId + " are present.");
+    int numChunksRecoveredFromIndexFile = (int) indexFile.length() / 8 - 1;
+    numChunksRecoveredFromIndexFile = Math.max(numChunksRecoveredFromIndexFile, 0);
+    // Load the meta file into memory to deserialize the chunk bitmaps. This way, we can
+    // keep track of the position offset of each chunk bitmap, so that we can properly
+    // truncate the meta file in case the end of the meta file is corrupted.
+    ManagedBuffer chunksBitmapBuffer = new FileSegmentManagedBuffer(conf, metaFile, 0L,
+      metaFile.length());
+    ByteBuf buf = Unpooled.wrappedBuffer(chunksBitmapBuffer.nioByteBuffer());
+    RoaringBitmap mapTracker = new RoaringBitmap();
+    int numChunksRecoveredFromMetaFile = 0;
+    long metaFileLength = 0L;
+    while(buf.isReadable()) {
+      try {
+        mapTracker.or(Encoders.Bitmaps.decode(buf));
+        metaFileLength = buf.readerIndex();
+        numChunksRecoveredFromMetaFile++;
+      } catch (Exception e) {
+        logger.warn("Encountered issue while reloading chunk bitmaps from the file for "
+          + "partition {}. Discard the non-recoverable portion.", partitionId, e);
+        break;
+      }
+    }
+    // Since the chunk bitmap is written to the meta file after the chunk offset gets written
+    // to the index file, numChunksRecoveredFromIndexFile should always be larger than or equal
+    // to numChunksRecoveredFromMetaFile.
+    int numChunks = Math.min(numChunksRecoveredFromIndexFile, numChunksRecoveredFromMetaFile);
+    long dataFileLength;
+    // Truncate the files accordingly, so to discard the unrecoverable portion of the data.
+    // Here, we only reload blocks that belong to a chunk whose index and bitmap have already
+    // been successfully reloaded from the index and meta files. Blocks beyond the successfully
+    // committed and reloaded chunks are discarded.
+    try (
+      FileChannel dataChannel = new FileOutputStream(dataFile, true).getChannel();
+      FileChannel metaChannel = new FileOutputStream(metaFile, true).getChannel();
+      RandomAccessFile indexRAFile = new RandomAccessFile(indexFile, "rw")) {
+      metaChannel.truncate(metaFileLength);
+      indexRAFile.skipBytes(numChunks * 8);
+      dataFileLength = indexRAFile.readLong();
+      dataChannel.truncate(dataFileLength);
+      indexRAFile.setLength((numChunks + 1) * 8);
+    }
+    return new AppShufflePartitionInfo(partitionId, dataFile, indexFile, metaFile,
+      dataFileLength, mapTracker);
   }
 
   /**
@@ -809,14 +1028,26 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         File dataFile,
         MergeShuffleFile indexFile,
         MergeShuffleFile metaFile) throws IOException {
+      this(appShuffleId, reduceId, dataFile, indexFile, metaFile, 0, new RoaringBitmap());
+      // Writing 0 offset so that we can reuse ShuffleIndexInformation.getIndex()
+      updateChunkInfo(0L, -1);
+    }
+
+    // Constructor for creating AppShufflePartitionInfo reloaded from leveldb.
+    AppShufflePartitionInfo(
+        AppShuffleId appShuffleId,
+        int reduceId,
+        File dataFile,
+        MergeShuffleFile indexFile,
+        MergeShuffleFile metaFile,
+        long position,
+        RoaringBitmap mapTracker) throws IOException {
       this.appShuffleId = Preconditions.checkNotNull(appShuffleId, "app shuffle id");
       this.reduceId = reduceId;
       this.dataChannel = new FileOutputStream(dataFile).getChannel();
       this.indexFile = indexFile;
       this.metaFile = metaFile;
       this.currentMapIndex = -1;
-      // Writing 0 offset so that we can reuse ShuffleIndexInformation.getIndex()
-      updateChunkInfo(0L, -1);
       this.dataFilePos = 0;
       this.mapTracker = new RoaringBitmap();
       this.chunkTracker = new RoaringBitmap();
@@ -991,7 +1222,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   /**
    * Wraps all the information related to the merge directory of an application.
    */
-  private static class AppPathsInfo {
+  public static class AppPathsInfo {
 
     private final String[] activeLocalDirs;
     private final int subDirsPerLocalDir;
@@ -999,7 +1230,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private AppPathsInfo(
         String appId,
         String[] localDirs,
-        int subDirsPerLocalDir) {
+        int subDirsPerLocalDir,
+        DB db) {
       activeLocalDirs = Arrays.stream(localDirs)
         .map(localDir ->
           // Merge directory is created at the same level as block-manager directory. The list of
@@ -1013,6 +1245,35 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         logger.info("Updated active local dirs {} and sub dirs {} for application {}",
           Arrays.toString(activeLocalDirs),subDirsPerLocalDir, appId);
       }
+      try {
+        if (db != null) {
+          byte[] key = dbAppPathsKey(appId);
+          byte[] value = mapper.writeValueAsString(this).getBytes(StandardCharsets.UTF_8);
+          db.put(key, value);
+        }
+      } catch (Exception e) {
+        logger.error("Error saving registered app paths info", e);
+      }
+    }
+
+    // Constructor for jackson deserialization for this class
+    @JsonCreator
+    public AppPathsInfo(
+        @JsonFormat(shape = JsonFormat.Shape.ARRAY)
+        @JsonProperty("activeLocalDirs") String[] activeLocalDirs,
+        @JsonProperty("subDirsPerLocalDir") int subDirsPerLocalDir) {
+      this.activeLocalDirs = activeLocalDirs;
+      this.subDirsPerLocalDir = subDirsPerLocalDir;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (other instanceof AppPathsInfo) {
+        AppPathsInfo o = (AppPathsInfo) other;
+        return Arrays.equals(activeLocalDirs, o.activeLocalDirs) &&
+          subDirsPerLocalDir == o.subDirsPerLocalDir;
+      }
+      return false;
     }
   }
 

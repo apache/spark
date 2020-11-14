@@ -30,6 +30,11 @@ import java.util.Arrays;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 
@@ -46,7 +51,7 @@ import static org.junit.Assert.*;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
-import org.apache.spark.network.shuffle.RemoteBlockPushResolver.MergeShuffleFile;
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver.*;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
@@ -73,7 +78,7 @@ public class RemoteBlockPushResolverSuite {
     MapConfigProvider provider = new MapConfigProvider(
       ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
-    pushResolver = new RemoteBlockPushResolver(conf);
+    pushResolver = new RemoteBlockPushResolver(conf, null);
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
   }
 
@@ -376,7 +381,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void testUpdateLocalDirsOnlyOnce() throws IOException {
     String testApp = "updateLocalDirsOnlyOnceTest";
     Path[] activeLocalDirs = createLocalDirs(1);
@@ -396,7 +401,7 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.getMergedBlockDirs(testApp);
     } catch (Throwable e) {
       assertTrue(e.getMessage()
-        .startsWith("application " + testApp + " is not registered or NM was restarted."));
+        .startsWith("application " + testApp + " is not registered."));
       Throwables.propagate(e);
     }
   }
@@ -819,6 +824,30 @@ public class RemoteBlockPushResolverSuite {
     if (failedEx != null) {
       throw failedEx;
     }
+  }
+
+  @Test
+  public void testJsonSerializationOfPushShufflePartitionInfo() throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    AppShufflePartitionId partitionId = new AppShufflePartitionId("foo", 1, 5);
+    String partitionIdJson = mapper.writeValueAsString(partitionId);
+    AppShufflePartitionId parsedPartitionId = mapper.readValue(partitionIdJson,
+      AppShufflePartitionId.class);
+    assertEquals(partitionId, parsedPartitionId);
+
+    AppPathsInfo pathInfo = new AppPathsInfo("user", new String[]{"/foo", "/bar"});
+    String pathInfoJson = mapper.writeValueAsString(pathInfo);
+    AppPathsInfo parsedPathInfo = mapper.readValue(pathInfoJson, AppPathsInfo.class);
+    assertEquals(pathInfo, parsedPathInfo);
+
+    // Intentionally keep these hard-coded strings in here, to check backwards-compatibility.
+    // its not legacy yet, but keeping this here in case anybody changes it
+    String legacyPartitionIdJson = "{\"appId\":\"foo\", \"shuffleId\":\"1\", \"reduceId\":\"5\"}";
+    assertEquals(partitionId, mapper.readValue(legacyPartitionIdJson,
+      AppShufflePartitionId.class));
+    String legacyAppPathInfoJson = "{\"user\":\"user\", \"activeLocalDirs\": "
+      + "[\"/foo\", \"/bar\"]}";
+    assertEquals(pathInfo, mapper.readValue(legacyAppPathInfoJson, AppPathsInfo.class));
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

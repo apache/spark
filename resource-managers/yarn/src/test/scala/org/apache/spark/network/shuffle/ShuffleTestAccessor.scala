@@ -16,7 +16,8 @@
  */
 package org.apache.spark.network.shuffle
 
-import java.io.File
+import java.io.{DataOutputStream, File}
+import java.nio.channels.FileChannel
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
@@ -24,6 +25,7 @@ import org.fusesource.leveldbjni.JniDBFactory
 import org.iq80.leveldb.{DB, Options}
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
+import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 
 /**
@@ -44,12 +46,77 @@ object ShuffleTestAccessor {
     Option(resolver.executors.get(id))
   }
 
+  def getAppPathsInfo(
+      appId: String,
+      mergeManager: RemoteBlockPushResolver): Option[AppPathsInfo] = {
+    Option(mergeManager.appsPathInfo.get(appId))
+  }
+
   def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
     resolver.registeredExecutorFile
   }
 
+  def recoveryFile(mergeManager: RemoteBlockPushResolver): File = {
+    mergeManager.recoveryFile
+  }
+
   def shuffleServiceLevelDB(resolver: ExternalShuffleBlockResolver): DB = {
     resolver.db
+  }
+
+  def mergeManagerLevelDB(mergeManager: RemoteBlockPushResolver): DB = {
+    mergeManager.db
+  }
+
+  def updateAppPathInfo(
+      info: AppPathsInfo,
+      appId: String,
+      localDirs: Array[String],
+      db: DB): Unit = {
+    info.updateActiveLocalDirs(appId, "", localDirs, db)
+  }
+
+  def getOrCreateAppShufflePartitionInfo(
+      mergeManager: RemoteBlockPushResolver,
+      partitionId: AppShufflePartitionId): AppShufflePartitionInfo = {
+    mergeManager.getOrCreateAppShufflePartitionInfo(partitionId)
+  }
+
+  def generateDataFileName(partitionId: AppShufflePartitionId): String = {
+    partitionId.generateFileName()
+  }
+
+  def generateIndexFileName(partitionId: AppShufflePartitionId): String = {
+    partitionId.generateIndexFileName()
+  }
+
+  def generateMetaFileName(partitionId: AppShufflePartitionId): String = {
+    partitionId.generateMetaFileName()
+  }
+
+  def getFile(mergeManager: RemoteBlockPushResolver, appId: String, fileName: String): File = {
+    mergeManager.getFile(appId, fileName)
+  }
+
+  def getPartitionFileHandlers(
+      partitionInfo: AppShufflePartitionInfo): (FileChannel, FileChannel, DataOutputStream) = {
+    (partitionInfo.channel, partitionInfo.metaChannel, partitionInfo.indexWriteStream)
+  }
+
+  def closePartitionFiles(partitionInfo: AppShufflePartitionInfo): Unit = {
+    partitionInfo.closeAllFiles()
+  }
+
+  def reloadActiveAppPathInfo(
+      mergeMgr: RemoteBlockPushResolver,
+      db: DB): ConcurrentMap[String, AppPathsInfo] = {
+    mergeMgr.reloadActiveAppPathInfo(db)
+  }
+
+  def reloadActiveAppShufflePartitions(
+      mergeMgr: RemoteBlockPushResolver,
+      db: DB): ConcurrentMap[AppShufflePartitionId, AppShufflePartitionInfo] = {
+    mergeMgr.reloadActiveAppShufflePartitions(db)
   }
 
   def reloadRegisteredExecutors(
