@@ -747,7 +747,7 @@ private[spark] object Utils extends Logging {
         val uc = url_object.openConnection().asInstanceOf[HttpURLConnection]
         uc.setDoInput(true)
         uc.setRequestMethod("GET")
-        if (!url_object.getUserInfo.isEmpty) {
+        if (url_object.getUserInfo != null) {
           uc.setRequestProperty(
             "Authorization",
             "Basic " + Base64.encodeBase64(url_object.getUserInfo.getBytes))
