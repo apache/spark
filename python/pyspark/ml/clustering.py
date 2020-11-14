@@ -112,7 +112,8 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
               "Must be > 1.", typeConverter=TypeConverters.toInt)
 
     initialModel = Param(Params._dummy(), "initialModel",
-                         "The initial Gausssian Mixture Model to use")
+                         "The initial Gausssian Mixture Model to use",
+                         typeConverter=TypeConverters.toString)
 
     def __init__(self, *args):
         super(_GaussianMixtureParams, self).__init__(*args)
@@ -124,6 +125,12 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
         Gets the value of `k`
         """
         return self.getOrDefault(self.k)
+
+    def getInitialModel(self):
+        """
+        Gets the value of the initial model
+        """
+        return self.getOrDefault(self.initialModel)
 
 
 class GaussianMixtureModel(JavaModel, _GaussianMixtureParams, JavaMLWritable, JavaMLReadable,
