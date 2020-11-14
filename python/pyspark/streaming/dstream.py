@@ -228,7 +228,7 @@ class DStream(object):
 
         Parameters
         ----------
-        interval : int, float
+        interval : int
             time in seconds, after each period of that, generated
             RDD will be checkpointed
         """

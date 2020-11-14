@@ -41,7 +41,7 @@ class StreamingContext(object):
     ----------
     sparkContext : :class:`SparkContext`
         SparkContext object.
-    batchDuration : int, float, optional
+    batchDuration : int, optional
         the time interval (in seconds) at which streaming
         data will be divided into batches
     """
