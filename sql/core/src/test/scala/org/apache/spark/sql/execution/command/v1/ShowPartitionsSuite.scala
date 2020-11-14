@@ -153,7 +153,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("issue exceptions on the temporary view") {
+  test("show partitions of a temporary view") {
     val viewName = "test_view"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
@@ -166,6 +166,22 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
 }
 
 class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSession {
+  // The test is placed here because it fails with `USING HIVE`:
+  // org.apache.spark.sql.AnalysisException:
+  //   Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING
+  test("issue exceptions on the temporary view") {
+    val viewName = "test_view"
+    withTempView(viewName) {
+      sql(s"""
+             |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
+             |$defaultUsing""".stripMargin)
+      val errMsg = intercept[NoSuchTableException] {
+        sql(s"SHOW PARTITIONS $viewName")
+      }.getMessage
+      assert(errMsg.contains(s"Table or view '$viewName' not found"))
+    }
+  }
+
   test("show partitions from a datasource") {
     import testImplicits._
     withTable("part_datasrc") {

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -37,19 +35,5 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
       |CREATE TABLE $table (price int, qty int)
       |PARTITIONED BY (year int, month int, hour int, minute int, sec int, extra int)
       """.stripMargin)
-  }
-
-  ignore("show partitions - empty row") {
-    withTempView("parquet_temp") {
-      sql(
-        """
-          |CREATE TEMPORARY VIEW parquet_temp (c1 INT, c2 STRING)
-          |USING org.apache.spark.sql.parquet.DefaultSource
-        """.stripMargin)
-      // An empty sequence of row is returned for session temporary table.
-      intercept[NoSuchTableException] {
-        sql("SHOW PARTITIONS parquet_temp")
-      }
-    }
   }
 }
