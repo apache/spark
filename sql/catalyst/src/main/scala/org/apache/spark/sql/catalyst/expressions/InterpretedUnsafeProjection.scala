@@ -34,10 +34,10 @@ import org.apache.spark.unsafe.Platform
 class InterpretedUnsafeProjection(expressions: Array[Expression]) extends UnsafeProjection {
   import InterpretedUnsafeProjection._
 
-  private[this] val subExprElimination = SQLConf.get.subexpressionEliminationEnabled
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
   private[this] lazy val runtime =
     new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
-  private[this] val proxyExpressions = if (subExprElimination) {
+  private[this] val exprs = if (subExprEliminationEnabled) {
     runtime.proxyExpressions(expressions)
   } else {
     expressions.toSeq
@@ -73,21 +73,21 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    proxyExpressions.foreach(_.foreach {
+    exprs.foreach(_.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     })
   }
 
   override def apply(row: InternalRow): UnsafeRow = {
-    if (subExprElimination) {
+    if (subExprEliminationEnabled) {
       runtime.setInput(row)
     }
 
     // Put the expression results in the intermediate row.
     var i = 0
     while (i < numFields) {
-      values(i) = proxyExpressions(i).eval(row)
+      values(i) = exprs(i).eval(row)
       i += 1
     }
 

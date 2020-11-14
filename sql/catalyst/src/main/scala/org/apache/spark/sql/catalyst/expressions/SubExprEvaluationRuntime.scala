@@ -69,12 +69,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   private def replaceWithProxy(
       expr: Expression,
       proxyMap: Map[Expression, ExpressionProxy]): Expression = {
-    expr match {
-      case e if proxyMap.contains(e) =>
-        proxyMap(e)
-      case _ =>
-        expr.mapChildren(replaceWithProxy(_, proxyMap))
-    }
+    proxyMap.getOrElse(expr, expr.mapChildren(replaceWithProxy(_, proxyMap)))
   }
 
   /**

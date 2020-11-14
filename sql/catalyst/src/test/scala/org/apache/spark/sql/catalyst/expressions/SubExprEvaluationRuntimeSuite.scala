@@ -29,6 +29,26 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     assert(runtime.cache.get(proxy) == ResultProxy(1))
   }
 
+  test("SubExprEvaluationRuntime cannot exceed configured max entries") {
+    val runtime = new SubExprEvaluationRuntime(2)
+    assert(runtime.cache.size() == 0)
+
+    val proxy1 = ExpressionProxy(Literal(1), runtime)
+    proxy1.eval()
+    assert(runtime.cache.size() == 1)
+    assert(runtime.cache.get(proxy1) == ResultProxy(1))
+
+    val proxy2 = ExpressionProxy(Literal(2), runtime)
+    proxy2.eval()
+    assert(runtime.cache.size() == 2)
+    assert(runtime.cache.get(proxy2) == ResultProxy(2))
+
+    val proxy3 = ExpressionProxy(Literal(3), runtime)
+    proxy3.eval()
+    assert(runtime.cache.size() == 2)
+    assert(runtime.cache.get(proxy3) == ResultProxy(3))
+  }
+
   test("setInput should empty cached result") {
     val runtime = new SubExprEvaluationRuntime(2)
     val proxy1 = ExpressionProxy(Literal(1), runtime)
