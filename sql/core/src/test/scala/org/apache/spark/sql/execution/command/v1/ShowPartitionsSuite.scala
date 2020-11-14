@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
@@ -112,6 +112,18 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         sql(s"show partitions $table"),
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
+    }
+  }
+
+  test("non-partitioning columns") {
+    val table = "dateTable"
+    withTable(table) {
+      createDateTable(table)
+      fillDateTable(table)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
+      }.getMessage
+      assert(errMsg.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
     }
   }
 

@@ -56,11 +56,6 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
       }.getMessage
       assert(message1.contains("not allowed on a table that is not partitioned"))
 
-      val message2 = intercept[AnalysisException] {
-        sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
-      }.getMessage
-      assert(message2.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
-
       val message3 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
