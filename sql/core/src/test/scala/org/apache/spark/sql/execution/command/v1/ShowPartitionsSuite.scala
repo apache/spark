@@ -127,6 +127,17 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
+  test("show partitions of not partitioned table") {
+    val table = "not_partitioned_table"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $table")
+      }.getMessage
+      assert(errMsg.contains("not allowed on a table that is not partitioned"))
+    }
+  }
+
   test("issue exceptions on the temporary view") {
     val viewName = "test_view"
     withTempView(viewName) {

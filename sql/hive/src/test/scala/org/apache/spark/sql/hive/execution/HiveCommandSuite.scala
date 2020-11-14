@@ -56,7 +56,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
-    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int) USING hive")
     sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
@@ -69,7 +68,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     try {
       sql("DROP TABLE IF EXISTS parquet_tab1")
       sql("DROP TABLE IF EXISTS parquet_tab2")
-      sql("DROP TABLE IF EXISTS parquet_tab3")
       sql("DROP VIEW IF EXISTS parquet_view1")
       sql("DROP TABLE IF EXISTS parquet_tab4")
     } finally {
