@@ -421,6 +421,8 @@ class GaussianMixture @Since("2.0.0") (
 
     val (weights, gaussians) = ${initialModel} match {
       case Some(gmm) =>
+        require(gmm.getK == ${k}, "Number of independent Gaussians in the initial model has to be equal to K")
+
         (
           gmm.weights,
           gmm.gaussians.map(gaussian => {

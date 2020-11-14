@@ -122,6 +122,28 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getInitialModel.get === gmm)
   }
 
+  test("Initial model has the same K as the Gaussian Mixture"){
+    val gmm = new GaussianMixtureModel(
+      "uuid",
+      Array(0.5, 0.2, 0.3),
+      Array(
+        new MultivariateGaussian(Vectors.dense(1),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(2),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(3),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1)))
+      ))
+
+    val gm = new GaussianMixture()
+      .setK(9)
+      .setInitialModel(gmm)
+
+    intercept[IllegalArgumentException] {
+      gm.fit(denseDataset);
+    }
+  }
+
   test("parameters validation") {
     intercept[IllegalArgumentException] {
       new GaussianMixture().setK(1)
