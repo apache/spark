@@ -65,7 +65,11 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    *
    * @group param
    */
-  var initialModel = new Param[Option[GaussianMixtureModel]](this, "initialModel", "initial gaussian mixture model")
+  var initialModel = new Param[Option[GaussianMixtureModel]](
+    this,
+    "initialModel",
+    "initial gaussian mixture model"
+  )
 
   /** @group getParam */
   def getInitialModel: Option[GaussianMixtureModel] = $(initialModel)
@@ -238,7 +242,8 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   override def load(path: String): GaussianMixtureModel = super.load(path)
 
   /** [[MLWriter]] instance for [[GaussianMixtureModel]] */
-  private[GaussianMixtureModel] class GaussianMixtureModelWriter(instance: GaussianMixtureModel) extends MLWriter {
+  private[GaussianMixtureModel] class GaussianMixtureModelWriter(instance: GaussianMixtureModel)
+    extends MLWriter {
 
     private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
 
@@ -380,7 +385,8 @@ class GaussianMixture @Since("2.0.0") (
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
   /** @group initialModel */
-  def setInitialModel(value: GaussianMixtureModel): this.type = set(initialModel, Option[GaussianMixtureModel](value))
+  def setInitialModel(value: GaussianMixtureModel):
+    this.type = set(initialModel, Option[GaussianMixtureModel](value))
 
   /**
    * Number of samples per cluster to use when initializing Gaussians.
@@ -421,7 +427,10 @@ class GaussianMixture @Since("2.0.0") (
 
     val (weights, gaussians) = ${initialModel} match {
       case Some(gmm) =>
-        require(gmm.getK == ${k}, "Number of independent Gaussians in the initial model has to be equal to K")
+        require(
+          gmm.getK == ${k},
+          "Number of independent Gaussians in the initial model has to be equal to K"
+        )
 
         (
           gmm.weights,
@@ -609,16 +618,15 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
    *                         (column major).
    * @return A dense matrix which represents the symmetric matrix in column major.
    */
-  private[clustering] def unpackUpperTriangularMatrix(
-                                                       n: Int,
-                                                       triangularValues: Array[Double]): DenseMatrix = {
+  private[clustering] def unpackUpperTriangularMatrix(n: Int,
+         triangularValues: Array[Double]): DenseMatrix = {
     val symmetricValues = unpackUpperTriangular(n, triangularValues)
     new DenseMatrix(n, n, symmetricValues)
   }
 
   private def mergeWeightsMeans(
-                                 a: (DenseVector, DenseVector, Double, Double),
-                                 b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
+    a: (DenseVector, DenseVector, Double, Double),
+    b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
   {
     // update the weights, means and covariances for i-th distributions
     BLAS.axpy(1.0, b._1, a._1)
@@ -637,10 +645,10 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
    * @return The updated weight, mean and covariance.
    */
   private[clustering] def updateWeightsAndGaussians(
-                                                     mean: DenseVector,
-                                                     cov: DenseVector,
-                                                     weight: Double,
-                                                     sumWeights: Double): (Double, (DenseVector, DenseVector)) = {
+      mean: DenseVector,
+      cov: DenseVector,
+      weight: Double,
+      sumWeights: Double): (Double, (DenseVector, DenseVector)) = {
     BLAS.scal(1.0 / weight, mean)
     BLAS.spr(-weight, mean, cov)
     BLAS.scal(1.0 / weight, cov)
@@ -661,9 +669,9 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  *                    in order to reduce shuffled data size.
  */
 private class ExpectationAggregator(
-                                     numFeatures: Int,
-                                     bcWeights: Broadcast[Array[Double]],
-                                     bcGaussians: Broadcast[Array[(DenseVector, DenseVector)]]) extends Serializable {
+    numFeatures: Int,
+    bcWeights: Broadcast[Array[Double]],
+    bcGaussians: Broadcast[Array[(DenseVector, DenseVector)]]) extends Serializable {
 
   private val k = bcWeights.value.length
   private var totalCnt = 0L
