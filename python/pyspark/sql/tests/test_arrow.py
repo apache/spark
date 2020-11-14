@@ -21,6 +21,7 @@ import threading
 import time
 import unittest
 import warnings
+from distutils.version import LooseVersion
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -346,17 +347,22 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf, schema=schema)
 
-        df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    self.spark.createDataFrame(pdf, schema=schema)
+        else:
+            df_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
-        result = df.collect()
-        result_arrow = df_arrow.collect()
+            result = df.collect()
+            result_arrow = df_arrow.collect()
 
-        self.assertEqual(len(result), len(result_arrow))
-        for row, row_arrow in zip(result, result_arrow):
-            i, m = row
-            _, m_arrow = row_arrow
-            self.assertEqual(m, map_data[i])
-            self.assertEqual(m_arrow, map_data[i])
+            self.assertEqual(len(result), len(result_arrow))
+            for row, row_arrow in zip(result, result_arrow):
+                i, m = row
+                _, m_arrow = row_arrow
+                self.assertEqual(m, map_data[i])
+                self.assertEqual(m_arrow, map_data[i])
 
     def test_toPandas_with_map_type(self):
         pdf = pd.DataFrame({"id": [0, 1, 2, 3],
@@ -365,8 +371,13 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
 
-        pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
-        assert_frame_equal(pdf_arrow, pdf_non)
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    df.toPandas()
+        else:
+            pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow, pdf_non)
 
     def test_toPandas_with_map_type_nulls(self):
         pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4],
@@ -375,8 +386,13 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
 
-        pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
-        assert_frame_equal(pdf_arrow, pdf_non)
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    df.toPandas()
+        else:
+            pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow, pdf_non)
 
     def test_createDataFrame_with_int_col_names(self):
         import numpy as np

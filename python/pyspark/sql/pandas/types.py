@@ -28,6 +28,7 @@ from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, Lon
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
+    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -59,6 +60,8 @@ def to_arrow_type(dt):
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
         if type(dt.keyType) in [StructType, TimestampType] or \
                 type(dt.valueType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
@@ -86,6 +89,8 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
+    from distutils.version import LooseVersion
+    import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
         spark_type = BooleanType()
@@ -116,6 +121,8 @@ def from_arrow_type(at):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
     elif types.is_map(at):
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
         if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
