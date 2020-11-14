@@ -1464,8 +1464,6 @@ object EliminateLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Limit(l, child) if canEliminate(l, child.maxRows) =>
       child
-    case LocalLimit(l, child) if canEliminate(l, child.maxRows) =>
-      child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Least(Seq(ne, le)), grandChild)
