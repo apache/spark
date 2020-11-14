@@ -50,11 +50,6 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
       intercept[NoSuchTableException] {
         sql("SHOW PARTITIONS parquet_temp")
       }
-
-      val message3 = intercept[AnalysisException] {
-        sql("SHOW PARTITIONS parquet_view1")
-      }.getMessage
-      assert(message3.contains("is not allowed on a view"))
     }
   }
 }

@@ -138,6 +138,21 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
+  test("show partitions of a view") {
+    val table = "dateTable"
+    withTable(table) {
+      createDateTable(table)
+      val view = "view1"
+      withView(view) {
+        sql(s"CREATE VIEW $view as select * from $table")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $view")
+        }.getMessage
+        assert(errMsg.contains("is not allowed on a view"))
+      }
+    }
+  }
+
   test("issue exceptions on the temporary view") {
     val viewName = "test_view"
     withTempView(viewName) {
