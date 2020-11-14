@@ -240,6 +240,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     //       +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@63262071 [] PushedAggregates: [], PushedFilters: [], PushedGroupby: [], ReadSchema: struct<>
     // scalastyle:on line.size.limit
     checkAnswer(df5, Seq(Row(4)))
+
+    val df6 = sql("select MIN(SALARY), MIN(BONUS), MIN(SALARY) * MIN(BONUS) FROM h2.test.employee")
+    // df6.explain(true)
+    checkAnswer(df6, Seq(Row(9000, 1000, 9000000)))
   }
 
   test("read/write with partition info") {

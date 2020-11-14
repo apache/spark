@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -24,8 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.{AggregateFunc, Aggregation}
 import org.apache.spark.sql.types.StructType
@@ -73,33 +77,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
               postScanFilters)
             Aggregate(groupingExpressions, resultExpressions, plan)
           } else {
-            val resultAttributes = resultExpressions.map(_.toAttribute)
-              .map ( e => e match { case a: AttributeReference => a })
-            var index = 0
             val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
-            for (a <- resultAttributes) {
-              val newName = if (a.name.contains("FILTER")) {
-                a.name.substring(0, a.name.indexOf("FILTER") - 1)
-              } else if (a.name.contains("DISTINCT")) {
-                a.name.replace("DISTINCT ", "")
-              } else {
-                a.name
-              }
-
-              aggOutputBuilder +=
-                a.copy(name = newName,
-                  dataType = aggregates(index).dataType)(exprId = NamedExpression.newExprId,
-                  qualifier = a.qualifier)
-              index += 1
+            for (a <- aggregates) {
+                aggOutputBuilder += AttributeReference(toPrettySQL(a), a.dataType)()
             }
             val aggOutput = aggOutputBuilder.result
 
-            var newOutput = aggOutput
-            for (col <- output) {
-              if (!aggOutput.exists(_.name.contains(col.name))) {
-                newOutput = col +: newOutput
+            val newOutputBuilder = ArrayBuilder.make[AttributeReference]
+            for (col1 <- output) {
+              var found = false
+              for (col2 <- aggOutput) {
+                  if (contains(col2.name, col1.name)) {
+                    newOutputBuilder += col2
+                    found = true
+                  }
               }
+              if (!found) newOutputBuilder += col1
+
             }
+            val newOutput = newOutputBuilder.result
 
             val r = buildLogicalPlan(newOutput, relation, wrappedScan, newOutput,
               normalizedProjects, postScanFilters)
@@ -207,6 +203,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       withFilter
     }
     withProjection
+  }
+
+  private def contains(s1: String, s2: String): Boolean = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      s1.contains(s2)
+    } else {
+      s1.toLowerCase(Locale.ROOT).contains(s2.toLowerCase(Locale.ROOT))
+    }
   }
 }
 
