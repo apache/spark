@@ -43,22 +43,6 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
         Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
   }
 
-  ignore("show partitions - filter") {
-    checkAnswer(
-      sql("show partitions default.parquet_tab4 PARTITION(year=2015)"),
-      Row("year=2015/month=1") ::
-        Row("year=2015/month=2") :: Nil)
-
-    checkAnswer(
-      sql("show partitions default.parquet_tab4 PARTITION(year=2015, month=1)"),
-      Row("year=2015/month=1") :: Nil)
-
-    checkAnswer(
-      sql("show partitions default.parquet_tab4 PARTITION(month=2)"),
-      Row("year=2015/month=2") ::
-        Row("year=2016/month=2") :: Nil)
-  }
-
   ignore("show partitions - empty row") {
     withTempView("parquet_temp") {
       sql(

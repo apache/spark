@@ -60,6 +60,24 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
+  test("filter by partitions") {
+    val table = "dateTable"
+    withTable(table) {
+      createDateTable(table)
+      checkAnswer(
+        sql(s"show partitions default.$table PARTITION(year=2015)"),
+        Row("year=2015/month=1") ::
+          Row("year=2015/month=2") :: Nil)
+      checkAnswer(
+        sql(s"show partitions default.$table PARTITION(year=2015, month=1)"),
+        Row("year=2015/month=1") :: Nil)
+      checkAnswer(
+        sql(s"show partitions default.$table PARTITION(month=2)"),
+        Row("year=2015/month=2") ::
+          Row("year=2016/month=2") :: Nil)
+    }
+  }
+
   test("issue exceptions on the temporary view") {
     val viewName = "test_view"
     withTempView(viewName) {
