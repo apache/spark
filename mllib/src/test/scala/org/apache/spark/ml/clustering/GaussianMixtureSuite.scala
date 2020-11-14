@@ -75,7 +75,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
-    assert(gm.getInitialModel === None)
+    assert(gm.getInitialModel === null)
 
     val model = gm.setMaxIter(1).fit(dataset)
 
@@ -119,10 +119,10 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getMaxIter === 33)
     assert(gm.getSeed === 123)
     assert(gm.getTol === 1e-3)
-    assert(gm.getInitialModel.get === gmm)
+    assert(gm.getInitialModel === gmm)
   }
 
-  test("Initial model has the same K as the Gaussian Mixture") {
+  test("Initial model doesn't have the same K as the Gaussian Mixture") {
     val gmm = new GaussianMixtureModel(
       "uuid",
       Array(0.5, 0.2, 0.3),
@@ -142,6 +142,28 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     intercept[IllegalArgumentException] {
       gm.fit(denseDataset);
     }
+  }
+
+  test("Initial model have the same K as the Gaussian Mixture") {
+    val gmm = new GaussianMixtureModel(
+      "uuid",
+      Array(0.5, 0.2, 0.3),
+      Array(
+        new MultivariateGaussian(Vectors.dense(1),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(2),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(3),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1)))
+      ))
+
+    val gm = new GaussianMixture()
+      .setK(3)
+      .setInitialModel(gmm)
+
+    gm.fit(denseDataset);
+
+    assert(gm.getK === gmm.weights.length)
   }
 
   test("parameters validation") {

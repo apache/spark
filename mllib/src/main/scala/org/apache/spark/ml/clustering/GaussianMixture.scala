@@ -65,16 +65,16 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    *
    * @group param
    */
-  var initialModel = new Param[Option[GaussianMixtureModel]](
+  var initialModel = new Param[GaussianMixtureModel](
     this,
     "initialModel",
     "initial gaussian mixture model"
   )
 
   /** @group getParam */
-  def getInitialModel: Option[GaussianMixtureModel] = $(initialModel)
+  def getInitialModel: GaussianMixtureModel = $(initialModel)
 
-  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, initialModel -> None)
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, initialModel -> null)
 
   /**
    * Validates and transforms the input schema.
@@ -386,7 +386,7 @@ class GaussianMixture @Since("2.0.0") (
 
   /** @group initialModel */
   def setInitialModel(value: GaussianMixtureModel):
-    this.type = set(initialModel, Option[GaussianMixtureModel](value))
+    this.type = set(initialModel, value)
 
   /**
    * Number of samples per cluster to use when initializing Gaussians.
@@ -425,10 +425,12 @@ class GaussianMixture @Since("2.0.0") (
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) { instances.persist(StorageLevel.MEMORY_AND_DISK) }
 
+
     val (weights, gaussians) = ${initialModel} match {
-      case Some(gmm) =>
+      case null => initRandom(instances, $(k), numFeatures)
+      case gmm =>
         require(
-          gmm.getK == ${k},
+          ${initialModel}.weights.length == ${k},
           "Number of independent Gaussians in the initial model has to be equal to K"
         )
 
@@ -441,7 +443,6 @@ class GaussianMixture @Since("2.0.0") (
             )
           }
           ))
-      case None => initRandom(instances, $(k), numFeatures)
     }
 
     val (logLikelihood, iteration) = trainImpl(instances, weights, gaussians, numFeatures, instr)
