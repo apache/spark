@@ -59,7 +59,18 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   @Since("2.0.0")
   def getK: Int = $(k)
 
-  setDefault(k -> 2, maxIter -> 100, tol -> 0.01)
+
+  /**
+   * Initial gaussian mixture model
+   *
+   * @group param
+   */
+  var initialModel = new Param[Option[GaussianMixtureModel]](this, "initialModel", "initial gaussian mixture model")
+
+  /** @group getParam */
+  def getInitialModel: Option[GaussianMixtureModel] = $(initialModel)
+
+  setDefault(k -> 2, maxIter -> 100, tol -> 0.01, initialModel -> None)
 
   /**
    * Validates and transforms the input schema.
@@ -86,11 +97,11 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
  */
 @Since("2.0.0")
 class GaussianMixtureModel private[ml] (
-    @Since("2.0.0") override val uid: String,
-    @Since("2.0.0") val weights: Array[Double],
-    @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
+                                         @Since("2.0.0") override val uid: String,
+                                         @Since("2.0.0") val weights: Array[Double],
+                                         @Since("2.0.0") val gaussians: Array[MultivariateGaussian])
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable
-  with HasTrainingSummary[GaussianMixtureSummary] {
+    with HasTrainingSummary[GaussianMixtureSummary] {
 
   @Since("3.0.0")
   lazy val numFeatures: Int = gaussians.head.mean.size
@@ -227,8 +238,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   override def load(path: String): GaussianMixtureModel = super.load(path)
 
   /** [[MLWriter]] instance for [[GaussianMixtureModel]] */
-  private[GaussianMixtureModel] class GaussianMixtureModelWriter(
-      instance: GaussianMixtureModel) extends MLWriter {
+  private[GaussianMixtureModel] class GaussianMixtureModelWriter(instance: GaussianMixtureModel) extends MLWriter {
 
     private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
 
@@ -280,9 +290,9 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
    * @return  Probability (partial assignment) for each of the k clusters
    */
   private[clustering] def computeProbabilities(
-      features: Vector,
-      dists: Array[MultivariateGaussian],
-      weights: Array[Double]): Array[Double] = {
+                                                features: Vector,
+                                                dists: Array[MultivariateGaussian],
+                                                weights: Array[Double]): Array[Double] = {
     val probArray = Array.ofDim[Double](weights.length)
     var probSum = 0.0
     var i = 0
@@ -324,7 +334,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
  */
 @Since("2.0.0")
 class GaussianMixture @Since("2.0.0") (
-    @Since("2.0.0") override val uid: String)
+                                        @Since("2.0.0") override val uid: String)
   extends Estimator[GaussianMixtureModel] with GaussianMixtureParams with DefaultParamsWritable {
 
   @Since("2.0.0")
@@ -369,10 +379,14 @@ class GaussianMixture @Since("2.0.0") (
   @Since("3.0.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
 
+  /** @group initialModel */
+  def setInitialModel(value: GaussianMixtureModel): this.type = set(initialModel, Option[GaussianMixtureModel](value))
+
   /**
    * Number of samples per cluster to use when initializing Gaussians.
    */
   private val numSamples = 5
+
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = instrumented { instr =>
@@ -404,8 +418,21 @@ class GaussianMixture @Since("2.0.0") (
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) { instances.persist(StorageLevel.MEMORY_AND_DISK) }
-    // TODO: SPARK-15785 Support users supplied initial GMM.
-    val (weights, gaussians) = initRandom(instances, $(k), numFeatures)
+
+    val (weights, gaussians) = ${initialModel} match {
+      case Some(gmm) =>
+        (
+          gmm.weights,
+          gmm.gaussians.map(gaussian => {
+            (
+              gaussian.mean.toDense,
+              covMatrixToDenseVector(gaussian.cov)
+            )
+          }
+          ))
+      case None => initRandom(instances, $(k), numFeatures)
+    }
+
     val (logLikelihood, iteration) = trainImpl(instances, weights, gaussians, numFeatures, instr)
     if (handlePersistence) { instances.unpersist() }
 
@@ -424,11 +451,11 @@ class GaussianMixture @Since("2.0.0") (
   }
 
   private def trainImpl(
-      instances: RDD[(Vector, Double)],
-      weights: Array[Double],
-      gaussians: Array[(DenseVector, DenseVector)],
-      numFeatures: Int,
-      instr: Instrumentation): (Double, Int) = {
+                         instances: RDD[(Vector, Double)],
+                         weights: Array[Double],
+                         gaussians: Array[(DenseVector, DenseVector)],
+                         numFeatures: Int,
+                         instr: Instrumentation): (Double, Int) = {
     val sc = instances.sparkContext
     var logLikelihood = Double.MinValue
     var logLikelihoodPrev = 0.0
@@ -499,9 +526,9 @@ class GaussianMixture @Since("2.0.0") (
    *         we only save the upper triangular part as a dense vector (column major).
    */
   private def initRandom(
-      instances: RDD[(Vector, Double)],
-      numClusters: Int,
-      numFeatures: Int): (Array[Double], Array[(DenseVector, DenseVector)]) = {
+                          instances: RDD[(Vector, Double)],
+                          numClusters: Int,
+                          numFeatures: Int): (Array[Double], Array[(DenseVector, DenseVector)]) = {
     val (samples, sampleWeights) = instances
       .takeSample(withReplacement = true, numClusters * numSamples, $(seed))
       .unzip
@@ -552,6 +579,14 @@ class GaussianMixture @Since("2.0.0") (
     }
     (weights, gaussians)
   }
+
+  def covMatrixToDenseVector(cov: Matrix) : DenseVector = {
+    val diagVec = Vectors.dense(cov.toArray)
+    val covVec = new DenseVector(Array.ofDim[Double](cov.numRows * (cov.numRows + 1) / 2))
+    diagVec.foreach { (i, v) => covVec.values(i + i * (i + 1) / 2) = v }
+    covVec
+  }
+
 }
 
 @Since("2.0.0")
@@ -573,15 +608,15 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
    * @return A dense matrix which represents the symmetric matrix in column major.
    */
   private[clustering] def unpackUpperTriangularMatrix(
-      n: Int,
-      triangularValues: Array[Double]): DenseMatrix = {
+                                                       n: Int,
+                                                       triangularValues: Array[Double]): DenseMatrix = {
     val symmetricValues = unpackUpperTriangular(n, triangularValues)
     new DenseMatrix(n, n, symmetricValues)
   }
 
   private def mergeWeightsMeans(
-      a: (DenseVector, DenseVector, Double, Double),
-      b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
+                                 a: (DenseVector, DenseVector, Double, Double),
+                                 b: (DenseVector, DenseVector, Double, Double)): (DenseVector, DenseVector, Double, Double) =
   {
     // update the weights, means and covariances for i-th distributions
     BLAS.axpy(1.0, b._1, a._1)
@@ -600,10 +635,10 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
    * @return The updated weight, mean and covariance.
    */
   private[clustering] def updateWeightsAndGaussians(
-      mean: DenseVector,
-      cov: DenseVector,
-      weight: Double,
-      sumWeights: Double): (Double, (DenseVector, DenseVector)) = {
+                                                     mean: DenseVector,
+                                                     cov: DenseVector,
+                                                     weight: Double,
+                                                     sumWeights: Double): (Double, (DenseVector, DenseVector)) = {
     BLAS.scal(1.0 / weight, mean)
     BLAS.spr(-weight, mean, cov)
     BLAS.scal(1.0 / weight, cov)
@@ -624,9 +659,9 @@ object GaussianMixture extends DefaultParamsReadable[GaussianMixture] {
  *                    in order to reduce shuffled data size.
  */
 private class ExpectationAggregator(
-    numFeatures: Int,
-    bcWeights: Broadcast[Array[Double]],
-    bcGaussians: Broadcast[Array[(DenseVector, DenseVector)]]) extends Serializable {
+                                     numFeatures: Int,
+                                     bcWeights: Broadcast[Array[Double]],
+                                     bcGaussians: Broadcast[Array[(DenseVector, DenseVector)]]) extends Serializable {
 
   private val k = bcWeights.value.length
   private var totalCnt = 0L
@@ -708,13 +743,13 @@ private class ExpectationAggregator(
  */
 @Since("2.0.0")
 class GaussianMixtureSummary private[clustering] (
-    predictions: DataFrame,
-    predictionCol: String,
-    @Since("2.0.0") val probabilityCol: String,
-    featuresCol: String,
-    k: Int,
-    @Since("2.2.0") val logLikelihood: Double,
-    numIter: Int)
+                                                   predictions: DataFrame,
+                                                   predictionCol: String,
+                                                   @Since("2.0.0") val probabilityCol: String,
+                                                   featuresCol: String,
+                                                   k: Int,
+                                                   @Since("2.2.0") val logLikelihood: Double,
+                                                   numIter: Int)
   extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter) {
 
   /**

@@ -75,6 +75,8 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getProbabilityCol === "probability")
     assert(gm.getMaxIter === 100)
     assert(gm.getTol === 0.01)
+    assert(gm.getInitialModel === None)
+
     val model = gm.setMaxIter(1).fit(dataset)
 
     val transformed = model.transform(dataset)
@@ -88,6 +90,18 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("set parameters") {
+    val gmm = new GaussianMixtureModel(
+      "uuid",
+      Array(0.5, 0.2, 0.3),
+      Array(
+        new MultivariateGaussian(Vectors.dense(1),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(2),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1))),
+        new MultivariateGaussian(Vectors.dense(3),
+          Matrices.dense(1, 1, Array.fill[Double](1)(1)))
+      ))
+
     val gm = new GaussianMixture()
       .setK(9)
       .setFeaturesCol("test_feature")
@@ -96,6 +110,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
       .setMaxIter(33)
       .setSeed(123)
       .setTol(1e-3)
+      .setInitialModel(gmm)
 
     assert(gm.getK === 9)
     assert(gm.getFeaturesCol === "test_feature")
@@ -104,6 +119,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     assert(gm.getMaxIter === 33)
     assert(gm.getSeed === 123)
     assert(gm.getTol === 1e-3)
+    assert(gm.getInitialModel.get === gmm)
   }
 
   test("parameters validation") {
@@ -177,6 +193,29 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
     Seq(denseDataset, sparseDataset).foreach { dataset =>
       val actual = new GaussianMixture().setK(2).setSeed(seed).fit(dataset)
+      modelEquals(expected, actual)
+    }
+  }
+
+  test("univariate dense/sparse data with two clusters and an initial model") {
+    val initialWeights = Array(0.5, 0.5)
+    val initialMeans = Array(Vectors.dense(5), Vectors.dense(-3))
+    val initialCovs = Array(Matrices.dense(1, 1, Array(1)), Matrices.dense(1, 1, Array(1)))
+    val initialGaussians = initialMeans.zip(initialCovs).map { case (mean, cov) =>
+      new MultivariateGaussian(mean, cov)
+    }
+    val initialModel = new GaussianMixtureModel("dummy", initialWeights, initialGaussians)
+
+    val weights = Array(2.0 / 3.0, 1.0 / 3.0)
+    val means = Array(Vectors.dense(5.1604), Vectors.dense(-4.3673))
+    val covs = Array(Matrices.dense(1, 1, Array(0.86644)), Matrices.dense(1, 1, Array(1.1098)))
+    val gaussians = means.zip(covs).map { case (mean, cov) =>
+      new MultivariateGaussian(mean, cov)
+    }
+    val expected = new GaussianMixtureModel("dummy", weights, gaussians)
+
+    Seq(denseDataset, sparseDataset).foreach { dataset =>
+      val actual = new GaussianMixture().setK(2).setInitialModel(initialModel).fit(dataset)
       modelEquals(expected, actual)
     }
   }
