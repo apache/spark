@@ -117,7 +117,7 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
 
     def __init__(self, *args):
         super(_GaussianMixtureParams, self).__init__(*args)
-        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
+        self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2, initialModel=None)
 
     @since("2.0.0")
     def getK(self):
