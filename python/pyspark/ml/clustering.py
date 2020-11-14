@@ -111,6 +111,9 @@ class _GaussianMixtureParams(HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionC
     k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
               "Must be > 1.", typeConverter=TypeConverters.toInt)
 
+    initialModel = Param(Params._dummy(), "initialModel",
+                         "The initial Gausssian Mixture Model to use")
+
     def __init__(self, *args):
         super(_GaussianMixtureParams, self).__init__(*args)
         self._setDefault(k=2, tol=0.01, maxIter=100, aggregationDepth=2)
@@ -340,7 +343,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @keyword_only
     def __init__(self, *, featuresCol="features", predictionCol="prediction", k=2,
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                 aggregationDepth=2, weightCol=None):
+                 aggregationDepth=2, weightCol=None, initialModel=None):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
@@ -359,7 +362,7 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     @since("2.0.0")
     def setParams(self, *, featuresCol="features", predictionCol="prediction", k=2,
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None,
-                  aggregationDepth=2, weightCol=None):
+                  aggregationDepth=2, weightCol=None, initialModel=None):
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   probabilityCol="probability", tol=0.01, maxIter=100, seed=None, \
@@ -376,6 +379,12 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
         Sets the value of :py:attr:`k`.
         """
         return self._set(k=value)
+
+    def setInitialModel(self, value):
+        """
+        Sets the value of :py:attr:`initialModel`
+        """
+        return self._set(initialModel=value)
 
     @since("2.0.0")
     def setMaxIter(self, value):
