@@ -133,7 +133,7 @@ private[spark] class MesosClusterScheduler(
   private val retainedDrivers = conf.get(config.RETAINED_DRIVERS)
   private val maxRetryWaitTime = conf.get(config.CLUSTER_RETRY_WAIT_MAX_SECONDS)
   private val queues: immutable.Map[String, Float] =
-      conf.getAllWithPrefix("spark.mesos.dispatcher.queue.").toMap.mapValues(_.toFloat)
+      conf.getAllWithPrefix("spark.mesos.dispatcher.queue.").map(t => (t._1, t._2.toFloat)).toMap
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
