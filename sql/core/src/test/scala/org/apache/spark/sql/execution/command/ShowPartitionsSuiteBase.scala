@@ -20,25 +20,14 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.StructType
 
 trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
-  case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
-  protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
-  // Gets the schema of `SHOW TABLES`
-  protected def showSchema: StructType
-
-  protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
-    val df = spark.sql(sqlText)
-    assert(df.schema === showSchema)
-    checkAnswer(df, getRows(expected))
-  }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {

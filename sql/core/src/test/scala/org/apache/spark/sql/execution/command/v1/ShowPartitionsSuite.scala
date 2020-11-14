@@ -22,22 +22,41 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
-  override def showSchema: StructType = {
-    new StructType()
-      .add("database", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
+
+  protected def createDateTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (price int, qty int, year int, month int)
+      |$defaultUsing
+      |partitioned by (year, month)""".stripMargin)
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
+    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
+    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
   }
-  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
+
+  test("show everything") {
+    val table = "dateTable"
+    withTable(table) {
+      createDateTable(table)
+      checkAnswer(
+        sql(s"show partitions $table"),
+        Row("year=2015/month=1") ::
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
+
+      checkAnswer(
+        sql(s"show partitions default.$table"),
+        Row("year=2015/month=1") ::
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
     }
   }
 
