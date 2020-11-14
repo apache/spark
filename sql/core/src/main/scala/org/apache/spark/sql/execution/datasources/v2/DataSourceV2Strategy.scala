@@ -231,7 +231,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropTable(r: ResolvedTable, ifExists, purge) =>
       DropTableExec(session, r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
 
-    case _: NoopDropTable =>
+    case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
