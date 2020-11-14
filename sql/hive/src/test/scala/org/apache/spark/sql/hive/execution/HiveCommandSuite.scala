@@ -62,21 +62,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 2) SELECT 3, 3")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 3) SELECT 3, 3")
-    sql(
-      """
-        |CREATE TABLE parquet_tab5 (price int, qty int)
-        |PARTITIONED BY (year int, month int, hour int, minute int, sec int, extra int)
-      """.stripMargin)
-    sql(
-      """
-        |INSERT INTO parquet_tab5
-        |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-    sql(
-      """
-        |INSERT INTO parquet_tab5
-        |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
   }
 
@@ -87,7 +72,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("DROP TABLE IF EXISTS parquet_tab3")
       sql("DROP VIEW IF EXISTS parquet_view1")
       sql("DROP TABLE IF EXISTS parquet_tab4")
-      sql("DROP TABLE IF EXISTS parquet_tab5")
     } finally {
       super.afterAll()
     }

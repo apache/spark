@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -28,19 +28,15 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
 
   override protected def createDateTable(table: String): Unit = {
     sql(s"""
-        |CREATE TABLE $table (price int, qty int)
-        |partitioned by (year int, month int)""".stripMargin)
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
+      |CREATE TABLE $table (price int, qty int)
+      |partitioned by (year int, month int)""".stripMargin)
   }
 
-  ignore("show partitions - show everything more than 5 part keys") {
-    checkAnswer(
-      sql("show partitions parquet_tab5"),
-      Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
-        Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
+  override protected def createWideTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (price int, qty int)
+      |PARTITIONED BY (year int, month int, hour int, minute int, sec int, extra int)
+      """.stripMargin)
   }
 
   ignore("show partitions - empty row") {
