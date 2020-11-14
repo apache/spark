@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
@@ -90,4 +90,18 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   }
 }
 
-class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSession
+class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSession {
+  test("show partitions from a datasource") {
+    import testImplicits._
+    withTable("part_datasrc") {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write
+        .partitionBy("a")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("part_datasrc")
+
+      assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
+    }
+  }
+}

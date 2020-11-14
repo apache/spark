@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -69,20 +69,6 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingle
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
       assert(message3.contains("is not allowed on a view"))
-    }
-  }
-
-  ignore("show partitions - datasource") {
-    import spark.implicits._
-    withTable("part_datasrc") {
-      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
-      df.write
-        .partitionBy("a")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable("part_datasrc")
-
-      assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
     }
   }
 }
