@@ -742,6 +742,7 @@ See the [configuration page](configuration.html) for information on Spark config
     The specified queue must be added to the dispatcher with <code>spark.mesos.dispatcher.queue.[QueueName]</code>.
     If no queue is specified, then the application is submitted to the "default" queue with 0.0 priority.
   </td>
+  <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.mesos.dispatcher.queue.[QueueName]</code></td>
@@ -763,6 +764,7 @@ See the [configuration page](configuration.html) for information on Spark config
     spark.mesos.role=URGENT
     </pre>
   </td>
+  <td>3.1.0</td>
 </tr>
 <tr>
   <td><code>spark.mesos.gpus.max</code></td>

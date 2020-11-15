@@ -567,43 +567,43 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("assembles a valid driver command, escaping all confs and args") {
-      setScheduler()
+    setScheduler()
 
-      val mem = 1000
-      val cpu = 1
-      val driverDesc = new MesosDriverDescription(
-        "d1",
-        "jar",
-        mem,
-        cpu,
-        true,
-        new Command(
-          "Main",
-          Seq("--a=$2", "--b", "x y z"),
-          Map(),
-          Seq(),
-          Seq(),
-          Seq()),
-        Map("spark.app.name" -> "app name",
-          config.EXECUTOR_URI.key -> "s3a://bucket/spark-version.tgz",
-          "another.conf" -> "\\value"),
-        "s1",
-        new Date())
+    val mem = 1000
+    val cpu = 1
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      new Command(
+        "Main",
+        Seq("--a=$2", "--b", "x y z"),
+        Map(),
+        Seq(),
+        Seq(),
+        Seq()),
+      Map("spark.app.name" -> "app name",
+        config.EXECUTOR_URI.key -> "s3a://bucket/spark-version.tgz",
+        "another.conf" -> "\\value"),
+      "s1",
+      new Date())
 
-      val expectedCmd = "cd spark-version*;  " +
-          "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
-          "--driver-cores 1.0 --driver-memory 1000M --class Main " +
-          "--conf \"another.conf=\\\\value\" " +
-          "--conf \"spark.app.name=app name\" " +
-          "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
-          "../jar " +
-          "\"--a=\\$2\" " +
-          "--b \"x y z\""
+    val expectedCmd = "cd spark-version*;  " +
+      "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
+      "--driver-cores 1.0 --driver-memory 1000M --class Main " +
+      "--conf \"another.conf=\\\\value\" " +
+      "--conf \"spark.app.name=app name\" " +
+      "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+      "../jar " +
+      "\"--a=\\$2\" " +
+      "--b \"x y z\""
 
-      assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
-    }
+    assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
+  }
 
-  test("Get driver priority") {
+  test("SPARK-23499: Get driver priority") {
     val conf = new SparkConf()
     conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
     conf.set("spark.mesos.dispatcher.queue.URGENT", "2.0")
@@ -615,10 +615,10 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     // Test queue not declared in scheduler
     var desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
-        command,
-        Map("spark.mesos.dispatcher.queue" -> "dummy"),
-        "s1",
-        new Date())
+      command,
+      Map("spark.mesos.dispatcher.queue" -> "dummy"),
+      "s1",
+      new Date())
 
     assertThrows[NoSuchElementException] {
       scheduler.getDriverPriority(desc)
@@ -661,7 +661,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(scheduler.getDriverPriority(desc) == 2.0f)
   }
 
-  test("Can queue drivers with priority") {
+  test("SPARK-23499: Can queue drivers with priority") {
     val conf = new SparkConf()
     conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
     conf.set("spark.mesos.dispatcher.queue.URGENT", "2.0")
@@ -699,7 +699,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(queuedDrivers(3).submissionId == response1.submissionId)
   }
 
-  test("Can queue drivers with negative priority") {
+  test("SPARK-23499: Can queue drivers with negative priority") {
     val conf = new SparkConf()
     conf.set("spark.mesos.dispatcher.queue.LOWER", "-1.0")
     setScheduler(conf.getAll.toMap)

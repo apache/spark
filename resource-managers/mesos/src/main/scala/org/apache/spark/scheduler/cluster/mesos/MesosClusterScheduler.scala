@@ -390,12 +390,12 @@ private[spark] class MesosClusterScheduler(
   }
 
   private[mesos] def getDriverPriority(desc: MesosDriverDescription): Float = {
-      val queueName = desc.conf.get("spark.mesos.dispatcher.queue", config.DEFAULT_QUEUE)
-      if (queueName != config.DEFAULT_QUEUE) {
-        queues.getOrElse(queueName, throw new NoSuchElementException(queueName))
-      } else {
-        0.0f
-      }
+    val queueName = desc.conf.get("spark.mesos.dispatcher.queue")
+    if (queueName != config.DEFAULT_QUEUE) {
+      queues.getOrElse(queueName, throw new NoSuchElementException(queueName))
+    } else {
+      0.0f
+    }
   }
 
   private def getDriverTaskId(desc: MesosDriverDescription): String = {
@@ -851,7 +851,6 @@ private[spark] class MesosClusterScheduler(
       status: Int): Unit = {}
 
   private def removeFromQueuedDrivers(subId: String): Boolean = {
-
     val matchOption = queuedDrivers.find(_.submissionId == subId)
     if (matchOption.isEmpty) {
       false
