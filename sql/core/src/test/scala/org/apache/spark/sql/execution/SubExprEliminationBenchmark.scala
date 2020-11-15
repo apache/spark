@@ -50,6 +50,8 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
         from_json('value, schema).getField(s"col$idx")
       }
 
+      // We only benchmark subexpression performance under codegen/non-codegen, so disabling
+      // json optimization.
       benchmark.addCase("subexpressionElimination off, codegen on", numIters) { _ =>
         withSQLConf(
           SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
@@ -76,8 +78,6 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      // We only benchmark subexpression performance under codegen/non-codegen, so disabling
-      // json optimization.
       benchmark.addCase("subexpressionElimination on, codegen on", numIters) { _ =>
         withSQLConf(
             SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
