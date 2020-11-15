@@ -168,6 +168,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param port port of shuffle server.
    * @param shuffleId shuffle ID of the shuffle to be finalized
    * @param listener the listener to receive MergeStatuses
+   *
+   * @since 3.1.0
    */
   public void finalizeShuffleMerge(
       String host,
