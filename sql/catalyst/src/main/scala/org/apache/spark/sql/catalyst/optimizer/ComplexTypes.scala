@@ -61,7 +61,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))), useStringTypeWhenEmpty)
 
       // Remove redundant map lookup.
-      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx)) =>
+      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx), _) =>
         // Instead of creating the array and then selecting one row, remove array creation
         // altogether.
         if (idx >= 0 && idx < elems.size) {

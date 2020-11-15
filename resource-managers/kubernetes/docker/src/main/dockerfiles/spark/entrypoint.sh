@@ -85,6 +85,7 @@ case "$1" in
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
+      --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
     )
     ;;
 

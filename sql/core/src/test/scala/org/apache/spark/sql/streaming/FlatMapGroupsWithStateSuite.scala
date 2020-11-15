@@ -1324,7 +1324,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   def testWithAllStateVersions(name: String)(func: => Unit): Unit = {
     for (version <- FlatMapGroupsWithStateExecHelper.supportedVersions) {
       test(s"$name - state format version $version") {
-        withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> version.toString) {
+        withSQLConf(
+            SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> version.toString,
+            SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
           func
         }
       }

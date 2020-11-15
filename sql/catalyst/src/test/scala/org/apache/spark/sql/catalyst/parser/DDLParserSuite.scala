@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1233,55 +1233,6 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
   }
 
-  test("show tables") {
-    comparePlans(
-      parsePlan("SHOW TABLES"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW TABLES '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-  }
-
-  test("show table extended") {
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
-      ShowTableStatement(None, "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
-      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-  }
-
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
@@ -1632,7 +1583,13 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTableStatement(Seq("a", "b", "c")))
+      ShowCreateTable(UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false)))
+
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
+      ShowCreateTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        asSerde = true))
   }
 
   test("CACHE TABLE") {
@@ -1743,15 +1700,15 @@ class DDLParserSuite extends AnalysisTest {
     val parsed1 = parsePlan(sql1)
     val parsed2 = parsePlan(sql2)
 
-    val expected1 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
+    val expected1 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
-    val expected2 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+    val expected2 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
     comparePlans(parsed1, expected1)
@@ -1816,11 +1773,11 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
-    val expected1_table = AlterTableDropPartitionStatement(
-      Seq("table_name"),
+    val expected1_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("table_name")),
       Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = true,
       purge = false,
       retainData = false)
@@ -1832,9 +1789,9 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed1_purge, expected1_purge)
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
-    val expected3_table = AlterTableDropPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq(Map("ds" -> "2017-06-10")),
+    val expected3_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,
       retainData = false)

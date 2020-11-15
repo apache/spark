@@ -63,6 +63,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 
@@ -93,7 +94,8 @@ private[spark] class Client(
   private val amMemoryOverhead = {
     val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
     sparkConf.get(amMemoryOverheadEntry).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong,
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
   }
   private val amCores = if (isClusterMode) {
     sparkConf.get(DRIVER_CORES)
@@ -104,9 +106,10 @@ private[spark] class Client(
   // Executor related configurations
   private val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
   // Executor offHeap memory in MiB.
-  protected val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
+  protected val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong,
+      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {
