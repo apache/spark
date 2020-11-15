@@ -704,12 +704,17 @@ class BlockManagerMasterEndpoint(
     } else {
       // Delta mergers added from inactive mergers list to the active mergers list
       val filteredMergersWithExecutorsHosts = filteredMergersWithExecutors.map(_.host)
-      // Pick random hosts instead of preferring the top of the list
-      val randomizedShuffleMergerLocations = Utils.randomize(shuffleMergerLocations.values.toSeq)
-      val filteredMergersWithoutExecutors = randomizedShuffleMergerLocations
+      val filteredMergersWithoutExecutors = shuffleMergerLocations.values
         .filterNot(x => hostsToFilter.contains(x.host))
         .filterNot(x => filteredMergersWithExecutorsHosts.contains(x.host))
-      filteredMergersWithExecutors.toSeq ++ filteredMergersWithoutExecutors
+      val randomFilteredMergersLocations =
+        if (filteredMergersWithoutExecutors.size >
+          numMergersNeeded - filteredMergersWithExecutors.size) {
+          Utils.randomize(filteredMergersWithoutExecutors)
+        } else {
+          filteredMergersWithoutExecutors
+        }
+      filteredMergersWithExecutors.toSeq ++ randomFilteredMergersLocations
         .take(numMergersNeeded - filteredMergersWithExecutors.size)
     }
   }

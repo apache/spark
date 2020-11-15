@@ -1270,13 +1270,14 @@ private[spark] class DAGScheduler(
 
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
-      logInfo(s"Shuffle merge enabled for $stage (${stage.name}) with" +
+      logInfo(s"Push-based shuffle enabled for $stage (${stage.name}) with" +
         s" ${stage.shuffleDep.getMergerLocs.size} merger locations")
 
       logDebug("List of shuffle push merger locations " +
         s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     } else {
-      logInfo(s"No available merger locations. Shuffle merge disabled for $stage (${stage.name})")
+      logInfo(s"No available merger locations." +
+        s" Push-based shuffle disabled for $stage (${stage.name})")
     }
   }
 

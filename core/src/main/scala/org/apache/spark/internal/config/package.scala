@@ -1951,7 +1951,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_MERGERS_MAX_RETAINED_LOCATIONS =
-    ConfigBuilder("spark.shuffle.push.retainedMergerLocations")
+    ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
       .doc("Maximum number of shuffle push mergers locations cached for push based shuffle. " +
         "Currently, shuffle push merger locations are nothing but external shuffle services " +
         "which are responsible for handling pushed blocks and merging them and serving " +
