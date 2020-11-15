@@ -89,5 +89,4 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
 
     schema
   }
-
 }

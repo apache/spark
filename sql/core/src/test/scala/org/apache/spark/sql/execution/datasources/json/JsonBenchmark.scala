@@ -39,7 +39,6 @@ import org.apache.spark.sql.types._
  *      Results will be written to "benchmarks/JSONBenchmark-results.txt".
  * }}}
  */
-
 object JsonBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 

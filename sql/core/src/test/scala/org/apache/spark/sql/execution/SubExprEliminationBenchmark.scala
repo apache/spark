@@ -35,7 +35,6 @@ import org.apache.spark.sql.internal.SQLConf
  *      Results will be written to "benchmarks/SubExprEliminationBenchmark-results.txt".
  * }}}
  */
-
 object SubExprEliminationBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
