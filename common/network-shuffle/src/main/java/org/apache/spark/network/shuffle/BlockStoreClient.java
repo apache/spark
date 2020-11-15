@@ -147,6 +147,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param blockIds block ids to be pushed
    * @param buffers buffers to be pushed
    * @param listener the listener to receive block push status.
+   *
+   * @since 3.1.0
    */
   public void pushBlocks(
       String host,
