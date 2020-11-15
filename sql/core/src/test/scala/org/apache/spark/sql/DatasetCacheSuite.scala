@@ -113,7 +113,8 @@ class DatasetCacheSuite extends QueryTest
     ds.unpersist(blocking = true)
     assert(ds.storageLevel == StorageLevel.NONE, "The Dataset ds should not be cached.")
     aggregated.unpersist(blocking = true)
-    assert(aggregated.storageLevel == StorageLevel.NONE, "The Dataset aggregated should not be cached.")
+    assert(aggregated.storageLevel == StorageLevel.NONE,
+           "The Dataset aggregated should not be cached.")
   }
 
   test("persist and then withColumn") {

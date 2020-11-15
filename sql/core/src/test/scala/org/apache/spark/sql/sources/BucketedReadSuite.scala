@@ -644,7 +644,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -684,7 +685,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
