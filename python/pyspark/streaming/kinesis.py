@@ -64,7 +64,7 @@ class KinesisUtils(object):
             limit of 24 hours (InitialPositionInStream.TRIM_HORIZON) or
             the tip of the stream (InitialPositionInStream.LATEST).
         checkpointInterval : int
-            Checkpoint interval for Kinesis checkpointing. See the Kinesis
+            Checkpoint interval(in seconds) for Kinesis checkpointing. See the Kinesis
             Spark Streaming documentation for more details on the different
             types of checkpoints.
         storageLevel : :class:`pyspark.StorageLevel`, optional
