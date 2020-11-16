@@ -715,7 +715,7 @@ class Analyzer(
             case _ => value.foldable
           }
           if (!foldable) {
-            throw QueryCompilationErrors.nonliteralPivotValError(value)
+            throw QueryCompilationErrors.nonLiteralPivotValError(value)
           }
           if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
             throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)

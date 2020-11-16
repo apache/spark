@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
 
 /**
- * Object for grouping all error messages in catalyst.
+ * Object for grouping all error messages of the query compilation.
  * Currently it includes all AnalysisExcpetions created and thrown directly in
  * org.apache.spark.sql.catalyst.analysis.Analyzer.
  */
@@ -54,7 +54,7 @@ object QueryCompilationErrors {
     )
   }
 
-  def nonliteralPivotValError(pivotVal: Expression): Throwable = {
+  def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
       s"Literal expressions required for pivot values, found '$pivotVal'")
   }
