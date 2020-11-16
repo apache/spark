@@ -58,6 +58,15 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  /**
+   * @param id the worker id
+   * @param worker the worker endpoint ref
+   */
+  case class WorkerDecommission(
+      id: String,
+      worker: RpcEndpointRef)
+    extends DeployMessage
+
   case class ExecutorStateChanged(
       appId: String,
       execId: Int,

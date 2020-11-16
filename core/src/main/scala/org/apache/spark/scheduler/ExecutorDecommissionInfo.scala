@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.scheduler
 
-private[deploy] object ExecutorState extends Enumeration {
-
-  val LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED, DECOMMISSIONED = Value
-
-  type ExecutorState = Value
-
-  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
-}
+/**
+ * Provides more detail when an executor is being decommissioned.
+ * @param message Human readable reason for why the decommissioning is happening.
+ * @param isHostDecommissioned Whether the host (aka the `node` or `worker` in other places) is
+ *                             being decommissioned too. Used to infer if the shuffle data might
+ *                             be lost even if the external shuffle service is enabled.
+ */
+private[spark]
+case class ExecutorDecommissionInfo(message: String, isHostDecommissioned: Boolean)

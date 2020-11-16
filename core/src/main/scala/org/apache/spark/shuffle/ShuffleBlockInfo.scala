@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.shuffle
 
-private[deploy] object ExecutorState extends Enumeration {
+import org.apache.spark.annotation.Experimental
 
-  val LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED, DECOMMISSIONED = Value
-
-  type ExecutorState = Value
-
-  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
-}
+/**
+ * :: Experimental ::
+ * An experimental case class used by MigratableResolver to return the shuffleId and mapId in a
+ * type safe way.
+ */
+@Experimental
+case class ShuffleBlockInfo(shuffleId: Int, mapId: Long)

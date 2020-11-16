@@ -126,4 +126,6 @@ private[spark] object CoarseGrainedClusterMessages {
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
 
+  // Used to ask an executor to decommission itself. (Can be an internal message)
+  case object DecommissionSelf extends CoarseGrainedClusterMessage
 }

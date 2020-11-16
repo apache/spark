@@ -251,16 +251,6 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
-    ConfigBuilder("spark.executor.decommission.killInterval")
-      .doc("Duration after which a decommissioned executor will be killed forcefully." +
-        "This config is useful for cloud environments where we know in advance when " +
-        "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
-        "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
-        "used to decide what tasks running on decommission executors to speculate.")
-      .timeConf(TimeUnit.SECONDS)
-      .createOptional
-
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")

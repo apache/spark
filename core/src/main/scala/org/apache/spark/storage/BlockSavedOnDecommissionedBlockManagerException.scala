@@ -15,13 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.storage
 
-private[deploy] object ExecutorState extends Enumeration {
-
-  val LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED, DECOMMISSIONED = Value
-
-  type ExecutorState = Value
-
-  def isFinished(state: ExecutorState): Boolean = Seq(KILLED, FAILED, LOST, EXITED).contains(state)
-}
+class BlockSavedOnDecommissionedBlockManagerException(blockId: BlockId)
+  extends Exception(s"Block $blockId cannot be saved on decommissioned executor")

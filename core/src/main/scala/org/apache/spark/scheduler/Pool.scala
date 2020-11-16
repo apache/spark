@@ -88,6 +88,10 @@ private[spark] class Pool(
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
+  override def executorDecommission(executorId: String): Unit = {
+    schedulableQueue.asScala.foreach(_.executorDecommission(executorId))
+  }
+
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue.asScala) {

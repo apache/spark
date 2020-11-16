@@ -717,7 +717,7 @@ private[spark] class TaskSchedulerImpl(
       executorsPendingDecommission.get(executorId)
   }
 
-  override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
+  override def executorLost(executorId: String, givenReason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
 
     val reason = givenReason match {
@@ -835,7 +835,7 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
-    hostToExecutors.map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
+    hostToExecutors.get(host).map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
   }
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
