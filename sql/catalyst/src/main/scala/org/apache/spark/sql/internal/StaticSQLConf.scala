@@ -250,15 +250,6 @@ object StaticSQLConf {
     .timeConf(TimeUnit.SECONDS)
     .createWithDefault(-1)
 
-  val LEGACY_ALLOW_MODIFY_ACTIVE_SESSION =
-    buildStaticConf("spark.sql.legacy.allowModifyActiveSession")
-      .internal()
-      .doc("When set to true, user is allowed to use setActiveSession or clearActiveSession " +
-        "to modify the current active SparkSession, otherwise an exception will be thrown.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
     buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
       .internal()

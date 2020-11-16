@@ -35,7 +35,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
     var t = spark.table(s"$catalogName.alt_table")
-    // nullable is true in the expecteSchema because Spark always sets nullable to true
+    // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
     var expectedSchema = new StructType().add("ID", StringType, nullable = true)
     assert(t.schema === expectedSchema)

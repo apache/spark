@@ -586,7 +586,13 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    if (groupingExpressions.isEmpty) {
+      Some(1L)
+    } else {
+      child.maxRows
+    }
+  }
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)

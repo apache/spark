@@ -1906,8 +1906,10 @@ case class ArrayPosition(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. Returns NULL if the index exceeds the length
-      of the array.
+      accesses elements from the last to the first. The function returns NULL
+      if the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
+      for invalid indices.
 
     _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
   """,
@@ -1919,8 +1921,13 @@ case class ArrayPosition(left: Expression, right: Expression)
        b
   """,
   since = "2.4.0")
-case class ElementAt(left: Expression, right: Expression)
+case class ElementAt(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
+
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -1969,7 +1976,7 @@ case class ElementAt(left: Expression, right: Expression)
     if (ordinal == 0) {
       false
     } else if (elements.length < math.abs(ordinal)) {
-      true
+      !failOnError
     } else {
       if (ordinal < 0) {
         elements(elements.length + ordinal).nullable
@@ -1979,24 +1986,9 @@ case class ElementAt(left: Expression, right: Expression)
     }
   }
 
-  override def computeNullabilityFromArray(child: Expression, ordinal: Expression): Boolean = {
-    if (ordinal.foldable && !ordinal.nullable) {
-      val intOrdinal = ordinal.eval().asInstanceOf[Number].intValue()
-      child match {
-        case CreateArray(ar, _) =>
-          nullability(ar, intOrdinal)
-        case GetArrayStructFields(CreateArray(elements, _), field, _, _, _) =>
-          nullability(elements, intOrdinal) || field.nullable
-        case _ =>
-          true
-      }
-    } else {
-      true
-    }
-  }
-
   override def nullable: Boolean = left.dataType match {
-    case _: ArrayType => computeNullabilityFromArray(left, right)
+    case _: ArrayType =>
+      computeNullabilityFromArray(left, right, failOnError, nullability)
     case _: MapType => true
   }
 
@@ -2008,7 +2000,12 @@ case class ElementAt(left: Expression, right: Expression)
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          null
+          if (failOnError) {
+            throw new ArrayIndexOutOfBoundsException(
+              s"Invalid index: $index, numElements: ${array.numElements()}")
+          } else {
+            null
+          }
         } else {
           val idx = if (index == 0) {
             throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
@@ -2042,10 +2039,20 @@ case class ElementAt(left: Expression, right: Expression)
           } else {
             ""
           }
+
+          val indexOutOfBoundBranch = if (failOnError) {
+            s"""throw new ArrayIndexOutOfBoundsException(
+               |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
+               |);
+             """.stripMargin
+          } else {
+            s"${ev.isNull} = true;"
+          }
+
           s"""
              |int $index = (int) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
-             |  ${ev.isNull} = true;
+             |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
              |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
