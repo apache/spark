@@ -178,8 +178,8 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
-        ResolveSQLOnFile +:
-        FallBackFileSourceV2 +:
+        new ResolveSQLOnFile(session) +:
+        new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, catalog.isTempView, catalog.isTempFunction) +:

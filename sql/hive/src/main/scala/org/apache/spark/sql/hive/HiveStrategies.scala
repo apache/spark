@@ -113,7 +113,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-object DetermineTableStats extends Rule[LogicalPlan] {
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
@@ -121,7 +121,7 @@ object DetermineTableStats extends Rule[LogicalPlan] {
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
-        val hadoopConf = SparkSession.active.sessionState.newHadoopConf()
+        val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
         fs.getContentSummary(tablePath).getLength

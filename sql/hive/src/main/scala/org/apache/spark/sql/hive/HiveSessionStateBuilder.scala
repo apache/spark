@@ -77,8 +77,8 @@ class HiveSessionStateBuilder(
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
-        ResolveSQLOnFile +:
-        FallBackFileSourceV2 +:
+        new ResolveSQLOnFile(session) +:
+        new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, catalog.isTempView, catalog.isTempFunction) +:
@@ -86,7 +86,7 @@ class HiveSessionStateBuilder(
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        DetermineTableStats +:
+        new DetermineTableStats(session) +:
         RelationConversions(catalog) +:
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:

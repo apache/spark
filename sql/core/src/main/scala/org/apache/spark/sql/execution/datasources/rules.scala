@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
-object ResolveSQLOnFile extends Rule[LogicalPlan] {
+class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
@@ -47,7 +47,7 @@ object ResolveSQLOnFile extends Rule[LogicalPlan] {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
-          SparkSession.active,
+          sparkSession,
           paths = u.multipartIdentifier.last :: Nil,
           className = u.multipartIdentifier.head)
 
