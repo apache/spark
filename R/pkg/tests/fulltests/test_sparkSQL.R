@@ -2864,7 +2864,7 @@ test_that("mutate(), transform(), rename() and names()", {
     df,
     df$age + 123456789012345678901234567890 + 123456789012345678901234567890
   )
-  expect_match(tail(columns(newDF), 1L), "1234567890", fixed = TRUE)
+  expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
 test_that("read/write ORC files", {
