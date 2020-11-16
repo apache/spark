@@ -127,7 +127,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("show partitions of not partitioned table") {
+  test("show partitions of non-partitioned table") {
     val table = "not_partitioned_table"
     withTable(table) {
       sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
