@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, StaticSQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 /**
@@ -40,8 +40,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
 class SparkSqlParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
-  val newConf = new SQLConf
-  private lazy val parser = new SparkSqlParser(newConf)
+  private lazy val parser = new SparkSqlParser()
 
   /**
    * Normalizes plans:

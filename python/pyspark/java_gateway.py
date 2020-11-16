@@ -35,12 +35,20 @@ from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
-    :param conf: spark configuration passed to spark-submit
-    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
+
+    Parameters
+    ----------
+    conf : :py:class:`pyspark.SparkConf`
+        spark configuration passed to spark-submit
+    popen_kwargs : dict
+        Dictionary of kwargs to pass to Popen when spawning
         the py4j JVM. This is a developer feature intended for use in
         customizing how pyspark interacts with the py4j JVM (e.g., capturing
         stdout/stderr).
-    :return:
+
+    Returns
+    -------
+    ClientServer or JavaGateway
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
@@ -174,9 +182,16 @@ def local_connect_and_auth(port, auth_secret):
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
-    :param port
-    :param auth_secret
-    :return: a tuple with (sockfile, sock)
+
+    Parameters
+    ----------
+    port : str or int or None
+    auth_secret : str
+
+    Returns
+    -------
+    tuple
+        with (sockfile, sock)
     """
     sock = None
     errors = []

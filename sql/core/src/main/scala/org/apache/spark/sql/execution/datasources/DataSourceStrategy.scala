@@ -243,16 +243,16 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
  * TODO: we should remove the special handling for hive tables after completely making hive as a
  * data source.
  */
-object FindDataSourceTable extends Rule[LogicalPlan] {
+class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def readDataSourceTable(
       table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val catalog = SparkSession.active.sessionState.catalog
+    val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
       val dataSource =
         DataSource(
-          SparkSession.active,
+          sparkSession,
           // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
           // inferred at runtime. We should still support it.
           userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),

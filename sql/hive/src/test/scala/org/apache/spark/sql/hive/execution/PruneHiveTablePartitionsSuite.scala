@@ -29,7 +29,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("PruneHiveTablePartitions", Once,
-        EliminateSubqueryAliases, PruneHiveTablePartitions) :: Nil
+        EliminateSubqueryAliases, new PruneHiveTablePartitions(spark)) :: Nil
   }
 
   test("SPARK-15616: statistics pruned after going through PruneHiveTablePartitions") {

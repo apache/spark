@@ -102,7 +102,9 @@ def keyword_only(func):
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
 
-    .. note:: Should only be used to wrap a method where first arg is `self`
+    Notes
+    -----
+    Should only be used to wrap a method where first arg is `self`
     """
     @wraps(func)
     def wrapper(self, *args, **kwargs):

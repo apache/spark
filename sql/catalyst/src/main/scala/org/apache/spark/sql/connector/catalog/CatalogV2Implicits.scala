@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -143,9 +142,7 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
-  private lazy val catalystSqlParser = new CatalystSqlParser(SQLConf.get)
-
   def parseColumnPath(name: String): Seq[String] = {
-    catalystSqlParser.parseMultipartIdentifier(name)
+    CatalystSqlParser.parseMultipartIdentifier(name)
   }
 }
