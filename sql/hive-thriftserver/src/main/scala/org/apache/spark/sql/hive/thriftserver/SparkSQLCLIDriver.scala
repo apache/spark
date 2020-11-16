@@ -499,7 +499,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
             if (ret != 0 && !ignoreErrors) {
               CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-              ret
+              return ret
             }
           }
         }
