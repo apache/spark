@@ -82,7 +82,7 @@ object Main extends Logging {
 
     if (!hasErrors) {
       interp.run(settings) // Repl starts and goes in loop of R.E.P.L
-      Option(sparkContext).foreach(_.stop)
+      Option(sparkContext).foreach(_.stop())
     }
   }
 
@@ -103,7 +103,7 @@ object Main extends Logging {
         conf.setSparkHome(System.getenv("SPARK_HOME"))
       }
 
-      val builder = SparkSession.builder.config(conf)
+      val builder = SparkSession.builder().config(conf)
       if (conf
             .get(CATALOG_IMPLEMENTATION.key, "hive")
             .toLowerCase(Locale.ROOT) == "hive") {
