@@ -23,17 +23,4 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingleton {
   override def version: String = "Hive V1"
   override def defaultUsing: String = "USING HIVE"
-
-  override protected def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int)
-      |partitioned by (year int, month int)""".stripMargin)
-  }
-
-  override protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int)
-      |PARTITIONED BY (year int, month int, hour int, minute int, sec int, extra int)
-      """.stripMargin)
-  }
 }

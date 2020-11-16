@@ -29,45 +29,21 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
 
-  protected def createDateTable(table: String): Unit = {
+  private def createDateTable(table: String): Unit = {
     sql(s"""
       |CREATE TABLE $table (price int, qty int, year int, month int)
       |$defaultUsing
       |partitioned by (year, month)""".stripMargin)
-  }
-
-  protected def fillDateTable(table: String): Unit = {
     sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
     sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
     sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
   }
 
-  protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (
-      |  price int, qty int,
-      |  year int, month int, hour int, minute int, sec int, extra int)
-      |$defaultUsing
-      |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
-  }
-
-  protected def fillWideTable(table: String): Unit = {
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-  }
-
   test("show everything") {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      fillDateTable(table)
       checkAnswer(
         sql(s"show partitions $table"),
         Row("year=2015/month=1") ::
@@ -88,7 +64,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      fillDateTable(table)
       checkAnswer(
         sql(s"show partitions default.$table PARTITION(year=2015)"),
         Row("year=2015/month=1") ::
@@ -106,8 +81,20 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   test("show everything more than 5 part keys") {
     val table = "wideTable"
     withTable(table) {
-      createWideTable(table)
-      fillWideTable(table)
+      sql(s"""
+        |CREATE TABLE $table (
+        |  price int, qty int,
+        |  year int, month int, hour int, minute int, sec int, extra int)
+        |$defaultUsing
+        |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
+      sql(s"""
+        |INSERT INTO $table
+        |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
+      sql(s"""
+        |INSERT INTO $table
+        |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
       checkAnswer(
         sql(s"show partitions $table"),
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
@@ -119,7 +106,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      fillDateTable(table)
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
       }.getMessage
