@@ -35,7 +35,7 @@ class PythonUDFRunner(
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, evalType, argOffsets) {
 
-  override val simplifiedStacktrace: Boolean = SQLConf.get.pysparkSimplifiedException
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected override def newWriterThread(
       env: SparkEnv,

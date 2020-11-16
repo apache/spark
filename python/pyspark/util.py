@@ -16,14 +16,14 @@
 # limitations under the License.
 #
 
-import threading
-import re
-import sys
-import traceback
-import types
+import itertools
 import os
 import platform
-import itertools
+import re
+import sys
+import threading
+import traceback
+import types
 
 from py4j.clientserver import ClientServer
 
@@ -133,7 +133,7 @@ def try_simplify_traceback(tb):
 
     >>> exc_info = None
     >>> try:
-    ...    fail_on_stopiteration(dummy_module.raise_stop_iteration)()
+    ...     fail_on_stopiteration(dummy_module.raise_stop_iteration)()
     ... except Exception as e:
     ...     tb = sys.exc_info()[-1]
     ...     e.__cause__ = None
@@ -149,11 +149,11 @@ def try_simplify_traceback(tb):
     >>> "pyspark/util.py" in exc_info
     True
 
-    If the the traceback is simplified with this method, it hides the current package file name:
+    If the traceback is simplified with this method, it hides the current package file name:
 
     >>> exc_info = None
     >>> try:
-    ...    fail_on_stopiteration(dummy_module.raise_stop_iteration)()
+    ...     fail_on_stopiteration(dummy_module.raise_stop_iteration)()
     ... except Exception as e:
     ...     tb = try_simplify_traceback(sys.exc_info()[-1])
     ...     e.__cause__ = None
@@ -170,8 +170,8 @@ def try_simplify_traceback(tb):
 
     >>> exc_info = None
     >>> try:
-    ...    fail_on_stopiteration(dummy_module.simple_wrapper(
-    ...        fail_on_stopiteration(dummy_module.raise_stop_iteration)))()
+    ...     fail_on_stopiteration(dummy_module.simple_wrapper(
+    ...         fail_on_stopiteration(dummy_module.raise_stop_iteration)))()
     ... except Exception as e:
     ...     tb = sys.exc_info()[-1]
     ...     e.__cause__ = None
@@ -325,8 +325,11 @@ class InheritableThread(threading.Thread):
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.util
 
     if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
-        (failure_count, test_count) = doctest.testmod()
-        if failure_count:
-            sys.exit(-1)
+        del pyspark.util.try_simplify_traceback
+
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        sys.exit(-1)

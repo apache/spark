@@ -50,7 +50,7 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
   with PythonArrowOutput {
 
-  override val simplifiedStacktrace: Boolean = SQLConf.get.pysparkSimplifiedException
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected def newWriterThread(
       env: SparkEnv,

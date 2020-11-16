@@ -610,7 +610,7 @@ def main(infile, outfile):
     except BaseException as e:
         try:
             exc_info = None
-            if os.environ.get("SPARK_SIMPLIFIED_EXCEPTION", False):
+            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
                 tb = try_simplify_traceback(sys.exc_info()[-1])
                 if tb is not None:
                     e.__cause__ = None
