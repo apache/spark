@@ -22,14 +22,16 @@ from pyspark.resource.requests import TaskResourceRequest, TaskResourceRequests,
 class ResourceProfile(object):
 
     """
-    .. note:: Evolving
-
     Resource profile to associate with an RDD. A :class:`pyspark.resource.ResourceProfile`
     allows the user to specify executor and task requirements for an RDD that will get
     applied during a stage. This allows the user to change the resource requirements between
     stages. This is meant to be immutable so user cannot change it after building.
 
     .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, _java_resource_profile=None, _exec_req={}, _task_req={}):
@@ -75,14 +77,16 @@ class ResourceProfile(object):
 class ResourceProfileBuilder(object):
 
     """
-    .. note:: Evolving
-
     Resource profile Builder to build a resource profile to associate with an RDD.
     A ResourceProfile allows the user to specify executor and task requirements for
     an RDD that will get applied during a stage. This allows the user to change the
     resource requirements between stages.
 
     .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self):

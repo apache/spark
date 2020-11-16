@@ -41,13 +41,14 @@ class VersionUtils(object):
         Given a Spark version string, return the (major version number, minor version number).
         E.g., for 2.0.1-SNAPSHOT, return (2, 0).
 
+        Examples
+        --------
         >>> sparkVersion = "2.4.0"
         >>> VersionUtils.majorMinorVersion(sparkVersion)
         (2, 4)
         >>> sparkVersion = "2.3.0-SNAPSHOT"
         >>> VersionUtils.majorMinorVersion(sparkVersion)
         (2, 3)
-
         """
         m = re.search(r'^(\d+)\.(\d+)(\..*)?$', sparkVersion)
         if m is not None:
@@ -107,6 +108,8 @@ def _parse_memory(s):
     Parse a memory string in the format supported by Java (e.g. 1g, 200m) and
     return the value in MiB
 
+    Examples
+    --------
     >>> _parse_memory("256m")
     256
     >>> _parse_memory("2g")
@@ -132,9 +135,12 @@ class InheritableThread(threading.Thread):
 
     When the pinned thread mode is off, this works as :class:`threading.Thread`.
 
-    .. note:: Experimental
-
     .. versionadded:: 3.1.0
+
+
+    Notes
+    -----
+    This API is experimental.
     """
     def __init__(self, target, *args, **kwargs):
         from pyspark import SparkContext
