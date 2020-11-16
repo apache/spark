@@ -1911,7 +1911,9 @@ case class ArrayPosition(left: Expression, right: Expression)
       If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
       for invalid indices.
 
-    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
+    _FUNC_(map, key) - Returns value for given key. The function returns NULL
+      if the key is not contained in the map and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws NoSuchElementException instead.
   """,
   examples = """
     Examples:
@@ -1930,6 +1932,9 @@ case class ElementAt(
   def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
+
+  @transient private lazy val mapValueContainsNull =
+    left.dataType.asInstanceOf[MapType].valueContainsNull
 
   @transient private lazy val arrayContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull
 
@@ -1989,7 +1994,7 @@ case class ElementAt(
   override def nullable: Boolean = left.dataType match {
     case _: ArrayType =>
       computeNullabilityFromArray(left, right, failOnError, nullability)
-    case _: MapType => true
+    case _: MapType => if (failOnError) mapValueContainsNull else true
   }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
@@ -2022,7 +2027,7 @@ case class ElementAt(
         }
       }
     case _: MapType =>
-      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering, failOnError)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2069,7 +2074,7 @@ case class ElementAt(
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], failOnError)
     }
   }
 
