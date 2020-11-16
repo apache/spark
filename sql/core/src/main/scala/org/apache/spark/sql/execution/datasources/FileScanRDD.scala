@@ -220,18 +220,23 @@ class FileScanRDD(
 
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
+  //获取数据最优位置
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
+
+    //返回 Seq[PartitionedFile]
     val files = split.asInstanceOf[FilePartition].files
 
     // Computes total number of bytes can be retrieved from each host.
     val hostToNumBytes = mutable.HashMap.empty[String, Long]
     files.foreach { file =>
       file.locations.filter(_ != "localhost").foreach { host =>
+        //(host,length)
         hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
       }
     }
 
     // Takes the first 3 hosts with the most data to be retrieved
+    //获取前3个主机，其中要检索的数据最多
     hostToNumBytes.toSeq.sortBy {
       case (host, numBytes) => numBytes
     }.reverse.take(3).map {
