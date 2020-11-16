@@ -109,8 +109,11 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized3, query3)
 
     // test sort after limit
-    val query4 = testRelation.select(Symbol("a")).orderBy(Symbol("a").asc).limit(1).analyze
+    val query4 = testRelation.select().groupBy()(count(1))
+      .orderBy(Symbol("a").asc).limit(1).analyze
     val optimized4 = Optimize.execute(query4)
-    comparePlans(optimized4, optimized4)
+    val expected4 = testRelation.select().groupBy()(count(1))
+      .orderBy(Symbol("a").asc).analyze
+    comparePlans(optimized4, expected4)
   }
 }

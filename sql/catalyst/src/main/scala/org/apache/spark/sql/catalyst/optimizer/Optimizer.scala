@@ -1458,15 +1458,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object EliminateLimits extends Rule[LogicalPlan] {
   private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
-    // We skip such case that Sort is after Limit since
-    // SparkStrategies will convert them to TakeOrderedAndProjectExec
-    val skipEliminate = child match {
-      case Sort(_, true, _) => true
-      case Project(_, Sort(_, true, _)) => true
-      case _ => false
-    }
-    !skipEliminate && limitExpr.foldable &&
-      child.maxRows.exists { _ <= limitExpr.eval().toString.toLong }
+    limitExpr.foldable && child.maxRows.exists { _ <= limitExpr.eval().toString.toLong }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
