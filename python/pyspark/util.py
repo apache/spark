@@ -325,11 +325,8 @@ class InheritableThread(threading.Thread):
 
 if __name__ == "__main__":
     import doctest
-    import pyspark.util
 
-    if "pypy" in platform.python_implementation().lower() or sys.version_info[:2] < (3, 7):
-        del pyspark.util.try_simplify_traceback
-
-    (failure_count, test_count) = doctest.testmod(pyspark.util)
-    if failure_count:
-        sys.exit(-1)
+    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
+        (failure_count, test_count) = doctest.testmod()
+        if failure_count:
+            sys.exit(-1)
