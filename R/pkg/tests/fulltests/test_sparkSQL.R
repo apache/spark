@@ -2860,8 +2860,8 @@ test_that("mutate(), transform(), rename() and names()", {
   # ensure long inferred names are handled without error (SPARK-26199)
   #   test implicitly assumes eval(formals(deparse)$width.cutoff) = 60
   #   (which has always been true as of 2020-11-15)
-  newDF <- mutate(df, 0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9)
-  expect_match(tail(columns(newDF), 1L), '0+1+2+3+4+5+6+7+8+9', fixed = TRUE)
+  newDF <- mutate(df, 0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9+0+1+2+3+4+5+6+7+8+9) # nolint
+  expect_match(tail(columns(newDF), 1L), "0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9", fixed = TRUE) # nolint
 })
 
 test_that("read/write ORC files", {
