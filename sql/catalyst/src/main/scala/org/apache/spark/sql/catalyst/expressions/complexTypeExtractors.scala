@@ -363,8 +363,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       } else {
         null
       }
-    }
-    else if (values.isNullAt(i)) {
+    } else if (values.isNullAt(i)) {
       null
     } else {
       values.get(i, dataType)
