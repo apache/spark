@@ -258,4 +258,15 @@ object StaticSQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
+    buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
+      .internal()
+      .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
+        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "only sum used.")
+      .version("3.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

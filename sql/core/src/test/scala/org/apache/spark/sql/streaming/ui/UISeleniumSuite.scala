@@ -27,10 +27,11 @@ import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
-import org.apache.spark.internal.config.UI.{ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST, UI_ENABLED, UI_PORT}
+import org.apache.spark.internal.config.UI.{UI_ENABLED, UI_PORT}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.ui.SparkUICssErrorHandler
 

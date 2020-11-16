@@ -203,15 +203,4 @@ private[spark] object UI {
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .createWithDefault("LOCAL")
-
-  val ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
-    ConfigBuilder("spark.ui.sql.streaming.enabledCustomMetricList")
-      .internal()
-      .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
-        "The list contains the name of the custom metrics separated by comma. In aggregation" +
-        "only sum used.")
-      .version("3.1.0")
-      .stringConf
-      .toSequence
-      .createWithDefault(Nil)
 }
