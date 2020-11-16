@@ -154,9 +154,11 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
       <td>Memory</td><td>{driver.mem}</td>
     </tr>
     <tr>
-      <td>Queue</td><td>{
-      driver.conf.get("spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)
-    }</td>
+      <td>Queue</td>
+      <td>
+        {driver.conf.get(
+        "spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)}
+      </td>
     </tr>
     <tr>
       <td>Submitted</td><td>{UIUtils.formatDate(driver.submissionDate)}</td>

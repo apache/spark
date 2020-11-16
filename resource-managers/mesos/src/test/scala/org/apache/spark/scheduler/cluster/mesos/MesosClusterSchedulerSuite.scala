@@ -591,16 +591,26 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new Date())
 
     val expectedCmd = "cd spark-version*;  " +
-      "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
-      "--driver-cores 1.0 --driver-memory 1000M --class Main " +
-      "--conf \"another.conf=\\\\value\" " +
-      "--conf \"spark.app.name=app name\" " +
-      "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
-      "../jar " +
-      "\"--a=\\$2\" " +
-      "--b \"x y z\""
+        "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
+        "--driver-cores 1.0 --driver-memory 1000M --class Main " +
+        "--conf \"another.conf=\\\\value\" " +
+        "--conf \"spark.app.name=app name\" " +
+        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+        "../jar " +
+        "\"--a=\\$2\" " +
+        "--b \"x y z\""
 
     assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
+  }
+
+  test("SPARK-23499: Test dispatcher priority queue with non float value") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
+    conf.set("spark.mesos.dispatcher.queue.URGENT", "abc")
+    conf.set("spark.mesos.dispatcher.queue.EXCEPTIONAL", "3.0")
+    assertThrows[NumberFormatException] {
+      setScheduler(conf.getAll.toMap)
+    }
   }
 
   test("SPARK-23499: Get driver priority") {

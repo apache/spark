@@ -69,10 +69,10 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val id = submission.submissionId
     <tr>
       <td><a href={s"driver?id=$id"}>{id}</a></td>
-      <td>{
-      submission.conf
-        .get("spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)
-    }</td>
+      <td>
+        {submission.conf.get(
+        "spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)}
+      </td>
       <td>{UIUtils.formatDate(submission.submissionDate)}</td>
       <td>{submission.command.mainClass}</td>
       <td>cpus: {submission.cores}, mem: {submission.mem}</td>
@@ -104,10 +104,8 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       <td><a href={s"driver?id=$id"}>{id}</a></td>
       {historyCol}
       <td>
-      {
-      state.driverDescription.conf
-        .get("spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)
-    }
+        {state.driverDescription.conf.get(
+        "spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)}
       </td>
       <td>{UIUtils.formatDate(state.driverDescription.submissionDate)}</td>
       <td>{state.driverDescription.command.mainClass}</td>
