@@ -129,6 +129,11 @@ package object config {
 
   private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
 
+  private[spark] val DYN_ALLOCATION_ENABLED =
+    ConfigBuilder("spark.dynamicAllocation.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
 
@@ -143,9 +148,66 @@ package object config {
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
       .doubleConf.createWithDefault(1.0)
 
+  private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefault(Integer.MAX_VALUE)
+
+  private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefault(60)
+
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
+
+  private[spark] val STORAGE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.storage.decommission.enabled")
+      .doc("Whether to decommission the block manager when decommissioning executor")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.enabled")
+      .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
+        "a migratable shuffle resolver (like sort based shuffe)")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
+      .doc("Maximum number of threads to use in migrating shuffle files.")
+      .intConf
+      .checkValue(_ > 0, "The maximum number of threads should be positive")
+      .createWithDefault(8)
+
+  private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
+    ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
+      .doc("Whether to transfer RDD blocks during block manager decommissioning.")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK =
+    ConfigBuilder("spark.storage.decommission.maxReplicationFailuresPerBlock")
+      .internal()
+      .doc("Maximum number of failures which can be handled for the replication of " +
+        "one RDD block when block manager is decommissioning and trying to move its " +
+        "existing blocks.")
+      .intConf
+      .createWithDefault(3)
+
+  private[spark] val STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL =
+    ConfigBuilder("spark.storage.decommission.replicationReattemptInterval")
+      .internal()
+      .doc("The interval of time between consecutive cache block replication reattempts " +
+        "happening on each decommissioning executor (due to storage decommissioning).")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Time interval between two consecutive attempts of " +
+        "cache block replication should be positive.")
+      .createWithDefaultString("30s")
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
@@ -175,6 +237,29 @@ package object config {
     ConfigBuilder("spark.task.maxFailures")
       .intConf
       .createWithDefault(4)
+
+  private[spark] val DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.decommission.enabled")
+      .doc("When decommission enabled, Spark will try its best to shutdown the executor " +
+        s"gracefully. Spark will try to migrate all the RDD blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key}) and shuffle blocks (controlled by " +
+        s"${STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key}) from the decommissioning " +
+        s"executor to a remote executor when ${STORAGE_DECOMMISSION_ENABLED.key} is enabled. " +
+        s"With decommission enabled, Spark will also decommission an executor instead of " +
+        s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
+      .withAlternative("spark.worker.decommission.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
+    ConfigBuilder("spark.executor.decommission.killInterval")
+      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+        "This config is useful for cloud environments where we know in advance when " +
+        "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
+        "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
+        "used to decide what tasks running on decommission executors to speculate.")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =

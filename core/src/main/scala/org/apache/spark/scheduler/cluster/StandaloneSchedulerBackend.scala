@@ -42,7 +42,7 @@ private[spark] class StandaloneSchedulerBackend(
   with StandaloneAppClientListener
   with Logging {
 
-  private var client: StandaloneAppClient = null
+  private[spark] var client: StandaloneAppClient = null
   private val stopping = new AtomicBoolean(false)
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sc.conf
@@ -166,6 +166,13 @@ private[spark] class StandaloneSchedulerBackend(
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
+  }
+
+  override def executorDecommissioned(fullId: String, decommissionInfo: ExecutorDecommissionInfo) {
+    logInfo("Asked to decommission executor")
+    val execId = fullId.split("/")(1)
+    decommissionExecutors(Array((execId, decommissionInfo)), adjustTargetNumExecutors = false)
+    logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
   }
 
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {

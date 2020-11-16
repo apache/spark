@@ -109,6 +109,8 @@ private[spark] class TaskSchedulerImpl(
   // IDs of the tasks running on each executor
   private val executorIdToRunningTaskIds = new HashMap[String, HashSet[Long]]
 
+  private val executorsPendingDecommission = new HashMap[String, ExecutorDecommissionInfo]
+
   def runningTasksByExecutors: Map[String, Int] = synchronized {
     executorIdToRunningTaskIds.toMap.mapValues(_.size)
   }
@@ -691,8 +693,46 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def executorDecommission(
+      executorId: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+    synchronized {
+      // Don't bother noting decommissioning for executors that we don't know about
+      if (executorIdToHost.contains(executorId)) {
+        // The scheduler can get multiple decommission updates from multiple sources,
+        // and some of those can have isHostDecommissioned false. We merge them such that
+        // if we heard isHostDecommissioned ever true, then we keep that one since it is
+        // most likely coming from the cluster manager and thus authoritative
+        val oldDecomInfo = executorsPendingDecommission.get(executorId)
+        if (oldDecomInfo.isEmpty || !oldDecomInfo.get.isHostDecommissioned) {
+          executorsPendingDecommission(executorId) = decommissionInfo
+        }
+      }
+    }
+    rootPool.executorDecommission(executorId)
+    backend.reviveOffers()
+  }
+
+  override def getExecutorDecommissionInfo(executorId: String)
+    : Option[ExecutorDecommissionInfo] = synchronized {
+      executorsPendingDecommission.get(executorId)
+  }
+
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {
     var failedExecutor: Option[String] = None
+
+    val reason = givenReason match {
+      // Handle executor process loss due to decommissioning
+      case SlaveLost(message, origWorkerLost, origCausedByApp) =>
+        val executorDecommissionInfo = getExecutorDecommissionInfo(executorId)
+        SlaveLost(
+          message,
+          // Also mark the worker lost if we know that the host was decommissioned
+          origWorkerLost || executorDecommissionInfo.exists(_.isHostDecommissioned),
+          // Executor loss is certainly not caused by app if we knew that this executor is being
+          // decommissioned
+          causedByApp = executorDecommissionInfo.isEmpty && origCausedByApp)
+      case e => e
+    }
 
     synchronized {
       if (executorIdToRunningTaskIds.contains(executorId)) {
@@ -781,6 +821,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
 
+    executorsPendingDecommission -= executorId
+
     if (reason != LossReasonPending) {
       executorIdToHost -= executorId
       rootPool.executorLost(executorId, host, reason)
@@ -793,23 +835,36 @@ private[spark] class TaskSchedulerImpl(
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
-    hostToExecutors.get(host).map(_.toSet)
+    hostToExecutors.map(_.filterNot(isExecutorDecommissioned)).map(_.toSet)
   }
 
   def hasExecutorsAliveOnHost(host: String): Boolean = synchronized {
-    hostToExecutors.contains(host)
+    hostToExecutors.get(host)
+      .exists(executors => executors.exists(e => !isExecutorDecommissioned(e)))
   }
 
   def hasHostAliveOnRack(rack: String): Boolean = synchronized {
-    hostsByRack.contains(rack)
+    hostsByRack.get(rack)
+      .exists(hosts => hosts.exists(h => !isHostDecommissioned(h)))
   }
 
   def isExecutorAlive(execId: String): Boolean = synchronized {
-    executorIdToRunningTaskIds.contains(execId)
+    executorIdToRunningTaskIds.contains(execId) && !isExecutorDecommissioned(execId)
   }
 
   def isExecutorBusy(execId: String): Boolean = synchronized {
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
+  }
+
+  // exposed for test
+  protected final def isExecutorDecommissioned(execId: String): Boolean =
+    getExecutorDecommissionInfo(execId).nonEmpty
+
+  // exposed for test
+  protected final def isHostDecommissioned(host: String): Boolean = {
+    hostToExecutors.get(host).exists { executors =>
+      executors.exists(e => getExecutorDecommissionInfo(e).exists(_.isHostDecommissioned))
+    }
   }
 
   /**

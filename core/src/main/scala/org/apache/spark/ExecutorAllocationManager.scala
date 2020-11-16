@@ -126,6 +126,8 @@ private[spark] class ExecutorAllocationManager(
   private val executorAllocationRatio =
     conf.get(DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO)
 
+  private val decommissionEnabled = conf.get(DECOMMISSION_ENABLED)
+
   validateSettings()
 
   // Number of executors to add in the next round
@@ -210,11 +212,15 @@ private[spark] class ExecutorAllocationManager(
     if (cachedExecutorIdleTimeoutS < 0) {
       throw new SparkException("spark.dynamicAllocation.cachedExecutorIdleTimeout must be >= 0!")
     }
-    // Require external shuffle service for dynamic allocation
+    // Require external shuffle service or decommissioning for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !testing) {
-      throw new SparkException("Dynamic allocation of executors requires the external " +
-        "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+      if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+        logWarning("Dynamic allocation without a shuffle service is an experimental feature.")
+      } else {
+        throw new SparkException("Dynamic allocation of executors requires the external " +
+          "shuffle service. You may enable this through spark.shuffle.service.enabled.")
+      }
     }
     if (tasksPerExecutorForFullParallelism == 0) {
       throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
@@ -478,8 +484,14 @@ private[spark] class ExecutorAllocationManager(
     } else {
       // We don't want to change our target number of executors, because we already did that
       // when the task backlog decreased.
-      client.killExecutors(executorIdsToBeRemoved, adjustTargetNumExecutors = false,
-        countFailures = false, force = false)
+      if (decommissionEnabled) {
+        val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
+          id => (id, ExecutorDecommissionInfo("spark scale down", false))).toArray
+        client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
+      } else {
+        client.killExecutors(executorIdsToBeRemoved, adjustTargetNumExecutors = false,
+          countFailures = false, force = false)
+      }
     }
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.

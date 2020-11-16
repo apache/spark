@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -42,7 +42,8 @@ class BlockManagerMasterEndpoint(
     override val rpcEnv: RpcEnv,
     val isLocal: Boolean,
     conf: SparkConf,
-    listenerBus: LiveListenerBus)
+    listenerBus: LiveListenerBus,
+    mapOutputTracker: MapOutputTrackerMaster)
   extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
@@ -50,6 +51,9 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
+
+  // Set of block managers which are decommissioning
+  private val decommissioningBlockManagerSet = new mutable.HashSet[BlockManagerId]
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
@@ -124,6 +128,14 @@ class BlockManagerMasterEndpoint(
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
       context.reply(true)
+
+    case DecommissionBlockManagers(executorIds) =>
+      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
+      decommissionBlockManagers(bmIds)
+      context.reply(true)
+
+    case GetReplicateInfoForRDDBlocks(blockManagerId) =>
+      context.reply(getReplicateInfoForRDDBlocks(blockManagerId))
 
     case StopBlockManagerMaster =>
       context.reply(true)
@@ -211,6 +223,7 @@ class BlockManagerMasterEndpoint(
 
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
+    decommissioningBlockManagerSet.remove(blockManagerId)
 
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
@@ -251,6 +264,45 @@ class BlockManagerMasterEndpoint(
   private def removeExecutor(execId: String) {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
+  }
+
+  /**
+   * Decommission the given Seq of blockmanagers
+   *    - Adds these block managers to decommissioningBlockManagerSet Set
+   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerSlaveEndpoint]]
+   */
+  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
+    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
+    val futures = newBlockManagersToDecommission.map { blockManagerId =>
+      decommissioningBlockManagerSet.add(blockManagerId)
+      val info = blockManagerInfo(blockManagerId)
+      info.slaveEndpoint.ask[Unit](DecommissionBlockManager)
+    }
+    Future.sequence{ futures.toSeq }
+  }
+
+  /**
+   * Returns a Seq of ReplicateBlock for each RDD block stored by given blockManagerId
+   * @param blockManagerId - block manager id for which ReplicateBlock info is needed
+   * @return Seq of ReplicateBlock
+   */
+  private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
+    try {
+      val info = blockManagerInfo(blockManagerId)
+
+      val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+      rddBlocks.map { blockId =>
+        val currentBlockLocations = blockLocations.get(blockId)
+        val maxReplicas = currentBlockLocations.size + 1
+        val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
+        val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+        replicateMsg
+      }.toSeq
+    } catch {
+      // If the block manager has already exited, nothing to replicate.
+      case e: java.util.NoSuchElementException =>
+        Seq.empty[ReplicateBlock]
+    }
   }
 
   /**
@@ -395,6 +447,24 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
+    logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
+
+    if (blockId.isShuffle) {
+      blockId match {
+        case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+          // Don't update the map output on just the index block
+          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          return true
+        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+          return true
+        case _ =>
+          logDebug(s"Unexpected shuffle block type ${blockId}" +
+            s"as ${blockId.getClass().getSimpleName()}")
+          return false
+      }
+    }
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
