@@ -81,7 +81,7 @@ object TaskContext {
 abstract class TaskContext extends Serializable {
   // Note: TaskContext must NOT define a get method. Otherwise it will prevent the Scala compiler
   // from generating a static get method (based on the companion object's get method).
-
+  //TaskContext不得定义get方法。否则，它将阻止Scala编译器 生成静态get方法（基于伴随对象的get方法）。
   // Note: Update JavaTaskContextCompileCheck when new methods are added to this class.
 
   // Note: getters in this class are defined with parentheses to maintain backward compatibility.

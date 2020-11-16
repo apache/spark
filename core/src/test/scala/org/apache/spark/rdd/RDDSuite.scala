@@ -1087,7 +1087,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     sc.parallelize(1 to 100).map(x => x*2).collect
   }
 
-  /** A contrived RDD that allows the manual addition of dependencies after creation. */
+  /** A contrived RDD that allows the manual addition of dependencies after creation.
+   * 人为设计的RDD，允许在创建后手动添加依赖项。 */
   private class CyclicalDependencyRDD[T: ClassTag] extends RDD[T](sc, Nil) {
     private val mutableDependencies: ArrayBuffer[Dependency[_]] = ArrayBuffer.empty
     override def compute(p: Partition, c: TaskContext): Iterator[T] = Iterator.empty

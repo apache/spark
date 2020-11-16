@@ -35,12 +35,12 @@ import org.apache.spark.util.NextIterator
 /**
  * A part (i.e. "block") of a single file that should be read, along with partition column values
  * that need to be prepended to each row.
- *
- * @param partitionValues value of partition columns to be prepended to each row.
- * @param filePath path of the file to read
- * @param start the beginning offset (in bytes) of the block.
- * @param length number of bytes to read.
- * @param locations locality information (list of nodes that have the data).
+ * 应该读取的单个文件的一部分（即“块”）以及需要在每行之前添加的分区列值.
+ * @param partitionValues value of partition columns to be prepended to each row. 每一行前面的分区列的值。
+ * @param filePath path of the file to read 读取文件的路径
+ * @param start the beginning offset (in bytes) of the block. 块的起始偏移量（以字节为单位）
+ * @param length number of bytes to read. 读取的字节数。
+ * @param locations locality information (list of nodes that have the data). 位置信息(拥有数据的节点信息)
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -55,12 +55,15 @@ case class PartitionedFile(
 
 /**
  * A collection of file blocks that should be read as a single task
+ * 应作为单个任务读取的文件块的集合
  * (possibly from multiple partitioned directories).
+ * (可能来自多个分区目录)
  */
 case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPartition
 
 /**
  * An RDD that scans a list of file partitions.
+ *扫描文件分区列表的RDD实现类
  */
 class FileScanRDD(
     @transient private val sparkSession: SparkSession,
@@ -68,7 +71,9 @@ class FileScanRDD(
     @transient val filePartitions: Seq[FilePartition])
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
+  //是否忽略损坏的文件
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+  //是否忽略丢失的文件
   private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
