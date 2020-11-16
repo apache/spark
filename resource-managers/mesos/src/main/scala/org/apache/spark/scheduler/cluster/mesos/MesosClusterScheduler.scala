@@ -390,8 +390,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private[mesos] def getDriverPriority(desc: MesosDriverDescription): Float = {
-    val queueName = desc.conf.get("spark.mesos.dispatcher.queue", config.DEFAULT_QUEUE)
-    if (queueName != config.DEFAULT_QUEUE) {
+    val queueName = desc.conf.get("spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)
+    if (queueName != config.DISPATCHER_QUEUE.defaultValueString) {
       queues.getOrElse(queueName, throw new NoSuchElementException(queueName))
     } else {
       0.0f
