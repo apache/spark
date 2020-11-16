@@ -95,28 +95,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("show tables") {
-    withTable("show1a", "show2b") {
-      sql("CREATE TABLE show1a(c1 int)")
-      sql("CREATE TABLE show2b(c2 int)")
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*'"),
-        Row("default", "show1a", false) :: Nil)
-      checkAnswer(
-        sql("SHOW TABLES IN default 'show1*|show2*'"),
-        Row("default", "show1a", false) ::
-          Row("default", "show2b", false) :: Nil)
-      checkAnswer(
-        sql("SHOW TABLES 'show1*|show2*'"),
-        Row("default", "show1a", false) ::
-          Row("default", "show2b", false) :: Nil)
-      assert(
-        sql("SHOW TABLES").count() >= 2)
-      assert(
-        sql("SHOW TABLES IN default").count() >= 2)
-    }
-  }
-
   test("show views") {
     withView("show1a", "show2b", "global_temp.temp1", "temp2") {
       sql("CREATE VIEW show1a AS SELECT 1 AS id")

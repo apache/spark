@@ -1382,6 +1382,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
+      .internal()
+      .doc("When true, the stateful operators for streaming query will be checked for possible " +
+        "correctness issue due to global watermark. The correctness issue comes from queries " +
+        "containing stateful operation which can emit rows older than the current watermark " +
+        "plus allowed late record delay, which are \"late rows\" in downstream stateful " +
+        "operations and these rows can be discarded. Please refer the programming guide doc for " +
+        "more details. Once the issue is detected, Spark will throw analysis exception. " +
+        "When this config is disabled, Spark will just print warning message for users. " +
+        "Prior to Spark 3.1.0, the behavior is disabling this config.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -3017,6 +3032,9 @@ class SQLConf extends Serializable with Logging {
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
 
+  def statefulOperatorCorrectnessCheckEnabled: Boolean =
+    getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
+
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
@@ -3490,9 +3508,6 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def legacyAllowModifyActiveSession: Boolean =
-    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

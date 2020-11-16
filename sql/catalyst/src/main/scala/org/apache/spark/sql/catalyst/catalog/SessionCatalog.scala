@@ -79,7 +79,7 @@ class SessionCatalog(
       functionRegistry,
       conf,
       new Configuration(),
-      new CatalystSqlParser(conf),
+      new CatalystSqlParser(),
       DummyFunctionResourceLoader)
   }
 

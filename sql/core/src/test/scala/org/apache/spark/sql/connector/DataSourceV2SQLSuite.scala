@@ -1650,6 +1650,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33435: REFRESH TABLE should invalidate all caches referencing the table") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      withTempView("t") {
+        sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        sql(s"REFRESH TABLE $tblName")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
+      }
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
