@@ -85,6 +85,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
+  protected val gatewayConnectTimeout = conf.get(PYTHON_GATEWAY_CONNECT_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
 
   // All the Python functions should have the same exec, version and envvars.
@@ -140,6 +141,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
+    envVars.put("SPARK_GATEWAY_CONNECT_TIMEOUT", gatewayConnectTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or

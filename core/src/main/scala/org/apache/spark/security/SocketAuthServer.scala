@@ -25,6 +25,8 @@ import scala.concurrent.duration.Duration
 import scala.util.Try
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python.PYTHON_GATEWAY_CONNECT_TIMEOUT
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -34,11 +36,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * handling one batch of data, with authentication and error handling.
  *
  * The socket server can only accept one connection, or close if no connection
- * in 15 seconds.
+ * in configurable amount of seconds (default 15).
  */
 private[spark] abstract class SocketAuthServer[T](
     authHelper: SocketAuthHelper,
-    threadName: String) {
+    threadName: String) extends Logging {
 
   def this(env: SparkEnv, threadName: String) = this(new SocketAuthHelper(env.conf), threadName)
   def this(threadName: String) = this(SparkEnv.get, threadName)
@@ -46,17 +48,23 @@ private[spark] abstract class SocketAuthServer[T](
   private val promise = Promise[T]()
 
   private def startServer(): (Int, String) = {
+    logTrace("Creating listening socket")
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
-    // Close the socket if no connection in 15 seconds
-    serverSocket.setSoTimeout(15000)
+    // Close the socket if no connection in configured seconds
+    val timeout = SparkEnv.get.conf.get(PYTHON_GATEWAY_CONNECT_TIMEOUT).toInt * 1000
+    logTrace(s"Setting timeout to $timeout ms")
+    serverSocket.setSoTimeout(timeout)
 
     new Thread(threadName) {
       setDaemon(true)
       override def run(): Unit = {
         var sock: Socket = null
         try {
+          logTrace(s"Waiting for connection on port ${serverSocket.getLocalPort}")
           sock = serverSocket.accept()
+          logTrace(s"Connection accepted from port ${sock.getLocalPort}")
           authHelper.authClient(sock)
+          logTrace("Client authenticated")
           promise.complete(Try(handleConnection(sock)))
         } finally {
           JavaUtils.closeQuietly(serverSocket)
