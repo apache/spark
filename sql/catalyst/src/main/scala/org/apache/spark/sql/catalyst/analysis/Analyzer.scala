@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
-import org.apache.spark.sql.{AnalysisException, CatalystErrors}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -443,7 +444,7 @@ class Analyzer(
               e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
             Alias(gid, toPrettySQL(e))()
           } else {
-            throw CatalystErrors.groupingIDMismatchError(e, groupByExprs)
+            throw QueryCompilationErrors.groupingIDMismatchError(e, groupByExprs)
           }
         case e @ Grouping(col: Expression) =>
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
@@ -451,7 +452,7 @@ class Analyzer(
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
               Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
-            throw CatalystErrors.groupingColInvalidError(col, groupByExprs)
+            throw QueryCompilationErrors.groupingColInvalidError(col, groupByExprs)
           }
       }
     }
@@ -567,7 +568,7 @@ class Analyzer(
       val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
 
       if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
-        throw CatalystErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
+        throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
       }
 
       // Expand works by setting grouping expressions to null as determined by the
@@ -703,7 +704,7 @@ class Analyzer(
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
-          throw CatalystErrors.unorderablePivotColError(pivotColumn)
+          throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
@@ -714,10 +715,10 @@ class Analyzer(
             case _ => value.foldable
           }
           if (!foldable) {
-            throw CatalystErrors.nonliteralPivotValError(value)
+            throw QueryCompilationErrors.nonliteralPivotValError(value)
           }
           if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
-            throw CatalystErrors.pivotValDataTypeMismatchError(value, pivotColumn)
+            throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)
           }
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
@@ -1040,7 +1041,7 @@ class Analyzer(
       case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
-          throw CatalystErrors.unsupportedIfNotExistsError(r.table.name)
+          throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
         }
 
         val partCols = partitionColumnNames(r.table)
@@ -1077,7 +1078,7 @@ class Analyzer(
         partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
           case Some(_) =>
           case None =>
-            throw CatalystErrors.nonPartitionColError(partitionName)
+            throw QueryCompilationErrors.nonPartitionColError(partitionName)
         }
       }
     }
@@ -1099,7 +1100,7 @@ class Analyzer(
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
-                throw CatalystErrors.addStaticValToUnknownColError(staticName)
+                throw QueryCompilationErrors.addStaticValToUnknownColError(staticName)
             }).toMap
 
           val queryColumns = query.output.iterator
@@ -1141,7 +1142,7 @@ class Analyzer(
               // an UnresolvedAttribute.
               EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
             case None =>
-              throw CatalystErrors.unknownStaticPartitionColError(name)
+              throw QueryCompilationErrors.unknownStaticPartitionColError(name)
           }
         }.reduce(And)
       }
@@ -2354,19 +2355,19 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
-        throw CatalystErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw CatalystErrors.moreThanOneGeneratorError(generators, "select")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
-        throw CatalystErrors.nestedGeneratorError(trimAlias(nestedGenerator))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
-        throw CatalystErrors.moreThanOneGeneratorError(generators, "aggregate")
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
 
       case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
           case AliasedGenerator(_, _, _) => true
@@ -2449,7 +2450,7 @@ class Analyzer(
       case g: Generate => g
 
       case p if p.expressions.exists(hasGenerator) =>
-        throw CatalystErrors.generatorOutsideSelectError(p)
+        throw QueryCompilationErrors.generatorOutsideSelectError(p)
     }
   }
 
@@ -3010,7 +3011,7 @@ class Analyzer(
   private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
-      throw CatalystErrors.legacyStoreAssignmentPolicyError()
+      throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }
 
@@ -3023,12 +3024,12 @@ class Analyzer(
       hint: JoinHint) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw CatalystErrors.unresolvedUsingColForJoinError(keyName, left, "left")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
       }
     }
     val rightKeys = joinNames.map { keyName =>
       right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw CatalystErrors.unresolvedUsingColForJoinError(keyName, right, "right")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, right, "right")
       }
     }
     val joinPairs = leftKeys.zip(rightKeys)
@@ -3091,7 +3092,7 @@ class Analyzer(
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw CatalystErrors.dataTypeMismatchForDeserializerError(other,
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other,
                     "array")
               }
             case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
@@ -3102,7 +3103,7 @@ class Analyzer(
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw CatalystErrors.dataTypeMismatchForDeserializerError(other, "map")
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other, "map")
               }
           }
           validateNestedTupleFields(result)
@@ -3111,7 +3112,7 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw CatalystErrors.fieldNumberMismatchForDeserializerError(schema, maxOrdinal)
+      throw QueryCompilationErrors.fieldNumberMismatchForDeserializerError(schema, maxOrdinal)
     }
 
     /**
@@ -3170,7 +3171,7 @@ class Analyzer(
         case n: NewInstance if n.childrenResolved && !n.resolved =>
           val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
-            throw CatalystErrors.outerScopeFailureForNewInstanceError(n.cls.getName)
+            throw QueryCompilationErrors.outerScopeFailureForNewInstanceError(n.cls.getName)
           }
           n.copy(outerPointer = Some(outer))
       }
@@ -3186,7 +3187,7 @@ class Analyzer(
         case l: LambdaVariable => "array element"
         case e => e.sql
       }
-      throw CatalystErrors.upCastFailureError(fromStr, from, to, walkedTypePath)
+      throw QueryCompilationErrors.upCastFailureError(fromStr, from, to, walkedTypePath)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -3197,7 +3198,7 @@ class Analyzer(
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw CatalystErrors.unsupportedAbstractDataTypeForUpCastError(target)
+          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
@@ -3376,7 +3377,7 @@ class Analyzer(
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
-              throw CatalystErrors.referenceColNotFoundForAlterTableChangesError(after,
+              throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(after,
                 parentName)
           }
         case other => other

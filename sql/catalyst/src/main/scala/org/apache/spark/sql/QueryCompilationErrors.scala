@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, GroupingID}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.toPrettySQL
