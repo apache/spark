@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitionsStatement
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
@@ -44,9 +43,8 @@ class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("empty values in non-optional partition specs") {
-    val parser = new SparkSqlParser(new SQLConf)
     val e = intercept[ParseException] {
-      parser.parsePlan(
+      new SparkSqlParser().parsePlan(
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
     }.getMessage
     assert(e.contains("Found an empty partition key 'b'"))
