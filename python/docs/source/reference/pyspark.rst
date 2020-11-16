@@ -32,6 +32,7 @@ Public Classes
     RDD
     Broadcast
     Accumulator
+    AccumulatorParam
     SparkConf
     SparkFiles
     StorageLevel
@@ -226,6 +227,8 @@ Broadcast and Accumulator
     Broadcast.value
     Accumulator.add
     Accumulator.value
+    AccumulatorParam.addInPlace
+    AccumulatorParam.zero
 
 
 Management

@@ -24,6 +24,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile}
@@ -90,7 +91,10 @@ private[spark] class BasicExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
-
+    val configMapName = KubernetesClientUtils.configMapNameExecutor
+    val confFilesMap = KubernetesClientUtils
+      .buildSparkConfDirFilesMap(configMapName, kubernetesConf.sparkConf, Map.empty)
+    val keyToPaths = KubernetesClientUtils.buildKeyToPathObjects(confFilesMap)
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
     // executorId
@@ -193,6 +197,10 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
+      .addNewVolumeMount()
+        .withName(SPARK_CONF_VOLUME_EXEC)
+        .withMountPath(SPARK_CONF_DIR_INTERNAL)
+        .endVolumeMount()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
@@ -249,6 +257,13 @@ private[spark] class BasicExecutorFeatureStep(
         .withRestartPolicy("Never")
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
+        .addNewVolume()
+          .withName(SPARK_CONF_VOLUME_EXEC)
+          .withNewConfigMap()
+            .withItems(keyToPaths.asJava)
+            .withName(configMapName)
+            .endConfigMap()
+          .endVolume()
         .endSpec()
       .build()
 

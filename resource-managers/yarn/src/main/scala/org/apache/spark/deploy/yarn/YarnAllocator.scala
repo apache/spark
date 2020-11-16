@@ -317,7 +317,7 @@ private[yarn] class YarnAllocator(
         customSparkResources
       }
       val resource =
-        Resource.newInstance(resourcesWithDefaults.totalMemMiB, resourcesWithDefaults.cores)
+        Resource.newInstance(resourcesWithDefaults.totalMemMiB.toInt, resourcesWithDefaults.cores)
       ResourceRequestHelper.setResourceRequests(customResources, resource)
       logDebug(s"Created resource capability: $resource")
       rpIdToYarnResource.putIfAbsent(rp.id, resource)
