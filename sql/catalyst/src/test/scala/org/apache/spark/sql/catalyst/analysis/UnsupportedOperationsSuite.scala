@@ -412,7 +412,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     batchStreamSupported = false,
     streamBatchSupported = false)
 
-  // Left outer, left semi, left anti join: *-stream not allowed
+  // Left outer join, left semi join, left anti join: *-stream not allowed
   Seq((LeftOuter, "LeftOuter join"), (LeftSemi, "LeftSemi join"), (LeftAnti, "Left anti join"))
     .foreach { case (joinType, name) =>
       testBinaryOperationInStreamingPlan(
