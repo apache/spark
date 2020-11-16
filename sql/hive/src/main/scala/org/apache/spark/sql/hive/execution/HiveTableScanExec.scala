@@ -172,7 +172,7 @@ case class HiveTableScanExec(
         prunePartitions(hivePartitions)
       }
     } else {
-      if (conf.metastorePartitionPruning &&
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
         partitionPruningPred.nonEmpty) {
         rawPartitions
       } else {
@@ -184,7 +184,7 @@ case class HiveTableScanExec(
   // exposed for tests
   @transient lazy val rawPartitions: Seq[HivePartition] = {
     val prunedPartitions =
-      if (conf.metastorePartitionPruning &&
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
         partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
