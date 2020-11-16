@@ -1911,7 +1911,9 @@ case class ArrayPosition(left: Expression, right: Expression)
       If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
       for invalid indices.
 
-    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
+    _FUNC_(map, key) - Returns value for given key. The function returns NULL
+      if the key is not contained in the map and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws NoSuchElementException instead.
   """,
   examples = """
     Examples:
