@@ -45,8 +45,8 @@ class SVDPlusPlusSuite extends SparkFunSuite with LocalSparkContext {
       val edges = sc.emptyRDD[Edge[Double]]
       val conf = new SVDPlusPlus.Conf(10, 2, 0.0, 5.0, 0.007, 0.007, 0.005, 0.015) // 2 iterations
       val (graph, _) = SVDPlusPlus.run(edges, conf)
-      assert(graph.vertices.count == 0)
-      assert(graph.edges.count == 0)
+      assert(graph.vertices.count() == 0)
+      assert(graph.edges.count() == 0)
     }
   }
 }
