@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+         stop("Unsupported type for SparkDataFrame: ", class(x)))
 }
 
 #' return the SparkSession
@@ -110,10 +110,11 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
-                  stop(paste0("Config '", key, "' is not set"))
+                estr <- as.character(e)
+                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                  stop("Config '", key, "' is not set")
                 } else {
-                  stop(paste0("Unknown error: ", as.character(e)))
+                  stop("Unknown error: ", estr)
                 }
               })
     } else {
@@ -147,6 +148,81 @@ getDefaultSqlSource <- function() {
   l[["spark.sql.sources.default"]]
 }
 
+writeToFileInArrow <- function(fileName, rdf, numPartitions) {
+  if (requireNamespace("arrow", quietly = TRUE)) {
+    numPartitions <- if (!is.null(numPartitions)) {
+      numToInt(numPartitions)
+    } else {
+      1
+    }
+
+    rdf_slices <- if (numPartitions > 1) {
+      split(rdf, makeSplits(numPartitions, nrow(rdf)))
+    } else {
+      list(rdf)
+    }
+
+    stream_writer <- NULL
+    tryCatch({
+      for (rdf_slice in rdf_slices) {
+        batch <- arrow::record_batch(rdf_slice)
+        if (is.null(stream_writer)) {
+          stream <- arrow::FileOutputStream$create(fileName)
+          schema <- batch$schema
+          stream_writer <- arrow::RecordBatchStreamWriter$create(stream, schema)
+        }
+
+        stream_writer$write_batch(batch)
+      }
+    },
+    finally = {
+      if (!is.null(stream_writer)) {
+        stream_writer$close()
+      }
+    })
+
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
+  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
+    if (is.null(firstRow)) {
+      stopifnot(!is.null(rdd))
+      firstRow <- firstRDD(rdd)
+    }
+    names <- if (is.null(schema)) {
+      names(firstRow)
+    } else {
+      as.list(schema)
+    }
+    if (is.null(names)) {
+      names <- lapply(seq_len(length(firstRow)), function(x) {
+        paste0("_", as.character(x))
+      })
+    }
+
+    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # TODO(davies): remove this once SPARK-2775 is fixed
+    names <- lapply(names, function(n) {
+      nn <- gsub(".", "_", n, fixed = TRUE)
+      if (nn != n) {
+        warning("Use ", nn, " instead of ", n, " as column name")
+      }
+      nn
+    })
+
+    types <- lapply(firstRow, infer_type)
+    fields <- lapply(seq_len(length(firstRow)), function(i) {
+      structField(names[[i]], types[[i]], TRUE)
+    })
+    schema <- do.call(structType, fields)
+  } else {
+    schema
+  }
+}
+
 #' Create a SparkDataFrame
 #'
 #' Converts R data.frame or list into SparkDataFrame.
@@ -172,36 +248,74 @@ getDefaultSqlSource <- function() {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
+  useArrow <- FALSE
+  firstRow <- NULL
 
   if (is.data.frame(data)) {
+    # get the names of columns, they will be put into RDD
+    if (is.null(schema)) {
+      schema <- names(data)
+    }
+
+    # get rid of factor type
+    cleanCols <- function(x) {
+      if (is.factor(x)) {
+        as.character(x)
+      } else {
+        x
+      }
+    }
+    data[] <- lapply(data, cleanCols)
+
+    args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    if (arrowEnabled) {
+      useArrow <- tryCatch({
+        stopifnot(length(data) > 0)
+        firstRow <- do.call(mapply, append(args, head(data, 1)))[[1]]
+        schema <- getSchema(schema, firstRow = firstRow)
+        checkSchemaInArrow(schema)
+        fileName <- tempfile(pattern = "sparwriteToFileInArrowk-arrow", fileext = ".tmp")
+        tryCatch({
+          writeToFileInArrow(fileName, data, numPartitions)
+          jrddInArrow <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                                     "readArrowStreamFromFile",
+                                     sparkSession,
+                                     fileName)
+        },
+        finally = {
+          # File might not be created.
+          suppressWarnings(file.remove(fileName))
+        })
+        TRUE
+      },
+      error = function(e) {
+        warning("createDataFrame attempted Arrow optimization because ",
+                "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
+                "failed, attempting non-optimization. Reason: ", e)
+        FALSE
+      })
+    }
+
+    if (!useArrow) {
       # Convert data into a list of rows. Each row is a list.
-
-      # get the names of columns, they will be put into RDD
-      if (is.null(schema)) {
-        schema <- names(data)
-      }
-
-      # get rid of factor type
-      cleanCols <- function(x) {
-        if (is.factor(x)) {
-          as.character(x)
-        } else {
-          x
-        }
-      }
-
       # drop factors and wrap lists
-      data <- setNames(lapply(data, cleanCols), NULL)
+      data <- setNames(as.list(data), NULL)
 
       # check if all columns have supported type
       lapply(data, getInternalType)
 
       # convert to rows
-      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
       data <- do.call(mapply, append(args, data))
+      if (length(data) > 0) {
+        firstRow <- data[[1]]
+      }
+    }
   }
 
-  if (is.list(data)) {
+  if (useArrow) {
+    rdd <- jrddInArrow
+  } else if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
     if (!is.null(numPartitions)) {
       rdd <- parallelize(sc, data, numSlices = numToInt(numPartitions))
@@ -211,45 +325,22 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   } else if (inherits(data, "RDD")) {
     rdd <- data
   } else {
-    stop(paste("unexpected type:", class(data)))
+    stop("unexpected type: ", class(data))
   }
 
-  if (is.null(schema) || (!inherits(schema, "structType") && is.null(names(schema)))) {
-    row <- firstRDD(rdd)
-    names <- if (is.null(schema)) {
-      names(row)
-    } else {
-      as.list(schema)
-    }
-    if (is.null(names)) {
-      names <- lapply(1:length(row), function(x) {
-        paste("_", as.character(x), sep = "")
-      })
-    }
-
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
-    # TODO(davies): remove this once SPARK-2775 is fixed
-    names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
-      if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, " as column name"))
-      }
-      nn
-    })
-
-    types <- lapply(row, infer_type)
-    fields <- lapply(1:length(row), function(i) {
-      structField(names[[i]], types[[i]], TRUE)
-    })
-    schema <- do.call(structType, fields)
-  }
+  schema <- getSchema(schema, firstRow, rdd)
 
   stopifnot(class(schema) == "structType")
 
-  jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
-  srdd <- callJMethod(jrdd, "rdd")
-  sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
-                     srdd, schema$jobj, sparkSession)
+  if (useArrow) {
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                       "toDataFrame", rdd, schema$jobj, sparkSession)
+  } else {
+    jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
+    srdd <- callJMethod(jrdd, "rdd")
+    sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
+                       srdd, schema$jobj, sparkSession)
+  }
   dataFrame(sdf)
 }
 
@@ -358,7 +449,7 @@ read.parquet <- function(path, ...) {
 #'
 #' Loads text files and returns a SparkDataFrame whose schema starts with
 #' a string column named "value", and followed by partitioned columns if
-#' there are any.
+#' there are any. The text files must be encoded as UTF-8.
 #'
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
@@ -465,7 +556,6 @@ tableToDF <- function(tableName) {
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df4 <- read.df(mapTypeJsonPath, "json", stringSchema, multiLine = TRUE)
 #' }
-#' @name read.df
 #' @note read.df since 1.4.0
 read.df <- function(path = NULL, source = NULL, schema = NULL, na.strings = "NA", ...) {
   if (!is.null(path) && !is.character(path)) {
@@ -521,7 +611,8 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #'
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
-#' @param partitionColumn the name of a column of integral type that will be used for partitioning
+#' @param partitionColumn the name of a column of numeric, date, or timestamp type
+#'                        that will be used for partitioning.
 #' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
 #' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
 #' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),
@@ -595,7 +686,6 @@ read.jdbc <- function(url, tableName,
 #' stringSchema <- "name STRING, info MAP<STRING, DOUBLE>"
 #' df1 <- read.stream("json", path = jsonDir, schema = stringSchema, maxFilesPerTrigger = 1)
 #' }
-#' @name read.stream
 #' @note read.stream since 2.2.0
 #' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {

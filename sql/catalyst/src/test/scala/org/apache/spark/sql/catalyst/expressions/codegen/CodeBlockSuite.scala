@@ -37,6 +37,18 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(code.asInstanceOf[CodeBlock].blockInputs === Seq(value))
   }
 
+  test("Code parts should be treated for escapes, but string inputs shouldn't be") {
+    val strlit = raw"\\"
+    val code = code"""String s = "foo\\bar" + "$strlit";"""
+
+    val builtin = s"""String s = "foo\\bar" + "$strlit";"""
+
+    val expected = raw"""String s = "foo\bar" + "\\";"""
+
+    assert(builtin == expected)
+    assert(code.asInstanceOf[CodeBlock].toString == expected)
+  }
+
   test("Block.stripMargin") {
     val isNull = JavaCode.isNullVariable("expr1_isNull")
     val value = JavaCode.variable("expr1", IntegerType)

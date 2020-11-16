@@ -16,7 +16,10 @@
  */
 package org.apache.spark.executor
 
+import java.util.concurrent.atomic.AtomicLongArray
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.ExecutorMetricType
 
 /**
@@ -46,14 +49,21 @@ class ExecutorMetrics private[spark] extends Serializable {
     Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.size, this.metrics.size))
   }
 
+  private[spark] def this(metrics: AtomicLongArray) {
+    this()
+    ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
+      this.metrics(i) = metrics.get(i)
+    }
+  }
+
   /**
-   * Constructor: create the ExecutorMetrics with using a given map.
+   * Constructor: create the ExecutorMetrics using a given map.
    *
    * @param executorMetrics map of executor metric name to value
    */
   private[spark] def this(executorMetrics: Map[String, Long]) {
     this()
-    ExecutorMetricType.metricToOffset.foreach { case(name, idx) =>
+    ExecutorMetricType.metricToOffset.foreach { case (name, idx) =>
       metrics(idx) = executorMetrics.getOrElse(name, 0L)
     }
   }
@@ -74,5 +84,26 @@ class ExecutorMetrics private[spark] extends Serializable {
       }
     }
     updated
+  }
+}
+
+private[spark] object ExecutorMetrics {
+
+  /**
+   * Get the current executor metrics. These are returned as an array, with the index
+   * determined by ExecutorMetricType.metricToOffset.
+   *
+   * @param memoryManager the memory manager for execution and storage memory
+   * @return the values of the metrics
+   */
+  def getCurrentMetrics(memoryManager: MemoryManager): Array[Long] = {
+    val currentMetrics = new Array[Long](ExecutorMetricType.numMetrics)
+    var offset = 0
+    ExecutorMetricType.metricGetters.foreach { metricType =>
+      val metricValues = metricType.getMetricValues(memoryManager)
+      Array.copy(metricValues, 0, currentMetrics, offset, metricValues.length)
+      offset += metricValues.length
+    }
+    currentMetrics
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -35,15 +36,20 @@ class FilterPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val attrA = 'a.int
+  val attrB = 'b.int
+  val attrC = 'c.int
+  val attrD = 'd.int
 
-  val testRelation1 = LocalRelation('d.int)
+  val testRelation = LocalRelation(attrA, attrB, attrC)
+
+  val testRelation1 = LocalRelation(attrD)
 
   // This test already passes.
   test("eliminate subqueries") {
@@ -658,14 +664,14 @@ class FilterPushdownSuite extends PlanTest {
     val generator = Explode('c_arr)
     val originalQuery = {
       testRelationWithArrayType
-        .generate(generator, alias = Some("arr"))
+        .generate(generator, alias = Some("arr"), outputNames = Seq("c"))
         .where(('b >= 5) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val referenceResult = {
       testRelationWithArrayType
         .where('b >= 5)
-        .generate(generator, alias = Some("arr"))
+        .generate(generator, alias = Some("arr"), outputNames = Seq("c"))
         .where('c > 6).analyze
     }
 
@@ -1129,77 +1135,84 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
 
-  test("join condition pushdown: deterministic and non-deterministic") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    // Verify that all conditions except the watermark touching condition are pushed down
-    // by the optimizer and others are not.
-    val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
-      "x.a".attr === Rand(10) && "y.b".attr === 5))
-    val correctAnswer =
-      x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
-        condition = Some("x.a".attr === Rand(10)))
-
-    // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
-    // TODO support nondeterministic expressions in join condition.
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-      checkAnalysis = false)
-  }
-
   test("watermark pushdown: no pushdown on watermark attribute #1") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
+    val relation = LocalRelation(attrA, 'b.timestamp, attrC)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark('b, interval, testRelation)
-      .where('a === 5 && 'b === 10 && 'c === 5)
+    val originalQuery = EventTimeWatermark('b, interval, relation)
+      .where('a === 5 && 'b === new java.sql.Timestamp(0) && 'c === 5)
     val correctAnswer = EventTimeWatermark(
-      'b, interval, testRelation.where('a === 5 && 'c === 5))
-      .where('b === 10)
+      'b, interval, relation.where('a === 5 && 'c === 5))
+      .where('b === new java.sql.Timestamp(0))
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
-      checkAnalysis = false)
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
   test("watermark pushdown: no pushdown for nondeterministic filter") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
+    val relation = LocalRelation(attrA, attrB, 'c.timestamp)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark('c, interval, testRelation)
-      .where('a === 5 && 'b === Rand(10) && 'c === 5)
+    val originalQuery = EventTimeWatermark('c, interval, relation)
+      .where('a === 5 && 'b === Rand(10) && 'c === new java.sql.Timestamp(0))
     val correctAnswer = EventTimeWatermark(
-      'c, interval, testRelation.where('a === 5))
-      .where('b === Rand(10) && 'c === 5)
+      'c, interval, relation.where('a === 5))
+      .where('b === Rand(10) && 'c === new java.sql.Timestamp(0))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
   }
 
   test("watermark pushdown: full pushdown") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
+    val relation = LocalRelation(attrA, attrB, 'c.timestamp)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark('c, interval, testRelation)
+    val originalQuery = EventTimeWatermark('c, interval, relation)
       .where('a === 5 && 'b === 10)
     val correctAnswer = EventTimeWatermark(
-      'c, interval, testRelation.where('a === 5 && 'b === 10))
+      'c, interval, relation.where('a === 5 && 'b === 10))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
   }
 
   test("watermark pushdown: no pushdown on watermark attribute #2") {
-    val interval = new CalendarInterval(2, 2000L)
+    val interval = new CalendarInterval(2, 2, 2000L)
+    val relation = LocalRelation('a.timestamp, attrB, attrC)
 
-    val originalQuery = EventTimeWatermark('a, interval, testRelation)
-      .where('a === 5 && 'b === 10)
+    val originalQuery = EventTimeWatermark('a, interval, relation)
+      .where('a === new java.sql.Timestamp(0) && 'b === 10)
     val correctAnswer = EventTimeWatermark(
-      'a, interval, testRelation.where('b === 10)).where('a === 5)
+      'a, interval, relation.where('b === 10)).where('a === new java.sql.Timestamp(0))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
+  }
+
+  test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
+    val pythonUDFJoinCond = {
+      val pythonUDF = PythonUDF("pythonUDF", null,
+        IntegerType,
+        Seq(attrA),
+        PythonEvalType.SQL_BATCHED_UDF,
+        udfDeterministic = true)
+      pythonUDF === attrD
+    }
+
+    val query = testRelation.join(
+      testRelation1,
+      joinType = Cross).where(pythonUDFJoinCond)
+
+    val expected = testRelation.join(
+      testRelation1,
+      joinType = Cross,
+      condition = Some(pythonUDFJoinCond)).analyze
+
+    comparePlans(Optimize.execute(query.analyze), expected)
   }
 }

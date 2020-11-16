@@ -22,10 +22,10 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{JobExecutionStatus, SparkConf}
+import org.apache.spark.{JobExecutionStatus, SparkConf, SparkException}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
 /**
@@ -36,7 +36,14 @@ private[spark] class AppStatusStore(
     val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
-    store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+    try {
+      // The ApplicationInfo may not be available when Spark is starting up.
+      store.view(classOf[ApplicationInfoWrapper]).max(1).iterator().next().info
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application information. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def environmentInfo(): v1.ApplicationEnvironmentInfo = {
@@ -156,20 +163,11 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        if (store.isInstanceOf[InMemoryStore]) {
-          store.view(classOf[TaskDataWrapper])
-            .parent(stageKey)
-            .index(TaskIndexNames.STATUS)
-            .first("SUCCESS")
-            .last("SUCCESS")
-            .closeableIterator()
-        } else {
-          store.view(classOf[TaskDataWrapper])
-            .parent(stageKey)
-            .index(TaskIndexNames.EXEC_RUN_TIME)
-            .first(0L)
-            .closeableIterator()
-        }
+        store.view(classOf[TaskDataWrapper])
+          .parent(stageKey)
+          .index(TaskIndexNames.EXEC_RUN_TIME)
+          .first(0L)
+          .closeableIterator()
       ) { it =>
         var _count = 0L
         while (it.hasNext()) {
@@ -238,50 +236,30 @@ private[spark] class AppStatusStore(
     // stabilize once the stage finishes. It's also slow, especially with disk stores.
     val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
 
-    // TODO: Summary metrics needs to display all the successful tasks' metrics (SPARK-26119).
-    // For InMemory case, it is efficient to find using the following code. But for diskStore case
-    // we need an efficient solution to avoid deserialization time overhead. For that, we need to
-    // rework on the way indexing works, so that we can index by specific metrics for successful
-    // and failed tasks differently (would be tricky). Also would require changing the disk store
-    // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      if (store.isInstanceOf[InMemoryStore]) {
-        val quantileTasks = store.view(classOf[TaskDataWrapper])
+      Utils.tryWithResource(
+        store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
           .index(index)
           .first(0L)
-          .asScala
-          .filter { _.status == "SUCCESS"} // Filter "SUCCESS" tasks
-          .toIndexedSeq
-
-        indices.map { index =>
-          fn(quantileTasks(index.toInt)).toDouble
-        }.toIndexedSeq
-      } else {
-        Utils.tryWithResource(
-          store.view(classOf[TaskDataWrapper])
-            .parent(stageKey)
-            .index(index)
-            .first(0L)
-            .closeableIterator()
-        ) { it =>
-          var last = Double.NaN
-          var currentIdx = -1L
-          indices.map { idx =>
-            if (idx == currentIdx) {
+          .closeableIterator()
+      ) { it =>
+        var last = Double.NaN
+        var currentIdx = -1L
+        indices.map { idx =>
+          if (idx == currentIdx) {
+            last
+          } else {
+            val diff = idx - currentIdx
+            currentIdx = idx
+            if (it.skip(diff - 1)) {
+              last = fn(it.next()).toDouble
               last
             } else {
-              val diff = idx - currentIdx
-              currentIdx = idx
-              if (it.skip(diff - 1)) {
-                last = fn(it.next()).toDouble
-                last
-              } else {
-                Double.NaN
-              }
+              Double.NaN
             }
-          }.toIndexedSeq
-        }
+          }
+        }.toIndexedSeq
       }
     }
 
@@ -462,40 +440,53 @@ private[spark] class AppStatusStore(
       .toMap
 
     new v1.StageData(
-      stage.status,
-      stage.stageId,
-      stage.attemptId,
-      stage.numTasks,
-      stage.numActiveTasks,
-      stage.numCompleteTasks,
-      stage.numFailedTasks,
-      stage.numKilledTasks,
-      stage.numCompletedIndices,
-      stage.executorRunTime,
-      stage.executorCpuTime,
-      stage.submissionTime,
-      stage.firstTaskLaunchedTime,
-      stage.completionTime,
-      stage.failureReason,
-      stage.inputBytes,
-      stage.inputRecords,
-      stage.outputBytes,
-      stage.outputRecords,
-      stage.shuffleReadBytes,
-      stage.shuffleReadRecords,
-      stage.shuffleWriteBytes,
-      stage.shuffleWriteRecords,
-      stage.memoryBytesSpilled,
-      stage.diskBytesSpilled,
-      stage.name,
-      stage.description,
-      stage.details,
-      stage.schedulingPool,
-      stage.rddIds,
-      stage.accumulatorUpdates,
-      Some(tasks),
-      Some(executorSummary(stage.stageId, stage.attemptId)),
-      stage.killedTasksSummary)
+      status = stage.status,
+      stageId = stage.stageId,
+      attemptId = stage.attemptId,
+      numTasks = stage.numTasks,
+      numActiveTasks = stage.numActiveTasks,
+      numCompleteTasks = stage.numCompleteTasks,
+      numFailedTasks = stage.numFailedTasks,
+      numKilledTasks = stage.numKilledTasks,
+      numCompletedIndices = stage.numCompletedIndices,
+      submissionTime = stage.submissionTime,
+      firstTaskLaunchedTime = stage.firstTaskLaunchedTime,
+      completionTime = stage.completionTime,
+      failureReason = stage.failureReason,
+      executorDeserializeTime = stage.executorDeserializeTime,
+      executorDeserializeCpuTime = stage.executorDeserializeCpuTime,
+      executorRunTime = stage.executorRunTime,
+      executorCpuTime = stage.executorCpuTime,
+      resultSize = stage.resultSize,
+      jvmGcTime = stage.jvmGcTime,
+      resultSerializationTime = stage.resultSerializationTime,
+      memoryBytesSpilled = stage.memoryBytesSpilled,
+      diskBytesSpilled = stage.diskBytesSpilled,
+      peakExecutionMemory = stage.peakExecutionMemory,
+      inputBytes = stage.inputBytes,
+      inputRecords = stage.inputRecords,
+      outputBytes = stage.outputBytes,
+      outputRecords = stage.outputRecords,
+      shuffleRemoteBlocksFetched = stage.shuffleRemoteBlocksFetched,
+      shuffleLocalBlocksFetched = stage.shuffleLocalBlocksFetched,
+      shuffleFetchWaitTime = stage.shuffleFetchWaitTime,
+      shuffleRemoteBytesRead = stage.shuffleRemoteBytesRead,
+      shuffleRemoteBytesReadToDisk = stage.shuffleRemoteBytesReadToDisk,
+      shuffleLocalBytesRead = stage.shuffleLocalBytesRead,
+      shuffleReadBytes = stage.shuffleReadBytes,
+      shuffleReadRecords = stage.shuffleReadRecords,
+      shuffleWriteBytes = stage.shuffleWriteBytes,
+      shuffleWriteTime = stage.shuffleWriteTime,
+      shuffleWriteRecords = stage.shuffleWriteRecords,
+      name = stage.name,
+      description = stage.description,
+      details = stage.details,
+      schedulingPool = stage.schedulingPool,
+      rddIds = stage.rddIds,
+      accumulatorUpdates = stage.accumulatorUpdates,
+      tasks = Some(tasks),
+      executorSummary = Some(executorSummary(stage.stageId, stage.attemptId)),
+      killedTasksSummary = stage.killedTasksSummary)
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
@@ -528,7 +519,13 @@ private[spark] class AppStatusStore(
   }
 
   def appSummary(): AppSummary = {
-    store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    try {
+      store.read(classOf[AppSummary], classOf[AppSummary].getName())
+    } catch {
+      case _: NoSuchElementException =>
+        throw new NoSuchElementException("Failed to get the application summary. " +
+          "If you are starting up Spark, please wait a while until it's ready.")
+    }
   }
 
   def close(): Unit = {
@@ -562,7 +559,7 @@ private[spark] class AppStatusStore(
 
 private[spark] object AppStatusStore {
 
-  val CURRENT_VERSION = 1L
+  val CURRENT_VERSION = 2L
 
   /**
    * Create an in-memory store for a live application.

@@ -159,15 +159,11 @@ pre {
   display: none;
 }
 
-span.expand-additional-metrics, span.expand-dag-viz, span.collapse-table {
+span.expand-dag-viz, span.collapse-table {
   cursor: pointer;
 }
 
-span.additional-metric-title {
-  cursor: pointer;
-}
-
-.additional-metrics.collapsed, .collapsible-table.collapsed {
+.collapsible-table.collapsed {
   display: none;
 }
 
@@ -204,14 +200,6 @@ span.additional-metric-title {
   margin: 0;
   font-weight: bold;
   color: #777;
-}
-
-/* Hide all additional metrics by default. This is done here rather than using JavaScript to
- * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .deserialization_time, .fetch_wait_time, .shuffle_read_remote,
-.serialization_time, .getting_result_time, .peak_execution_memory,
-.on_heap_memory, .off_heap_memory {
-  display: none;
 }
 
 .accordion-inner {
@@ -257,9 +245,9 @@ a.expandbutton {
   max-width: 600px;
 }
 
-.paginate_button.active > a {
-    color: #999999;
-    text-decoration: underline;
+.paginate_button.active {
+  border: 1px solid #979797 !important;
+  background: white linear-gradient(to bottom, #fff 0%, #dcdcdc 100%);
 }
 
 .title-table {
@@ -275,32 +263,36 @@ a.expandbutton {
   width: 200px;
 }
 
+.select-all-div-checkbox-div {
+  width: 90px;
+}
+
 .scheduler-delay-checkbox-div {
-  width: 120px;
+  width: 130px;
 }
 
 .task-deserialization-time-checkbox-div {
-  width: 175px;
+  width: 190px;
 }
 
 .shuffle-read-blocked-time-checkbox-div {
-  width: 187px;
+  width: 200px;
 }
 
 .shuffle-remote-reads-checkbox-div {
-  width: 157px;
+  width: 170px;
 }
 
 .result-serialization-time-checkbox-div {
-  width: 171px;
+  width: 185px;
 }
 
 .getting-result-time-checkbox-div {
-  width: 141px;
+  width: 155px;
 }
 
 .peak-execution-memory-checkbox-div {
-  width: 170px;
+  width: 180px;
 }
 
 #active-tasks-table th {

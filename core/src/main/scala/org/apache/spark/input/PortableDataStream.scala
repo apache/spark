@@ -44,7 +44,7 @@ private[spark] abstract class StreamFileInputFormat[T]
    * Allow minPartitions set by end-user in order to keep compatibility with old Hadoop API
    * which is set through setMaxSplitSize
    */
-  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int) {
+  def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int): Unit = {
     val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
     val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
     val defaultParallelism = Math.max(sc.defaultParallelism, minPartitions)
@@ -172,7 +172,7 @@ class PortableDataStream(
 
   @transient private lazy val conf = {
     val bais = new ByteArrayInputStream(confBytes)
-    val nconf = new Configuration()
+    val nconf = new Configuration(false)
     nconf.readFields(new DataInputStream(bais))
     nconf
   }

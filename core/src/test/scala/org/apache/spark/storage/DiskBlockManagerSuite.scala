@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
-import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -33,14 +32,14 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   var diskBlockManager: DiskBlockManager = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     rootDir0 = Utils.createTempDir()
     rootDir1 = Utils.createTempDir()
     rootDirs = rootDir0.getAbsolutePath + "," + rootDir1.getAbsolutePath
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       Utils.deleteRecursively(rootDir0)
       Utils.deleteRecursively(rootDir1)
@@ -49,14 +48,14 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     }
   }
 
-  override def beforeEach() {
+  override def beforeEach(): Unit = {
     super.beforeEach()
     val conf = testConf.clone
     conf.set("spark.local.dir", rootDirs)
     diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       diskBlockManager.stop()
     } finally {
@@ -86,7 +85,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(diskBlockManager.getAllBlocks().isEmpty)
   }
 
-  def writeToFile(file: File, numBytes: Int) {
+  def writeToFile(file: File, numBytes: Int): Unit = {
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)
     writer.close()

@@ -28,6 +28,48 @@ from pyspark.sql import Row
 # $example off:schema_merging$
 
 
+def generic_file_source_options_example(spark):
+    # $example on:ignore_corrupt_files$
+    # enable ignore corrupt files
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    # dir1/file3.json is corrupt from parquet's view
+    test_corrupt_df = spark.read.parquet("examples/src/main/resources/dir1/",
+                                         "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+    # $example off:ignore_corrupt_files$
+
+    # $example on:recursive_file_lookup$
+    recursive_loaded_df = spark.read.format("parquet")\
+        .option("recursiveFileLookup", "true")\
+        .load("examples/src/main/resources/dir1")
+    recursive_loaded_df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+    # $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
+
+    # $example on:load_with_path_glob_filter$
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", pathGlobFilter="*.parquet")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    # $example off:load_with_path_glob_filter$
+
+
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
@@ -228,6 +270,7 @@ if __name__ == "__main__":
         .getOrCreate()
 
     basic_datasource_example(spark)
+    generic_file_source_options_example(spark)
     parquet_example(spark)
     parquet_schema_merging_example(spark)
     json_dataset_example(spark)

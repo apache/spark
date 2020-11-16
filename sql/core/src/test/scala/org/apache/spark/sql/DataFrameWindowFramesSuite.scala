@@ -21,12 +21,12 @@ import java.sql.Date
 
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Window frame testing for DataFrame API.
  */
-class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("lead/lag with empty data frame") {
@@ -111,7 +111,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         first("value").over(
           window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         first("value").over(
@@ -226,7 +226,7 @@ class DataFrameWindowFramesSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(
-        'key,
+        $"key",
         sum("value").over(window.
           rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
         sum("value").over(window.

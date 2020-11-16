@@ -24,8 +24,7 @@ private[csv] trait TestCsvData {
 
   def sampledTestData: Dataset[String] = {
     spark.range(0, 100, 1).map { index =>
-      val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-        57, 62, 68, 72)
+      val predefinedSample = Set[Long](3, 18, 20, 24, 50, 60, 87, 99)
       if (predefinedSample.contains(index)) {
         index.toString
       } else {

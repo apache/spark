@@ -323,7 +323,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
-      assertEquals(args[0], "hello");
+      assertEquals("hello", args[0]);
       new SparkContext().stop();
 
       synchronized (LOCK) {
@@ -340,7 +340,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
     public static void main(String[] args) {
       assertNotEquals(0, args.length);
-      assertEquals(args[0], "hello");
+      assertEquals("hello", args[0]);
       throw DUMMY_EXCEPTION;
     }
   }

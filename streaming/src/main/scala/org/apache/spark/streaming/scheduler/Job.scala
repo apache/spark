@@ -35,7 +35,7 @@ class Job(val time: Time, func: () => _) {
   private var _startTime: Option[Long] = None
   private var _endTime: Option[Long] = None
 
-  def run() {
+  def run(): Unit = {
     _result = Try(func())
   }
 
@@ -66,7 +66,7 @@ class Job(val time: Time, func: () => _) {
     _outputOpId
   }
 
-  def setOutputOpId(outputOpId: Int) {
+  def setOutputOpId(outputOpId: Int): Unit = {
     if (isSet) {
       throw new IllegalStateException("Cannot call setOutputOpId more than once")
     }

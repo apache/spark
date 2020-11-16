@@ -29,12 +29,11 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
 
 /**
- * :: DeveloperApi ::
  * A param with self-contained documentation and optionally default value. Primitive-typed param
  * should use the specialized versions, which are more friendly to Java users.
  *
@@ -45,7 +44,6 @@ import org.apache.spark.ml.util.Identifiable
  *                See [[ParamValidators]] for factory methods for common validation functions.
  * @tparam T param value type
  */
-@DeveloperApi
 class Param[T](val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
 
@@ -159,11 +157,9 @@ private[ml] object Param {
 }
 
 /**
- * :: DeveloperApi ::
  * Factory methods for common validation functions for `Param.isValid`.
  * The numerical methods only support Int, Long, Float, and Double.
  */
-@DeveloperApi
 object ParamValidators {
 
   /** (private[param]) Default validation always return true */
@@ -323,10 +319,8 @@ object ParamValidators {
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Double]` for Java.
  */
-@DeveloperApi
 class DoubleParam(parent: String, name: String, doc: String, isValid: Double => Boolean)
   extends Param[Double](parent, name, doc, isValid) {
 
@@ -383,10 +377,8 @@ private[param] object DoubleParam {
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Int]` for Java.
  */
-@DeveloperApi
 class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolean)
   extends Param[Int](parent, name, doc, isValid) {
 
@@ -412,10 +404,8 @@ class IntParam(parent: String, name: String, doc: String, isValid: Int => Boolea
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Float]` for Java.
  */
-@DeveloperApi
 class FloatParam(parent: String, name: String, doc: String, isValid: Float => Boolean)
   extends Param[Float](parent, name, doc, isValid) {
 
@@ -473,10 +463,8 @@ private object FloatParam {
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Long]` for Java.
  */
-@DeveloperApi
 class LongParam(parent: String, name: String, doc: String, isValid: Long => Boolean)
   extends Param[Long](parent, name, doc, isValid) {
 
@@ -502,10 +490,8 @@ class LongParam(parent: String, name: String, doc: String, isValid: Long => Bool
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Boolean]` for Java.
  */
-@DeveloperApi
 class BooleanParam(parent: String, name: String, doc: String) // No need for isValid
   extends Param[Boolean](parent, name, doc) {
 
@@ -525,10 +511,8 @@ class BooleanParam(parent: String, name: String, doc: String) // No need for isV
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[String]]` for Java.
  */
-@DeveloperApi
 class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array[String] => Boolean)
   extends Param[Array[String]](parent, name, doc, isValid) {
 
@@ -550,10 +534,8 @@ class StringArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[Double]]` for Java.
  */
-@DeveloperApi
 class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array[Double] => Boolean)
   extends Param[Array[Double]](parent, name, doc, isValid) {
 
@@ -580,10 +562,8 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[Array[Double]]]` for Java.
  */
-@DeveloperApi
 class DoubleArrayArrayParam(
     parent: Params,
     name: String,
@@ -619,10 +599,8 @@ class DoubleArrayArrayParam(
 }
 
 /**
- * :: DeveloperApi ::
  * Specialized version of `Param[Array[Int]]` for Java.
  */
-@DeveloperApi
 class IntArrayParam(parent: Params, name: String, doc: String, isValid: Array[Int] => Boolean)
   extends Param[Array[Int]](parent, name, doc, isValid) {
 
@@ -657,11 +635,9 @@ case class ParamPair[T] @Since("1.2.0") (
 }
 
 /**
- * :: DeveloperApi ::
  * Trait for components that take parameters. This also provides an internal param map to store
  * parameter values attached to the instance.
  */
-@DeveloperApi
 trait Params extends Identifiable with Serializable {
 
   /**
@@ -915,13 +891,11 @@ private[ml] object Params {
 }
 
 /**
- * :: DeveloperApi ::
  * Java-friendly wrapper for [[Params]].
  * Java developers who need to extend [[Params]] should use this class instead.
  * If you need to extend an abstract class which already extends [[Params]], then that abstract
  * class should be Java-friendly as well.
  */
-@DeveloperApi
 abstract class JavaParams extends Params
 
 /**

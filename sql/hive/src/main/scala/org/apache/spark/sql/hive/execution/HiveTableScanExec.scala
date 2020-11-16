@@ -166,14 +166,14 @@ case class HiveTableScanExec(
   @transient lazy val rawPartitions = {
     val prunedPartitions =
       if (sparkSession.sessionState.conf.metastorePartitionPruning &&
-          partitionPruningPred.size > 0) {
+          partitionPruningPred.nonEmpty) {
         // Retrieve the original attributes based on expression ID so that capitalization matches.
         val normalizedFilters = partitionPruningPred.map(_.transform {
           case a: AttributeReference => originalAttributes(a)
         })
-        sparkSession.sessionState.catalog.listPartitionsByFilter(
-          relation.tableMeta.identifier,
-          normalizedFilters)
+        relation.prunedPartitions.getOrElse(
+          sparkSession.sessionState.catalog
+            .listPartitionsByFilter(relation.tableMeta.identifier, normalizedFilters))
       } else {
         sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
       }
@@ -208,7 +208,7 @@ case class HiveTableScanExec(
   override def doCanonicalize(): HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
-      requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
+      requestedAttributes.map(QueryPlan.normalizeExpressions(_, input)),
       relation.canonicalized.asInstanceOf[HiveTableRelation],
       QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }

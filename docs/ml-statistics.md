@@ -2,6 +2,21 @@
 layout: global
 title: Basic Statistics
 displayTitle: Basic Statistics
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -35,7 +50,7 @@ correlation methods are currently Pearson's and Spearman's correlation.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[`Correlation`](api/scala/index.html#org.apache.spark.ml.stat.Correlation$)
+[`Correlation`](api/scala/org/apache/spark/ml/stat/Correlation$.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -72,7 +87,7 @@ the Chi-squared statistic is computed. All label and feature values must be cate
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Refer to the [`ChiSquareTest` Scala docs](api/scala/index.html#org.apache.spark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Scala docs](api/scala/org/apache/spark/ml/stat/ChiSquareTest$.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ChiSquareTestExample.scala %}
 </div>
@@ -94,11 +109,12 @@ Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat
 ## Summarizer
 
 We provide vector column summary statistics for `Dataframe` through `Summarizer`.
-Available metrics are the column-wise max, min, mean, variance, and number of nonzeros, as well as the total count.
+Available metrics are the column-wise max, min, mean, sum, variance, std, and number of nonzeros,
+as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
+The following example demonstrates using [`Summarizer`](api/scala/org/apache/spark/ml/stat/Summarizer$.html)
 to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}

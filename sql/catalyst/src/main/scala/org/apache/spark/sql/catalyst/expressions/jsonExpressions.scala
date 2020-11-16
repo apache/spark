@@ -22,6 +22,7 @@ import java.io._
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -99,10 +100,11 @@ private[this] object JsonPathParser extends RegexParsers {
 }
 
 private[this] object SharedFactory {
-  val jsonFactory = new JsonFactory()
-
-  // Enabled for Hive compatibility
-  jsonFactory.enable(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS)
+  val jsonFactory = new JsonFactoryBuilder()
+    // The two options below enabled for Hive compatibility
+    .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS)
+    .enable(JsonReadFeature.ALLOW_SINGLE_QUOTES)
+    .build()
 }
 
 /**
@@ -115,7 +117,8 @@ private[this] object SharedFactory {
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
-  """)
+  """,
+  group = "json_funcs")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -331,15 +334,16 @@ case class GetJsonObject(json: Expression, path: Expression)
   }
 }
 
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
-       1  2
-  """)
-// scalastyle:on line.size.limit
+       1	2
+  """,
+  group = "json_funcs")
+// scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
 
@@ -502,10 +506,11 @@ case class JsonTuple(children: Seq[Expression])
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
-       {"a":1, "b":0.8}
+       {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
-       {"time":"2015-08-26 00:00:00.0"}
+       {"time":2015-08-26 00:00:00}
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
@@ -515,12 +520,10 @@ case class JsonToStructs(
     timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
 
-  val forceNullableSchema = SQLConf.get.getConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA)
-
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
   // can generate incorrect files if values are missing in columns declared as non-nullable.
-  val nullableSchema = if (forceNullableSchema) schema.asNullable else schema
+  val nullableSchema = schema.asNullable
 
   override def nullable: Boolean = true
 
@@ -548,23 +551,15 @@ case class JsonToStructs(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }
 
-  @transient
-  private lazy val castRow = nullableSchema match {
-    case _: StructType => (row: InternalRow) => row
-    case _: ArrayType => (row: InternalRow) => row.getArray(0)
-    case _: MapType => (row: InternalRow) => row.getMap(0)
-  }
-
   // This converts parsed rows to the desired output by the given schema.
-  private def convertRow(rows: Iterator[InternalRow]) = {
-    if (rows.hasNext) {
-      val result = rows.next()
-      // JSON's parser produces one record only.
-      assert(!rows.hasNext)
-      castRow(result)
-    } else {
-      throw new IllegalArgumentException("Expected one row from JSON parser.")
-    }
+  @transient
+  lazy val converter = nullableSchema match {
+    case _: StructType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+    case _: ArrayType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getArray(0) else null
+    case _: MapType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getMap(0) else null
   }
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
@@ -590,8 +585,7 @@ case class JsonToStructs(
       input => rawParser.parse(input, createParser, identity[UTF8String]),
       mode,
       parserSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   override def dataType: DataType = nullableSchema
@@ -600,7 +594,7 @@ case class JsonToStructs(
     copy(timeZoneId = Option(timeZoneId))
 
   override def nullSafeEval(json: Any): Any = {
-    convertRow(parser.parse(json.asInstanceOf[UTF8String]))
+    converter(parser.parse(json.asInstanceOf[UTF8String]))
   }
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
@@ -636,6 +630,7 @@ case class JsonToStructs(
       > SELECT _FUNC_(array((map('a', 1))));
        [{"a":1}]
   """,
+  group = "json_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
@@ -703,10 +698,8 @@ case class StructsToJson(
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case map: MapType =>
-      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", map) :: Nil)
-        JacksonUtils.verifySchema(st)
+        JacksonUtils.verifyType(prettyName, map)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
@@ -747,6 +740,7 @@ case class StructsToJson(
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
        array<struct<col:bigint>>
   """,
+  group = "json_funcs",
   since = "2.4.0")
 case class SchemaOfJson(
     child: Expression,
@@ -767,11 +761,7 @@ case class SchemaOfJson(
   private lazy val jsonOptions = new JSONOptions(options, "UTC")
 
   @transient
-  private lazy val jsonFactory = {
-    val factory = new JsonFactory()
-    jsonOptions.setJacksonOptions(factory)
-    factory
-  }
+  private lazy val jsonFactory = jsonOptions.buildJsonFactory()
 
   @transient
   private lazy val jsonInferSchema = new JsonInferSchema(jsonOptions)
@@ -788,7 +778,18 @@ case class SchemaOfJson(
   override def eval(v: InternalRow): Any = {
     val dt = Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
       parser.nextToken()
-      jsonInferSchema.inferField(parser)
+      // To match with schema inference from JSON datasource.
+      jsonInferSchema.inferField(parser) match {
+        case st: StructType =>
+          jsonInferSchema.canonicalizeType(st, jsonOptions).getOrElse(StructType(Nil))
+        case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+          jsonInferSchema
+            .canonicalizeType(at.elementType, jsonOptions)
+            .map(ArrayType(_, containsNull = at.containsNull))
+            .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+        case other: DataType =>
+          jsonInferSchema.canonicalizeType(other, jsonOptions).getOrElse(StringType)
+      }
     }
 
     UTF8String.fromString(dt.catalogString)

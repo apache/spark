@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.resourceToString
  */
 class TPCHQuerySuite extends BenchmarkQueryTest {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     sql(

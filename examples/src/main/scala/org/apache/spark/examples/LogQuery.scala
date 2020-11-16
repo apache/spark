@@ -41,7 +41,7 @@ object LogQuery {
       | 0 73.23.2.15 images.com 1358492557 - Whatup""".stripMargin.split('\n').mkString
   )
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val sparkConf = new SparkConf().setAppName("Log Query")
     val sc = new SparkContext(sparkConf)

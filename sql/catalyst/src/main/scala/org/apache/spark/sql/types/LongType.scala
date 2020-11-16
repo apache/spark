@@ -37,6 +37,7 @@ class LongType private() extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  override private[sql] val exactNumeric = LongExactNumeric
 
   /**
    * The default size of a value of the LongType is 8 bytes.

@@ -135,18 +135,16 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
 
   /** Start the actual log writer on a separate thread. */
   private def startBatchedWriterThread(): Thread = {
-    val thread = new Thread(new Runnable {
-      override def run(): Unit = {
-        while (active.get()) {
-          try {
-            flushRecords()
-          } catch {
-            case NonFatal(e) =>
-              logWarning("Encountered exception in Batched Writer Thread.", e)
-          }
+    val thread = new Thread(() => {
+      while (active.get()) {
+        try {
+          flushRecords()
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Encountered exception in Batched Writer Thread.", e)
         }
-        logInfo("BatchedWriteAheadLog Writer thread exiting.")
       }
+      logInfo("BatchedWriteAheadLog Writer thread exiting.")
     }, "BatchedWriteAheadLog Writer")
     thread.setDaemon(true)
     thread.start()

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -160,7 +160,8 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   """)
 // scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
-  override def prettyName: String = "xpath_double"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("xpath_double")
   override def dataType: DataType = DoubleType
 
   override def nullSafeEval(xml: Any, path: Any): Any = {
@@ -194,7 +195,7 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   examples = """
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
-       ['b1','b2','b3']
+       ["b1","b2","b3"]
   """)
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {

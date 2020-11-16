@@ -44,6 +44,8 @@ object TestRelations {
     AttributeReference("g", StringType)(),
     AttributeReference("h", MapType(IntegerType, IntegerType))())
 
+  val testRelation5 = LocalRelation(AttributeReference("i", StringType)())
+
   val nestedRelation = LocalRelation(
     AttributeReference("top", StructType(
       StructField("duplicateField", StringType) ::

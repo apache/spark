@@ -25,7 +25,7 @@ import scala.xml.Node
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -51,23 +51,36 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         numKilledTasks = 1,
         numCompletedIndices = 1,
 
-        executorRunTime = 1L,
-        executorCpuTime = 1L,
         submissionTime = None,
         firstTaskLaunchedTime = None,
         completionTime = None,
         failureReason = None,
 
+        executorDeserializeTime = 1L,
+        executorDeserializeCpuTime = 1L,
+        executorRunTime = 1L,
+        executorCpuTime = 1L,
+        resultSize = 1L,
+        jvmGcTime = 1L,
+        resultSerializationTime = 1L,
+        memoryBytesSpilled = 1L,
+        diskBytesSpilled = 1L,
+        peakExecutionMemory = 1L,
         inputBytes = 1L,
         inputRecords = 1L,
         outputBytes = 1L,
         outputRecords = 1L,
+        shuffleRemoteBlocksFetched = 1L,
+        shuffleLocalBlocksFetched = 1L,
+        shuffleFetchWaitTime = 1L,
+        shuffleRemoteBytesRead = 1L,
+        shuffleRemoteBytesReadToDisk = 1L,
+        shuffleLocalBytesRead = 1L,
         shuffleReadBytes = 1L,
         shuffleReadRecords = 1L,
         shuffleWriteBytes = 1L,
+        shuffleWriteTime = 1L,
         shuffleWriteRecords = 1L,
-        memoryBytesSpilled = 1L,
-        diskBytesSpilled = 1L,
 
         name = "stage1",
         description = Some("description"),
@@ -128,8 +141,10 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
           listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
           taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())
           val taskMetrics = TaskMetrics.empty
+          val executorMetrics = new ExecutorMetrics
           taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
-          listener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
+          listener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo,
+            executorMetrics, taskMetrics))
       }
       listener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
       page.render(request)

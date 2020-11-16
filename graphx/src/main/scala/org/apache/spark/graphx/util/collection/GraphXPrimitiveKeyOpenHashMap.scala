@@ -71,7 +71,7 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V) {
+  def update(k: K, v: V): Unit = {
     val pos = keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
     keySet.rehashIfNeeded(k, grow, move)
@@ -80,7 +80,7 @@ class GraphXPrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
 
 
   /** Set the value for a key */
-  def setMerge(k: K, v: V, mergeF: (V, V) => V) {
+  def setMerge(k: K, v: V, mergeF: (V, V) => V): Unit = {
     val pos = keySet.addWithoutResize(k)
     val ind = pos & OpenHashSet.POSITION_MASK
     if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) { // if first add

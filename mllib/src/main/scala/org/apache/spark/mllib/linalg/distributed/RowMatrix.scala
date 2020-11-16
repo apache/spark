@@ -27,8 +27,9 @@ import breeze.numerics.{sqrt => brzSqrt}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.mllib.stat._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
@@ -117,13 +118,29 @@ class RowMatrix @Since("1.0.0") (
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
+    val gramianSizeInBytes = nt * 8L
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.treeAggregate(new BDV[Double](nt))(
-      seqOp = (U, v) => {
+    val GU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
+      seqOp = (maybeU, v) => {
+        val U =
+          if (maybeU == null) {
+            new BDV[Double](nt)
+          } else {
+            maybeU
+          }
         BLAS.spr(1.0, v, U.data)
         U
-      }, combOp = (U1, U2) => U1 += U2)
+      }, combOp = (U1, U2) =>
+        if (U1 == null) {
+          U2
+        } else if (U2 == null) {
+          U1
+        } else {
+          U1 += U2
+        },
+      depth = getTreeAggregateIdealDepth(gramianSizeInBytes)
+    )
 
     RowMatrix.triuToFull(n, GU.data)
   }
@@ -136,8 +153,14 @@ class RowMatrix @Since("1.0.0") (
     // This succeeds when n <= 65535, which is checked above
     val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
-    val MU = rows.treeAggregate(new BDV[Double](nt))(
-      seqOp = (U, v) => {
+    val MU = rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
+      seqOp = (maybeU, v) => {
+        val U =
+          if (maybeU == null) {
+            new BDV[Double](nt)
+          } else {
+            maybeU
+          }
 
         val n = v.size
         val na = Array.ofDim[Double](n)
@@ -150,7 +173,15 @@ class RowMatrix @Since("1.0.0") (
 
         BLAS.spr(1.0, new DenseVector(na), U.data)
         U
-      }, combOp = (U1, U2) => U1 += U2)
+      }, combOp = (U1, U2) =>
+        if (U1 == null) {
+          U2
+        } else if (U2 == null) {
+          U1
+        } else {
+          U1 += U2
+        }
+    )
 
     bc.destroy()
 
@@ -402,11 +433,11 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     checkNumColumns(n)
 
-    val summary = computeColumnSummaryStatistics()
+    val summary = Statistics.colStats(rows.map((_, 1.0)), Seq("count", "mean"))
     val m = summary.count
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
-    val mean = summary.mean
+    val mean = Vectors.fromML(summary.mean)
 
     if (rows.first().isInstanceOf[DenseVector]) {
       computeDenseVectorCovariance(mean, n, m)
@@ -585,7 +616,8 @@ class RowMatrix @Since("1.0.0") (
       10 * math.log(numCols()) / threshold
     }
 
-    columnSimilaritiesDIMSUM(computeColumnSummaryStatistics().normL2.toArray, gamma)
+    val summary = Statistics.colStats(rows.map((_, 1.0)), Seq("normL2"))
+    columnSimilaritiesDIMSUM(summary.normL2.toArray, gamma)
   }
 
   /**
@@ -730,7 +762,7 @@ class RowMatrix @Since("1.0.0") (
     val mat = BDM.zeros[Double](m, n)
     var i = 0
     rows.collect().foreach { vector =>
-      vector.foreachActive { case (j, v) =>
+      vector.foreachNonZero { case (j, v) =>
         mat(i, j) = v
       }
       i += 1
@@ -739,13 +771,42 @@ class RowMatrix @Since("1.0.0") (
   }
 
   /** Updates or verifies the number of rows. */
-  private def updateNumRows(m: Long) {
+  private def updateNumRows(m: Long): Unit = {
     if (nRows <= 0) {
       nRows = m
     } else {
       require(nRows == m,
         s"The number of rows $m is different from what specified or previously computed: ${nRows}.")
     }
+  }
+
+  /**
+   * Computing desired tree aggregate depth necessary to avoid exceeding
+   * driver.MaxResultSize during aggregation.
+   * Based on the formulae: (numPartitions)^(1/depth) * objectSize <= DriverMaxResultSize
+   * @param aggregatedObjectSizeInBytes the size, in megabytes, of the object being tree aggregated
+   */
+  private[spark] def getTreeAggregateIdealDepth(aggregatedObjectSizeInBytes: Long) = {
+    require(aggregatedObjectSizeInBytes > 0,
+      "Cannot compute aggregate depth heuristic based on a zero-size object to aggregate")
+
+    val maxDriverResultSizeInBytes = rows.conf.get[Long](MAX_RESULT_SIZE)
+
+    require(maxDriverResultSizeInBytes > aggregatedObjectSizeInBytes,
+      s"Cannot aggregate object of size $aggregatedObjectSizeInBytes Bytes, "
+        + s"as it's bigger than maxResultSize ($maxDriverResultSizeInBytes Bytes)")
+
+    val numerator = math.log(rows.getNumPartitions)
+    val denominator = math.log(maxDriverResultSizeInBytes) - math.log(aggregatedObjectSizeInBytes)
+    val desiredTreeDepth = math.ceil(numerator / denominator)
+
+    if (desiredTreeDepth > 4) {
+      logWarning(
+        s"Desired tree depth for treeAggregation is big ($desiredTreeDepth)."
+          + "Consider increasing driver max result size or reducing number of partitions")
+    }
+
+    math.min(math.max(1, desiredTreeDepth), 10).toInt
   }
 }
 

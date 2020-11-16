@@ -81,7 +81,7 @@ class NextIteratorSuite extends SparkFunSuite with Matchers {
       }
     }
 
-    override def close() {
+    override def close(): Unit = {
       closeCalled += 1
     }
   }

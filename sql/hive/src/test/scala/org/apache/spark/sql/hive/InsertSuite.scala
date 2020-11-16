@@ -19,12 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
+import com.google.common.io.Files
+import org.apache.hadoop.fs.Path
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -36,7 +38,7 @@ case class TestData(key: Int, value: String)
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+    with SQLTestUtils  with PrivateMethodTester  {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -199,8 +201,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            |SELECT 7, 8, 3
           """.stripMargin)
     }
-    assert(e.getMessage.contains(
-      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [c]"))
+    assert(e.getMessage.contains("IF NOT EXISTS with dynamic partitions: c"))
 
     // If the partition already exists, the insert will overwrite the data
     // unless users specify IF NOT EXISTS
@@ -461,7 +462,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         // Columns `c + 1` and `d + 1` are resolved by position, and thus mapped to partition
         // columns `b` and `c` of the target table.
         val df = Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d")
-        df.select('a + 1, 'b + 1, 'c + 1, 'd + 1).write.insertInto(tableName)
+        df.select($"a" + 1, $"b" + 1, $"c" + 1, $"d" + 1).write.insertInto(tableName)
 
         checkAnswer(
           sql(s"SELECT a, b, c, d FROM $tableName"),
@@ -548,6 +549,32 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         checkAnswer(sql("SELECT * FROM test_table"), Row(1))
       }
     }
+  }
+
+  test("SPARK-27552: hive.exec.stagingdir is invalid on Windows OS") {
+    val conf = spark.sessionState.newHadoopConf()
+    val inputPath = new Path("/tmp/b/c")
+    var stagingDir = "tmp/b"
+    val saveHiveFile = InsertIntoHiveTable(null, Map.empty, null, false, false, null)
+    val getStagingDir = PrivateMethod[Path](Symbol("getStagingDir"))
+    var path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b_hive_") != -1)
+
+    stagingDir = "tmp/b/c"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
+
+    stagingDir = "d/e"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
+
+    stagingDir = ".d/e"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.d/e_hive_") != -1)
+
+    stagingDir = "/tmp/c/"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/c_hive_") != -1)
   }
 
   test("insert overwrite to dir from hive metastore table") {
@@ -730,6 +757,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+
+  test("insert overwrite to dir from non-existent table") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+      }.getMessage
+      assert(e.contains("Table or view not found"))
+    }
+  }
+
   test("SPARK-21165: FileFormatWriter should only rely on attributes from analyzed plan") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       withTable("tab1", "tab2") {
@@ -782,6 +821,29 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-30201 HiveOutputWriter standardOI should use ObjectInspectorCopyOption.DEFAULT") {
+    withTable("t1", "t2") {
+      withTempDir { dir =>
+        val file = new File(dir, "test.hex")
+        val hex = "AABBCC"
+        val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
+        Files.write(bs, file)
+        val path = file.getParent
+        sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
+        checkAnswer(
+          sql("select hex(c) from t1"),
+          Row(hex)
+        )
+
+        sql("create table t2 as select c from t1")
+        checkAnswer(
+          sql("select hex(c) from t2"),
+          Row(hex)
+        )
       }
     }
   }

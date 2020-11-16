@@ -150,7 +150,7 @@ private[spark] object ChiSqTest extends Logging {
    * Uniform distribution is assumed when `expected` is not passed in.
    */
   def chiSquared(observed: Vector,
-      expected: Vector = Vectors.dense(Array.empty[Double]),
+      expected: Vector = Vectors.dense(Array.emptyDoubleArray),
       methodName: String = PEARSON.name): ChiSqTestResult = {
 
     // Validate input arguments

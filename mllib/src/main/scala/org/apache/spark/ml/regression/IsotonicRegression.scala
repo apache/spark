@@ -240,7 +240,7 @@ class IsotonicRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
         udf { feature: Double => oldModel.predict(feature) }
@@ -248,17 +248,33 @@ class IsotonicRegressionModel private[ml] (
         val idx = $(featureIndex)
         udf { features: Vector => oldModel.predict(features(idx)) }
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
+
+  @Since("3.0.0")
+  def predict(value: Double): Double = oldModel.predict(value)
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    outputSchema
   }
 
   @Since("1.6.0")
   override def write: MLWriter =
     new IsotonicRegressionModelWriter(this)
+
+  @Since("3.0.0")
+  val numFeatures: Int = 1
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IsotonicRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 @Since("1.6.0")

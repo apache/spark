@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
@@ -50,24 +51,14 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     assert(res1 == res2)
   }
 
-  test("SPARK-26021: normalize float/double NaN and -0.0") {
-    val unsafeRowWriter1 = new UnsafeRowWriter(4)
-    unsafeRowWriter1.resetRowWriter()
-    unsafeRowWriter1.write(0, Float.NaN)
-    unsafeRowWriter1.write(1, Double.NaN)
-    unsafeRowWriter1.write(2, 0.0f)
-    unsafeRowWriter1.write(3, 0.0)
-    val res1 = unsafeRowWriter1.getRow
-
-    val unsafeRowWriter2 = new UnsafeRowWriter(4)
-    unsafeRowWriter2.resetRowWriter()
-    unsafeRowWriter2.write(0, 0.0f/0.0f)
-    unsafeRowWriter2.write(1, 0.0/0.0)
-    unsafeRowWriter2.write(2, -0.0f)
-    unsafeRowWriter2.write(3, -0.0)
-    val res2 = unsafeRowWriter2.getRow
-
-    // The two rows should be the equal
-    assert(res1 == res2)
+  test("write and get calendar intervals through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.write(0, null.asInstanceOf[CalendarInterval])
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getInterval(0) === null)
+    val interval = new CalendarInterval(0, 1, 0)
+    rowWriter.write(1, interval)
+    assert(rowWriter.getRow.getInterval(1) === interval)
   }
 }

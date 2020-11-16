@@ -23,12 +23,19 @@ DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 SPARK_TGZ="N/A"
 IMAGE_TAG="N/A"
+JAVA_IMAGE_TAG=
+BASE_IMAGE_NAME=
+JVM_IMAGE_NAME=
+PYTHON_IMAGE_NAME=
+R_IMAGE_NAME=
 SPARK_MASTER=
 NAMESPACE=
 SERVICE_ACCOUNT=
 CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
+JAVA_VERSION="8"
+HADOOP_PROFILE="hadoop-2.7"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
@@ -45,6 +52,10 @@ while (( "$#" )); do
       ;;
     --image-tag)
       IMAGE_TAG="$2"
+      shift
+      ;;
+    --java-image-tag)
+      JAVA_IMAGE_TAG="$2"
       shift
       ;;
     --deploy-mode)
@@ -79,6 +90,30 @@ while (( "$#" )); do
       EXCLUDE_TAGS="$2"
       shift
       ;;
+    --base-image-name)
+      BASE_IMAGE_NAME="$2"
+      shift
+      ;;
+    --jvm-image-name)
+      JVM_IMAGE_NAME="$2"
+      shift
+      ;;
+    --python-image-name)
+      PYTHON_IMAGE_NAME="$2"
+      shift
+      ;;
+    --r-image-name)
+      R_IMAGE_NAME="$2"
+      shift
+      ;;
+    --java-version)
+      JAVA_VERSION="$2"
+      shift
+      ;;
+    --hadoop-profile)
+      HADOOP_PROFILE="$2"
+      shift
+      ;;
     *)
       break
       ;;
@@ -87,6 +122,7 @@ while (( "$#" )); do
 done
 
 properties=(
+  -Djava.version=$JAVA_VERSION \
   -Dspark.kubernetes.test.sparkTgz=$SPARK_TGZ \
   -Dspark.kubernetes.test.imageTag=$IMAGE_TAG \
   -Dspark.kubernetes.test.imageRepo=$IMAGE_REPO \
@@ -94,29 +130,45 @@ properties=(
   -Dtest.include.tags=$INCLUDE_TAGS
 )
 
-if [ -n $NAMESPACE ];
+if [ -n "$JAVA_IMAGE_TAG" ];
+then
+  properties=( ${properties[@]} -Dspark.kubernetes.test.javaImageTag=$JAVA_IMAGE_TAG )
+fi
+
+if [ -n "$NAMESPACE" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.namespace=$NAMESPACE )
 fi
 
-if [ -n $SERVICE_ACCOUNT ];
+if [ -n "$SERVICE_ACCOUNT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.serviceAccountName=$SERVICE_ACCOUNT )
 fi
 
-if [ -n $CONTEXT ];
+if [ -n "$CONTEXT" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.kubeConfigContext=$CONTEXT )
 fi
 
-if [ -n $SPARK_MASTER ];
+if [ -n "$SPARK_MASTER" ];
 then
   properties=( ${properties[@]} -Dspark.kubernetes.test.master=$SPARK_MASTER )
 fi
 
-if [ -n $EXCLUDE_TAGS ];
+if [ -n "$EXCLUDE_TAGS" ];
 then
   properties=( ${properties[@]} -Dtest.exclude.tags=$EXCLUDE_TAGS )
 fi
 
-$TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}
+BASE_IMAGE_NAME=${BASE_IMAGE_NAME:-spark}
+JVM_IMAGE_NAME=${JVM_IMAGE_NAME:-${BASE_IMAGE_NAME}}
+PYTHON_IMAGE_NAME=${PYTHON_IMAGE_NAME:-${BASE_IMAGE_NAME}-py}
+R_IMAGE_NAME=${R_IMAGE_NAME:-${BASE_IMAGE_NAME}-r}
+
+properties+=(
+  -Dspark.kubernetes.test.jvmImage=$JVM_IMAGE_NAME
+  -Dspark.kubernetes.test.pythonImage=$PYTHON_IMAGE_NAME
+  -Dspark.kubernetes.test.rImage=$R_IMAGE_NAME
+)
+
+$TEST_ROOT_DIR/build/mvn integration-test -f $TEST_ROOT_DIR/pom.xml -pl resource-managers/kubernetes/integration-tests -am -Pscala-$SCALA_VERSION -P$HADOOP_PROFILE -Pkubernetes -Pkubernetes-integration-tests ${properties[@]}

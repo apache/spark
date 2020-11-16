@@ -42,7 +42,7 @@ public class JavaGaussianMixtureSuite extends SharedSparkSession {
     JavaRDD<Vector> data = jsc.parallelize(points, 2);
     GaussianMixtureModel model = new GaussianMixture().setK(2).setMaxIterations(1).setSeed(1234)
       .run(data);
-    assertEquals(model.gaussians().length, 2);
+    assertEquals(2, model.gaussians().length);
     JavaRDD<Integer> predictions = model.predict(data);
     predictions.first();
   }

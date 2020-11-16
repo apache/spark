@@ -141,6 +141,27 @@ class ReadwriterTests(ReusedSQLTestCase):
                 .mode("overwrite").saveAsTable("pyspark_bucket"))
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+    def test_insert_into(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2)], ["C1", "C2"])
+        with self.table("test_table"):
+            df.write.saveAsTable("test_table")
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table")
+            self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+            df.write.mode("overwrite").insertInto("test_table")
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table", True)
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table", False)
+            self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+            df.write.mode("overwrite").insertInto("test_table", False)
+            self.assertEqual(6, self.spark.sql("select * from test_table").count())
+
 
 if __name__ == "__main__":
     import unittest
@@ -148,7 +169,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

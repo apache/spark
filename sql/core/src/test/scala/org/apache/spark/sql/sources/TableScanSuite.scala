@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -108,7 +108,7 @@ case class AllDataTypesScan(
   }
 }
 
-class TableScanSuite extends DataSourceTest with SharedSQLContext {
+class TableScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
@@ -358,7 +358,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvider or the SchemaRelationProvider.
     Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
-      val schemaNotAllowed = intercept[Exception] {
+      val schemaNotMatch = intercept[Exception] {
         sql(
           s"""
              |CREATE $tableType relationProvierWithSchema (i int)
@@ -369,7 +369,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
              |)
            """.stripMargin)
       }
-      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+      assert(schemaNotMatch.getMessage.contains(
+        "The user-specified schema doesn't match the actual schema"))
 
       val schemaNeeded = intercept[Exception] {
         sql(

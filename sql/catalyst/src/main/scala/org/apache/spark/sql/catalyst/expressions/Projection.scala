@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  */
 class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
-    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+    this(bindReferences(expressions, inputSchema))
 
   override def initialize(partitionIndex: Int): Unit = {
     expressions.foreach(_.foreach {
@@ -88,18 +89,18 @@ object MutableProjection
   }
 
   /**
-   * Returns an MutableProjection for given sequence of bound Expressions.
+   * Returns a MutableProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): MutableProjection = {
     createObject(exprs)
   }
 
   /**
-   * Returns an MutableProjection for given sequence of Expressions, which will be bound to
+   * Returns a MutableProjection for given sequence of Expressions, which will be bound to
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): MutableProjection = {
-    create(toBoundExprs(exprs, inputSchema))
+    create(bindReferences(exprs, inputSchema))
   }
 }
 
@@ -126,12 +127,6 @@ object UnsafeProjection
     InterpretedUnsafeProjection.createProjection(in)
   }
 
-  protected def toUnsafeExprs(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map(_ transform {
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-  }
-
   /**
    * Returns an UnsafeProjection for given StructType.
    *
@@ -152,7 +147,7 @@ object UnsafeProjection
    * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
-    createObject(toUnsafeExprs(exprs))
+    createObject(exprs)
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
@@ -162,7 +157,7 @@ object UnsafeProjection
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
-    create(toBoundExprs(exprs, inputSchema))
+    create(bindReferences(exprs, inputSchema))
   }
 }
 
@@ -203,6 +198,6 @@ object SafeProjection extends CodeGeneratorWithInterpretedFallback[Seq[Expressio
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
-    create(toBoundExprs(exprs, inputSchema))
+    create(bindReferences(exprs, inputSchema))
   }
 }

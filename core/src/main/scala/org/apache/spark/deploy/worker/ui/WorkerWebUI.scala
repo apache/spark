@@ -43,7 +43,7 @@ class WorkerWebUI(
   initialize()
 
   /** Initialize all components of the server. */
-  def initialize() {
+  def initialize(): Unit = {
     val logPage = new LogPage(this)
     attachPage(logPage)
     attachPage(new WorkerPage(this))
@@ -56,6 +56,4 @@ class WorkerWebUI(
 
 private[worker] object WorkerWebUI {
   val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
-  val DEFAULT_RETAINED_DRIVERS = 1000
-  val DEFAULT_RETAINED_EXECUTORS = 1000
 }

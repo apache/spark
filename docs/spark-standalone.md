@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Spark Standalone Mode
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -85,12 +100,13 @@ If you do not have a password-less setup, you can set the environment variable S
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
-- `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
-- `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
+- `sbin/start-slaves.sh` - Starts a worker instance on each machine specified in the `conf/slaves` file.
+- `sbin/start-slave.sh` - Starts a worker instance on the machine the script is executed on.
+- `sbin/start-all.sh` - Starts both a master and a number of workers as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
-- `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
-- `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
+- `sbin/stop-slave.sh` - Stops all worker instances on the machine the script is executed on.
+- `sbin/stop-slaves.sh` - Stops all worker instances on the machines specified in the `conf/slaves` file.
+- `sbin/stop-all.sh` - Stops both the master and the workers as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
@@ -169,13 +185,14 @@ You can optionally configure the cluster further by setting environment variable
 SPARK_MASTER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.deploy.retainedApplications</code></td>
   <td>200</td>
   <td>
     The maximum number of completed applications to display. Older applications will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>0.8.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.retainedDrivers</code></td>
@@ -183,6 +200,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
    The maximum number of completed drivers to display. Older drivers will be dropped from the UI to maintain this limit.<br/>
   </td>
+  <td>1.1.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.spreadOut</code></td>
@@ -192,6 +210,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
   </td>
+  <td>0.6.1</td>
 </tr>
 <tr>
   <td><code>spark.deploy.defaultCores</code></td>
@@ -203,6 +222,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
   </td>
+  <td>0.9.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.maxExecutorRetries</code></td>
@@ -218,6 +238,7 @@ SPARK_MASTER_OPTS supports the following system properties:
     <code>-1</code>.
     <br/>
   </td>
+  <td>1.6.3</td>
 </tr>
 <tr>
   <td><code>spark.worker.timeout</code></td>
@@ -226,20 +247,53 @@ SPARK_MASTER_OPTS supports the following system properties:
     Number of seconds after which the standalone deploy master considers a worker lost if it
     receives no heartbeats.
   </td>
+  <td>0.6.2</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td>(none)</td>
+  <td>
+    Amount of a particular resource to use on the worker.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resource discovery script, which is used to find a particular resource while worker starting up.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
+  </td>
+  <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.worker.resourcesFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resources file which is used to find various resources while worker starting up.
+    The content of resources file should be formatted like <code>
+    [{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]</code>.
+    If a particular resource is not found in the resources file, the discovery script would be used to
+    find that resource. If the discovery script also does not find the resources, the worker will fail
+    to start up.
+  </td>
+  <td>3.0.0</td>
 </tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
   <td>false</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
+    This should be enabled if spark.shuffle.service.db.enabled is "true"
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.interval</code></td>
@@ -248,6 +302,7 @@ SPARK_WORKER_OPTS supports the following system properties:
     Controls the interval, in seconds, at which the worker cleans up old application work dirs
     on the local machine.
   </td>
+  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.appDataTtl</code></td>
@@ -258,6 +313,18 @@ SPARK_WORKER_OPTS supports the following system properties:
     downloaded to each application work dir.  Over time, the work dirs can quickly fill up disk space,
     especially if you run jobs very frequently.
   </td>
+  <td>1.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.service.db.enabled</code></td>
+  <td>true</td>
+  <td>
+    Store External Shuffle service state on local disk so that when the external shuffle service is restarted, it will
+    automatically reload info on current executors.  This only affects standalone mode (yarn always has this behavior
+    enabled).  You should also enable <code>spark.worker.cleanup.enabled</code>, to ensure that the state
+    eventually gets cleaned up.  This config may be removed in the future.
+  </td>
+  <td>3.0.0</td>
 </tr>
 <tr>
   <td><code>spark.storage.cleanupFilesAfterExecutorExit</code></td>
@@ -268,8 +335,9 @@ SPARK_WORKER_OPTS supports the following system properties:
     overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
     local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
     all files/subdirectories of a stopped and timeout application.
-    This only affects Standalone mode, support of other cluster manangers can be added in the future.
+    This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
+  <td>2.4.0</td>
 </tr>
 <tr>
   <td><code>spark.worker.ui.compressedLogFileLengthCacheSize</code></td>
@@ -279,8 +347,21 @@ SPARK_WORKER_OPTS supports the following system properties:
     Spark caches the uncompressed file size of compressed log files. This property controls the cache
     size.
   </td>
+  <td>2.0.2</td>
 </tr>
 </table>
+
+# Resource Allocation and Configuration Overview
+
+Please make sure to have read the Custom Resource Scheduling and Configuration Overview section on the [configuration page](configuration.html). This section only talks about the Spark Standalone specific aspects of resource scheduling.
+
+Spark Standalone has 2 parts, the first is configuring the resources for the Worker, the second is the resource allocation for a specific application.
+
+The user must configure the Workers to have a set of resources available so that it can assign them out to Executors. The <code>spark.worker.resource.{resourceName}.amount</code> is used to control the amount of each resource the worker has allocated. The user must also specify either <code>spark.worker.resourcesFile</code> or <code>spark.worker.resource.{resourceName}.discoveryScript</code> to specify how the Worker discovers the resources its assigned. See the descriptions above for each of those to see which method works best for your setup.
+
+The second part is running an application on Spark Standalone. The only special case from the standard Spark resource configs is when you are running the Driver in client mode. For a Driver in client mode, the user can specify the resources it uses via <code>spark.driver.resourcesFile</code> or <code>spark.driver.resource.{resourceName}.discoveryScript</code>. If the Driver is running on the same host as other Drivers, please make sure the resources file or discovery script only returns resources that do not conflict with other Drivers running on the same node.
+
+Note, the user does not need to specify a discovery script when submitting an application as the Worker will start each Executor with the resources it allocates to it.
 
 # Connecting an Application to the Cluster
 
@@ -362,7 +443,7 @@ In addition, detailed log output for each job is also written to the work direct
 
 # Running Alongside Hadoop
 
-You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use a hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
+You can run Spark alongside your existing Hadoop cluster by just launching it as a separate service on the same machines. To access Hadoop data from Spark, just use an hdfs:// URL (typically `hdfs://<namenode>:9000/path`, but you can find the right URL on your Hadoop Namenode's web UI). Alternatively, you can set up a separate cluster for Spark, and still have it access HDFS over the network; this will be slower than disk-local access, but may not be a concern if you are still running in the same local area network (e.g. you place a few Spark machines on each rack that you have Hadoop on).
 
 
 # Configuring Ports for Network Security
@@ -418,14 +499,16 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
 <table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
+  <tr><th style="width:21%">System property</th><th>Meaning</th><th>Since Version</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>Set to FILESYSTEM to enable single-node recovery mode (default: NONE).</td>
+    <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.</td>
+    <td>0.8.1</td>
   </tr>
 </table>
 

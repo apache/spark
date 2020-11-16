@@ -34,6 +34,7 @@ import org.mockito.MockitoAnnotations;
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
@@ -45,6 +46,7 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.util.Utils;
+import org.apache.spark.internal.config.package$;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
@@ -63,7 +65,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   private TaskMemoryManager taskMemoryManager;
   private SerializerManager serializerManager = new SerializerManager(
       new JavaSerializer(new SparkConf()),
-      new SparkConf().set("spark.shuffle.spill.compress", "false"));
+      new SparkConf().set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false));
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   final LinkedList<File> spillFilesCreated = new LinkedList<>();
@@ -77,10 +79,10 @@ public abstract class AbstractBytesToBytesMapSuite {
     memoryManager =
       new TestMemoryManager(
         new SparkConf()
-          .set("spark.memory.offHeap.enabled", "" + useOffHeapMemoryAllocator())
-          .set("spark.memory.offHeap.size", "256mb")
-          .set("spark.shuffle.spill.compress", "false")
-          .set("spark.shuffle.compress", "false"));
+          .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), useOffHeapMemoryAllocator())
+          .set(package$.MODULE$.MEMORY_OFFHEAP_SIZE(), 256 * 1024 * 1024L)
+          .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
+          .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
@@ -690,13 +692,11 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     Thread thread = new Thread(() -> {
       int i = 0;
-      long used = 0;
       while (i < 10) {
         c1.use(10000000);
-        used += 10000000;
         i++;
       }
-      c1.free(used);
+      c1.free(c1.getUsed());
     });
 
     try {
@@ -722,6 +722,24 @@ public abstract class AbstractBytesToBytesMapSuite {
         assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
           spillFile.exists());
       }
+    }
+  }
+
+  @Test
+  public void freeAfterFailedReset() {
+    // SPARK-29244: BytesToBytesMap.free after a OOM reset operation should not cause failure.
+    memoryManager.limit(5000);
+    BytesToBytesMap map =
+      new BytesToBytesMap(taskMemoryManager, blockManager, serializerManager, 256, 0.5, 4000);
+    // Force OOM on next memory allocation.
+    memoryManager.markExecutionAsOutOfMemoryOnce();
+    try {
+      map.reset();
+      Assert.fail("Expected SparkOutOfMemoryError to be thrown");
+    } catch (SparkOutOfMemoryError e) {
+      // Expected exception; do nothing.
+    } finally {
+      map.free();
     }
   }
 

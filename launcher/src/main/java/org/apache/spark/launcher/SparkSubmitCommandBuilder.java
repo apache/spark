@@ -267,13 +267,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // We don't want the client to specify Xmx. These have to be set by their corresponding
     // memory flag --driver-memory or configuration entry spark.driver.memory
+    String driverDefaultJavaOptions = config.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS);
+    checkJavaOptions(driverDefaultJavaOptions);
     String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
-    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
-      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-                   "java options (was %s). Use the corresponding --driver-memory or " +
-                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
-      throw new IllegalArgumentException(msg);
-    }
+    checkJavaOptions(driverExtraJavaOptions);
 
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
@@ -289,6 +286,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
+      addOptionString(cmd, driverDefaultJavaOptions);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
@@ -297,6 +295,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
+  }
+
+  private void checkJavaOptions(String javaOptions) {
+    if (!isEmpty(javaOptions) && javaOptions.contains("Xmx")) {
+      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+        "java options (was %s). Use the corresponding --driver-memory or " +
+        "spark.driver.memory configuration instead.", javaOptions);
+      throw new IllegalArgumentException(msg);
+    }
   }
 
   private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {
@@ -341,7 +348,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
-    if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
+    if (!appArgs.isEmpty() && (appArgs.get(0).endsWith(".R") || appArgs.get(0).endsWith(".r"))) {
       System.err.println(
         "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <R file>");
@@ -383,9 +390,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case
-    return userMaster == null ||
-      "client".equals(userDeployMode) ||
-      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
+    return userMaster == null || userDeployMode == null || "client".equals(userDeployMode);
   }
 
   /**
@@ -455,6 +460,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
           break;
         case CONF:
+          checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);

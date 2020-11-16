@@ -48,7 +48,7 @@ private[streaming] class FileBasedWriteAheadLogRandomReader(path: String, conf: 
     instream.close()
   }
 
-  private def assertOpen() {
+  private def assertOpen(): Unit = {
     HdfsUtils.checkState(!closed, "Stream is closed. Create a new Reader to read from the file.")
   }
 }

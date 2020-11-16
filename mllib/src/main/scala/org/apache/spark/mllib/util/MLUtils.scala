@@ -173,7 +173,7 @@ object MLUtils extends Logging {
    * @see `org.apache.spark.mllib.util.MLUtils.loadLibSVMFile`
    */
   @Since("1.0.0")
-  def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
+  def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String): Unit = {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
       val sb = new StringBuilder(label.toString)

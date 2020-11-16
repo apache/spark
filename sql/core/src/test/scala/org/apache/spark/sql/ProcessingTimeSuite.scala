@@ -22,12 +22,15 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
+import org.apache.spark.sql.streaming.Trigger
 
 class ProcessingTimeSuite extends SparkFunSuite {
 
   test("create") {
-    def getIntervalMs(trigger: Trigger): Long = trigger.asInstanceOf[ProcessingTime].intervalMs
+    def getIntervalMs(trigger: Trigger): Long = {
+      trigger.asInstanceOf[ProcessingTimeTrigger].intervalMs
+    }
 
     assert(getIntervalMs(Trigger.ProcessingTime(10.seconds)) === 10 * 1000)
     assert(getIntervalMs(Trigger.ProcessingTime(10, TimeUnit.SECONDS)) === 10 * 1000)

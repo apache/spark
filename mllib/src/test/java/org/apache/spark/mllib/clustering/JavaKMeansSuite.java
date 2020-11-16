@@ -42,11 +42,11 @@ public class JavaKMeansSuite extends SharedSparkSession {
     Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
 
     JavaRDD<Vector> data = jsc.parallelize(points, 2);
-    KMeansModel model = KMeans.train(data.rdd(), 1, 1, 1, KMeans.K_MEANS_PARALLEL());
+    KMeansModel model = KMeans.train(data.rdd(), 1, 1, KMeans.K_MEANS_PARALLEL());
     assertEquals(1, model.clusterCenters().length);
     assertEquals(expectedCenter, model.clusterCenters()[0]);
 
-    model = KMeans.train(data.rdd(), 1, 1, 1, KMeans.RANDOM());
+    model = KMeans.train(data.rdd(), 1, 1, KMeans.RANDOM());
     assertEquals(expectedCenter, model.clusterCenters()[0]);
   }
 

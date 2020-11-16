@@ -17,20 +17,24 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
-class ComplexTypesSuite extends QueryTest with SharedSQLContext {
+class ComplexTypesSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     spark.range(10).selectExpr(
       "id + 1 as i1", "id + 2 as i2", "id + 3 as i3", "id + 4 as i4", "id + 5 as i5")
       .write.saveAsTable("tab")
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       spark.sql("DROP TABLE IF EXISTS tab")
     } finally {
@@ -105,5 +109,12 @@ class ComplexTypesSuite extends QueryTest with SharedSQLContext {
       .selectExpr("cola.exp.i2", "cola.i4").filter("cola.i4 > 11")
     checkAnswer(df1, Row(10, 12) :: Row(11, 13) :: Nil)
     checkNamedStruct(df.queryExecution.optimizedPlan, expectedCount = 0)
+  }
+
+  test("SPARK-32167: get field from an array of struct") {
+    val innerStruct = new StructType().add("i", "int", nullable = true)
+    val schema = new StructType().add("arr", ArrayType(innerStruct, containsNull = false))
+    val df = spark.createDataFrame(List(Row(Seq(Row(1), Row(null)))).asJava, schema)
+    checkAnswer(df.select($"arr".getField("i")), Row(Seq(1, null)))
   }
 }

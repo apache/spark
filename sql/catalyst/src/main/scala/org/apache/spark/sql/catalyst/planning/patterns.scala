@@ -17,14 +17,36 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+
+trait OperationHelper {
+  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+
+  protected def collectAliases(fields: Seq[Expression]): AttributeMap[Expression] =
+    AttributeMap(fields.collect {
+      case a: Alias => (a.toAttribute, a.child)
+    })
+
+  protected def substitute(aliases: AttributeMap[Expression])(expr: Expression): Expression = {
+    // use transformUp instead of transformDown to avoid dead loop
+    // in case of there's Alias whose exprId is the same as its child attribute.
+    expr.transformUp {
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifier))
+          .getOrElse(a)
+
+      case a: AttributeReference =>
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
+    }
+  }
+}
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -33,8 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * [[org.apache.spark.sql.catalyst.expressions.Alias Aliases]] are in-lined/substituted if
  * necessary.
  */
-object PhysicalOperation extends PredicateHelper {
-  type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
+object PhysicalOperation extends OperationHelper with PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = {
     val (fields, filters, child, _) = collectProjectsAndFilters(plan)
@@ -56,7 +77,7 @@ object PhysicalOperation extends PredicateHelper {
    * }}}
    */
   private def collectProjectsAndFilters(plan: LogicalPlan):
-      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
+      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, AttributeMap[Expression]) =
     plan match {
       case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
@@ -72,23 +93,76 @@ object PhysicalOperation extends PredicateHelper {
         collectProjectsAndFilters(h.child)
 
       case other =>
-        (None, Nil, other, Map.empty)
+        (None, Nil, other, AttributeMap(Seq()))
     }
+}
 
-  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _) => a.toAttribute -> child
-  }.toMap
+/**
+ * A variant of [[PhysicalOperation]]. It matches any number of project or filter
+ * operations even if they are non-deterministic, as long as they satisfy the
+ * requirement of CollapseProject and CombineFilters.
+ */
+object ScanOperation extends OperationHelper with PredicateHelper {
+  type ScanReturnType = Option[(Option[Seq[NamedExpression]],
+    Seq[Expression], LogicalPlan, AttributeMap[Expression])]
 
-  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
-    expr.transform {
-      case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier))
-          .getOrElse(a)
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    collectProjectsAndFilters(plan) match {
+      case Some((fields, filters, child, _)) =>
+        Some((fields.getOrElse(child.output), filters, child))
+      case None => None
+    }
+  }
 
-      case a: AttributeReference =>
-        aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
+  private def hasCommonNonDeterministic(
+      expr: Seq[Expression],
+      aliases: AttributeMap[Expression]): Boolean = {
+    expr.exists(_.collect {
+      case a: AttributeReference if aliases.contains(a) => aliases(a)
+    }.exists(!_.deterministic))
+  }
+
+  private def collectProjectsAndFilters(plan: LogicalPlan): ScanReturnType = {
+    plan match {
+      case Project(fields, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((_, filters, other, aliases)) =>
+            // Follow CollapseProject and only keep going if the collected Projects
+            // do not have common non-deterministic expressions.
+            if (!hasCommonNonDeterministic(fields, aliases)) {
+              val substitutedFields =
+                fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+              Some((Some(substitutedFields), filters, other, collectAliases(substitutedFields)))
+            } else {
+              None
+            }
+          case None => None
+        }
+
+      case Filter(condition, child) =>
+        collectProjectsAndFilters(child) match {
+          case Some((fields, filters, other, aliases)) =>
+            // Follow CombineFilters and only keep going if 1) the collected Filters
+            // and this filter are all deterministic or 2) if this filter is the first
+            // collected filter and doesn't have common non-deterministic expressions
+            // with lower Project.
+            val substitutedCondition = substitute(aliases)(condition)
+            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
+              substitutedCondition.deterministic) || filters.isEmpty
+            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
+              Some((fields, filters ++ splitConjunctivePredicates(substitutedCondition),
+                other, aliases))
+            } else {
+              None
+            }
+          case None => None
+        }
+
+      case h: ResolvedHint =>
+        collectProjectsAndFilters(h.child)
+
+      case other =>
+        Some((None, Nil, other, AttributeMap(Seq())))
     }
   }
 }
@@ -105,8 +179,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression],
       Option[Expression], LogicalPlan, LogicalPlan, JoinHint)
 
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition, hint) =>
+  def unapply(join: Join): Option[ReturnType] = join match {
+    case Join(left, right, joinType, condition, hint) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
@@ -118,19 +192,23 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // Replace null with default value for joining key, then those rows with null in it could
         // be joined together
         case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType)))))
+          Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))),
+            (IsNull(l), IsNull(r))
+          )
         case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType)))))
+          Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))),
+            (IsNull(r), IsNull(l))
+          )
         case other => None
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
-        case EqualTo(l, r) =>
+        case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
-        case other => false
+        case _ => false
       }
 
       if (joinKeys.nonEmpty) {
@@ -140,7 +218,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       } else {
         None
       }
-    case _ => None
   }
 }
 
@@ -167,35 +244,27 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * was involved in an explicit cross join. Also returns the entire list of join conditions for
    * the left-deep tree.
    */
-  def flattenJoin(
-      plan: LogicalPlan,
-      hintMap: mutable.HashMap[AttributeSet, HintInfo],
-      parentJoinType: InnerLike = Inner)
+  def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond, hint) =>
-      val (plans, conditions) = flattenJoin(left, hintMap, joinType)
-      hint.leftHint.map(hintMap.put(left.outputSet, _))
-      hint.rightHint.map(hintMap.put(right.outputSet, _))
+    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, _)) =>
-      val (plans, conditions) = flattenJoin(j, hintMap)
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
   def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[AttributeSet, HintInfo])]
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(f, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
-    case j @ Join(_, _, joinType, _, _) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(j, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
+        if hint == JoinHint.NONE =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
+      Some(flattenJoin(j))
     case _ => None
   }
 }

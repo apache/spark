@@ -2,6 +2,21 @@
 layout: global
 title: Parquet Files
 displayTitle: Parquet Files
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -37,7 +52,7 @@ Using the data from the above example:
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -157,9 +172,10 @@ turned it off by default starting from 1.5.0. You may enable it by
 
 ### Hive metastore Parquet table conversion
 
-When reading from and writing to Hive metastore Parquet tables, Spark SQL will try to use its own
-Parquet support instead of Hive SerDe for better performance. This behavior is controlled by the
-`spark.sql.hive.convertMetastoreParquet` configuration, and is turned on by default.
+When reading from Hive metastore Parquet tables and writing to non-partitioned Hive metastore
+Parquet tables, Spark SQL will try to use its own Parquet support instead of Hive SerDe for
+better performance. This behavior is controlled by the `spark.sql.hive.convertMetastoreParquet`
+configuration, and is turned on by default.
 
 #### Hive/Parquet Schema Reconciliation
 
@@ -226,7 +242,7 @@ refreshTable("my_table")
 
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 REFRESH TABLE my_table;
@@ -242,7 +258,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 `SET key=value` commands using SQL.
 
 <table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 <tr>
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
@@ -251,6 +267,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
@@ -259,23 +276,26 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     Some Parquet-producing systems, in particular Impala and Hive, store Timestamp into INT96. This
     flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
   </td>
+  <td>1.3.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
-    Sets the compression codec used when writing Parquet files. If either `compression` or
-    `parquet.compression` is specified in the table-specific options/properties, the precedence would be
-    `compression`, `parquet.compression`, `spark.sql.parquet.compression.codec`. Acceptable values include:
+    Sets the compression codec used when writing Parquet files. If either <code>compression</code> or
+    <code>parquet.compression</code> is specified in the table-specific options/properties, the precedence would be
+    <code>compression</code>, <code>parquet.compression</code>, <code>spark.sql.parquet.compression.codec</code>. Acceptable values include:
     none, uncompressed, snappy, gzip, lzo, brotli, lz4, zstd.
-    Note that `zstd` requires `ZStandardCodec` to be installed before Hadoop 2.9.0, `brotli` requires
-    `BrotliCodec` to be installed.
+    Note that <code>zstd</code> requires <code>ZStandardCodec</code> to be installed before Hadoop 2.9.0, <code>brotli</code> requires
+    <code>BrotliCodec</code> to be installed.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.filterPushdown</code></td>
   <td>true</td>
   <td>Enables Parquet filter push-down optimization when set to true.</td>
+  <td>1.2.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
@@ -284,6 +304,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
     support.
   </td>
+  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.mergeSchema</code></td>
@@ -294,18 +315,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
       schema is picked from the summary file or a random data file if no summary file is available.
     </p>
   </td>
-</tr>
-<tr>
-  <td><code>spark.sql.optimizer.metadataOnly</code></td>
-  <td>true</td>
-  <td>
-    <p>
-      When true, enable the metadata-only query optimization that use the table's metadata to
-      produce the partition columns instead of table scans. It applies when all the columns scanned
-      are partition columns and the query has an aggregate operator that satisfies distinct
-      semantics.
-    </p>
-  </td>
+  <td>1.5.0</td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
@@ -317,5 +327,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     example, decimals will be written in int-based format. If Parquet output is intended for use
     with systems that do not support this newer format, set to true.
   </td>
+  <td>1.6.0</td>
 </tr>
 </table>

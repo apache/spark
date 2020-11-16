@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcTimeout}
 
 private[spark] object RpcUtils {
@@ -35,32 +36,32 @@ private[spark] object RpcUtils {
 
   /** Returns the configured number of times to retry connecting */
   def numRetries(conf: SparkConf): Int = {
-    conf.getInt("spark.rpc.numRetries", 3)
+    conf.get(RPC_NUM_RETRIES)
   }
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Long = {
-    conf.getTimeAsMs("spark.rpc.retry.wait", "3s")
+    conf.get(RPC_RETRY_WAIT)
   }
 
   /** Returns the default Spark timeout to use for RPC ask operations. */
   def askRpcTimeout(conf: SparkConf): RpcTimeout = {
-    RpcTimeout(conf, Seq("spark.rpc.askTimeout", "spark.network.timeout"), "120s")
+    RpcTimeout(conf, Seq(RPC_ASK_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
   }
 
   /** Returns the default Spark timeout to use for RPC remote endpoint lookup. */
   def lookupRpcTimeout(conf: SparkConf): RpcTimeout = {
-    RpcTimeout(conf, Seq("spark.rpc.lookupTimeout", "spark.network.timeout"), "120s")
+    RpcTimeout(conf, Seq(RPC_LOOKUP_TIMEOUT.key, NETWORK_TIMEOUT.key), "120s")
   }
 
   private val MAX_MESSAGE_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
 
   /** Returns the configured max message size for messages in bytes. */
   def maxMessageSizeBytes(conf: SparkConf): Int = {
-    val maxSizeInMB = conf.getInt("spark.rpc.message.maxSize", 128)
+    val maxSizeInMB = conf.get(RPC_MESSAGE_MAX_SIZE)
     if (maxSizeInMB > MAX_MESSAGE_SIZE_IN_MB) {
       throw new IllegalArgumentException(
-        s"spark.rpc.message.maxSize should not be greater than $MAX_MESSAGE_SIZE_IN_MB MB")
+        s"${RPC_MESSAGE_MAX_SIZE.key} should not be greater than $MAX_MESSAGE_SIZE_IN_MB MB")
     }
     maxSizeInMB * 1024 * 1024
   }

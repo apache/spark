@@ -23,10 +23,13 @@ import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
+import com.codahale.metrics.MetricSet
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.metrics2.impl.MetricsSystemImpl
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem
 import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -36,6 +39,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.util.Utils
@@ -52,7 +56,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
-    yarnConfig.setInt("spark.shuffle.service.port", 0)
+    yarnConfig.setInt(SHUFFLE_SERVICE_PORT.key, 0)
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
@@ -326,10 +330,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
     recoveryPath.toString should be (new Path(secretsFile2.getParentFile.toURI).toString)
-    eventually(timeout(10 seconds), interval(5 millis)) {
+    eventually(timeout(10.seconds), interval(5.milliseconds)) {
       assert(!execStateFile.exists())
     }
-    eventually(timeout(10 seconds), interval(5 millis)) {
+    eventually(timeout(10.seconds), interval(5.milliseconds)) {
       assert(!secretsFile.exists())
     }
 
@@ -379,6 +383,27 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1._recoveryPath should be (null)
     s1.registeredExecutorFile should be (null)
     s1.secretsFile should be (null)
+  }
+
+  test("SPARK-31646: metrics should be registered into Node Manager's metrics system") {
+    s1 = new YarnShuffleService
+    s1.init(yarnConfig)
+
+    val metricsSource = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
+      .getSource("sparkShuffleService").asInstanceOf[YarnShuffleServiceMetrics]
+    val metricSetRef = classOf[YarnShuffleServiceMetrics].getDeclaredField("metricSet")
+    metricSetRef.setAccessible(true)
+    val metrics = metricSetRef.get(metricsSource).asInstanceOf[MetricSet].getMetrics
+
+    assert(metrics.keySet().asScala == Set(
+      "blockTransferRateBytes",
+      "numActiveConnections",
+      "numCaughtExceptions",
+      "numRegisteredConnections",
+      "openBlockRequestLatencyMillis",
+      "registeredExecutorsSize",
+      "registerExecutorRequestLatencyMillis"
+    ))
   }
 
 }

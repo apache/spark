@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -54,7 +54,6 @@ private[feature] trait ChiSqSelectorParams extends Params
     "Number of features that selector will select, ordered by ascending p-value. If the" +
       " number of features is < numTopFeatures, then this will select all features.",
     ParamValidators.gtEq(1))
-  setDefault(numTopFeatures -> 50)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -70,7 +69,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   final val percentile = new DoubleParam(this, "percentile",
     "Percentile of features that selector will select, ordered by ascending p-value.",
     ParamValidators.inRange(0, 1))
-  setDefault(percentile -> 0.1)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -85,7 +83,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.1.0")
   final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
-  setDefault(fpr -> 0.05)
 
   /** @group getParam */
   @Since("2.1.0")
@@ -100,7 +97,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.2.0")
   final val fdr = new DoubleParam(this, "fdr",
     "The upper bound of the expected false discovery rate.", ParamValidators.inRange(0, 1))
-  setDefault(fdr -> 0.05)
 
   /** @group getParam */
   def getFdr: Double = $(fdr)
@@ -114,7 +110,6 @@ private[feature] trait ChiSqSelectorParams extends Params
   @Since("2.2.0")
   final val fwe = new DoubleParam(this, "fwe",
     "The upper bound of the expected family-wise error rate.", ParamValidators.inRange(0, 1))
-  setDefault(fwe -> 0.05)
 
   /** @group getParam */
   def getFwe: Double = $(fwe)
@@ -129,11 +124,13 @@ private[feature] trait ChiSqSelectorParams extends Params
     "The selector type of the ChisqSelector. " +
       "Supported options: " + OldChiSqSelector.supportedSelectorTypes.mkString(", "),
     ParamValidators.inArray[String](OldChiSqSelector.supportedSelectorTypes))
-  setDefault(selectorType -> OldChiSqSelector.NumTopFeatures)
 
   /** @group getParam */
   @Since("2.1.0")
   def getSelectorType: String = $(selectorType)
+
+  setDefault(numTopFeatures -> 50, percentile -> 0.1, fpr -> 0.05, fdr -> 0.05, fwe -> 0.05,
+    selectorType -> OldChiSqSelector.NumTopFeatures)
 }
 
 /**
@@ -264,22 +261,32 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val transformedSchema = transformSchema(dataset.schema, logging = true)
-    val newField = transformedSchema.last
+    val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+    val newSize = selectedFeatures.length
+    val func = { vector: Vector =>
+      vector match {
+        case SparseVector(_, indices, values) =>
+          val (newIndices, newValues) = chiSqSelector.compressSparse(indices, values)
+          Vectors.sparse(newSize, newIndices, newValues)
+        case DenseVector(values) =>
+          Vectors.dense(chiSqSelector.compressDense(values))
+        case other =>
+          throw new UnsupportedOperationException(
+            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+      }
+    }
 
-    val selector = udf(transformer)
-    dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
+    val transformer = udf(func)
+    dataset.withColumn($(outputCol), transformer(col($(featuresCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField = prepOutputField(schema)
-    val outputFields = schema.fields :+ newField
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, newField)
   }
 
   /**
@@ -305,6 +312,11 @@ final class ChiSqSelectorModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"ChiSqSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
+  }
 }
 
 @Since("1.6.0")

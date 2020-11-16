@@ -198,7 +198,7 @@ object EvaluatePython {
 
     case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
 
-    case other => (obj: Any) => nullSafeConvert(other)(PartialFunction.empty)
+    case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
   }
 
   private def nullSafeConvert(input: Any)(f: PartialFunction[Any, Any]): Any = {

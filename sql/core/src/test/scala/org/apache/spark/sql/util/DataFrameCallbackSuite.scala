@@ -20,15 +20,21 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.{functions, AnalysisException, Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 
-class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
+class DataFrameCallbackSuite extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
   import functions._
 
@@ -48,7 +54,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     df.select("i").collect()
     df.filter($"i" > 0).count()
 
-    sparkContext.listenerBus.waitUntilEmpty(1000)
+    sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 2)
 
     assert(metrics(0)._1 == "collect")
@@ -79,7 +85,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     val e = intercept[SparkException](df.select(errorUdf($"i")).collect())
 
-    sparkContext.listenerBus.waitUntilEmpty(1000)
+    sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 1)
     assert(metrics(0)._1 == "collect")
     assert(metrics(0)._2.analyzed.isInstanceOf[Project])
@@ -95,7 +101,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        val metric = qe.executedPlan match {
+        val metric = stripAQEPlan(qe.executedPlan) match {
           case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
         }
@@ -109,12 +115,12 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     df.collect()
     // Wait for the first `collect` to be caught by our listener. Otherwise the next `collect` will
     // reset the plan metrics.
-    sparkContext.listenerBus.waitUntilEmpty(1000)
+    sparkContext.listenerBus.waitUntilEmpty()
     df.collect()
 
     Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
 
-    sparkContext.listenerBus.waitUntilEmpty(1000)
+    sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 3)
     assert(metrics(0) === 1)
     assert(metrics(1) === 1)
@@ -162,7 +168,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     // For this simple case, the peakExecutionMemory of a stage should be the data size of the
     // aggregate operator, as we only have one memory consuming operator per stage.
-    sparkContext.listenerBus.waitUntilEmpty(1000)
+    sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 2)
     assert(metrics(0) == topAggDataSize)
     assert(metrics(1) == bottomAggDataSize)
@@ -186,7 +192,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
     withTempPath { path =>
       spark.range(10).write.format("json").save(path.getCanonicalPath)
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 1)
       assert(commands.head._1 == "save")
       assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
@@ -197,18 +203,18 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     withTable("tab") {
       sql("CREATE TABLE tab(i long) using parquet") // adds commands(1) via onSuccess
       spark.range(10).write.insertInto("tab")
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 3)
       assert(commands(2)._1 == "insertInto")
-      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
-      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
-        .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
+      assert(commands(2)._2.isInstanceOf[InsertIntoStatement])
+      assert(commands(2)._2.asInstanceOf[InsertIntoStatement].table
+        .asInstanceOf[UnresolvedRelation].multipartIdentifier == Seq("tab"))
     }
     // exiting withTable adds commands(3) via onSuccess (drops tab)
 
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(commands.length == 5)
       assert(commands(4)._1 == "saveAsTable")
       assert(commands(4)._2.isInstanceOf[CreateTable])
@@ -220,10 +226,86 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         spark.range(10).select($"id", $"id").write.insertInto("tab")
       }
-      sparkContext.listenerBus.waitUntilEmpty(1000)
+      sparkContext.listenerBus.waitUntilEmpty()
       assert(exceptions.length == 1)
       assert(exceptions.head._1 == "insertInto")
       assert(exceptions.head._2 == e)
     }
   }
+
+  test("get observable metrics by callback") {
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        metricMaps += qe.observedMetrics
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        // No-op
+      }
+    }
+    spark.listenerManager.register(listener)
+    try {
+      val df = spark.range(100)
+        .observe(
+          name = "my_event",
+          min($"id").as("min_val"),
+          max($"id").as("max_val"),
+          sum($"id").as("sum_val"),
+          count(when($"id" % 2 === 0, 1)).as("num_even"))
+        .observe(
+          name = "other_event",
+          avg($"id").cast("int").as("avg_val"))
+
+      def checkMetrics(metrics: Map[String, Row]): Unit = {
+        assert(metrics.size === 2)
+        assert(metrics("my_event") === Row(0L, 99L, 4950L, 50L))
+        assert(metrics("other_event") === Row(49))
+      }
+
+      // First run
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+      metricMaps.clear()
+
+      // Second run should produce the same result as the first run.
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(metricMaps.size === 1)
+      checkMetrics(metricMaps.head)
+
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  testQuietly("SPARK-31144: QueryExecutionListener should receive `java.lang.Error`") {
+    var e: Exception = null
+    val listener = new QueryExecutionListener {
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        e = exception
+      }
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {}
+    }
+    spark.listenerManager.register(listener)
+
+    intercept[Error] {
+      Dataset.ofRows(spark, ErrorTestCommand("foo")).collect()
+    }
+    sparkContext.listenerBus.waitUntilEmpty()
+    assert(e != null && e.isInstanceOf[QueryExecutionException]
+      && e.getCause.isInstanceOf[Error] && e.getCause.getMessage == "foo")
+    spark.listenerManager.unregister(listener)
+  }
+}
+
+/** A test command that throws `java.lang.Error` during execution. */
+case class ErrorTestCommand(foo: String) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
+
+  override def run(sparkSession: SparkSession): Seq[Row] =
+    throw new java.lang.Error(foo)
 }

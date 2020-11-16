@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 object StreamingExamples extends Logging {
 
   /** Set reasonable logging levels for streaming if the user has not configured log4j. */
-  def setStreamingLogLevels() {
+  def setStreamingLogLevels(): Unit = {
     val log4jInitialized = Logger.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {
       // We first log something to initialize Spark's default logging, then we override the

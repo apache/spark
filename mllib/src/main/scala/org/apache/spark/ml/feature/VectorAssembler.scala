@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature
 import java.util.NoSuchElementException
 
 import scala.collection.mutable
-import scala.language.existentials
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
@@ -131,14 +130,14 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
-    val featureAttributes = featureAttributesMap.flatten[Attribute].toArray
-    val lengths = featureAttributesMap.map(a => a.length).toArray
+    val featureAttributes = featureAttributesMap.flatten[Attribute]
+    val lengths = featureAttributesMap.map(a => a.length)
     val metadata = new AttributeGroup($(outputCol), featureAttributes).toMetadata()
-    val (filteredDataset, keepInvalid) = $(handleInvalid) match {
-      case VectorAssembler.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
-      case VectorAssembler.KEEP_INVALID => (dataset, true)
-      case VectorAssembler.ERROR_INVALID => (dataset, false)
+    val filteredDataset = $(handleInvalid) match {
+      case VectorAssembler.SKIP_INVALID => dataset.na.drop($(inputCols))
+      case VectorAssembler.KEEP_INVALID | VectorAssembler.ERROR_INVALID => dataset
     }
+    val keepInvalid = $(handleInvalid) == VectorAssembler.KEEP_INVALID
     // Data transformation.
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
@@ -176,6 +175,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"VectorAssembler: uid=$uid, handleInvalid=${$(handleInvalid)}" +
+      get(inputCols).map(c => s", numInputCols=${c.length}").getOrElse("")
+  }
 }
 
 @Since("1.6.0")
@@ -228,7 +233,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
         s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint
-           |to add metadata for columns: ${columns.mkString("[", ", ", "]")}."""
+           |to add metadata for columns: ${missingColumns.mkString("[", ", ", "]")}."""
           .stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }
@@ -266,11 +271,9 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         inputColumnIndex += 1
         featureIndex += 1
       case vec: Vector =>
-        vec.foreachActive { case (i, v) =>
-          if (v != 0.0) {
-            indices += featureIndex + i
-            values += v
-          }
+        vec.foreachNonZero { case (i, v) =>
+          indices += featureIndex + i
+          values += v
         }
         inputColumnIndex += 1
         featureIndex += vec.size
@@ -285,7 +288,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
           featureIndex += length
         } else {
           throw new SparkException(
-            s"""Encountered null while assembling a row with handleInvalid = "keep". Consider
+            s"""Encountered null while assembling a row with handleInvalid = "error". Consider
                |removing nulls from dataset or using handleInvalid = "keep" or "skip"."""
               .stripMargin)
         }

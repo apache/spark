@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -79,8 +79,8 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
-    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to update rows"),
-    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to remove rows"),
+    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state")
   ) ++ stateStoreCustomMetrics
@@ -156,17 +156,17 @@ trait WatermarkSupport extends UnaryExecNode {
   }
 
   /** Predicate based on keys that matches data older than the watermark */
-  lazy val watermarkPredicateForKeys: Option[Predicate] = watermarkExpression.flatMap { e =>
+  lazy val watermarkPredicateForKeys: Option[BasePredicate] = watermarkExpression.flatMap { e =>
     if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
-      Some(newPredicate(e, keyExpressions))
+      Some(Predicate.create(e, keyExpressions))
     } else {
       None
     }
   }
 
   /** Predicate based on the child output that matches data older than the watermark. */
-  lazy val watermarkPredicateForData: Option[Predicate] =
-    watermarkExpression.map(newPredicate(_, child.output))
+  lazy val watermarkPredicateForData: Option[BasePredicate] =
+    watermarkExpression.map(Predicate.create(_, child.output))
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
@@ -353,6 +353,7 @@ case class StateStoreSaveExec(
                   finished = true
                   null
                 } else {
+                  numOutputRows += 1
                   removedValueRow
                 }
               }

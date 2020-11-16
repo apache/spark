@@ -37,7 +37,7 @@ import org.apache.spark.util.IntParam
  *   <batchMillise> is the Spark Streaming batch duration in milliseconds.
  */
 object RawNetworkGrep {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       System.err.println("Usage: RawNetworkGrep <numStreams> <host> <port> <batchMillis>")
       System.exit(1)

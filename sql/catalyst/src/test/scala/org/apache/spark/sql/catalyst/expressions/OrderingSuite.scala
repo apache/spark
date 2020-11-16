@@ -106,7 +106,7 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("a", dataType, nullable = true) ::
             StructField("b", dataType, nullable = true) :: Nil)
         val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
-        assume(maybeDataGenerator.isDefined)
+        assert(maybeDataGenerator.isDefined)
         val randGenerator = maybeDataGenerator.get
         val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
         for (_ <- 1 to 50) {

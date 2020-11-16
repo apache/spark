@@ -42,7 +42,9 @@ private[spark] class YarnClientSchedulerBackend(
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
    */
-  override def start() {
+  override def start(): Unit = {
+    super.start()
+
     val driverHost = conf.get(config.DRIVER_HOST_ADDRESS)
     val driverPort = conf.get(config.DRIVER_PORT)
     val hostport = driverHost + ":" + driverPort
@@ -54,17 +56,15 @@ private[spark] class YarnClientSchedulerBackend(
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
-    client = new Client(args, conf)
+    client = new Client(args, conf, sc.env.rpcEnv)
     bindToYarn(client.submitApplication(), None)
 
-    // SPARK-8687: Ensure all necessary properties have already been set before
-    // we initialize our driver scheduler backend, which serves these properties
-    // to the executors
-    super.start()
     waitForApplication()
 
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
+
+    startBindings()
   }
 
   /**
@@ -109,7 +109,7 @@ private[spark] class YarnClientSchedulerBackend(
   private class MonitorThread extends Thread {
     private var allowInterrupt = true
 
-    override def run() {
+    override def run(): Unit = {
       try {
         val YarnAppReport(_, state, diags) =
           client.monitorApplication(appId.get, logApplicationReport = false)
@@ -148,7 +148,7 @@ private[spark] class YarnClientSchedulerBackend(
   /**
    * Stop the scheduler. This assumes `start()` has already been called.
    */
-  override def stop() {
+  override def stop(): Unit = {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
     if (monitorThread != null) {
       monitorThread.stopMonitor()
@@ -164,7 +164,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     super.stop()
     client.stop()
-    logInfo("Stopped")
+    logInfo("YARN client scheduler backend Stopped")
   }
 
   override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {

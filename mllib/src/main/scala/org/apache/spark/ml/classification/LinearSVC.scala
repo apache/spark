@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -32,13 +32,11 @@ import org.apache.spark.ml.optim.aggregator.HingeAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
@@ -56,11 +54,12 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
    */
   final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
     "threshold in binary classification prediction applied to rawPrediction")
+
+  setDefault(regParam -> 0.0, maxIter -> 100, fitIntercept -> true, tol -> 1E-6,
+    standardization -> true, threshold -> 0.0, aggregationDepth -> 2)
 }
 
 /**
- * :: Experimental ::
- *
  * <a href = "https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM">
  *   Linear SVM Classifier</a>
  *
@@ -69,7 +68,6 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  *
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVC @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
@@ -86,7 +84,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -96,7 +93,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Whether to fit an intercept term.
@@ -106,7 +102,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -117,7 +112,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -127,7 +121,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Set the value of param [[weightCol]].
@@ -146,7 +139,6 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold -> 0.0)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -158,40 +150,34 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.2.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
   override protected def train(dataset: Dataset[_]): LinearSVCModel = instrumented { instr =>
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+
+    val instances = extractInstances(dataset)
+    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth)
 
-    val (summarizer, labelSummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
-
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val (summarizer, labelSummarizer) = instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
+      combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
+                c2: (SummarizerBuffer, MultiClassSummarizer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = $(aggregationDepth)
+    )
     instr.logNumExamples(summarizer.count)
     instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
     instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.max.toString)
+    instr.logSumOfWeights(summarizer.weightSum)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -218,7 +204,7 @@ class LinearSVC @Since("2.2.0") (
         throw new SparkException(msg)
       }
 
-      val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+      val featuresStd = summarizer.std.toArray
       val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
@@ -248,7 +234,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
         instr.logError(msg)
@@ -278,6 +264,8 @@ class LinearSVC @Since("2.2.0") (
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
 
+    if (handlePersistence) instances.unpersist()
+
     copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
   }
 }
@@ -290,11 +278,9 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 }
 
 /**
- * :: Experimental ::
  * Linear SVM Model trained by [[LinearSVC]]
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVCModel private[classification] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") val coefficients: Vector,
@@ -310,10 +296,6 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
-  setDefault(threshold, 0.0)
-
-  @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
@@ -323,7 +305,8 @@ class LinearSVCModel private[classification] (
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 
-  override protected def predictRaw(features: Vector): Vector = {
+  @Since("3.0.0")
+  override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
   }
@@ -340,6 +323,10 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   override def write: MLWriter = new LinearSVCModel.LinearSVCWriter(this)
 
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LinearSVCModel: uid=$uid, numClasses=$numClasses, numFeatures=$numFeatures"
+  }
 }
 
 

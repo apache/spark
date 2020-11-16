@@ -69,8 +69,7 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
           function(data, testCol = "test", nullHypothesis = c("norm"), distParams = c(0, 1)) {
             tryCatch(match.arg(nullHypothesis),
                      error = function(e) {
-                       msg <- paste("Distribution", nullHypothesis, "is not supported.")
-                       stop(msg)
+                       stop("Distribution ", nullHypothesis, " is not supported.")
                      })
             if (nullHypothesis == "norm") {
               distParams <- as.numeric(distParams)

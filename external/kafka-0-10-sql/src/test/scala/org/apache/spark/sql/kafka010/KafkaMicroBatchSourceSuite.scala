@@ -28,12 +28,15 @@ import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.util.Random
 
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.commons.io.FileUtils
+import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
+import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
@@ -41,12 +44,13 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
+abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -94,7 +98,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       message: String = "",
       topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
-    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
+    override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
       query match {
         // Make sure no Spark job is running when deleting a topic
         case Some(m: MicroBatchExecution) => m.processAllAvailable()
@@ -114,18 +118,13 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources: Seq[BaseStreamingSource] = {
+      val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
-          case StreamingExecutionRelation(source: KafkaMicroBatchReadSupport, _) => source
-        } ++ (query.get.lastExecution match {
-          case null => Seq()
-          case e => e.logical.collect {
-            case r: StreamingDataSourceV2Relation
-                if r.readSupport.isInstanceOf[KafkaContinuousReadSupport] =>
-              r.readSupport.asInstanceOf[KafkaContinuousReadSupport]
-          }
-        })
+          case r: StreamingDataSourceV2Relation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
+              r.stream.isInstanceOf[KafkaContinuousStream] =>
+            r.stream
+        }
       }.distinct
 
       if (sources.isEmpty) {
@@ -201,6 +200,41 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       StopStream)
   }
 
+  test("SPARK-26718 Rate limit set to Long.Max should not overflow integer " +
+    "during end offset calculation") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    // fill in 5 messages to trigger potential integer overflow
+    testUtils.sendMessages(topic, (0 until 5).map(_.toString).toArray, Some(0))
+
+    val partitionOffsets = Map(
+      new TopicPartition(topic, 0) -> 5L
+    )
+    val startingOffsets = JsonUtils.partitionOffsets(partitionOffsets)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      // use latest to force begin to be 5
+      .option("startingOffsets", startingOffsets)
+      // use Long.Max to try to trigger overflow
+      .option("maxOffsetsPerTrigger", Long.MaxValue)
+      .option("subscribe", topic)
+      .option("kafka.metadata.max.age.ms", "1")
+      .load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 30, 31, 32, 33, 34),
+      CheckAnswer(30, 31, 32, 33, 34),
+      StopStream
+    )
+  }
+
   test("maxOffsetsPerTrigger") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
@@ -263,6 +297,28 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         13, 126, 127, 128, 129, 130, 131, 132, 133, 134
       )
     )
+
+    // When Trigger.Once() is used, the read limit should be ignored
+    val allData = Seq(1) ++ (10 to 20) ++ (100 to 200)
+    withTempDir { dir =>
+      testStream(mapped)(
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(allData: _*),
+        StopStream,
+
+        AddKafkaData(Set(topic), 1000 to 1010: _*),
+        StartStream(Trigger.Once(), checkpointLocation = dir.getCanonicalPath),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer((allData ++ 1000.to(1010)): _*)
+      )
+    }
   }
 
   test("input row metrics") {
@@ -293,7 +349,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("subscribing topic by pattern with topic deletions") {
+  // TODO (SPARK-31731): re-enable it
+  ignore("subscribing topic by pattern with topic deletions") {
     val topicPrefix = newTopic()
     val topic = topicPrefix + "-seems"
     val topic2 = topicPrefix + "-bad"
@@ -626,6 +683,57 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
+    )
+  }
+
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
+  test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String,
+      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
+    // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
+    // as well as KafkaOffsetReader.createConsumer(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val dsKafka = spark
+      .readStream
+      .format("kafka")
+      .option(groupIdKey, customGroupId)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(dsKafka)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(1 to 30: _*),
+      Execute { _ =>
+        val consumerGroups = testUtils.listConsumerGroups()
+        val validGroups = consumerGroups.valid().get()
+        val validGroupsId = validGroups.asScala.map(_.groupId())
+        validateGroupId(customGroupId, validGroupsId)
+      }
     )
   }
 
@@ -974,6 +1082,39 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       q.stop()
     }
   }
+
+  test("SPARK-27494: read kafka record containing null key/values.") {
+    testNullableKeyValue(Trigger.ProcessingTime(100))
+  }
+
+  test("SPARK-30656: minPartitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (0 to 9).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (10 to 19).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, Array("20"), Some(2))
+
+    val ds = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .option("minPartitions", "6")
+      .load()
+      .select($"value".as[String])
+    val q = ds.writeStream.foreachBatch { (batch: Dataset[String], _: Long) =>
+      val partitions = batch.rdd.collectPartitions()
+      assert(partitions.length >= 6)
+      assert(partitions.flatten.toSet === (0 to 20).map(_.toString).toSet): Unit
+    }.start()
+    try {
+      q.processAllAvailable()
+    } finally {
+      q.stop()
+    }
+  }
 }
 
 
@@ -981,7 +1122,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key,
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 
@@ -1025,9 +1166,10 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     testStream(kafka)(
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
-        query.logicalPlan.collect {
-          case StreamingExecutionRelation(_: KafkaMicroBatchReadSupport, _) => true
-        }.nonEmpty
+        query.logicalPlan.find {
+          case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[KafkaMicroBatchStream]
+          case _ => false
+        }.isDefined
       }
     )
   }
@@ -1051,16 +1193,14 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           "kafka.bootstrap.servers" -> testUtils.brokerAddress,
           "subscribe" -> topic
         ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
-        val readSupport = provider.createMicroBatchReadSupport(
-          dir.getAbsolutePath, new DataSourceOptions(options.asJava))
-        val config = readSupport.newScanConfigBuilder(
+        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val table = provider.getTable(dsOptions)
+        val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
+        val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).build()
-        val inputPartitions = readSupport.planInputPartitions(config)
-          .map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
-          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }
@@ -1077,6 +1217,63 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
   }
 
+  test("default config of includeHeader doesn't break existing query from Spark 2.4") {
+    import testImplicits._
+
+    // This topic name is migrated from Spark 2.4.3 test run
+    val topic = "spark-test-topic-2b8619f5-d3c4-4c2d-b5d1-8d9d9458aa62"
+    // create same topic and messages as test run
+    testUtils.createTopic(topic, partitions = 5, overwrite = true)
+    testUtils.sendMessages(topic, Array(-20, -21, -22).map(_.toString), Some(0))
+    testUtils.sendMessages(topic, Array(-10, -11, -12).map(_.toString), Some(1))
+    testUtils.sendMessages(topic, Array(0, 1, 2).map(_.toString), Some(2))
+    testUtils.sendMessages(topic, Array(10, 11, 12).map(_.toString), Some(3))
+    testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    val headers = Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))
+    (31 to 35).map { num =>
+      new RecordBuilder(topic, num.toString).partition(num - 31).headers(headers).build()
+    }.foreach { rec => testUtils.sendMessage(rec) }
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    val query = kafka.dropDuplicates()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+      .map(kv => kv._2.toInt + 1)
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-version-2.4.3-kafka-include-headers-default/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    FileUtils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    testStream(query)(
+      StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+      /*
+        Note: The checkpoint was generated using the following input in Spark version 2.4.3
+        testUtils.createTopic(topic, partitions = 5, overwrite = true)
+
+        testUtils.sendMessages(topic, Array(-20, -21, -22).map(_.toString), Some(0))
+        testUtils.sendMessages(topic, Array(-10, -11, -12).map(_.toString), Some(1))
+        testUtils.sendMessages(topic, Array(0, 1, 2).map(_.toString), Some(2))
+        testUtils.sendMessages(topic, Array(10, 11, 12).map(_.toString), Some(3))
+        testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
+        */
+      makeSureGetOffsetCalled,
+      CheckNewAnswer(32, 33, 34, 35, 36)
+    )
+  }
 }
 
 abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
@@ -1134,6 +1331,16 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         "failOnDataLoss" -> failOnDataLoss.toString)
     }
 
+    test(s"assign from specific timestamps (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromSpecificTimestamps(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        addPartitions = false,
+        "assign" -> assignString(topic, 0 to 4),
+        "failOnDataLoss" -> failOnDataLoss.toString)
+    }
+
     test(s"subscribing topic by name from latest offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromLatestOffsets(
@@ -1155,6 +1362,12 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     test(s"subscribing topic by name from specific offsets (failOnDataLoss: $failOnDataLoss)") {
       val topic = newTopic()
       testFromSpecificOffsets(topic, failOnDataLoss = failOnDataLoss, "subscribe" -> topic)
+    }
+
+    test(s"subscribing topic by name from specific timestamps (failOnDataLoss: $failOnDataLoss)") {
+      val topic = newTopic()
+      testFromSpecificTimestamps(topic, failOnDataLoss = failOnDataLoss, addPartitions = true,
+        "subscribe" -> topic)
     }
 
     test(s"subscribing topic by pattern from latest offsets (failOnDataLoss: $failOnDataLoss)") {
@@ -1185,6 +1398,17 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
         failOnDataLoss = failOnDataLoss,
         "subscribePattern" -> s"$topicPrefix-.*")
     }
+
+    test(s"subscribing topic by pattern from specific timestamps " +
+      s"(failOnDataLoss: $failOnDataLoss)") {
+      val topicPrefix = newTopic()
+      val topic = topicPrefix + "-suffix"
+      testFromSpecificTimestamps(
+        topic,
+        failOnDataLoss = failOnDataLoss,
+        addPartitions = true,
+        "subscribePattern" -> s"$topicPrefix-.*")
+    }
   }
 
   test("bad source options") {
@@ -1203,6 +1427,9 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
     // Specifying an ending offset
     testBadOptions("endingOffsets" -> "latest")("Ending offset not valid in streaming queries")
+
+    testBadOptions("subscribe" -> "t", "endingOffsetsByTimestamp" -> "{\"t\": {\"0\": 1000}}")(
+      "Ending timestamp not valid in streaming queries")
 
     // No strategy specified
     testBadOptions()("options must be specified", "subscribe", "subscribePattern")
@@ -1233,7 +1460,6 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
-    testUnsupportedConfig("kafka.group.id")
     testUnsupportedConfig("kafka.auto.offset.reset")
     testUnsupportedConfig("kafka.enable.auto.commit")
     testUnsupportedConfig("kafka.interceptor.classes")
@@ -1252,14 +1478,17 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
         SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
-      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), "dummy", optionKey,
+        answer)
       assert(offset === answer)
     }
 
     for ((optionKey, answer) <- Seq(
       (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
-      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map.empty), "dummy", optionKey, answer)
       assert(offset === answer)
     }
   }
@@ -1324,11 +1553,90 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     )
   }
 
+  private def testFromSpecificTimestamps(
+      topic: String,
+      failOnDataLoss: Boolean,
+      addPartitions: Boolean,
+      options: (String, String)*): Unit = {
+    def sendMessages(topic: String, msgs: Seq[String], part: Int, ts: Long): Unit = {
+      val records = msgs.map { msg =>
+        new RecordBuilder(topic, msg).partition(part).timestamp(ts).build()
+      }
+      testUtils.sendMessages(records)
+    }
+
+    testUtils.createTopic(topic, partitions = 5)
+
+    val firstTimestamp = System.currentTimeMillis() - 5000
+    sendMessages(topic, Array(-20).map(_.toString), 0, firstTimestamp)
+    sendMessages(topic, Array(-10).map(_.toString), 1, firstTimestamp)
+    sendMessages(topic, Array(0, 1).map(_.toString), 2, firstTimestamp)
+    sendMessages(topic, Array(10, 11).map(_.toString), 3, firstTimestamp)
+    sendMessages(topic, Array(20, 21, 22).map(_.toString), 4, firstTimestamp)
+
+    val secondTimestamp = firstTimestamp + 1000
+    sendMessages(topic, Array(-21, -22).map(_.toString), 0, secondTimestamp)
+    sendMessages(topic, Array(-11, -12).map(_.toString), 1, secondTimestamp)
+    sendMessages(topic, Array(2).map(_.toString), 2, secondTimestamp)
+    sendMessages(topic, Array(12).map(_.toString), 3, secondTimestamp)
+    // no data after second timestamp for partition 4
+
+    require(testUtils.getLatestOffsets(Set(topic)).size === 5)
+
+    // we intentionally starts from second timestamp,
+    // except for partition 4 - it starts from first timestamp
+    val startPartitionTimestamps: Map[TopicPartition, Long] = Map(
+      (0 to 3).map(new TopicPartition(topic, _) -> secondTimestamp): _*
+    ) ++ Map(new TopicPartition(topic, 4) -> firstTimestamp)
+    val startingTimestamps = JsonUtils.partitionTimestamps(startPartitionTimestamps)
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("startingOffsetsByTimestamp", startingTimestamps)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("failOnDataLoss", failOnDataLoss.toString)
+    options.foreach { case (k, v) => reader.option(k, v) }
+    val kafka = reader.load()
+      .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+      .as[(String, String)]
+    val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
+
+    testStream(mapped)(
+      makeSureGetOffsetCalled,
+      Execute { q =>
+        val partitions = (0 to 4).map(new TopicPartition(topic, _))
+        // wait to reach the last offset in every partition
+        q.awaitOffset(
+          0, KafkaSourceOffset(partitions.map(tp => tp -> 3L).toMap), streamingTimeout.toMillis)
+      },
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22),
+      StopStream,
+      StartStream(),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22), // Should get the data back on recovery
+      StopStream,
+      AddKafkaData(Set(topic), 30, 31, 32), // Add data when stream is stopped
+      StartStream(),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22, 30, 31, 32), // Should get the added data
+      AssertOnQuery("Add partitions") { query: StreamExecution =>
+        if (addPartitions) setTopicPartitions(topic, 10, query)
+        true
+      },
+      AddKafkaData(Set(topic), 40, 41, 42, 43, 44)(ensureDataInMultiplePartition = true),
+      CheckAnswer(-21, -22, -11, -12, 2, 12, 20, 21, 22, 30, 31, 32, 40, 41, 42, 43, 44),
+      StopStream
+    )
+  }
+
   test("Kafka column types") {
     val now = System.currentTimeMillis()
     val topic = newTopic()
     testUtils.createTopic(newTopic(), partitions = 1)
-    testUtils.sendMessages(topic, Array(1).map(_.toString))
+    testUtils.sendMessage(
+      new RecordBuilder(topic, "1")
+        .headers(Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))).build()
+    )
 
     val kafka = spark
       .readStream
@@ -1337,6 +1645,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       .option("kafka.metadata.max.age.ms", "1")
       .option("startingOffsets", s"earliest")
       .option("subscribe", topic)
+      .option("includeHeaders", "true")
       .load()
 
     val query = kafka
@@ -1359,6 +1668,21 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     // producer. So here we just use a low bound to make sure the internal conversion works.
     assert(row.getAs[java.sql.Timestamp]("timestamp").getTime >= now, s"Unexpected results: $row")
     assert(row.getAs[Int]("timestampType") === 0, s"Unexpected results: $row")
+
+    def checkHeader(row: Row, expected: Seq[(String, Array[Byte])]): Unit = {
+      // array<struct<key:string,value:binary>>
+      val headers = row.getList[Row](row.fieldIndex("headers")).asScala
+      assert(headers.length === expected.length)
+
+      (0 until expected.length).foreach { idx =>
+        val key = headers(idx).getAs[String]("key")
+        val value = headers(idx).getAs[Array[Byte]]("value")
+        assert(key === expected(idx)._1)
+        assert(value === expected(idx)._2)
+      }
+    }
+
+    checkHeader(row, Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8))))
     query.stop()
   }
 
@@ -1374,7 +1698,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val reader = spark
       .readStream
       .format("kafka")
-      .option("startingOffsets", s"latest")
+      .option("startingOffsets", "latest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("failOnDataLoss", failOnDataLoss.toString)
@@ -1445,6 +1769,60 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       AddKafkaData(Set(topic), 9, 10, 11, 12, 13, 14, 15, 16),
       CheckAnswer(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
     )
+  }
+
+  protected def testNullableKeyValue(trigger: Trigger): Unit = {
+    val table = "kafka_null_key_value_source_test"
+    withTable(table) {
+      val topic = newTopic()
+      testUtils.createTopic(topic)
+      testUtils.withTranscationalProducer { producer =>
+        val df = spark
+          .readStream
+          .format("kafka")
+          .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+          .option("kafka.isolation.level", "read_committed")
+          .option("startingOffsets", "earliest")
+          .option("subscribe", topic)
+          .load()
+          .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+          .as[(String, String)]
+
+        val q = df
+          .writeStream
+          .format("memory")
+          .queryName(table)
+          .trigger(trigger)
+          .start()
+        try {
+          var idx = 0
+          producer.beginTransaction()
+          val expected1 = Seq.tabulate(5) { _ =>
+            producer.send(new ProducerRecord[String, String](topic, null, null)).get()
+            (null, null)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          val expected2 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, idx.toString, null)).get()
+            (idx.toString, null)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          val expected3 = Seq.tabulate(5) { _ =>
+            idx += 1
+            producer.send(new ProducerRecord[String, String](topic, null, idx.toString)).get()
+            (null, idx.toString)
+          }.asInstanceOf[Seq[(String, String)]]
+
+          producer.commitTransaction()
+          eventually(timeout(streamingTimeout)) {
+            checkAnswer(spark.table(table), (expected1 ++ expected2 ++ expected3).toDF())
+          }
+        } finally {
+          q.stop()
+        }
+      }
+    }
   }
 }
 

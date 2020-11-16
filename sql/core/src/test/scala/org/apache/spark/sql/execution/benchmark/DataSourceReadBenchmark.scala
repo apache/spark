@@ -22,10 +22,9 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -43,22 +42,25 @@ import org.apache.spark.sql.vectorized.ColumnVector
  *      Results will be written to "benchmarks/DataSourceReadBenchmark-results.txt".
  * }}}
  */
-object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
-  val conf = new SparkConf()
-    .setAppName("DataSourceReadBenchmark")
-    // Since `spark.master` always exists, overrides this value
-    .set("spark.master", "local[1]")
-    .setIfMissing("spark.driver.memory", "3g")
-    .setIfMissing("spark.executor.memory", "3g")
-    .setIfMissing("spark.ui.enabled", "false")
+object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
-  val spark = SparkSession.builder.config(conf).getOrCreate()
+  override def getSparkSession: SparkSession = {
+    val conf = new SparkConf()
+      .setAppName("DataSourceReadBenchmark")
+      // Since `spark.master` always exists, overrides this value
+      .set("spark.master", "local[1]")
+      .setIfMissing("spark.driver.memory", "3g")
+      .setIfMissing("spark.executor.memory", "3g")
 
-  // Set default configs. Individual cases will change them if necessary.
-  spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
-  spark.conf.set(SQLConf.ORC_COPY_BATCH_TO_SPARK.key, "false")
-  spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-  spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    val sparkSession = SparkSession.builder.config(conf).getOrCreate()
+
+    // Set default configs. Individual cases will change them if necessary.
+    sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+
+    sparkSession
+  }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
@@ -118,36 +120,30 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
         prepareTable(dir, spark.sql(s"SELECT CAST(value as ${dataType.sql}) id FROM t1"))
 
         sqlBenchmark.addCase("SQL CSV") { _ =>
-          spark.sql("select sum(id) from csvTable").collect()
+          spark.sql("select sum(id) from csvTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Json") { _ =>
-          spark.sql("select sum(id) from jsonTable").collect()
+          spark.sql("select sum(id) from jsonTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Parquet Vectorized") { _ =>
-          spark.sql("select sum(id) from parquetTable").collect()
+          spark.sql("select sum(id) from parquetTable").noop()
         }
 
         sqlBenchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(id) from parquetTable").collect()
+            spark.sql("select sum(id) from parquetTable").noop()
           }
         }
 
         sqlBenchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(id) FROM orcTable").collect()
-        }
-
-        sqlBenchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
-          }
+          spark.sql("SELECT sum(id) FROM orcTable").noop()
         }
 
         sqlBenchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
+            spark.sql("SELECT sum(id) FROM orcTable").noop()
           }
         }
 
@@ -171,7 +167,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -205,7 +201,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -240,36 +236,30 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("SELECT CAST(value AS INT) AS c1, CAST(value as STRING) AS c2 FROM t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
-          spark.sql("select sum(c1), sum(length(c2)) from csvTable").collect()
+          spark.sql("select sum(c1), sum(length(c2)) from csvTable").noop()
         }
 
         benchmark.addCase("SQL Json") { _ =>
-          spark.sql("select sum(c1), sum(length(c2)) from jsonTable").collect()
+          spark.sql("select sum(c1), sum(length(c2)) from jsonTable").noop()
         }
 
         benchmark.addCase("SQL Parquet Vectorized") { _ =>
-          spark.sql("select sum(c1), sum(length(c2)) from parquetTable").collect()
+          spark.sql("select sum(c1), sum(length(c2)) from parquetTable").noop()
         }
 
         benchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(c1), sum(length(c2)) from parquetTable").collect()
+            spark.sql("select sum(c1), sum(length(c2)) from parquetTable").noop()
           }
         }
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
-          }
+          spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").noop()
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
+            spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").noop()
           }
         }
 
@@ -291,36 +281,30 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("select cast((value % 200) + 10000 as STRING) as c1 from t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
-          spark.sql("select sum(length(c1)) from csvTable").collect()
+          spark.sql("select sum(length(c1)) from csvTable").noop()
         }
 
         benchmark.addCase("SQL Json") { _ =>
-          spark.sql("select sum(length(c1)) from jsonTable").collect()
+          spark.sql("select sum(length(c1)) from jsonTable").noop()
         }
 
         benchmark.addCase("SQL Parquet Vectorized") { _ =>
-          spark.sql("select sum(length(c1)) from parquetTable").collect()
+          spark.sql("select sum(length(c1)) from parquetTable").noop()
         }
 
         benchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(length(c1)) from parquetTable").collect()
+            spark.sql("select sum(length(c1)) from parquetTable").noop()
           }
         }
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql("select sum(length(c1)) from orcTable").collect()
-        }
-
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("select sum(length(c1)) from orcTable").collect()
-          }
+          spark.sql("select sum(length(c1)) from orcTable").noop()
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(length(c1)) from orcTable").collect()
+            spark.sql("select sum(length(c1)) from orcTable").noop()
           }
         }
 
@@ -340,104 +324,86 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
         prepareTable(dir, spark.sql("SELECT value % 2 AS p, value AS id FROM t1"), Some("p"))
 
         benchmark.addCase("Data column - CSV") { _ =>
-          spark.sql("select sum(id) from csvTable").collect()
+          spark.sql("select sum(id) from csvTable").noop()
         }
 
         benchmark.addCase("Data column - Json") { _ =>
-          spark.sql("select sum(id) from jsonTable").collect()
+          spark.sql("select sum(id) from jsonTable").noop()
         }
 
         benchmark.addCase("Data column - Parquet Vectorized") { _ =>
-          spark.sql("select sum(id) from parquetTable").collect()
+          spark.sql("select sum(id) from parquetTable").noop()
         }
 
         benchmark.addCase("Data column - Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(id) from parquetTable").collect()
+            spark.sql("select sum(id) from parquetTable").noop()
           }
         }
 
         benchmark.addCase("Data column - ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(id) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("Data column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
-          }
+          spark.sql("SELECT sum(id) FROM orcTable").noop()
         }
 
         benchmark.addCase("Data column - ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
+            spark.sql("SELECT sum(id) FROM orcTable").noop()
           }
         }
 
         benchmark.addCase("Partition column - CSV") { _ =>
-          spark.sql("select sum(p) from csvTable").collect()
+          spark.sql("select sum(p) from csvTable").noop()
         }
 
         benchmark.addCase("Partition column - Json") { _ =>
-          spark.sql("select sum(p) from jsonTable").collect()
+          spark.sql("select sum(p) from jsonTable").noop()
         }
 
         benchmark.addCase("Partition column - Parquet Vectorized") { _ =>
-          spark.sql("select sum(p) from parquetTable").collect()
+          spark.sql("select sum(p) from parquetTable").noop()
         }
 
         benchmark.addCase("Partition column - Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(p) from parquetTable").collect()
+            spark.sql("select sum(p) from parquetTable").noop()
           }
         }
 
         benchmark.addCase("Partition column - ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(p) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("Partition column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(p) FROM orcTable").collect()
-          }
+          spark.sql("SELECT sum(p) FROM orcTable").noop()
         }
 
         benchmark.addCase("Partition column - ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(p) FROM orcTable").collect()
+            spark.sql("SELECT sum(p) FROM orcTable").noop()
           }
         }
 
         benchmark.addCase("Both columns - CSV") { _ =>
-          spark.sql("select sum(p), sum(id) from csvTable").collect()
+          spark.sql("select sum(p), sum(id) from csvTable").noop()
         }
 
         benchmark.addCase("Both columns - Json") { _ =>
-          spark.sql("select sum(p), sum(id) from jsonTable").collect()
+          spark.sql("select sum(p), sum(id) from jsonTable").noop()
         }
 
         benchmark.addCase("Both columns - Parquet Vectorized") { _ =>
-          spark.sql("select sum(p), sum(id) from parquetTable").collect()
+          spark.sql("select sum(p), sum(id) from parquetTable").noop()
         }
 
         benchmark.addCase("Both columns - Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("select sum(p), sum(id) from parquetTable").collect
+            spark.sql("select sum(p), sum(id) from parquetTable").noop()
           }
         }
 
         benchmark.addCase("Both columns - ORC Vectorized") { _ =>
-          spark.sql("SELECT sum(p), sum(id) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("Both column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(p), sum(id) FROM orcTable").collect()
-          }
+          spark.sql("SELECT sum(p), sum(id) FROM orcTable").noop()
         }
 
         benchmark.addCase("Both columns - ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql("SELECT sum(p), sum(id) FROM orcTable").collect()
+            spark.sql("SELECT sum(p), sum(id) FROM orcTable").noop()
           }
         }
 
@@ -463,23 +429,23 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
         benchmark.addCase("SQL CSV") { _ =>
           spark.sql("select sum(length(c2)) from csvTable where c1 is " +
-            "not NULL and c2 is not NULL").collect()
+            "not NULL and c2 is not NULL").noop()
         }
 
         benchmark.addCase("SQL Json") { _ =>
           spark.sql("select sum(length(c2)) from jsonTable where c1 is " +
-            "not NULL and c2 is not NULL").collect()
+            "not NULL and c2 is not NULL").noop()
         }
 
         benchmark.addCase("SQL Parquet Vectorized") { _ =>
           spark.sql("select sum(length(c2)) from parquetTable where c1 is " +
-            "not NULL and c2 is not NULL").collect()
+            "not NULL and c2 is not NULL").noop()
         }
 
         benchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("select sum(length(c2)) from parquetTable where c1 is " +
-              "not NULL and c2 is not NULL").collect()
+              "not NULL and c2 is not NULL").noop()
           }
         }
 
@@ -490,7 +456,7 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -510,20 +476,13 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
           spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
-        }
-
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
-          }
+            "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
+              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").noop()
           }
         }
 
@@ -549,36 +508,30 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
         prepareTable(dir, spark.sql("SELECT * FROM t1"))
 
         benchmark.addCase("SQL CSV") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM csvTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM csvTable").noop()
         }
 
         benchmark.addCase("SQL Json") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM jsonTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM jsonTable").noop()
         }
 
         benchmark.addCase("SQL Parquet Vectorized") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM parquetTable").collect()
+          spark.sql(s"SELECT sum(c$middle) FROM parquetTable").noop()
         }
 
         benchmark.addCase("SQL Parquet MR") { _ =>
           withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql(s"SELECT sum(c$middle) FROM parquetTable").collect()
+            spark.sql(s"SELECT sum(c$middle) FROM parquetTable").noop()
           }
         }
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql(s"SELECT sum(c$middle) FROM orcTable").collect()
-          }
+          spark.sql(s"SELECT sum(c$middle) FROM orcTable").noop()
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
-            spark.sql(s"SELECT sum(c$middle) FROM orcTable").collect()
+            spark.sql(s"SELECT sum(c$middle) FROM orcTable").noop()
           }
         }
 

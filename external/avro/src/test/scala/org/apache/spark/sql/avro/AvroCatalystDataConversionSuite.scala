@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.Schema
+import java.util
+import java.util.Collections
 
-import org.apache.spark.SparkFunSuite
+import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
+import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
+
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class AvroCatalystDataConversionSuite extends SparkFunSuite
-  with SharedSQLContext
+  with SharedSparkSession
   with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {
@@ -38,12 +43,12 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
   private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
     checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map.empty),
+      AvroDataToCatalyst(CatalystDataToAvro(data, None), schema, Map.empty),
       prepareExpectedResult(expected))
   }
 
   protected def checkUnsupportedRead(data: Literal, schema: String): Unit = {
-    val binary = CatalystDataToAvro(data)
+    val binary = CatalystDataToAvro(data, None)
     intercept[Exception] {
       AvroDataToCatalyst(binary, schema, Map("mode" -> "FAILFAST")).eval()
     }
@@ -120,6 +125,26 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val rand = new scala.util.Random(seed)
     val schema = RandomDataGenerator.randomNestedSchema(rand, 10, testingTypes)
     test(s"nested schema ${schema.catalogString} with seed $seed") {
+      val data = RandomDataGenerator.randomRow(rand, schema)
+      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+      val input = Literal.create(converter(data), schema)
+      roundTripTest(input)
+    }
+  }
+
+  test("array of nested schema with seed") {
+    val seed = scala.util.Random.nextLong()
+    val rand = new scala.util.Random(seed)
+    val schema = StructType(
+      StructField("a",
+        ArrayType(
+          RandomDataGenerator.randomNestedSchema(rand, 10, testingTypes),
+          containsNull = false),
+        nullable = false
+      ) :: Nil
+    )
+
+    withClue(s"Schema: $schema\nseed: $seed") {
       val data = RandomDataGenerator.randomRow(rand, schema)
       val converter = CatalystTypeConverters.createToCatalystConverter(schema)
       val input = Literal.create(converter(data), schema)
@@ -208,5 +233,84 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
       checkUnsupportedRead(input, avroSchema)
     }
+  }
+
+  test("user-specified output schema") {
+    val data = Literal("SPADES")
+    val jsonFormatSchema =
+      """
+        |{ "type": "enum",
+        |  "name": "Suit",
+        |  "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+        |}
+      """.stripMargin
+
+    val message = intercept[SparkException] {
+      AvroDataToCatalyst(
+        CatalystDataToAvro(
+          data,
+          None),
+        jsonFormatSchema,
+        options = Map.empty).eval()
+    }.getMessage
+    assert(message.contains("Malformed records are detected in record parsing."))
+
+    checkEvaluation(
+      AvroDataToCatalyst(
+        CatalystDataToAvro(
+          data,
+          Some(jsonFormatSchema)),
+        jsonFormatSchema,
+        options = Map.empty),
+      data.eval())
+  }
+
+  test("invalid user-specified output schema") {
+    val message = intercept[IncompatibleSchemaException] {
+      CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
+    }.getMessage
+    assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
+  }
+
+  test("avro array can be generic java collection") {
+    val jsonFormatSchema =
+      """
+        |{ "type": "record",
+        |  "name": "record",
+        |  "fields" : [{
+        |    "name": "array",
+        |    "type": {
+        |      "type": "array",
+        |      "items": ["null", "int"]
+        |    }
+        |  }]
+        |}
+      """.stripMargin
+    val avroSchema = new Schema.Parser().parse(jsonFormatSchema)
+    val dataType = SchemaConverters.toSqlType(avroSchema).dataType
+    val deserializer = new AvroDeserializer(avroSchema, dataType)
+
+    def checkDeserialization(data: GenericData.Record, expected: Any): Unit = {
+      assert(checkResult(
+        expected,
+        deserializer.deserialize(data),
+        dataType, exprNullable = false
+      ))
+    }
+
+    def validateDeserialization(array: java.util.Collection[Integer]): Unit = {
+      val data = new GenericRecordBuilder(avroSchema)
+        .set("array", array)
+        .build()
+      val expected = InternalRow(new GenericArrayData(new util.ArrayList[Any](array)))
+      checkDeserialization(data, expected)
+
+      val reEncoded = new BinaryMessageDecoder[GenericData.Record](new GenericData(), avroSchema)
+        .decode(new BinaryMessageEncoder(new GenericData(), avroSchema).encode(data))
+      checkDeserialization(reEncoded, expected)
+    }
+
+    validateDeserialization(Collections.emptySet())
+    validateDeserialization(util.Arrays.asList(1, null, 3))
   }
 }

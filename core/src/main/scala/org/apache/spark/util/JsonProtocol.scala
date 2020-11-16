@@ -22,7 +22,7 @@ import java.util.{Properties, UUID}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -58,6 +59,7 @@ private[spark] object JsonProtocol {
   private implicit val format = DefaultFormats
 
   private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
+    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -138,6 +140,7 @@ private[spark] object JsonProtocol {
   def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
     val taskInfo = taskEnd.taskInfo
+    val executorMetrics = taskEnd.taskExecutorMetrics
     val taskMetrics = taskEnd.taskMetrics
     val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd) ~
@@ -146,6 +149,7 @@ private[spark] object JsonProtocol {
     ("Task Type" -> taskEnd.taskType) ~
     ("Task End Reason" -> taskEndReason) ~
     ("Task Info" -> taskInfoToJson(taskInfo)) ~
+    ("Task Executor Metrics" -> executorMetricsToJson(executorMetrics)) ~
     ("Task Metrics" -> taskMetricsJson)
   }
 
@@ -171,11 +175,13 @@ private[spark] object JsonProtocol {
     val environmentDetails = environmentUpdate.environmentDetails
     val jvmInformation = mapToJson(environmentDetails("JVM Information").toMap)
     val sparkProperties = mapToJson(environmentDetails("Spark Properties").toMap)
+    val hadoopProperties = mapToJson(environmentDetails("Hadoop Properties").toMap)
     val systemProperties = mapToJson(environmentDetails("System Properties").toMap)
     val classpathEntries = mapToJson(environmentDetails("Classpath Entries").toMap)
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.environmentUpdate) ~
     ("JVM Information" -> jvmInformation) ~
     ("Spark Properties" -> sparkProperties) ~
+    ("Hadoop Properties" -> hadoopProperties) ~
     ("System Properties" -> systemProperties) ~
     ("Classpath Entries" -> classpathEntries)
   }
@@ -209,7 +215,8 @@ private[spark] object JsonProtocol {
     ("Timestamp" -> applicationStart.time) ~
     ("User" -> applicationStart.sparkUser) ~
     ("App Attempt ID" -> applicationStart.appAttemptId.map(JString(_)).getOrElse(JNothing)) ~
-    ("Driver Logs" -> applicationStart.driverLogs.map(mapToJson).getOrElse(JNothing))
+    ("Driver Logs" -> applicationStart.driverLogs.map(mapToJson).getOrElse(JNothing)) ~
+    ("Driver Attributes" -> applicationStart.driverAttributes.map(mapToJson).getOrElse(JNothing))
   }
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
@@ -239,7 +246,7 @@ private[spark] object JsonProtocol {
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val accumUpdates = metricsUpdate.accumUpdates
-    val executorMetrics = metricsUpdate.executorUpdates.map(executorMetricsToJson(_))
+    val executorUpdates = metricsUpdate.executorUpdates
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
@@ -248,7 +255,12 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     }) ~
-    ("Executor Metrics Updated" -> executorMetrics)
+    ("Executor Metrics Updated" -> executorUpdates.map {
+      case ((stageId, stageAttemptId), metrics) =>
+        ("Stage ID" -> stageId) ~
+        ("Stage Attempt ID" -> stageAttemptId) ~
+        ("Executor Metrics" -> executorMetricsToJson(metrics))
+    })
   }
 
   def stageExecutorMetricsToJson(metrics: SparkListenerStageExecutorMetrics): JValue = {
@@ -306,7 +318,7 @@ private[spark] object JsonProtocol {
 
   private lazy val accumulableBlacklist = Set("internal.metrics.updatedBlockStatuses")
 
-  def accumulablesToJson(accumulables: Traversable[AccumulableInfo]): JArray = {
+  def accumulablesToJson(accumulables: Iterable[AccumulableInfo]): JArray = {
     JArray(accumulables
         .filterNot(_.name.exists(accumulableBlacklist.contains))
         .toList.map(accumulableInfoToJson))
@@ -339,12 +351,22 @@ private[spark] object JsonProtocol {
         case v: Long => JInt(v)
         // We only have 3 kind of internal accumulator types, so if it's not int or long, it must be
         // the blocks accumulator, whose type is `java.util.List[(BlockId, BlockStatus)]`
-        case v =>
-          JArray(v.asInstanceOf[java.util.List[(BlockId, BlockStatus)]].asScala.toList.map {
-            case (id, status) =>
-              ("Block ID" -> id.toString) ~
-              ("Status" -> blockStatusToJson(status))
+        case v: java.util.List[_] =>
+          JArray(v.asScala.toList.flatMap {
+            case (id: BlockId, status: BlockStatus) =>
+              Some(
+                ("Block ID" -> id.toString) ~
+                ("Status" -> blockStatusToJson(status))
+              )
+            case _ =>
+              // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should
+              // not crash.
+              None
           })
+        case _ =>
+          // Ignore unsupported types. A user may put `METRICS_PREFIX` in the name. We should not
+          // crash.
+          JNothing
       }
     } else {
       // For all external accumulators, just use strings
@@ -380,6 +402,7 @@ private[spark] object JsonProtocol {
     ("Executor Deserialize CPU Time" -> taskMetrics.executorDeserializeCpuTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Executor CPU Time" -> taskMetrics.executorCpuTime) ~
+    ("Peak Execution Memory" -> taskMetrics.peakExecutionMemory) ~
     ("Result Size" -> taskMetrics.resultSize) ~
     ("JVM GC Time" -> taskMetrics.jvmGCTime) ~
     ("Result Serialization Time" -> taskMetrics.resultSerializationTime) ~
@@ -409,6 +432,7 @@ private[spark] object JsonProtocol {
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
         ("Map ID" -> fetchFailed.mapId) ~
+        ("Map Index" -> fetchFailed.mapIndex) ~
         ("Reduce ID" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
@@ -461,6 +485,7 @@ private[spark] object JsonProtocol {
     ("Callsite" -> rddInfo.callSite) ~
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
+    ("Barrier" -> rddInfo.isBarrier) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
@@ -484,7 +509,16 @@ private[spark] object JsonProtocol {
   def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
     ("Host" -> executorInfo.executorHost) ~
     ("Total Cores" -> executorInfo.totalCores) ~
-    ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
+    ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
+    ("Attributes" -> mapToJson(executorInfo.attributes)) ~
+    ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo))
+  }
+
+  def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
+    val jsonFields = m.map {
+      case (k, v) => JField(k, v.toJson)
+    }
+    JObject(jsonFields.toList)
   }
 
   def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo): JValue = {
@@ -624,8 +658,10 @@ private[spark] object JsonProtocol {
     val taskType = (json \ "Task Type").extract[String]
     val taskEndReason = taskEndReasonFromJson(json \ "Task End Reason")
     val taskInfo = taskInfoFromJson(json \ "Task Info")
+    val executorMetrics = executorMetricsFromJson(json \ "Task Executor Metrics")
     val taskMetrics = taskMetricsFromJson(json \ "Task Metrics")
-    SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo, taskMetrics)
+    SparkListenerTaskEnd(stageId, stageAttemptId, taskType, taskEndReason, taskInfo,
+      executorMetrics, taskMetrics)
   }
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
@@ -653,9 +689,13 @@ private[spark] object JsonProtocol {
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
+    // For compatible with previous event logs
+    val hadoopProperties = jsonOption(json \ "Hadoop Properties").map(mapFromJson(_).toSeq)
+      .getOrElse(Seq.empty)
     val environmentDetails = Map[String, Seq[(String, String)]](
       "JVM Information" -> mapFromJson(json \ "JVM Information").toSeq,
       "Spark Properties" -> mapFromJson(json \ "Spark Properties").toSeq,
+      "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
     SparkListenerEnvironmentUpdate(environmentDetails)
@@ -687,7 +727,9 @@ private[spark] object JsonProtocol {
     val sparkUser = (json \ "User").extract[String]
     val appAttemptId = jsonOption(json \ "App Attempt ID").map(_.extract[String])
     val driverLogs = jsonOption(json \ "Driver Logs").map(mapFromJson)
-    SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId, driverLogs)
+    val driverAttributes = jsonOption(json \ "Driver Attributes").map(mapFromJson)
+    SparkListenerApplicationStart(appName, appId, time, sparkUser, appAttemptId, driverLogs,
+      driverAttributes)
   }
 
   def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
@@ -723,8 +765,14 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    val executorUpdates = jsonOption(json \ "Executor Metrics Updated").map {
-      executorUpdate => executorMetricsFromJson(executorUpdate)
+    val executorUpdates = (json \ "Executor Metrics Updated") match {
+      case JNothing => Map.empty[(Int, Int), ExecutorMetrics]
+      case value: JValue => value.extract[List[JValue]].map { json =>
+        val stageId = (json \ "Stage ID").extract[Int]
+        val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
+        val executorMetrics = executorMetricsFromJson(json \ "Executor Metrics")
+        ((stageId, stageAttemptId) -> executorMetrics)
+      }.toMap
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
   }
@@ -859,6 +907,10 @@ private[spark] object JsonProtocol {
       case JNothing => 0
       case x => x.extract[Long]
     })
+    metrics.setPeakExecutionMemory((json \ "Peak Execution Memory") match {
+      case JNothing => 0
+      case x => x.extract[Long]
+    })
     metrics.setResultSize((json \ "Result Size").extract[Long])
     metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
     metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
@@ -940,10 +992,18 @@ private[spark] object JsonProtocol {
       case `fetchFailed` =>
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
-        val mapId = (json \ "Map ID").extract[Int]
+        val mapId = (json \ "Map ID").extract[Long]
+        val mapIndex = json \ "Map Index" match {
+          case JNothing =>
+            // Note, we use the invalid value Int.MinValue here to fill the map index for backward
+            // compatibility. Otherwise, the fetch failed event will be dropped when the history
+            // server loads the event log written by the Spark version before 3.0.
+            Int.MinValue
+          case x => x.extract[Int]
+        }
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = jsonOption(json \ "Message").map(_.extract[String])
-        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
+        new FetchFailed(blockManagerAddress, shuffleId, mapId, mapIndex, reduceId,
           message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
@@ -1024,12 +1084,14 @@ private[spark] object JsonProtocol {
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
+    val isBarrier = jsonOption(json \ "Barrier").map(_.extract[Boolean]).getOrElse(false)
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
-    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, parentIds, callsite, scope)
+    val rddInfo =
+      new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.diskSize = diskSize
@@ -1055,7 +1117,15 @@ private[spark] object JsonProtocol {
     val executorHost = (json \ "Host").extract[String]
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
-    new ExecutorInfo(executorHost, totalCores, logUrls)
+    val attributes = jsonOption(json \ "Attributes") match {
+      case Some(attr) => mapFromJson(attr).toMap
+      case None => Map.empty[String, String]
+    }
+    val resources = jsonOption(json \ "Resources") match {
+      case Some(resources) => resourcesMapFromJson(resources).toMap
+      case None => Map.empty[String, ResourceInformation]
+    }
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
@@ -1065,6 +1135,14 @@ private[spark] object JsonProtocol {
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
     BlockUpdatedInfo(blockManagerId, blockId, storageLevel, memorySize, diskSize)
+  }
+
+  def resourcesMapFromJson(json: JValue): Map[String, ResourceInformation] = {
+    val jsonFields = json.asInstanceOf[JObject].obj
+    jsonFields.map { case JField(k, v) =>
+      val resourceInfo = ResourceInformation.parseJson(v)
+      (k, resourceInfo)
+    }.toMap
   }
 
   /** -------------------------------- *

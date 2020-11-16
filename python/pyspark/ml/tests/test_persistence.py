@@ -21,16 +21,76 @@ import tempfile
 import unittest
 
 from pyspark.ml import Transformer
-from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, OneVsRest, \
-    OneVsRestModel
+from pyspark.ml.classification import DecisionTreeClassifier, FMClassifier, \
+    FMClassificationModel, LogisticRegression, MultilayerPerceptronClassifier, \
+    MultilayerPerceptronClassificationModel, OneVsRest, OneVsRestModel
+from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel
-from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression
+from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegression, \
+    GeneralizedLinearRegressionModel, \
+    LinearRegression
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import MockUnaryTransformer, SparkSessionTestCase
+
+
+class TestDefaultSolver(SparkSessionTestCase):
+
+    def test_multilayer_load(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense([0.0, 0.0])),
+                                         (1.0, Vectors.dense([0.0, 1.0])),
+                                         (1.0, Vectors.dense([1.0, 0.0])),
+                                         (0.0, Vectors.dense([1.0, 1.0]))],
+                                        ["label",  "features"])
+
+        mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
+        model = mlp.fit(df)
+        self.assertEqual(model.getSolver(), "l-bfgs")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/mlp"
+        model.save(model_path)
+        model2 = MultilayerPerceptronClassificationModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "l-bfgs")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(4), transformed2.take(4))
+
+    def test_fm_load(self):
+        df = self.spark.createDataFrame([(1.0, Vectors.dense(1.0)),
+                                         (0.0, Vectors.sparse(1, [], []))],
+                                        ["label",  "features"])
+        fm = FMClassifier(factorSize=2, maxIter=50, stepSize=2.0)
+        model = fm.fit(df)
+        self.assertEqual(model.getSolver(), "adamW")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/fm"
+        model.save(model_path)
+        model2 = FMClassificationModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "adamW")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(2), transformed2.take(2))
+
+    def test_glr_load(self):
+        df = self.spark.createDataFrame([(1.0, Vectors.dense(0.0, 0.0)),
+                                         (1.0, Vectors.dense(1.0, 2.0)),
+                                         (2.0, Vectors.dense(0.0, 0.0)),
+                                         (2.0, Vectors.dense(1.0, 1.0))],
+                                        ["label",  "features"])
+        glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
+        model = glr.fit(df)
+        self.assertEqual(model.getSolver(), "irls")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/glr"
+        model.save(model_path)
+        model2 = GeneralizedLinearRegressionModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "irls")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(4), transformed2.take(4))
 
 
 class PersistenceTest(SparkSessionTestCase):
@@ -88,6 +148,42 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_kmeans(self):
+        kmeans = KMeans(k=2, seed=1)
+        path = tempfile.mkdtemp()
+        km_path = path + "/km"
+        kmeans.save(km_path)
+        kmeans2 = KMeans.load(km_path)
+        self.assertEqual(kmeans.uid, kmeans2.uid)
+        self.assertEqual(type(kmeans.uid), type(kmeans2.uid))
+        self.assertEqual(kmeans2.uid, kmeans2.k.parent,
+                         "Loaded KMeans instance uid (%s) did not match Param's uid (%s)"
+                         % (kmeans2.uid, kmeans2.k.parent))
+        self.assertEqual(kmeans._defaultParamMap[kmeans.k], kmeans2._defaultParamMap[kmeans2.k],
+                         "Loaded KMeans instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_kmean_pmml_basic(self):
+        # Most of the validation is done in the Scala side, here we just check
+        # that we output text rather than parquet (e.g. that the format flag
+        # was respected).
+        data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
+                (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=2, seed=1)
+        model = kmeans.fit(df)
+        path = tempfile.mkdtemp()
+        km_path = path + "/km-pmml"
+        model.write().format("pmml").save(km_path)
+        pmml_text_list = self.sc.textFile(km_path).collect()
+        pmml_text = "\n".join(pmml_text_list)
+        self.assertIn("Apache Spark", pmml_text)
+        self.assertIn("PMML", pmml_text)
 
     def _compare_params(self, m1, m2, param):
         """
@@ -232,21 +328,27 @@ class PersistenceTest(SparkSessionTestCase):
 
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
-        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
-                                         (1.0, Vectors.sparse(2, [], [])),
-                                         (2.0, Vectors.dense(0.5, 0.5))] * 10,
-                                        ["label", "features"])
+        df = self.spark.createDataFrame([(0.0, 0.5, Vectors.dense(1.0, 0.8)),
+                                         (1.0, 0.5, Vectors.sparse(2, [], [])),
+                                         (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
+                                        ["label", "wt", "features"])
+
         lr = LogisticRegression(maxIter=5, regParam=0.01)
         ovr = OneVsRest(classifier=lr)
-        model = ovr.fit(df)
-        ovrPath = temp_path + "/ovr"
-        ovr.save(ovrPath)
-        loadedOvr = OneVsRest.load(ovrPath)
-        self._compare_pipelines(ovr, loadedOvr)
-        modelPath = temp_path + "/ovrModel"
-        model.save(modelPath)
-        loadedModel = OneVsRestModel.load(modelPath)
-        self._compare_pipelines(model, loadedModel)
+
+        def reload_and_compare(ovr, suffix):
+            model = ovr.fit(df)
+            ovrPath = temp_path + "/{}".format(suffix)
+            ovr.save(ovrPath)
+            loadedOvr = OneVsRest.load(ovrPath)
+            self._compare_pipelines(ovr, loadedOvr)
+            modelPath = temp_path + "/{}Model".format(suffix)
+            model.save(modelPath)
+            loadedModel = OneVsRestModel.load(modelPath)
+            self._compare_pipelines(model, loadedModel)
+
+        reload_and_compare(OneVsRest(classifier=lr), "ovr")
+        reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
@@ -355,7 +457,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -32,6 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
@@ -236,5 +237,26 @@ private[sql] object SQLUtils extends Logging {
 
   def createArrayType(column: Column): ArrayType = {
     new ArrayType(ExprUtils.evalTypeExpr(column.expr), true)
+  }
+
+  /**
+   * R callable function to read a file in Arrow stream format and create an `RDD`
+   * using each serialized ArrowRecordBatch as a partition.
+   */
+  def readArrowStreamFromFile(
+      sparkSession: SparkSession,
+      filename: String): JavaRDD[Array[Byte]] = {
+    ArrowConverters.readArrowStreamFromFile(sparkSession.sqlContext, filename)
+  }
+
+  /**
+   * R callable function to create a `DataFrame` from a `JavaRDD` of serialized
+   * ArrowRecordBatches.
+   */
+  def toDataFrame(
+      arrowBatchRDD: JavaRDD[Array[Byte]],
+      schema: StructType,
+      sparkSession: SparkSession): DataFrame = {
+    ArrowConverters.toDataFrame(arrowBatchRDD, schema.json, sparkSession.sqlContext)
   }
 }

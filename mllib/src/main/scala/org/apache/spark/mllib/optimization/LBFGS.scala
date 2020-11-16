@@ -22,21 +22,18 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.axpy
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Class used to solve an optimization problem using Limited-memory BFGS.
  * Reference: <a href="http://en.wikipedia.org/wiki/Limited-memory_BFGS">
  * Wikipedia on Limited-memory BFGS</a>
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-@DeveloperApi
 class LBFGS(private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
@@ -154,10 +151,8 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
 }
 
 /**
- * :: DeveloperApi ::
  * Top-level method to run L-BFGS.
  */
-@DeveloperApi
 object LBFGS extends Logging {
   /**
    * Run Limited-memory BFGS (L-BFGS) in parallel.
@@ -261,7 +256,7 @@ object LBFGS extends Logging {
       val (gradientSum, lossSum) = data.treeAggregate((zeroSparseVector, 0.0))(seqOp, combOp)
 
       // broadcasted model is not needed anymore
-      bcW.destroy(blocking = false)
+      bcW.destroy()
 
       /**
        * regVal is sum of weight squares if it's L2 updater;

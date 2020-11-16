@@ -128,9 +128,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   @transient private var _path: Path = null
   @transient private var _fs: FileSystem = null
 
-  override def start() { }
+  override def start(): Unit = { }
 
-  override def stop() { }
+  override def stop(): Unit = { }
 
   /**
    * Finds the files that were modified since the last time this method was called and makes
@@ -160,7 +160,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   /** Clear the old time-to-files mappings along with old RDDs */
-  protected[streaming] override def clearMetadata(time: Time) {
+  protected[streaming] override def clearMetadata(time: Time): Unit = {
     super.clearMetadata(time)
     batchTimeToSelectedFiles.synchronized {
       val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
@@ -306,7 +306,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     _fs
   }
 
-  private def reset()  {
+  private def reset(): Unit = {
     _fs = null
   }
 
@@ -328,14 +328,14 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
     private def hadoopFiles = data.asInstanceOf[mutable.HashMap[Time, Array[String]]]
 
-    override def update(time: Time) {
+    override def update(time: Time): Unit = {
       hadoopFiles.clear()
       batchTimeToSelectedFiles.synchronized { hadoopFiles ++= batchTimeToSelectedFiles }
     }
 
-    override def cleanup(time: Time) { }
+    override def cleanup(time: Time): Unit = { }
 
-    override def restore() {
+    override def restore(): Unit = {
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
         case (t, f) =>
           // Restore the metadata in both files and generatedRDDs

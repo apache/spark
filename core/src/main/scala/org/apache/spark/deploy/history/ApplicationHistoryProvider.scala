@@ -115,6 +115,12 @@ private[history] abstract class ApplicationHistoryProvider {
   def stop(): Unit = { }
 
   /**
+   * Called when the server is starting up. Implement this function to init the provider and start
+   * background threads. With this function we can start provider later after it is created.
+   */
+  def start(): Unit = { }
+
+  /**
    * Returns configuration data to be shown in the History Server home page.
    *
    * @return A map with the configuration data. Data is show in the order returned by the map.

@@ -48,6 +48,15 @@ private[sql] object Column {
       case expr => toPrettySQL(expr)
     }
   }
+
+  private[sql] def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(Dataset.DATASET_ID_KEY)
+      .remove(Dataset.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
+  }
 }
 
 /**
@@ -144,11 +153,15 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.normalizedExpr() == this.normalizedExpr()
     case _ => false
   }
 
-  override def hashCode: Int = this.expr.hashCode()
+  override def hashCode: Int = this.normalizedExpr().hashCode()
+
+  private def normalizedExpr(): Expression = expr transform {
+    case a: AttributeReference => Column.stripColumnReferenceMetadata(a)
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
@@ -186,7 +199,7 @@ class Column(val expr: Expression) extends Logging {
       UnresolvedAlias(a, Some(Column.generateAlias))
 
     // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStructLike => UnresolvedAlias(struct)
+    case struct: CreateNamedStruct => UnresolvedAlias(struct)
 
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
@@ -304,6 +317,24 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
     */
   def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
+   *   df.select( df("colA") !== df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 1.3.0
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -820,7 +851,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
+  def like(literal: String): Column = withExpr { new Like(expr, lit(literal).expr) }
 
   /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
@@ -934,7 +965,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -973,7 +1005,8 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 1.3.0
@@ -1002,16 +1035,14 @@ class Column(val expr: Expression) extends Logging {
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
-   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   * to the new column. If this not desired, use the API `as(alias: String, metadata: Metadata)`
+   * with explicit metadata.
    *
    * @group expr_ops
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
+    Alias(normalizedExpr(), alias)()
   }
 
   /**

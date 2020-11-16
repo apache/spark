@@ -17,7 +17,6 @@
 
 import sys
 import numpy as np
-import warnings
 
 if sys.version > '3':
     xrange = range
@@ -96,7 +95,7 @@ class MLUtils(object):
                             which leads to inconsistent feature
                             dimensions.
         :param minPartitions: min number of partitions
-        @return: labeled data stored as an RDD of LabeledPoint
+        :return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
@@ -157,7 +156,7 @@ class MLUtils(object):
         :param path: file or directory path in any Hadoop-supported file
                      system URI
         :param minPartitions: min number of partitions
-        @return: labeled data stored as an RDD of LabeledPoint
+        :return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
@@ -373,7 +372,7 @@ class Saveable(object):
          * human-readable (JSON) model metadata to path/metadata/
          * Parquet formatted data to path/data/
 
-        The model may be loaded using py:meth:`Loader.load`.
+        The model may be loaded using :py:meth:`Loader.load`.
 
         :param sc: Spark context used to save model data.
         :param path: Path specifying the directory in which to save
@@ -413,14 +412,14 @@ class Loader(object):
     def load(cls, sc, path):
         """
         Load a model from the given path. The model should have been
-        saved using py:meth:`Saveable.save`.
+        saved using :py:meth:`Saveable.save`.
 
         :param sc: Spark context used for loading model files.
         :param path: Path specifying the directory to which the model
                      was saved.
         :return: model instance
         """
-        raise NotImplemented
+        raise NotImplementedError
 
 
 @inherit_doc

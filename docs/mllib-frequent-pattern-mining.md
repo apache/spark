@@ -2,6 +2,21 @@
 layout: global
 title: Frequent Pattern Mining - RDD-based API
 displayTitle: Frequent Pattern Mining - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -39,18 +54,18 @@ We refer users to the papers for more details.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
+[`FPGrowth`](api/scala/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
 FP-growth algorithm.
 It takes an `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
-[`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
+[`FPGrowthModel`](api/scala/org/apache/spark/mllib/fpm/FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.  The following
 example illustrates how to mine frequent itemsets and association rules
 (see [Association
 Rules](mllib-frequent-pattern-mining.html#association-rules) for
 details) from `transactions`.
 
-Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) for details on the API.
+Refer to the [`FPGrowth` Scala docs](api/scala/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/SimpleFPGrowth.scala %}
 
@@ -96,7 +111,7 @@ Refer to the [`FPGrowth` Python docs](api/python/pyspark.mllib.html#pyspark.mlli
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-[AssociationRules](api/scala/index.html#org.apache.spark.mllib.fpm.AssociationRules)
+[AssociationRules](api/scala/org/apache/spark/mllib/fpm/AssociationRules.html)
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
@@ -153,13 +168,13 @@ The following example illustrates PrefixSpan running on the sequences
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-[`PrefixSpan`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) implements the
+[`PrefixSpan`](api/scala/org/apache/spark/mllib/fpm/PrefixSpan.html) implements the
 PrefixSpan algorithm.
 Calling `PrefixSpan.run` returns a
-[`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel)
+[`PrefixSpanModel`](api/scala/org/apache/spark/mllib/fpm/PrefixSpanModel.html)
 that stores the frequent sequences with their frequencies.
 
-Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
+Refer to the [`PrefixSpan` Scala docs](api/scala/org/apache/spark/mllib/fpm/PrefixSpan.html) and [`PrefixSpanModel` Scala docs](api/scala/org/apache/spark/mllib/fpm/PrefixSpanModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/PrefixSpanExample.scala %}
 

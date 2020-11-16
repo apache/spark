@@ -25,7 +25,7 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature.Instance
@@ -36,14 +36,13 @@ import org.apache.spark.ml.optim.aggregator.{HuberAggregator, LeastSquaresAggreg
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.regression.{LinearRegressionModel => OldLinearRegressionModel}
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
@@ -105,16 +104,21 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   @Since("2.3.0")
   def getEpsilon: Double = $(epsilon)
 
+  setDefault(regParam -> 0.0, fitIntercept -> true, standardization -> true,
+    elasticNetParam -> 0.0, maxIter -> 100, tol -> 1E-6, solver -> Auto,
+    aggregationDepth -> 2, loss -> SquaredError, epsilon -> 1.35)
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if ($(loss) == Huber) {
-      require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
-        "normal solver, please change solver to auto or l-bfgs.")
-      require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
-        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
-
+    if (fitting) {
+      if ($(loss) == Huber) {
+        require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
+          "normal solver, please change solver to auto or l-bfgs.")
+        require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
+          s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+      }
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
@@ -190,7 +194,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set if we should fit the intercept.
@@ -200,7 +203,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -216,7 +218,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -232,7 +233,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
-  setDefault(elasticNetParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -242,7 +242,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -253,7 +252,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
@@ -282,7 +280,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -294,7 +291,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
    * Sets the value of param [[loss]].
@@ -304,7 +300,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> SquaredError)
 
   /**
    * Sets the value of param [[epsilon]].
@@ -314,18 +309,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setEpsilon(value: Double): this.type = set(epsilon, value)
-  setDefault(epsilon -> 1.35)
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     // Extract the number of features before deciding optimization solver.
-    val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-    val instances: RDD[Instance] = dataset.select(
-      col($(labelCol)), w, col($(featuresCol))).rdd.map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
+    val instances = extractInstances(dataset)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -362,27 +351,25 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val (featuresSummarizer, ySummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight),
-            c._2.add(Vectors.dense(instance.label), instance.weight))
-
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        (new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val (featuresSummarizer, ySummarizer) = instances.treeAggregate(
+      (Summarizer.createSummarizerBuffer("mean", "std"),
+        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
+      seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
+        (c._1.add(instance.features, instance.weight),
+          c._2.add(Vectors.dense(instance.label), instance.weight)),
+      combOp = (c1: (SummarizerBuffer, SummarizerBuffer),
+                c2: (SummarizerBuffer, SummarizerBuffer)) =>
+        (c1._1.merge(c2._1), c1._2.merge(c2._2)),
+      depth = $(aggregationDepth)
+    )
 
     val yMean = ySummarizer.mean(0)
-    val rawYStd = math.sqrt(ySummarizer.variance(0))
+    val rawYStd = ySummarizer.std(0)
 
     instr.logNumExamples(ySummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
     instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
+    instr.logSumOfWeights(featuresSummarizer.weightSum)
 
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
@@ -429,7 +416,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // setting yStd=abs(yMean) ensures that y is not scaled anymore in l-bfgs algorithm.
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
     val featuresMean = featuresSummarizer.mean.toArray
-    val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
+    val featuresStd = featuresSummarizer.std.toArray
     val bcFeaturesMean = instances.context.broadcast(featuresMean)
     val bcFeaturesStd = instances.context.broadcast(featuresStd)
 
@@ -531,8 +518,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         throw new SparkException(msg)
       }
 
-      bcFeaturesMean.destroy(blocking = false)
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesMean.destroy()
+      bcFeaturesStd.destroy()
 
       val parameters = state.x.toArray.clone()
 
@@ -710,6 +697,11 @@ class LinearRegressionModel private[ml] (
    */
   @Since("1.6.0")
   override def write: GeneralMLWriter = new GeneralMLWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"LinearRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 /** A writer for LinearRegression that handles the "internal" (or default) format */
@@ -796,7 +788,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 }
 
 /**
- * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training weights except for the objective trace.
  *
@@ -804,7 +795,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
@@ -834,7 +824,6 @@ class LinearRegressionTrainingSummary private[regression] (
 }
 
 /**
- * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
  * @param predictions predictions output by the model's `transform` method.
@@ -844,7 +833,6 @@ class LinearRegressionTrainingSummary private[regression] (
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,

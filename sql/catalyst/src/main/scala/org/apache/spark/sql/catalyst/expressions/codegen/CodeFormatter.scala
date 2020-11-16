@@ -41,7 +41,8 @@ object CodeFormatter {
       val commentReplaced = commentHolder.replaceAllIn(
         line.trim,
         m => code.comment.get(m.group(1)).map(Matcher.quoteReplacement).getOrElse(m.group(0)))
-      formatter.addLine(commentReplaced)
+      val comments = commentReplaced.split("\n")
+      comments.foreach(formatter.addLine)
     }
     if (needToTruncate) {
       formatter.addLine(s"[truncated to $maxLines lines (total lines is ${lines.length})]")

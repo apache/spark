@@ -23,7 +23,6 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.receiver.Receiver
@@ -38,7 +37,7 @@ import org.apache.spark.streaming.receiver.Receiver
  *    `$ bin/run-example org.apache.spark.examples.streaming.CustomReceiver localhost 9999`
  */
 object CustomReceiver {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 2) {
       System.err.println("Usage: CustomReceiver <hostname> <port>")
       System.exit(1)
@@ -63,28 +62,28 @@ object CustomReceiver {
 
 
 class CustomReceiver(host: String, port: Int)
-  extends Receiver[String](StorageLevel.MEMORY_AND_DISK_2) with Logging {
+  extends Receiver[String](StorageLevel.MEMORY_AND_DISK_2) {
 
-  def onStart() {
+  def onStart(): Unit = {
     // Start the thread that receives data over a connection
     new Thread("Socket Receiver") {
-      override def run() { receive() }
+      override def run(): Unit = { receive() }
     }.start()
   }
 
-  def onStop() {
+  def onStop(): Unit = {
    // There is nothing much to do as the thread calling receive()
    // is designed to stop by itself isStopped() returns false
   }
 
   /** Create a socket connection and receive data until receiver is stopped */
-  private def receive() {
+  private def receive(): Unit = {
    var socket: Socket = null
    var userInput: String = null
    try {
-     logInfo(s"Connecting to $host : $port")
+     println(s"Connecting to $host : $port")
      socket = new Socket(host, port)
-     logInfo(s"Connected to $host : $port")
+     println(s"Connected to $host : $port")
      val reader = new BufferedReader(
        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
      userInput = reader.readLine()
@@ -94,7 +93,7 @@ class CustomReceiver(host: String, port: Int)
      }
      reader.close()
      socket.close()
-     logInfo("Stopped receiving")
+     println("Stopped receiving")
      restart("Trying to connect again")
    } catch {
      case e: java.net.ConnectException =>

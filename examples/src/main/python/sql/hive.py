@@ -23,7 +23,7 @@ Run with:
 from __future__ import print_function
 
 # $example on:spark_hive$
-from os.path import expanduser, join, abspath
+from os.path import join, abspath
 
 from pyspark.sql import SparkSession
 from pyspark.sql import Row

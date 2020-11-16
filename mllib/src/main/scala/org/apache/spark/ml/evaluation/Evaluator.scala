@@ -17,16 +17,14 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.Dataset
 
 /**
- * :: DeveloperApi ::
  * Abstract class for evaluators that compute metrics from predictions.
  */
 @Since("1.5.0")
-@DeveloperApi
 abstract class Evaluator extends Params {
 
   /**

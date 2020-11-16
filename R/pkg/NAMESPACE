@@ -28,6 +28,7 @@ importFrom("utils", "download.file", "object.size", "packageVersion", "tail", "u
 
 # S3 methods exported
 export("sparkR.session")
+export("sparkR.init")
 export("sparkR.session.stop")
 export("sparkR.stop")
 export("sparkR.conf")
@@ -40,6 +41,9 @@ export("sparkR.callJMethod")
 export("sparkR.callJStatic")
 
 export("install.spark")
+
+export("sparkRSQL.init",
+       "sparkRHive.init")
 
 # MLlib integration
 exportMethods("glm",
@@ -148,6 +152,7 @@ exportMethods("arrange",
               "printSchema",
               "randomSplit",
               "rbind",
+              "registerTempTable",
               "rename",
               "repartition",
               "repartitionByRange",
@@ -312,8 +317,10 @@ exportMethods("%<=>%",
               "lower",
               "lpad",
               "ltrim",
+              "map_concat",
               "map_entries",
               "map_from_arrays",
+              "map_from_entries",
               "map_keys",
               "map_values",
               "max",
@@ -333,6 +340,7 @@ exportMethods("%<=>%",
               "ntile",
               "otherwise",
               "over",
+              "overlay",
               "percent_rank",
               "pmod",
               "posexplode",
@@ -406,6 +414,7 @@ exportMethods("%<=>%",
               "weekofyear",
               "when",
               "window",
+              "xxhash64",
               "year")
 
 exportClasses("GroupedData")
@@ -416,8 +425,10 @@ export("as.DataFrame",
        "cacheTable",
        "clearCache",
        "createDataFrame",
+       "createExternalTable",
        "createTable",
        "currentDatabase",
+       "dropTempTable",
        "dropTempView",
        "listColumns",
        "listDatabases",

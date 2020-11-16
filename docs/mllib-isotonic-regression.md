@@ -2,6 +2,21 @@
 layout: global
 title: Isotonic regression - RDD-based API
 displayTitle: Regression - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 ## Isotonic regression
@@ -59,7 +74,7 @@ i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
-Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegressionModel) for details on the API.
+Refer to the [`IsotonicRegression` Scala docs](api/scala/org/apache/spark/mllib/regression/IsotonicRegression.html) and [`IsotonicRegressionModel` Scala docs](api/scala/org/apache/spark/mllib/regression/IsotonicRegressionModel.html) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/mllib/IsotonicRegressionExample.scala %}
 </div>

@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
@@ -104,6 +105,91 @@ private[spark] object SchemaUtils {
   def appendColumn(schema: StructType, col: StructField): StructType = {
     require(!schema.fieldNames.contains(col.name), s"Column ${col.name} already exists.")
     StructType(schema.fields :+ col)
+  }
+
+  /**
+   * Update the size of a ML Vector column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param size number of features
+   * @return new schema
+   */
+  def updateAttributeGroupSize(
+      schema: StructType,
+      colName: String,
+      size: Int): StructType = {
+    require(size > 0)
+    val attrGroup = new AttributeGroup(colName, size)
+    val field = attrGroup.toStructField
+    updateField(schema, field, true)
+  }
+
+  /**
+   * Update the number of values of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @param numValues number of values.
+   * @return new schema
+   */
+  def updateNumValues(
+      schema: StructType,
+      colName: String,
+      numValues: Int): StructType = {
+    val attr = NominalAttribute.defaultAttr
+      .withName(colName)
+      .withNumValues(numValues)
+    val field = attr.toStructField
+    updateField(schema, field, true)
+  }
+
+  /**
+   * Update the numeric meta of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param colName column name
+   * @return new schema
+   */
+  def updateNumeric(
+      schema: StructType,
+      colName: String): StructType = {
+    val attr = NumericAttribute.defaultAttr
+      .withName(colName)
+    val field = attr.toStructField
+    updateField(schema, field, true)
+  }
+
+  /**
+   * Update the metadata of an existing column. If this column do not exist, append it.
+   * @param schema input schema
+   * @param field struct field
+   * @param overwriteMetadata whether to overwrite the metadata. If true, the metadata in the
+   *                          schema will be overwritten. If false, the metadata in `field`
+   *                          and `schema` will be merged to generate output metadata.
+   * @return new schema
+   */
+  def updateField(
+      schema: StructType,
+      field: StructField,
+      overwriteMetadata: Boolean = true): StructType = {
+    if (schema.fieldNames.contains(field.name)) {
+      val newFields = schema.fields.map { f =>
+        if (f.name == field.name) {
+          if (overwriteMetadata) {
+            field
+          } else {
+            val newMeta = new MetadataBuilder()
+              .withMetadata(field.metadata)
+              .withMetadata(f.metadata)
+              .build()
+            StructField(field.name, field.dataType, field.nullable, newMeta)
+          }
+        } else {
+          f
+        }
+      }
+      StructType(newFields)
+    } else {
+      appendColumn(schema, field)
+    }
   }
 
   /**

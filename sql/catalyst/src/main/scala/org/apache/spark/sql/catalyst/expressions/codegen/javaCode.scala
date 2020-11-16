@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import java.lang.{Boolean => JBool}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.{existentials, implicitConversions}
+import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{BooleanType, DataType}
@@ -143,6 +143,9 @@ trait Block extends TreeNode[Block] with JavaCode {
     case _ => code.trim
   }
 
+  // We could remove comments, extra whitespaces and newlines when calculating length as it is used
+  // only for codegen method splitting, but SPARK-30564 showed that this is a performance critical
+  // function so we decided not to do so.
   def length: Int = toString.length
 
   def isEmpty: Boolean = toString.isEmpty
@@ -183,7 +186,7 @@ trait Block extends TreeNode[Block] with JavaCode {
     def doTransform(arg: Any): AnyRef = arg match {
       case e: ExprValue => transform(e)
       case Some(value) => Some(doTransform(value))
-      case seq: Traversable[_] => seq.map(doTransform)
+      case seq: Iterable[_] => seq.map(doTransform)
       case other: AnyRef => other
     }
 
@@ -198,6 +201,9 @@ trait Block extends TreeNode[Block] with JavaCode {
   }
 
   override def verboseString(maxFields: Int): String = toString
+  override def simpleStringWithNodeId(): String = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+  }
 }
 
 object Block {
@@ -217,6 +223,11 @@ object Block {
   implicit def blocksToBlock(blocks: Seq[Block]): Block = blocks.reduceLeft(_ + _)
 
   implicit class BlockHelper(val sc: StringContext) extends AnyVal {
+    /**
+     * A string interpolator that retains references to the `JavaCode` inputs, and behaves like
+     * the Scala builtin StringContext.s() interpolator otherwise, i.e. it will treat escapes in
+     * the code parts, and will not treat escapes in the input arguments.
+     */
     def code(args: Any*): Block = {
       sc.checkLengths(args)
       if (sc.parts.length == 0) {
@@ -224,7 +235,7 @@ object Block {
       } else {
         args.foreach {
           case _: ExprValue | _: Inline | _: Block =>
-          case _: Int | _: Long | _: Float | _: Double | _: String =>
+          case _: Boolean | _: Int | _: Long | _: Float | _: Double | _: String =>
           case other => throw new IllegalArgumentException(
             s"Can not interpolate ${other.getClass.getName} into code block.")
         }
@@ -244,7 +255,7 @@ object Block {
     val inputs = args.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
 
-    buf.append(strings.next)
+    buf.append(StringContext.treatEscapes(strings.next))
     while (strings.hasNext) {
       val input = inputs.next
       input match {
@@ -256,7 +267,7 @@ object Block {
         case _ =>
           buf.append(input)
       }
-      buf.append(strings.next)
+      buf.append(StringContext.treatEscapes(strings.next))
     }
     codeParts += buf.toString
 
@@ -280,10 +291,10 @@ case class CodeBlock(codeParts: Seq[String], blockInputs: Seq[JavaCode]) extends
     val strings = codeParts.iterator
     val inputs = blockInputs.iterator
     val buf = new StringBuilder(Block.CODE_BLOCK_BUFFER_LENGTH)
-    buf.append(StringContext.treatEscapes(strings.next))
+    buf.append(strings.next)
     while (strings.hasNext) {
       buf.append(inputs.next)
-      buf.append(StringContext.treatEscapes(strings.next))
+      buf.append(strings.next)
     }
     buf.toString
   }

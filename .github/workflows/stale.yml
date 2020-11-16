@@ -1,0 +1,24 @@
+name: Close stale PRs
+
+on:
+  schedule:
+  - cron: "0 0 * * *"
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/stale@v1.1.0
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        stale-pr-message: >
+          We're closing this PR because it hasn't been updated in a while.
+          This isn't a judgement on the merit of the PR in any way. It's just
+          a way of keeping the PR queue manageable.
+
+          If you'd like to revive this PR, please reopen it and ask a
+          committer to remove the Stale tag!
+        days-before-stale: 100
+        # Setting this to 0 is the same as setting it to 1.
+        # See: https://github.com/actions/stale/issues/28
+        days-before-close: 0

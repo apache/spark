@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming;
 
 import java.util.Locale;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 public class JavaOutputModeSuite {
@@ -26,8 +27,8 @@ public class JavaOutputModeSuite {
   @Test
   public void testOutputModes() {
     OutputMode o1 = OutputMode.Append();
-    assert(o1.toString().toLowerCase(Locale.ROOT).contains("append"));
+    Assert.assertTrue(o1.toString().toLowerCase(Locale.ROOT).contains("append"));
     OutputMode o2 = OutputMode.Complete();
-    assert (o2.toString().toLowerCase(Locale.ROOT).contains("complete"));
+    Assert.assertTrue(o2.toString().toLowerCase(Locale.ROOT).contains("complete"));
   }
 }

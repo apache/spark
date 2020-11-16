@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
+import java.io.{PrintWriter, StringWriter}
+
 import scala.collection.mutable.{HashMap, HashSet, Set}
 
 import org.apache.hadoop.yarn.api.records._
@@ -45,7 +46,11 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     thread.start()
     thread.join()
 
-    assert(error === null)
+    if (error != null) {
+      val errors = new StringWriter()
+      error.printStackTrace(new PrintWriter(errors))
+      fail(s"StackOverflowError should not be thrown; however, got:\n\n$errors")
+    }
   }
 
   private def runTest(): Unit = {

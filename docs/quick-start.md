@@ -2,6 +2,21 @@
 layout: global
 title: Quick Start
 description: Quick start tutorial for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -42,7 +57,7 @@ scala> val textFile = spark.read.textFile("README.md")
 textFile: org.apache.spark.sql.Dataset[String] = [value: string]
 {% endhighlight %}
 
-You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/index.html#org.apache.spark.sql.Dataset)_.
+You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/org/apache/spark/sql/Dataset.html)_.
 
 {% highlight scala %}
 scala> textFile.count() // Number of items in this Dataset
@@ -249,7 +264,7 @@ Spark README. Note that you'll need to replace YOUR_SPARK_HOME with the location
 installed. Unlike the earlier examples with the Spark shell, which initializes its own SparkSession,
 we initialize a SparkSession as part of the program.
 
-We call `SparkSession.builder` to construct a [[SparkSession]], then set the application name, and finally call `getOrCreate` to get the [[SparkSession]] instance.
+We call `SparkSession.builder` to construct a `SparkSession`, then set the application name, and finally call `getOrCreate` to get the `SparkSession` instance.
 
 Our application depends on the Spark API, so we'll also include an sbt configuration file,
 `build.sbt`, which explains that Spark is a dependency. This file also adds a repository that
@@ -341,6 +356,7 @@ Note that Spark artifacts are tagged with a Scala version.
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_{{site.SCALA_BINARY_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 </project>

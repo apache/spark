@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
 import java.nio.channels.Channels
 import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
@@ -40,7 +41,7 @@ private[sql] object CreateJacksonParser extends Serializable {
     val bain = new ByteArrayInputStream(
       bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
 
-    jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
+    jsonFactory.createParser(new InputStreamReader(bain, StandardCharsets.UTF_8))
   }
 
   def text(jsonFactory: JsonFactory, record: Text): JsonParser = {

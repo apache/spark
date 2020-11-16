@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
+import org.apache.spark.util.Utils
 
 object SQLExecution {
 
@@ -57,9 +60,9 @@ object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sparkSession: SparkSession,
       queryExecution: QueryExecution,
-      name: Option[String] = None)(body: => T): T = {
+      name: Option[String] = None)(body: => T): T = queryExecution.sparkSession.withActive {
+    val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -71,13 +74,23 @@ object SQLExecution {
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sc.getCallSite()
 
+      val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
+
+      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+        .filter(_ => truncateLength > 0)
+        .map { sqlStr =>
+          val redactedStr = Utils
+            .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
+          redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
+        }.getOrElse(callSite.shortForm)
+
       withSQLConfPropagated(sparkSession) {
-        var ex: Option[Exception] = None
+        var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
-            description = callSite.shortForm,
+            description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.toString,
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
@@ -86,7 +99,7 @@ object SQLExecution {
             time = System.currentTimeMillis()))
           body
         } catch {
-          case e: Exception =>
+          case e: Throwable =>
             ex = Some(e)
             throw e
         } finally {
@@ -150,5 +163,31 @@ object SQLExecution {
         sc.setLocalProperty(key, value)
       }
     }
+  }
+
+  /**
+   * Wrap passed function to ensure necessary thread-local variables like
+   * SparkContext local properties are forwarded to execution thread
+   */
+  def withThreadLocalCaptured[T](
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
+    val activeSession = sparkSession
+    val sc = sparkSession.sparkContext
+    val localProps = Utils.cloneProperties(sc.getLocalProperties)
+    exec.submit(() => {
+      val originalSession = SparkSession.getActiveSession
+      val originalLocalProps = sc.getLocalProperties
+      SparkSession.setActiveSession(activeSession)
+      sc.setLocalProperties(localProps)
+      val res = body
+      // reset active session and local props.
+      sc.setLocalProperties(originalLocalProps)
+      if (originalSession.nonEmpty) {
+        SparkSession.setActiveSession(originalSession.get)
+      } else {
+        SparkSession.clearActiveSession()
+      }
+      res
+    })
   }
 }

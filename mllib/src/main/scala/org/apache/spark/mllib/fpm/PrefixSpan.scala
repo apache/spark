@@ -179,7 +179,7 @@ class PrefixSpan private (
       freqSequences.persist(data.getStorageLevel)
       freqSequences.count()
     }
-    dataInternalRepr.unpersist(false)
+    dataInternalRepr.unpersist()
 
     new PrefixSpanModel(freqSequences)
   }
@@ -316,9 +316,9 @@ object PrefixSpan extends Logging {
               ((prefix.id, item), (1L, postfixSize))
             }
           }
-        }.reduceByKey { case ((c0, s0), (c1, s1)) =>
-          (c0 + c1, s0 + s1)
-        }.filter { case (_, (c, _)) => c >= minCount }
+        }.reduceByKey { (cs0, cs1) =>
+          (cs0._1 + cs1._1, cs0._2 + cs1._2)
+        }.filter { case (_, cs) => cs._1 >= minCount }
         .collect()
       val newLargePrefixes = mutable.Map.empty[Int, Prefix]
       freqPrefixes.foreach { case ((id, item), (count, projDBSize)) =>
@@ -628,8 +628,6 @@ class PrefixSpanModel[Item] @Since("1.5.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PrefixSpanModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")

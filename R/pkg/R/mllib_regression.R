@@ -44,7 +44,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                operators are supported, including '~', '.', ':', '+', '-', '*', and '^'.
 #' @param family a description of the error distribution and link function to be used in the model.
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at

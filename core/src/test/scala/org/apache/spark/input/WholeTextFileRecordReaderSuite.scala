@@ -40,7 +40,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
   private var sc: SparkContext = _
   private var factory: CompressionCodecFactory = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     // Hadoop's FileSystem caching does not use the Configuration as part of its cache key, which
     // can cause Filesystem.get(Configuration) to return a cached instance created with a different
     // configuration than the one passed to get() (see HADOOP-8490 for more details). This caused
@@ -59,7 +59,7 @@ class WholeTextFileRecordReaderSuite extends SparkFunSuite with BeforeAndAfterAl
     factory = new CompressionCodecFactory(sc.hadoopConfiguration)
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       sc.stop()
     } finally {

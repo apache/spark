@@ -17,13 +17,11 @@
 package org.apache.spark.scheduler.cluster
 
 import java.net.URL
+import java.util.concurrent.atomic.AtomicReference
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.language.reflectiveCalls
-
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.mockito.Mockito.when
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -32,15 +30,37 @@ import org.apache.spark.ui.TestFilter
 
 class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with LocalSparkContext {
 
+  private var yarnSchedulerBackend: YarnSchedulerBackend = _
+
+  override def afterEach(): Unit = {
+    try {
+      if (yarnSchedulerBackend != null) {
+        yarnSchedulerBackend.stop()
+      }
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  private class TestTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+    val blacklistedNodes = new AtomicReference[Set[String]]()
+    def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
+    override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
+  }
+
+  private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
+      extends YarnSchedulerBackend(scheduler, sc) {
+    def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
+      this.hostToLocalTaskCount = hostToLocalTaskCount
+    }
+  }
+
   test("RequestExecutors reflects node blacklist and is serializable") {
     sc = new SparkContext("local", "YarnSchedulerBackendSuite")
-    val sched = mock[TaskSchedulerImpl]
-    when(sched.sc).thenReturn(sc)
-    val yarnSchedulerBackend = new YarnSchedulerBackend(sched, sc) {
-      def setHostToLocalTaskCount(hostToLocalTaskCount: Map[String, Int]): Unit = {
-        this.hostToLocalTaskCount = hostToLocalTaskCount
-      }
-    }
+    // Subclassing the TaskSchedulerImpl here instead of using Mockito. For details see SPARK-26891.
+    val sched = new TestTaskSchedulerImpl(sc)
+    val yarnSchedulerBackendExtended = new TestYarnSchedulerBackend(sched, sc)
+    yarnSchedulerBackend = yarnSchedulerBackendExtended
     val ser = new JavaSerializer(sc.conf).newInstance()
     for {
       blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
@@ -50,9 +70,9 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
         Map("a" -> 1, "b" -> 2)
       )
     } {
-      yarnSchedulerBackend.setHostToLocalTaskCount(hostToLocalCount)
-      when(sched.nodeBlacklist()).thenReturn(blacklist)
-      val req = yarnSchedulerBackend.prepareRequestExecutors(numRequested)
+      yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
+      sched.setNodeBlacklist(blacklist)
+      val req = yarnSchedulerBackendExtended.prepareRequestExecutors(numRequested)
       assert(req.requestedTotal === numRequested)
       assert(req.nodeBlacklist === blacklist)
       assert(req.hostToLocalTaskCount.keySet.intersect(blacklist).isEmpty)
@@ -75,14 +95,14 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     // Before adding the "YARN" filter, should get the code from the filter in SparkConf.
     assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_BAD_GATEWAY)
 
-    val backend = new YarnSchedulerBackend(sched, sc) { }
+    yarnSchedulerBackend = new YarnSchedulerBackend(sched, sc) { }
 
-    backend.addWebUIFilter(classOf[TestFilter2].getName(),
+    yarnSchedulerBackend.addWebUIFilter(classOf[TestFilter2].getName(),
       Map("responseCode" -> HttpServletResponse.SC_NOT_ACCEPTABLE.toString), "")
 
-    sc.ui.get.getHandlers.foreach { h =>
+    sc.ui.get.getDelegatingHandlers.foreach { h =>
       // Two filters above + security filter.
-      assert(h.getServletHandler().getFilters().length === 3)
+      assert(h.filterCount() === 3)
     }
 
     // The filter should have been added first in the chain, so we should get SC_NOT_ACCEPTABLE
@@ -96,11 +116,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       }
     }
 
-    val ctx = new ServletContextHandler()
-    ctx.setContextPath("/new-handler")
-    ctx.addServlet(new ServletHolder(servlet), "/")
-
-    sc.ui.get.attachHandler(ctx)
+    sc.ui.get.attachHandler("/new-handler", servlet, "/")
 
     val newUrl = new URL(sc.uiWebUrl.get + "/new-handler/")
     assert(TestUtils.httpResponseCode(newUrl) === HttpServletResponse.SC_NOT_ACCEPTABLE)

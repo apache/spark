@@ -1,0 +1,46 @@
+================================================================================================
+Dataset Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+back-to-back map long:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+RDD                                               14574          14759         261          6.9         145.7       1.0X
+DataFrame                                          2468           2655         264         40.5          24.7       5.9X
+Dataset                                            3498           3533          50         28.6          35.0       4.2X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+back-to-back map:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+RDD                                               17877          18133         361          5.6         178.8       1.0X
+DataFrame                                          5968           5991          33         16.8          59.7       3.0X
+Dataset                                           12638          12859         313          7.9         126.4       1.4X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+back-to-back filter Long:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+RDD                                                3399           3464          92         29.4          34.0       1.0X
+DataFrame                                          1609           1628          28         62.2          16.1       2.1X
+Dataset                                            3637           3648          16         27.5          36.4       0.9X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+back-to-back filter:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+RDD                                                4850           4859          13         20.6          48.5       1.0X
+DataFrame                                           211            244          21        472.9           2.1      22.9X
+Dataset                                            5864           6126         372         17.1          58.6       0.8X
+
+OpenJDK 64-Bit Server VM 11.0.4+11-LTS on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+aggregate:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+RDD sum                                            4821           4914         131         20.7          48.2       1.0X
+DataFrame sum                                        71             83           8       1412.4           0.7      68.1X
+Dataset sum using Aggregator                       6001           6012          16         16.7          60.0       0.8X
+Dataset complex Aggregator                        10247          10455         294          9.8         102.5       0.5X
+
+

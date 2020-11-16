@@ -79,16 +79,18 @@ object StreamingQueryListener {
 
   /**
    * Event representing the start of a query
-   * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
    * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
    * @param name User-specified name of the query, null if not specified.
+   * @param timestamp The timestamp to start a query.
    * @since 2.1.0
    */
   @Evolving
   class QueryStartedEvent private[sql](
       val id: UUID,
       val runId: UUID,
-      val name: String) extends Event
+      val name: String,
+      val timestamp: String) extends Event
 
   /**
    * Event representing any progress updates in a query.
@@ -101,7 +103,7 @@ object StreamingQueryListener {
   /**
    * Event representing that termination of a query.
    *
-   * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
    * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
    * @param exception The exception message of the query if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.

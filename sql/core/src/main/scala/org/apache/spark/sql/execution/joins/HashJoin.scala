@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExplainUtils, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
@@ -35,6 +36,24 @@ trait HashJoin {
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
+
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ${buildSide} ($opId)".trim
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Left keys", leftKeys)}
+       |${ExplainUtils.generateFieldString("Right keys", rightKeys)}
+       |${ExplainUtils.generateFieldString("Join condition", joinCondStr)}
+       |""".stripMargin
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -63,9 +82,8 @@ trait HashJoin {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = HashJoin.rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
-    val rkeys = HashJoin.rewriteKeyExpr(rightKeys)
-      .map(BindReferences.bindReference(_, right.output))
+    val lkeys = bindReferences(HashJoin.rewriteKeyExpr(leftKeys), left.output)
+    val rkeys = bindReferences(HashJoin.rewriteKeyExpr(rightKeys), right.output)
     buildSide match {
       case BuildLeft => (lkeys, rkeys)
       case BuildRight => (rkeys, lkeys)
@@ -81,7 +99,7 @@ trait HashJoin {
     UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
-    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+    Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
   } else {
     (r: InternalRow) => true
   }
@@ -225,7 +243,7 @@ object HashJoin {
    *
    * If not, returns the original expressions.
    */
-  private[joins] def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
     // TODO: support BooleanType, DateType and TimestampType
     if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
@@ -244,5 +262,25 @@ object HashJoin {
         BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
     }
     keyExpr :: Nil
+  }
+
+  /**
+   * Extract a given key which was previously packed in a long value using its index to
+   * determine the number of bits to shift
+   */
+  def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    // jump over keys that have a higher index value than the required key
+    if (keys.size == 1) {
+      assert(index == 0)
+      Cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+    } else {
+      val shiftedBits =
+        keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
+      val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
+      // build the schema for unpacking the required key
+      Cast(BitwiseAnd(
+        ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
+        Literal(mask)), keys(index).dataType)
+    }
   }
 }

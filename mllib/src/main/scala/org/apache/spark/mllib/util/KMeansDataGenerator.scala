@@ -20,16 +20,14 @@ package org.apache.spark.mllib.util
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 
 /**
- * :: DeveloperApi ::
  * Generate test data for KMeans. This class first chooses k cluster centers
  * from a d-dimensional Gaussian distribution scaled by factor r and then creates a Gaussian
  * cluster with scale 1 around each center.
  */
-@DeveloperApi
 @Since("0.8.0")
 object KMeansDataGenerator {
 
@@ -65,7 +63,7 @@ object KMeansDataGenerator {
   }
 
   @Since("0.8.0")
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 6) {
       // scalastyle:off println
       println("Usage: KMeansGenerator " +

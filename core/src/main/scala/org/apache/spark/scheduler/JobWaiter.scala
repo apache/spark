@@ -49,7 +49,7 @@ private[spark] class JobWaiter[T](
    * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
    * will fail this job with a SparkException.
    */
-  def cancel() {
+  def cancel(): Unit = {
     dagScheduler.cancelJob(jobId, None)
   }
 

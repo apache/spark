@@ -16,9 +16,14 @@
  */
 
 var uiRoot = "";
+var appBasePath = "";
 
 function setUIRoot(val) {
     uiRoot = val;
+}
+
+function setAppBasePath(path) {
+    appBasePath = path;
 }
 
 function collapseTablePageLoad(name, table){
@@ -33,7 +38,7 @@ function collapseTable(thisName, table){
     var status = window.localStorage.getItem(thisName) == "true";
     status = !status;
 
-    thisClass = '.' + thisName
+    var thisClass = '.' + thisName;
 
     // Expand the list of additional metrics.
     var tableDiv = $(thisClass).parent().find('.' + table);
@@ -63,6 +68,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-finishedDrivers','aggregated-finishedDrivers');
   collapseTablePageLoad('collapse-aggregated-runtimeInformation','aggregated-runtimeInformation');
   collapseTablePageLoad('collapse-aggregated-sparkProperties','aggregated-sparkProperties');
+  collapseTablePageLoad('collapse-aggregated-hadoopProperties','aggregated-hadoopProperties');
   collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
   collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
   collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');
@@ -86,4 +92,16 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-runningExecutions','aggregated-runningExecutions');
   collapseTablePageLoad('collapse-aggregated-completedExecutions','aggregated-completedExecutions');
   collapseTablePageLoad('collapse-aggregated-failedExecutions','aggregated-failedExecutions');
+  collapseTablePageLoad('collapse-aggregated-sessionstat','aggregated-sessionstat');
+  collapseTablePageLoad('collapse-aggregated-sqlstat','aggregated-sqlstat');
+  collapseTablePageLoad('collapse-aggregated-sqlsessionstat','aggregated-sqlsessionstat');
+  collapseTablePageLoad('collapse-aggregated-activeQueries','aggregated-activeQueries');
+  collapseTablePageLoad('collapse-aggregated-completedQueries','aggregated-completedQueries');
+});
+
+$(function() {
+    // Show/hide full job description on click event.
+    $(".description-input").click(function() {
+        $(this).toggleClass("description-input-full");
+    });
 });

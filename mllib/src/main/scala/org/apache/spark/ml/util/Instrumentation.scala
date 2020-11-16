@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 
 import scala.util.{Failure, Success, Try}
@@ -27,17 +28,18 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.PipelineStage
+import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.util.Utils
 
 /**
- * A small wrapper that defines a training session for an estimator, and some methods to log
- * useful information during this session.
+ * A small wrapper that defines a training session for an estimator, some methods to log
+ * useful information during this session, and some methods to send
+ * [[org.apache.spark.ml.MLEvent]].
  */
-private[spark] class Instrumentation private () extends Logging {
+private[spark] class Instrumentation private () extends Logging with MLEvents {
 
   private val id = UUID.randomUUID()
   private val shortId = id.toString.take(8)
@@ -121,6 +123,10 @@ private[spark] class Instrumentation private () extends Logging {
     logNamedValue(Instrumentation.loggerTags.numExamples, num)
   }
 
+  def logSumOfWeights(num: Double): Unit = {
+    logNamedValue(Instrumentation.loggerTags.sumOfWeights, num)
+  }
+
   /**
    * Logs the value with customized name field.
    */
@@ -160,8 +166,9 @@ private[spark] class Instrumentation private () extends Logging {
    * Logs an exception raised during a training session.
    */
   def logFailure(e: Throwable): Unit = {
-    val msg = e.getStackTrace.mkString("\n")
-    super.logError(msg)
+    val msg = new StringWriter()
+    e.printStackTrace(new PrintWriter(msg))
+    super.logError(msg.toString)
   }
 }
 
@@ -176,6 +183,7 @@ private[spark] object Instrumentation {
     val numExamples = "numExamples"
     val meanOfLabels = "meanOfLabels"
     val varianceOfLabels = "varianceOfLabels"
+    val sumOfWeights = "sumOfWeights"
   }
 
   def instrumented[T](body: (Instrumentation => T)): T = {
@@ -202,21 +210,21 @@ private[spark] class OptionalInstrumentation private(
 
   protected override def logName: String = className
 
-  override def logInfo(msg: => String) {
+  override def logInfo(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  override def logWarning(msg: => String) {
+  override def logWarning(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  override def logError(msg: => String) {
+  override def logError(msg: => String): Unit = {
     instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)

@@ -19,24 +19,21 @@ package org.apache.spark.sql.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{ListenerBus, Utils}
 
 /**
- * :: Experimental ::
  * The interface of query execution listener that can be used to analyze execution metrics.
  *
  * @note Implementations should guarantee thread-safety as they can be invoked by
  * multiple different threads.
  */
-@Experimental
-@Evolving
 trait QueryExecutionListener {
 
   /**
@@ -58,8 +55,9 @@ trait QueryExecutionListener {
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
-   * @param exception the exception that failed this query.
-   *
+   * @param exception the exception that failed this query. If `java.lang.Error` is thrown during
+   *                  execution, it will be wrapped with an `Exception` and it can be accessed by
+   *                  `exception.getCause`.
    * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
@@ -68,12 +66,8 @@ trait QueryExecutionListener {
 
 
 /**
- * :: Experimental ::
- *
  * Manager for [[QueryExecutionListener]]. See `org.apache.spark.sql.SQLContext.listenerManager`.
  */
-@Experimental
-@Evolving
 // The `session` is used to indicate which session carries this listener manager, and we only
 // catch SQL executions which are launched by the same session.
 // The `loadExtensions` flag is used to indicate whether we should load the pre-defined,
@@ -115,6 +109,11 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
     listenerBus.removeAllListeners()
   }
 
+  /** Only exposed for testing. */
+  private[sql] def listListeners(): Array[QueryExecutionListener] = {
+    listenerBus.listeners.asScala.toArray
+  }
+
   /**
    * Get an identical copy of this listener manager.
    */
@@ -142,7 +141,14 @@ private[sql] class ExecutionListenerBus(session: SparkSession)
       val funcName = event.executionName.get
       event.executionFailure match {
         case Some(ex) =>
-          listener.onFailure(funcName, event.qe, ex)
+          val exception = ex match {
+            case e: Exception => e
+            case other: Throwable =>
+              val message = "Hit an error when executing a query" +
+                (if (other.getMessage == null) "" else s": ${other.getMessage}")
+              new QueryExecutionException(message, other)
+          }
+          listener.onFailure(funcName, event.qe, exception)
         case _ =>
           listener.onSuccess(funcName, event.qe, event.duration)
       }

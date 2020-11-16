@@ -40,9 +40,9 @@ import org.apache.spark.unsafe.types.UTF8String
   examples = """
     Examples:
       > SELECT _FUNC_('1, 0.8', 'a INT, b DOUBLE');
-       {"a":1, "b":0.8}
-      > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'))
-       {"time":2015-08-26 00:00:00.0}
+       {"a":1,"b":0.8}
+      > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
+       {"time":2015-08-26 00:00:00}
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
@@ -114,11 +114,10 @@ case class CsvToStructs(
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
     val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)
     new FailureSafeParser[String](
-      input => Seq(rawParser.parse(input)),
+      input => rawParser.parse(input),
       mode,
       nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   override def dataType: DataType = nullableSchema
@@ -200,7 +199,7 @@ case class SchemaOfCsv(
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        1,2
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
-       "26/08/2015"
+       26/08/2015
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit

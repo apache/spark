@@ -24,6 +24,7 @@ from pyspark.ml.regression import LinearRegression
 from pyspark.ml.wrapper import _java2py, _py2java, JavaParams, JavaWrapper
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.mlutils import SparkSessionTestCase
+from pyspark.testing.utils import eventually
 
 
 class JavaWrapperMemoryTests(SparkSessionTestCase):
@@ -50,19 +51,27 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
 
         model.__del__()
 
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            model._java_obj.toString()
-        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+        def condition():
+            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+                model._java_obj.toString()
+            self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+            return True
+
+        eventually(condition, timeout=10, catch_assertions=True)
 
         try:
             summary.__del__()
         except:
             pass
 
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            model._java_obj.toString()
-        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
-            summary._java_obj.toString()
+        def condition():
+            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+                model._java_obj.toString()
+            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+                summary._java_obj.toString()
+            return True
+
+        eventually(condition, timeout=10, catch_assertions=True)
 
 
 class WrapperTests(MLlibTestCase):
@@ -99,14 +108,20 @@ class WrapperTests(MLlibTestCase):
         java_class = self.sc._gateway.jvm.java.lang.Integer
         java_array = JavaWrapper._new_java_array([], java_class)
         self.assertEqual(_java2py(self.sc, java_array), [])
-
+        # test array of array of strings
+        str_list = [["a", "b", "c"], ["d", "e"], ["f", "g", "h", "i"], []]
+        expected_str_list = [("a", "b", "c", None), ("d", "e", None, None), ("f", "g", "h", "i"),
+                             (None, None, None, None)]
+        java_class = self.sc._gateway.jvm.java.lang.String
+        java_array = JavaWrapper._new_java_array(str_list, java_class)
+        self.assertEqual(_java2py(self.sc, java_array), expected_str_list)
 
 if __name__ == "__main__":
     from pyspark.ml.tests.test_wrapper import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

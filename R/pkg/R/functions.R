@@ -77,8 +77,19 @@ NULL
 #'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
-#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: A string detailing
+#'            the time zone ID that the input should be adjusted to. It should be in the format
+#'            of either region-based zone IDs or zone offsets. Region IDs must have the form
+#'            'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+#'            (+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported
+#'            as aliases of '+00:00'. Other short names are not recommended to use
+#'            because they can be ambiguous.
 #'          \item \code{next_day}: day of the week string.
+#'          }
+#' @param ... additional argument(s).
+#'          \itemize{
+#'          \item \code{months_between}, this contains an optional parameter to specify the
+#'              the result is rounded off to 8 digits.
 #'          }
 #'
 #' @name column_datetime_diff_functions
@@ -131,6 +142,14 @@ NULL
 #'           format to. See 'Details'.
 #'      }
 #' @param y Column to compute on.
+#' @param pos In \itemize{
+#'                \item \code{locate}: a start position of search.
+#'                \item \code{overlay}: a start postiton for replacement.
+#'                }
+#' @param len In \itemize{
+#'               \item \code{lpad} the maximum length of each output result.
+#'               \item \code{overlay} a number of bytes to replace.
+#'               }
 #' @param ... additional Columns.
 #' @name column_string_functions
 #' @rdname column_string_functions
@@ -217,6 +236,7 @@ NULL
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
+#'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
 #' @name column_collection_functions
 #' @rdname column_collection_functions
@@ -229,7 +249,7 @@ NULL
 #' head(select(tmp, array_contains(tmp$v1, 21), size(tmp$v1), shuffle(tmp$v1)))
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
-#' head(select(tmp, flatten(tmp$v1), reverse(tmp$v1), array_remove(tmp$v1, 21)))
+#' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -238,15 +258,21 @@ NULL
 #' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
-#' head(select(tmp3, element_at(tmp3$v3, "Valiant")))
+#' head(select(tmp3, element_at(tmp3$v3, "Valiant"), map_concat(tmp3$v3, tmp3$v3)))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
-#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5), map_from_arrays(tmp4$v4, tmp4$v5)))
+#' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
 #' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
-#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))}
+#' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))
+#' tmp6 <- mutate(df, v7 = create_array(create_array(df$model, df$model)))
+#' head(select(tmp6, flatten(tmp6$v7)))
+#' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
+#' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
+#' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
+#' head(select(tmp8, map_from_entries(tmp8$v10)))}
 NULL
 
 #' Window functions for Column operations
@@ -724,6 +750,25 @@ setMethod("hash",
           })
 
 #' @details
+#' \code{xxhash64}: Calculates the hash code of given columns using the 64-bit
+#' variant of the xxHash algorithm, and returns the result as a long
+#' column.
+#'
+#' @rdname column_misc_functions
+#' @aliases xxhash64 xxhash64,Column-method
+#' @note xxhash64 since 3.0.0
+setMethod("xxhash64",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{dayofmonth}: Extracts the day of the month as an integer from a
 #' given date/timestamp/string.
 #'
@@ -848,8 +893,8 @@ setMethod("factorial",
 #'
 #' The function by default returns the first values it sees. It will return the first non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param na.rm a logical value indicating whether NA values should be stripped
 #'        before the computation proceeds.
@@ -993,8 +1038,8 @@ setMethod("kurtosis",
 #'
 #' The function by default returns the last values it sees. It will return the last non-missing
 #' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
-#' Note: the function is non-deterministic because its results depends on order of rows which
-#' may be non-deterministic after a shuffle.
+#' Note: the function is non-deterministic because its results depends on the order of the rows
+#' which may be non-deterministic after a shuffle.
 #'
 #' @param x column to compute on.
 #' @param na.rm a logical value indicating whether NA values should be stripped
@@ -1287,6 +1332,35 @@ setMethod("negate",
             jc <- callJStatic("org.apache.spark.sql.functions", "negate", x@jc)
             column(jc)
           })
+
+#' @details
+#' \code{overlay}: Overlay the specified portion of \code{x} with \code{replace},
+#' starting from byte position \code{pos} of \code{src} and proceeding for
+#' \code{len} bytes.
+#'
+#' @param replace a Column with replacement.
+#'
+#' @rdname column_string_functions
+#' @aliases overlay overlay,Column-method,numericOrColumn-method
+#' @note overlay since 3.0.0
+setMethod("overlay",
+  signature(x = "Column", replace = "Column", pos = "numericOrColumn"),
+  function(x, replace, pos, len = -1) {
+    if (is.numeric(pos)) {
+      pos <- lit(as.integer(pos))
+    }
+
+    if (is.numeric(len)) {
+      len <- lit(as.integer(len))
+    }
+
+    jc <- callJStatic(
+      "org.apache.spark.sql.functions", "overlay",
+      x@jc, replace@jc, pos@jc, len@jc
+    )
+
+    column(jc)
+  })
 
 #' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
@@ -1724,7 +1798,7 @@ setMethod("radians",
 #' @details
 #' \code{to_date}: Converts the column into a DateType. You may optionally specify
 #' a format according to the rules in:
-#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
+#' \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{Datetime Pattern}
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
@@ -1820,7 +1894,7 @@ setMethod("to_csv", signature(x = "Column"),
 #' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
-#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
+#' \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{Datetime Pattern}
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
@@ -2074,15 +2148,21 @@ setMethod("levenshtein", signature(y = "Column"),
 #' are on the same day of month, or both are the last day of month, time of day will be ignored.
 #' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
 #'
+#' @param roundOff an optional parameter to specify if the result is rounded off to 8 digits
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
 #' @note months_between since 1.5.0
 setMethod("months_between", signature(y = "Column"),
-          function(y, x) {
+          function(y, x, roundOff = NULL) {
             if (class(x) == "Column") {
               x <- x@jc
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            jc <- if (is.null(roundOff)) {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x)
+            } else {
+              callJStatic("org.apache.spark.sql.functions", "months_between", y@jc, x,
+                           as.logical(roundOff))
+            }
             column(jc)
           })
 
@@ -2119,7 +2199,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05).
+#' @param rsd maximum relative standard deviation allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approx_count_distinct,Column-method
@@ -2686,8 +2766,8 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
 #' to a string representing the timestamp of that moment in the current system time zone in the JVM
 #' in the given format.
-#' See \href{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}{
-#' Customizing Formats} for available options.
+#' See \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{
+#' Datetime Pattern} for available options.
 #'
 #' @rdname column_datetime_functions
 #'
@@ -2780,7 +2860,6 @@ setMethod("window", signature(x = "Column"),
 #'
 #' @param substr a character string to be matched.
 #' @param str a Column where matches are sought for each entry.
-#' @param pos start position of search.
 #' @rdname column_string_functions
 #' @aliases locate locate,character,Column-method
 #' @note locate since 1.5.0
@@ -2795,7 +2874,6 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #' @details
 #' \code{lpad}: Left-padded with pad to a length of len.
 #'
-#' @param len maximum length of each output result.
 #' @param pad a character string to be padded with.
 #' @rdname column_string_functions
 #' @aliases lpad lpad,Column,numeric,character-method
@@ -2810,7 +2888,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
-#' samples from U[0.0, 1.0].
+#' samples uniformly distributed in [0.0, 1.0).
 #' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
@@ -3449,6 +3527,23 @@ setMethod("flatten",
           })
 
 #' @details
+#' \code{map_concat}: Returns the union of all the given maps.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_concat map_concat,Column-method
+#' @note map_concat since 3.0.0
+setMethod("map_concat",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function(arg) {
+              stopifnot(class(arg) == "Column")
+              arg@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_concat", jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{map_entries}: Returns an unordered array of all entries in the given map.
 #'
 #' @rdname column_collection_functions
@@ -3473,6 +3568,19 @@ setMethod("map_from_arrays",
           signature(x = "Column", y = "Column"),
           function(x, y) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_from_arrays", x@jc, y@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_from_entries}: Returns a map created from the given array of entries.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_from_entries map_from_entries,Column-method
+#' @note map_from_entries since 3.0.0
+setMethod("map_from_entries",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_from_entries", x@jc)
             column(jc)
          })
 
@@ -3520,6 +3628,8 @@ setMethod("element_at",
 
 #' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode explode,Column-method
@@ -3546,11 +3656,11 @@ setMethod("size",
 
 #' @details
 #' \code{slice}: Returns an array containing all the elements in x from the index start
-#' (or starting from the end if start is negative) with the specified length.
+#' (array indices start at 1, or from the end if start is negative) with the specified length.
 #'
 #' @rdname column_collection_functions
-#' @param start an index indicating the first element occurring in the result.
-#' @param length a number of consecutive elements chosen to the result.
+#' @param start the starting index
+#' @param length the length of the slice
 #' @aliases slice slice,Column-method
 #' @note slice since 2.4.0
 setMethod("slice",
@@ -3580,7 +3690,9 @@ setMethod("sort_array",
 
 #' @details
 #' \code{posexplode}: Creates a new row for each element with position in the given array
-#' or map column.
+#' or map column. Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode posexplode,Column-method
@@ -3633,7 +3745,7 @@ setMethod("create_map",
 #' @details
 #' \code{collect_list}: Creates a list of objects with duplicates.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_list collect_list,Column-method
@@ -3654,7 +3766,7 @@ setMethod("collect_list",
 #' @details
 #' \code{collect_set}: Creates a list of objects with duplicate elements eliminated.
 #' Note: the function is non-deterministic because the order of collected results depends
-#' on order of rows which may be non-deterministic after a shuffle.
+#' on the order of the rows which may be non-deterministic after a shuffle.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases collect_set collect_set,Column-method
@@ -3721,7 +3833,8 @@ setMethod("repeat_string",
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #' Unlike \code{explode}, if the array/map is \code{null} or empty
 #' then \code{null} is produced.
-#'
+#' Uses the default column name \code{col} for elements in the array and
+#' \code{key} and \code{value} for elements in the map unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases explode_outer explode_outer,Column-method
@@ -3746,6 +3859,9 @@ setMethod("explode_outer",
 #' \code{posexplode_outer}: Creates a new row for each element with position in the given
 #' array or map column. Unlike \code{posexplode}, if the array/map is \code{null} or empty
 #' then the row (\code{null}, \code{null}) is produced.
+#' Uses the default column name \code{pos} for position, and \code{col}
+#' for elements in the array and \code{key} and \code{value} for elements in the map
+#' unless specified otherwise.
 #'
 #' @rdname column_collection_functions
 #' @aliases posexplode_outer posexplode_outer,Column-method

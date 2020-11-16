@@ -96,9 +96,9 @@ if not (ENV['SKIP_API'] == '1')
     end
     # End updating JavaDoc files for badge post-processing
 
-    puts "Copying jquery.js from Scala API to Java API for page post-processing of badges"
-    jquery_src_file = "./api/scala/lib/jquery.js"
-    jquery_dest_file = "./api/java/lib/jquery.js"
+    puts "Copying jquery.min.js from Scala API to Java API for page post-processing of badges"
+    jquery_src_file = "./api/scala/lib/jquery.min.js"
+    jquery_dest_file = "./api/java/lib/jquery.min.js"
     mkdir_p("./api/java/lib")
     cp(jquery_src_file, jquery_dest_file)
 
@@ -157,8 +157,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package") || raise("SQL doc generation failed")
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")

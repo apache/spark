@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import sys
 import tempfile
+import time
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
@@ -30,6 +32,9 @@ from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
 
 if sys.version_info[0] >= 3:
     xrange = range
+
+
+global_func = lambda: "Hi"
 
 
 class RDDTests(ReusedPySparkTestCase):
@@ -57,16 +62,33 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(6, self.sc.parallelize([1, 2, 3]).sum())
 
     def test_to_localiterator(self):
-        from time import sleep
         rdd = self.sc.parallelize([1, 2, 3])
         it = rdd.toLocalIterator()
-        sleep(5)
         self.assertEqual([1, 2, 3], sorted(it))
 
         rdd2 = rdd.repartition(1000)
         it2 = rdd2.toLocalIterator()
-        sleep(5)
         self.assertEqual([1, 2, 3], sorted(it2))
+
+    def test_to_localiterator_prefetch(self):
+        # Test that we fetch the next partition in parallel
+        # We do this by returning the current time and:
+        # reading the first elem, waiting, and reading the second elem
+        # If not in parallel then these would be at different times
+        # But since they are being computed in parallel we see the time
+        # is "close enough" to the same.
+        rdd = self.sc.parallelize(range(2), 2)
+        times1 = rdd.map(lambda x: datetime.now())
+        times2 = rdd.map(lambda x: datetime.now())
+        times_iter_prefetch = times1.toLocalIterator(prefetchPartitions=True)
+        times_iter = times2.toLocalIterator(prefetchPartitions=False)
+        times_prefetch_head = next(times_iter_prefetch)
+        times_head = next(times_iter)
+        time.sleep(2)
+        times_next = next(times_iter)
+        times_prefetch_next = next(times_iter_prefetch)
+        self.assertTrue(times_next - times_head >= timedelta(seconds=2))
+        self.assertTrue(times_prefetch_next - times_prefetch_head < timedelta(seconds=1))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -143,6 +165,17 @@ class RDDTests(ReusedPySparkTestCase):
             set(rdd.zip(rdd.zip(rdd)).collect()),
             set([(x, (x, x)) for x in 'abc'])
         )
+
+    def test_union_pair_rdd(self):
+        # SPARK-31788: test if pair RDDs can be combined by union.
+        rdd = self.sc.parallelize([1, 2])
+        pair_rdd = rdd.zip(rdd)
+        unionRDD = self.sc.union([pair_rdd, pair_rdd])
+        self.assertEqual(
+            set(unionRDD.collect()),
+            set([(1, 1), (2, 2), (1, 1), (2, 2)])
+        )
+        self.assertEqual(unionRDD.count(), 4)
 
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
@@ -324,7 +357,7 @@ class RDDTests(ReusedPySparkTestCase):
         bdata.unpersist()
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
-        bdata.destroy()
+        bdata.destroy(blocking=True)
         try:
             self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         except Exception as e:
@@ -605,7 +638,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
-        N = 200001
+        N = 2000001
         kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
@@ -681,8 +714,8 @@ class RDDTests(ReusedPySparkTestCase):
         data = ['1', '2', '3']
         rdd = self.sc.parallelize(data)
         with QuietTest(self.sc):
-            self.assertEqual([], rdd.pipe('cc').collect())
-            self.assertRaises(Py4JJavaError, rdd.pipe('cc', checkCode=True).collect)
+            self.assertEqual([], rdd.pipe('java').collect())
+            self.assertRaises(Py4JJavaError, rdd.pipe('java', checkCode=True).collect)
         result = rdd.pipe('cat').collect()
         result.sort()
         for x, y in zip(data, result):
@@ -726,6 +759,102 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
                                 seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
+    def test_overwritten_global_func(self):
+        # Regression test for SPARK-27000
+        global global_func
+        self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
+        global_func = lambda: "Yeah"
+        self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
+
+    def test_to_local_iterator_failure(self):
+        # SPARK-27548 toLocalIterator task failure not propagated to Python driver
+
+        def fail(_):
+            raise RuntimeError("local iterator error")
+
+        rdd = self.sc.range(10).map(fail)
+
+        with self.assertRaisesRegexp(Exception, "local iterator error"):
+            for _ in rdd.toLocalIterator():
+                pass
+
+    def test_to_local_iterator_collects_single_partition(self):
+        # Test that partitions are not computed until requested by iteration
+
+        def fail_last(x):
+            if x == 9:
+                raise RuntimeError("This should not be hit")
+            return x
+
+        rdd = self.sc.range(12, numSlices=4).map(fail_last)
+        it = rdd.toLocalIterator()
+
+        # Only consume first 4 elements from partitions 1 and 2, this should not collect the last
+        # partition which would trigger the error
+        for i in range(4):
+            self.assertEqual(i, next(it))
+
+    def test_multiple_group_jobs(self):
+        import threading
+        group_a = "job_ids_to_cancel"
+        group_b = "job_ids_to_run"
+
+        threads = []
+        thread_ids = range(4)
+        thread_ids_to_cancel = [i for i in thread_ids if i % 2 == 0]
+        thread_ids_to_run = [i for i in thread_ids if i % 2 != 0]
+
+        # A list which records whether job is cancelled.
+        # The index of the array is the thread index which job run in.
+        is_job_cancelled = [False for _ in thread_ids]
+
+        def run_job(job_group, index):
+            """
+            Executes a job with the group ``job_group``. Each job waits for 3 seconds
+            and then exits.
+            """
+            try:
+                self.sc.parallelize([15]).map(lambda x: time.sleep(x)) \
+                    .collectWithJobGroup(job_group, "test rdd collect with setting job group")
+                is_job_cancelled[index] = False
+            except Exception:
+                # Assume that exception means job cancellation.
+                is_job_cancelled[index] = True
+
+        # Test if job succeeded when not cancelled.
+        run_job(group_a, 0)
+        self.assertFalse(is_job_cancelled[0])
+
+        # Run jobs
+        for i in thread_ids_to_cancel:
+            t = threading.Thread(target=run_job, args=(group_a, i))
+            t.start()
+            threads.append(t)
+
+        for i in thread_ids_to_run:
+            t = threading.Thread(target=run_job, args=(group_b, i))
+            t.start()
+            threads.append(t)
+
+        # Wait to make sure all jobs are executed.
+        time.sleep(3)
+        # And then, cancel one job group.
+        self.sc.cancelJobGroup(group_a)
+
+        # Wait until all threads launching jobs are finished.
+        for t in threads:
+            t.join()
+
+        for i in thread_ids_to_cancel:
+            self.assertTrue(
+                is_job_cancelled[i],
+                "Thread {i}: Job in group A was not cancelled.".format(i=i))
+
+        for i in thread_ids_to_run:
+            self.assertFalse(
+                is_job_cancelled[i],
+                "Thread {i}: Job in group B did not succeeded.".format(i=i))
+
 
 if __name__ == "__main__":
     import unittest
@@ -733,7 +862,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

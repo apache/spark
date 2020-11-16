@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 
 class UIUtilsSuite extends SparkFunSuite with Matchers{
 
@@ -70,10 +71,13 @@ class UIUtilsSuite extends SparkFunSuite with Matchers{
   test("formatBatchTime") {
     val tzForTest = TimeZone.getTimeZone("America/Los_Angeles")
     val batchTime = 1431637480452L // Thu May 14 14:04:40 PDT 2015
-    assert("2015/05/14 14:04:40" === UIUtils.formatBatchTime(batchTime, 1000, timezone = tzForTest))
+    assert("2015/05/14 14:04:40" ===
+      SparkUIUtils.formatBatchTime(batchTime, 1000, timezone = tzForTest))
     assert("2015/05/14 14:04:40.452" ===
-      UIUtils.formatBatchTime(batchTime, 999, timezone = tzForTest))
-    assert("14:04:40" === UIUtils.formatBatchTime(batchTime, 1000, false, timezone = tzForTest))
-    assert("14:04:40.452" === UIUtils.formatBatchTime(batchTime, 999, false, timezone = tzForTest))
+      SparkUIUtils.formatBatchTime(batchTime, 999, timezone = tzForTest))
+    assert("14:04:40" ===
+      SparkUIUtils.formatBatchTime(batchTime, 1000, false, timezone = tzForTest))
+    assert("14:04:40.452" ===
+      SparkUIUtils.formatBatchTime(batchTime, 999, false, timezone = tzForTest))
   }
 }

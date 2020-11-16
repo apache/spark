@@ -21,19 +21,20 @@ import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
 import java.util.{Map => JMap, Properties}
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZkUtils
+import kafka.zk.{AdminZkClient, KafkaZkClient}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.common.utils.{Time => KTime}
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -57,7 +58,8 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   private var zookeeper: EmbeddedZookeeper = _
 
-  private var zkUtils: ZkUtils = _
+  private var zkClient: KafkaZkClient = _
+  private var admClient: AdminZkClient = _
 
   // Kafka broker related configurations
   private val brokerHost = "127.0.0.1"
@@ -85,10 +87,16 @@ private[kafka010] class KafkaTestUtils extends Logging {
     s"$brokerHost:$brokerPort"
   }
 
-  def zookeeperClient: ZkUtils = {
+  def zookeeperClient: KafkaZkClient = {
     assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
-    Option(zkUtils).getOrElse(
+    Option(zkClient).getOrElse(
       throw new IllegalStateException("Zookeeper client is not yet initialized"))
+  }
+
+  def adminClient: AdminZkClient = {
+    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
+    Option(admClient).getOrElse(
+      throw new IllegalStateException("Admin client is not yet initialized"))
   }
 
   // Set up the Embedded Zookeeper server and get the proper Zookeeper port
@@ -97,7 +105,9 @@ private[kafka010] class KafkaTestUtils extends Logging {
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkUtils = ZkUtils(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout, false)
+    zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
+      zkConnectionTimeout, 1, KTime.SYSTEM)
+    admClient = new AdminZkClient(zkClient)
     zkReady = true
   }
 
@@ -162,9 +172,9 @@ private[kafka010] class KafkaTestUtils extends Logging {
       }
     }
 
-    if (zkUtils != null) {
-      zkUtils.close()
-      zkUtils = null
+    if (zkClient != null) {
+      zkClient.close()
+      zkClient = null
     }
 
     if (zookeeper != null) {
@@ -175,7 +185,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String, partitions: Int, config: Properties): Unit = {
-    AdminUtils.createTopic(zkUtils, topic, partitions, 1, config)
+    adminClient.createTopic(topic, partitions, 1, config)
     // wait until metadata is propagated
     (0 until partitions).foreach { p =>
       waitUntilMetadataIsPropagated(topic, p)
@@ -265,14 +275,14 @@ private[kafka010] class KafkaTestUtils extends Logging {
       }
     }
 
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     @tailrec
     def tryAgain(attempt: Int): T = {
       makeAttempt() match {
         case Right(result) => result
         case Left(e) =>
-          val duration = System.currentTimeMillis() - startTime
-          if (duration < timeout.milliseconds) {
+          val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+          if (durationMs < timeout.milliseconds) {
             Thread.sleep(interval.milliseconds)
           } else {
             throw new TimeoutException(e.getMessage)
@@ -286,11 +296,12 @@ private[kafka010] class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+    def isPropagated = server.dataPlaneRequestProcessor.metadataCache
+        .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
-        val leader = partitionState.basePartitionState.leader
-        val isr = partitionState.basePartitionState.isr
-        zkUtils.getLeaderForPartition(topic, partition).isDefined &&
+        val leader = partitionState.leader
+        val isr = partitionState.isr
+        zkClient.getLeaderForPartition(new TopicPartition(topic, partition)).isDefined &&
           Request.isValidBrokerId(leader) && !isr.isEmpty
       case _ =>
         false
@@ -315,7 +326,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
     val actualPort = factory.getLocalPort
 
-    def shutdown() {
+    def shutdown(): Unit = {
       factory.shutdown()
       // The directories are not closed even if the ZooKeeper server is shut down.
       // Please see ZOOKEEPER-1844, which is fixed in 3.4.6+. It leads to test failures

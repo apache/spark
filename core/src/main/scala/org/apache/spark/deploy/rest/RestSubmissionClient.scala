@@ -61,8 +61,6 @@ import org.apache.spark.util.Utils
 private[spark] class RestSubmissionClient(master: String) extends Logging {
   import RestSubmissionClient._
 
-  private val supportedMasterPrefixes = Seq("spark://", "mesos://")
-
   private val masters: Array[String] = if (master.startsWith("spark://")) {
     Utils.parseStandaloneMasterUrls(master)
   } else {
@@ -409,6 +407,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
 private[spark] object RestSubmissionClient {
 
+  val supportedMasterPrefixes = Seq("spark://", "mesos://")
+
   // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
   // on the remote machine (SPARK-12345) (SPARK-25934)
   private val BLACKLISTED_SPARK_ENV_VARS = Set("SPARK_ENV_LOADED", "SPARK_HOME", "SPARK_CONF_DIR")
@@ -423,6 +423,10 @@ private[spark] object RestSubmissionClient {
     env.filterKeys { k =>
       (k.startsWith("SPARK_") && !BLACKLISTED_SPARK_ENV_VARS.contains(k)) || k.startsWith("MESOS_")
     }
+  }
+
+  private[spark] def supportsRestClient(master: String): Boolean = {
+    supportedMasterPrefixes.exists(master.startsWith)
   }
 }
 
@@ -456,5 +460,4 @@ private[spark] class RestSubmissionClientApp extends SparkApplication {
     val env = RestSubmissionClient.filterSystemEnvironment(sys.env)
     run(appResource, mainClass, appArgs, conf, env)
   }
-
 }

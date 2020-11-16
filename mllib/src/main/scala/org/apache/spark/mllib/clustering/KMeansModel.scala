@@ -42,10 +42,10 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   private[spark] val numIter: Int)
   extends Saveable with Serializable with PMMLExportable {
 
-  private val distanceMeasureInstance: DistanceMeasure =
+  @transient private lazy val distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasure)
 
-  private val clusterCentersWithNorm =
+  @transient private lazy val clusterCentersWithNorm =
     if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
   @Since("2.4.0")
@@ -103,7 +103,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
     val cost = data.map(p =>
       distanceMeasureInstance.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p)))
       .sum()
-    bcCentersWithNorm.destroy(blocking = false)
+    bcCentersWithNorm.destroy()
     cost
   }
 
@@ -112,8 +112,6 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   override def save(sc: SparkContext, path: String): Unit = {
     KMeansModel.SaveLoadV2_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "2.0"
 }
 
 @Since("1.4.0")

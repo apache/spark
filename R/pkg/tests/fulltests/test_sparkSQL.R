@@ -106,6 +106,15 @@ if (is_windows()) {
   Sys.setenv(TZ = "GMT")
 }
 
+test_that("calling sparkRSQL.init returns existing SQL context", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
 test_that("calling sparkR.session returns existing SparkSession", {
   expect_equal(sparkR.session(), sparkSession)
 })
@@ -172,7 +181,7 @@ test_that("structField type strings", {
   typeList <- c(primitiveTypes, complexTypes)
   typeStrings <- names(typeList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- typeList[[i]]
     testField <- structField("_col", typeString)
@@ -203,7 +212,7 @@ test_that("structField type strings", {
   errorList <- c(primitiveErrors, complexErrors)
   typeStrings <- names(errorList)
 
-  for (i in seq_along(typeStrings)){
+  for (i in seq_along(typeStrings)) {
     typeString <- typeStrings[i]
     expected <- paste0("Unsupported type for SparkDataframe: ", errorList[[i]])
     expect_error(structField("_col", typeString), expected)
@@ -656,10 +665,10 @@ test_that("test tableNames and tables", {
   expect_true("tableName" %in% colnames(tables()))
   expect_true(all(c("tableName", "database", "isTemporary") %in% colnames(tables())))
 
-  createOrReplaceTempView(df, "table2")
+  suppressWarnings(registerTempTable(df, "table2"))
   tables <- listTables()
   expect_equal(count(tables), count + 2)
-  dropTempView("table1")
+  suppressWarnings(dropTempTable("table1"))
   expect_true(dropTempView("table2"))
 
   tables <- listTables()
@@ -848,24 +857,31 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  lines <- c("{\"name\":\"안녕하세요\"}",
-             "{\"name\":\"您好\", \"age\":30}",
-             "{\"name\":\"こんにちは\", \"age\":19}",
-             "{\"name\":\"Xin chào\"}")
+  jsonPath <- file.path(
+    Sys.getenv("SPARK_HOME"),
+    "R", "pkg", "tests", "fulltests", "data",
+    "test_utils_utf.json"
+  )
 
-  jsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
-  writeLines(lines, jsonPath)
+  lines <- readLines(jsonPath, encoding = "UTF-8")
+
+  expected <- regmatches(lines, gregexpr('(?<="name": ").*?(?=")', lines, perl = TRUE))
 
   df <- read.df(jsonPath, "json")
   rdf <- collect(df)
   expect_true(is.data.frame(rdf))
-  expect_equal(rdf$name[1], markUtf8("안녕하세요"))
-  expect_equal(rdf$name[2], markUtf8("您好"))
-  expect_equal(rdf$name[3], markUtf8("こんにちは"))
-  expect_equal(rdf$name[4], markUtf8("Xin chào"))
+  expect_equal(rdf$name[1], expected[[1]])
+  expect_equal(rdf$name[2], expected[[2]])
+  expect_equal(rdf$name[3], expected[[3]])
+  expect_equal(rdf$name[4], expected[[4]])
 
   df1 <- createDataFrame(rdf)
-  expect_equal(collect(where(df1, df1$name == markUtf8("您好")))$name, markUtf8("您好"))
+  expect_equal(
+    collect(
+      where(df1, df1$name == expected[[2]])
+    )$name,
+    expected[[2]]
+  )
 })
 
 test_that("multiple pipeline transformations result in an RDD with the correct values", {
@@ -1375,6 +1391,7 @@ test_that("column operators", {
   c5 <- c2 ^ c3 ^ c4
   c6 <- c2 %<=>% c3
   c7 <- !c6
+  expect_true(TRUE)
 })
 
 test_that("column functions", {
@@ -1390,7 +1407,7 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + degrees(c) + radians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
-  c12 <- variance(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
+  c12 <- variance(c) + xxhash64(c) + ltrim(c, "a") + rtrim(c, "b") + trim(c, "c")
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
@@ -1405,6 +1422,8 @@ test_that("column functions", {
     trunc(c, "month") + trunc(c, "mon") + trunc(c, "mm")
   c24 <- date_trunc("hour", c) + date_trunc("minute", c) + date_trunc("week", c) +
     date_trunc("quarter", c) + current_date() + current_timestamp()
+  c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
+    overlay(c1, c2, 3, 4)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1439,6 +1458,14 @@ test_that("column functions", {
 
   df5 <- createDataFrame(list(list(a = "010101")))
   expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
+
+  # Test months_between()
+  df <- createDataFrame(list(list(a = as.Date("1997-02-28"),
+                                  b = as.Date("1996-10-30"))))
+  result1 <- collect(select(df, alias(months_between(df[[1]], df[[2]]), "month")))[[1]]
+  expect_equal(result1, 3.93548387)
+  result2 <- collect(select(df, alias(months_between(df[[1]], df[[2]], FALSE), "month")))[[1]]
+  expect_equal(result2, 3.935483870967742)
 
   # Test array_contains(), array_max(), array_min(), array_position(), element_at() and reverse()
   df <- createDataFrame(list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
@@ -1483,6 +1510,13 @@ test_that("column functions", {
   df <- createDataFrame(list(list(list("x", "y"), list(1, 2))), schema = c("k", "v"))
   result <- collect(select(df, map_from_arrays(df$k, df$v)))[[1]]
   expected_entries <- list(as.environment(list(x = 1, y = 2)))
+  expect_equal(result, expected_entries)
+
+  # Test map_from_entries()
+  df <- createDataFrame(list(list(list(listToStruct(list(c1 = "x", c2 = 1L)),
+                                       listToStruct(list(c1 = "y", c2 = 2L))))))
+  result <- collect(select(df, map_from_entries(df[[1]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1L, y = 2L)))
   expect_equal(result, expected_entries)
 
   # Test array_repeat()
@@ -1542,6 +1576,13 @@ test_that("column functions", {
                         list(list(list(5L, 6L), list(7L, 8L)))))
   result <- collect(select(df, flatten(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L, 4L), list(5L, 6L, 7L, 8L)))
+
+  # Test map_concat
+  df <- createDataFrame(list(list(map1 = as.environment(list(x = 1, y = 2)),
+                                  map2 = as.environment(list(a = 3, b = 4)))))
+  result <- collect(select(df, map_concat(df[[1]], df[[2]])))[[1]]
+  expected_entries <- list(as.environment(list(x = 1, y = 2, a = 3, b = 4)))
+  expect_equal(result, expected_entries)
 
   # Test map_entries(), map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
@@ -1694,7 +1735,7 @@ test_that("column functions", {
 
   # check for unparseable
   df <- as.DataFrame(list(list("a" = "")))
-  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]]$a, NA)
+  expect_equal(collect(select(df, from_json(df$a, schema)))[[1]][[1]], NA)
 
   # check if array type in string is correctly supported.
   jsonArr <- "[{\"name\":\"Bob\"}, {\"name\":\"Alice\"}]"
@@ -1764,9 +1805,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.636, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], 1.68, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1778,7 +1819,8 @@ test_that("string operators", {
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+  version <- packageVersion("base")
+  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }
@@ -2320,10 +2362,20 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
 
   # inner join, not cartesian join
   expect_equal(count(where(join(df, df2), df$name == df2$name)), 3)
-  # cartesian join
-  expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
-               paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
-                      " product for INNER join between logical plans).*"))
+
+  conf <- callJMethod(sparkSession, "conf")
+  crossJoinEnabled <- callJMethod(conf, "get", "spark.sql.crossJoin.enabled")
+  callJMethod(conf, "set", "spark.sql.crossJoin.enabled", "false")
+  tryCatch({
+    # cartesian join
+    expect_error(tryCatch(count(join(df, df2)), error = function(e) { stop(e) }),
+                 paste0(".*(org.apache.spark.sql.AnalysisException: Detected implicit cartesian",
+                        " product for INNER join between logical plans).*"))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.crossJoin.enabled", crossJoinEnabled)
+  })
 
   joined <- crossJoin(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
@@ -2334,39 +2386,94 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   expect_equal(names(joined2), c("age", "name", "name", "test"))
   expect_equal(count(joined2), 3)
 
-  joined3 <- join(df, df2, df$name == df2$name, "rightouter")
+  joined3 <- join(df, df2, df$name == df2$name, "right")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
 
-  joined4 <- select(join(df, df2, df$name == df2$name, "outer"),
-                    alias(df$age + 5, "newAge"), df$name, df2$test)
-  expect_equal(names(joined4), c("newAge", "name", "test"))
+  joined4 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined4), c("age", "name", "name", "test"))
   expect_equal(count(joined4), 4)
-  expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
+  expect_true(is.na(collect(orderBy(joined4, joined4$age))$age[2]))
 
-  joined5 <- join(df, df2, df$name == df2$name, "leftouter")
+  joined5 <- join(df, df2, df$name == df2$name, "rightouter")
   expect_equal(names(joined5), c("age", "name", "name", "test"))
-  expect_equal(count(joined5), 3)
-  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
+  expect_equal(count(joined5), 4)
+  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[2]))
 
-  joined6 <- join(df, df2, df$name == df2$name, "inner")
-  expect_equal(names(joined6), c("age", "name", "name", "test"))
-  expect_equal(count(joined6), 3)
 
-  joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
-  expect_equal(names(joined7), c("age", "name"))
-  expect_equal(count(joined7), 3)
+  joined6 <- select(join(df, df2, df$name == df2$name, "outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined6), c("newAge", "name", "test"))
+  expect_equal(count(joined6), 4)
+  expect_equal(collect(orderBy(joined6, joined6$name))$newAge[3], 24)
 
-  joined8 <- join(df, df2, df$name == df2$name, "left_outer")
-  expect_equal(names(joined8), c("age", "name", "name", "test"))
-  expect_equal(count(joined8), 3)
-  expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
+  joined7 <- select(join(df, df2, df$name == df2$name, "full"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined7), c("newAge", "name", "test"))
+  expect_equal(count(joined7), 4)
+  expect_equal(collect(orderBy(joined7, joined7$name))$newAge[3], 24)
 
-  joined9 <- join(df, df2, df$name == df2$name, "right_outer")
-  expect_equal(names(joined9), c("age", "name", "name", "test"))
+  joined8 <- select(join(df, df2, df$name == df2$name, "fullouter"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined8), c("newAge", "name", "test"))
+  expect_equal(count(joined8), 4)
+  expect_equal(collect(orderBy(joined8, joined8$name))$newAge[3], 24)
+
+  joined9 <- select(join(df, df2, df$name == df2$name, "full_outer"),
+                    alias(df$age + 5, "newAge"), df$name, df2$test)
+  expect_equal(names(joined9), c("newAge", "name", "test"))
   expect_equal(count(joined9), 4)
-  expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
+  expect_equal(collect(orderBy(joined9, joined9$name))$newAge[3], 24)
+
+  joined10 <- join(df, df2, df$name == df2$name, "left")
+  expect_equal(names(joined10), c("age", "name", "name", "test"))
+  expect_equal(count(joined10), 3)
+  expect_true(is.na(collect(orderBy(joined10, joined10$age))$age[1]))
+
+  joined11 <- join(df, df2, df$name == df2$name, "leftouter")
+  expect_equal(names(joined11), c("age", "name", "name", "test"))
+  expect_equal(count(joined11), 3)
+  expect_true(is.na(collect(orderBy(joined11, joined11$age))$age[1]))
+
+  joined12 <- join(df, df2, df$name == df2$name, "left_outer")
+  expect_equal(names(joined12), c("age", "name", "name", "test"))
+  expect_equal(count(joined12), 3)
+  expect_true(is.na(collect(orderBy(joined12, joined12$age))$age[1]))
+
+  joined13 <- join(df, df2, df$name == df2$name, "inner")
+  expect_equal(names(joined13), c("age", "name", "name", "test"))
+  expect_equal(count(joined13), 3)
+
+  joined14 <- join(df, df2, df$name == df2$name, "semi")
+  expect_equal(names(joined14), c("age", "name"))
+  expect_equal(count(joined14), 3)
+
+  joined14 <- join(df, df2, df$name == df2$name, "leftsemi")
+  expect_equal(names(joined14), c("age", "name"))
+  expect_equal(count(joined14), 3)
+
+  joined15 <- join(df, df2, df$name == df2$name, "left_semi")
+  expect_equal(names(joined15), c("age", "name"))
+  expect_equal(count(joined15), 3)
+
+  joined16 <- join(df2, df, df2$name == df$name, "anti")
+  expect_equal(names(joined16), c("name", "test"))
+  expect_equal(count(joined16), 1)
+
+  joined17 <- join(df2, df, df2$name == df$name, "leftanti")
+  expect_equal(names(joined17), c("name", "test"))
+  expect_equal(count(joined17), 1)
+
+  joined18 <- join(df2, df, df2$name == df$name, "left_anti")
+  expect_equal(names(joined18), c("name", "test"))
+  expect_equal(count(joined18), 1)
+
+  error_msg <- paste("joinType must be one of the following types:",
+                 "'inner', 'cross', 'outer', 'full', 'fullouter', 'full_outer',",
+                 "'left', 'leftouter', 'left_outer', 'right', 'rightouter', 'right_outer',",
+                 "'semi', 'leftsemi', 'left_semi', 'anti', 'leftanti', 'left_anti'")
+  expect_error(join(df2, df, df2$name == df$name, "invalid"), error_msg)
 
   merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
@@ -2400,8 +2507,8 @@ test_that("join(), crossJoin() and merge() on a DataFrame", {
   writeLines(mockLines3, jsonPath3)
   df3 <- read.json(jsonPath3)
   expect_error(merge(df, df3),
-               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
-                     "Please use different suffixes for the intersected columns.", sep = ""))
+               paste0("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                      "Please use different suffixes for the intersected columns."))
 
   unlink(jsonPath2)
   unlink(jsonPath3)
@@ -2444,20 +2551,20 @@ test_that("toJSON() on DataFrame", {
 
 test_that("showDF()", {
   df <- read.json(jsonPath)
-  expected <- paste("+----+-------+\n",
-                    "| age|   name|\n",
-                    "+----+-------+\n",
-                    "|null|Michael|\n",
-                    "|  30|   Andy|\n",
-                    "|  19| Justin|\n",
-                    "+----+-------+\n", sep = "")
-  expected2 <- paste("+---+----+\n",
-                     "|age|name|\n",
-                     "+---+----+\n",
-                     "|nul| Mic|\n",
-                     "| 30| And|\n",
-                     "| 19| Jus|\n",
-                     "+---+----+\n", sep = "")
+  expected <- paste("+----+-------+",
+                    "| age|   name|",
+                    "+----+-------+",
+                    "|null|Michael|",
+                    "|  30|   Andy|",
+                    "|  19| Justin|",
+                    "+----+-------+\n", sep = "\n")
+  expected2 <- paste("+---+----+",
+                     "|age|name|",
+                     "+---+----+",
+                     "|nul| Mic|",
+                     "| 30| And|",
+                     "| 19| Jus|",
+                     "+---+----+\n", sep = "\n")
   expect_output(showDF(df), expected)
   expect_output(showDF(df, truncate = 3), expected2)
 })
@@ -2949,7 +3056,7 @@ test_that("sampleBy() on a DataFrame", {
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 8))
 })
 
 test_that("approxQuantile() on a DataFrame", {
@@ -3139,6 +3246,13 @@ test_that("Histogram", {
   # Test when there are zero counts
   df <- as.DataFrame(data.frame(x = c(1, 2, 3, 4, 100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+})
+
+test_that("dapply() should show error message from R worker", {
+  df <- createDataFrame(list(list(n = 1)))
+  expect_error({
+    collect(dapply(df, function(x) stop("custom error message"), structType("a double")))
+  }, "custom error message")
 })
 
 test_that("dapply() and dapplyCollect() on a DataFrame", {

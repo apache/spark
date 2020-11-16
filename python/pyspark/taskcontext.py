@@ -16,20 +16,18 @@
 #
 
 from __future__ import print_function
-import socket
+import json
 
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import write_int, UTF8Deserializer
+from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 
 class TaskContext(object):
 
     """
-    .. note:: Experimental
-
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
-    L{TaskContext.get()}.
+    :meth:`TaskContext.get`.
     """
 
     _taskContext = None
@@ -39,6 +37,7 @@ class TaskContext(object):
     _stageId = None
     _taskAttemptId = None
     _localProperties = None
+    _resources = None
 
     def __new__(cls):
         """Even if users construct TaskContext instead of using get, give them the singleton."""
@@ -48,16 +47,16 @@ class TaskContext(object):
         cls._taskContext = taskContext = object.__new__(cls)
         return taskContext
 
-    def __init__(self):
-        """Construct a TaskContext, use get instead"""
-        pass
-
     @classmethod
     def _getOrCreate(cls):
         """Internal function to get or create global TaskContext."""
         if cls._taskContext is None:
             cls._taskContext = TaskContext()
         return cls._taskContext
+
+    @classmethod
+    def _setTaskContext(cls, taskContext):
+        cls._taskContext = taskContext
 
     @classmethod
     def get(cls):
@@ -100,24 +99,44 @@ class TaskContext(object):
         """
         return self._localProperties.get(key, None)
 
+    def resources(self):
+        """
+        Resources allocated to the task. The key is the resource name and the value is information
+        about the resource.
+        """
+        return self._resources
+
 
 BARRIER_FUNCTION = 1
+ALL_GATHER_FUNCTION = 2
 
 
-def _load_from_socket(port, auth_secret):
+def _load_from_socket(port, auth_secret, function, all_gather_message=None):
     """
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
     """
     (sockfile, sock) = local_connect_and_auth(port, auth_secret)
-    # The barrier() call may block forever, so no timeout
+
+    # The call may block forever, so no timeout
     sock.settimeout(None)
-    # Make a barrier() function call.
-    write_int(BARRIER_FUNCTION, sockfile)
+
+    if function == BARRIER_FUNCTION:
+        # Make a barrier() function call.
+        write_int(function, sockfile)
+    elif function == ALL_GATHER_FUNCTION:
+        # Make a all_gather() function call.
+        write_int(function, sockfile)
+        write_with_length(all_gather_message.encode("utf-8"), sockfile)
+    else:
+        raise ValueError("Unrecognized function type")
     sockfile.flush()
 
     # Collect result.
-    res = UTF8Deserializer().loads(sockfile)
+    len = read_int(sockfile)
+    res = []
+    for i in range(len):
+        res.append(UTF8Deserializer().loads(sockfile))
 
     # Release resources.
     sockfile.close()
@@ -140,13 +159,13 @@ class BarrierTaskContext(TaskContext):
     _port = None
     _secret = None
 
-    def __init__(self):
-        """Construct a BarrierTaskContext, use get instead"""
-        pass
-
     @classmethod
     def _getOrCreate(cls):
-        """Internal function to get or create global BarrierTaskContext."""
+        """
+        Internal function to get or create global BarrierTaskContext. We need to make sure
+        BarrierTaskContext is returned from here because it is needed in python worker reuse
+        scenario, see SPARK-25921 for more details.
+        """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             cls._taskContext = object.__new__(cls)
         return cls._taskContext
@@ -161,7 +180,10 @@ class BarrierTaskContext(TaskContext):
         running tasks.
 
         .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
+            An Exception will raise if it is not in a barrier stage.
         """
+        if not isinstance(cls._taskContext, BarrierTaskContext):
+            raise Exception('It is not in a barrier stage')
         return cls._taskContext
 
     @classmethod
@@ -191,7 +213,29 @@ class BarrierTaskContext(TaskContext):
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-            _load_from_socket(self._port, self._secret)
+            _load_from_socket(self._port, self._secret, BARRIER_FUNCTION)
+
+    def allGather(self, message=""):
+        """
+        .. note:: Experimental
+
+        This function blocks until all tasks in the same stage have reached this routine.
+        Each task passes in a message and returns with a list of all the messages passed in
+        by each of those tasks.
+
+        .. warning:: In a barrier stage, each task much have the same number of `allGather()`
+            calls, in all possible code branches.
+            Otherwise, you may get the job hanging or a SparkException after timeout.
+
+        .. versionadded:: 3.0.0
+        """
+        if not isinstance(message, str):
+            raise ValueError("Argument `message` must be of type `str`")
+        elif self._port is None or self._secret is None:
+            raise Exception("Not supported to call barrier() before initialize " +
+                            "BarrierTaskContext.")
+        else:
+            return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
 
     def getTaskInfos(self):
         """

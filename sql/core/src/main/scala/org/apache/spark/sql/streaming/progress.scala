@@ -24,12 +24,15 @@ import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.json4s._
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
@@ -74,7 +77,7 @@ class StateOperatorProgress private[sql](
  * a trigger. Each event relates to processing done for a single trigger of the streaming
  * query. Events are emitted even when no new data is available to be processed.
  *
- * @param id An unique query id that persists across restarts. See `StreamingQuery.id()`.
+ * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
  * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
  * @param name User-specified name of the query, null if not specified.
  * @param timestamp Beginning time of the trigger in ISO8601 format, i.e. UTC timestamps.
@@ -82,6 +85,7 @@ class StateOperatorProgress private[sql](
  *                case of retries after a failure a given batchId my be executed more than once.
  *                Similarly, when there is no data to be processed, the batchId will not be
  *                incremented.
+ * @param batchDuration The process duration of each batch.
  * @param durationMs The amount of time taken to perform various operations in milliseconds.
  * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
  *                 {{{
@@ -102,11 +106,14 @@ class StreamingQueryProgress private[sql](
   val name: String,
   val timestamp: String,
   val batchId: Long,
+  val batchDuration: Long,
   val durationMs: ju.Map[String, JLong],
   val eventTime: ju.Map[String, String],
   val stateOperators: Array[StateOperatorProgress],
   val sources: Array[SourceProgress],
-  val sink: SinkProgress) extends Serializable {
+  val sink: SinkProgress,
+  @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
+  val observedMetrics: ju.Map[String, Row]) extends Serializable {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum
@@ -149,7 +156,8 @@ class StreamingQueryProgress private[sql](
     ("eventTime" -> safeMapToJValue[String](eventTime, s => JString(s))) ~
     ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
     ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
-    ("sink" -> sink.jsonValue)
+    ("sink" -> sink.jsonValue) ~
+    ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, row => row.jsonValue))
   }
 }
 

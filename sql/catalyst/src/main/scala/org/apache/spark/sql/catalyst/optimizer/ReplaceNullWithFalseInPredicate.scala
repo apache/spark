@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, MapFi
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
 
@@ -63,7 +64,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case af @ ArrayFilter(_, lf @ LambdaFunction(func, _, _)) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         af.copy(function = newLambda)
-      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _)) =>
+      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _), false) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         ae.copy(function = newLambda)
       case mf @ MapFilter(_, lf @ LambdaFunction(func, _, _)) =>

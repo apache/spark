@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -25,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
@@ -49,10 +51,10 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("Not expected type - replaceNullWithFalse") {
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[AnalysisException] {
       testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
     }.getMessage
-    assert(e.contains("but got the type `int` in `CAST(NULL AS INT)"))
+    assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
   }
 
   test("replace null in branches of If") {
@@ -313,7 +315,18 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("replace nulls in lambda function of ArrayExists") {
-    testHigherOrderFunc('a, ArrayExists, Seq(lv('e)))
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "true") {
+      val lambdaArgs = Seq(lv('e))
+      val cond = GreaterThan(lambdaArgs.last, Literal(0))
+      val lambda = LambdaFunction(
+        function = If(cond, Literal(null, BooleanType), TrueLiteral),
+        arguments = lambdaArgs)
+      val expr = ArrayExists('a, lambda)
+      testProjection(originalExpr = expr, expectedExpr = expr)
+    }
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
+      testHigherOrderFunc('a, ArrayExists.apply, Seq(lv('e)))
+    }
   }
 
   test("replace nulls in lambda function of MapFilter") {

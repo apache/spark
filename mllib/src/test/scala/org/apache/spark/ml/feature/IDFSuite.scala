@@ -44,7 +44,7 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new IDF)
-    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0)))
+    val model = new IDFModel("idf", new OldIDFModel(Vectors.dense(1.0), Array(1L), 1))
     ParamsSuite.checkParams(model)
   }
 
@@ -67,6 +67,9 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("features")
       .setOutputCol("idfValue")
     val idfModel = idfEst.fit(df)
+
+    val transformed = idfModel.transform(df)
+    checkVectorSizeOnDF(transformed, "idfValue", idfModel.idf.size)
 
     MLTestingUtils.checkCopyAndUids(idfEst, idfModel)
 
@@ -112,10 +115,13 @@ class IDFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("IDFModel read/write") {
-    val instance = new IDFModel("myIDFModel", new OldIDFModel(Vectors.dense(1.0, 2.0)))
+    val instance = new IDFModel("myIDFModel",
+      new OldIDFModel(Vectors.dense(1.0, 2.0), Array(1, 2), 2))
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.idf === instance.idf)
+    assert(newInstance.docFreq === instance.docFreq)
+    assert(newInstance.numDocs === instance.numDocs)
   }
 }

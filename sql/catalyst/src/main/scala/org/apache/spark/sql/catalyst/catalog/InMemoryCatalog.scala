@@ -327,6 +327,11 @@ class InMemoryCatalog(
     catalog(db).tables(table).table
   }
 
+  override def getTablesByName(db: String, tables: Seq[String]): Seq[CatalogTable] = {
+    requireDbExists(db)
+    tables.flatMap(catalog(db).tables.get).map(_.table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).tables.contains(table)
@@ -339,6 +344,12 @@ class InMemoryCatalog(
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
     StringUtils.filterPattern(listTables(db), pattern)
+  }
+
+  override def listViews(db: String, pattern: String): Seq[String] = synchronized {
+    requireDbExists(db)
+    val views = catalog(db).tables.filter(_._2.table.tableType == CatalogTableType.VIEW).keySet
+    StringUtils.filterPattern(views.toSeq.sorted, pattern)
   }
 
   override def loadTable(

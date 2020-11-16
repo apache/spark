@@ -34,7 +34,7 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
 
   override def stop(): Unit = {}
 
-  def notifySubscribers(): Unit = {
+  override def notifySubscribers(): Unit = {
     subscribers.foreach(_(snapshotsBuffer))
     snapshotsBuffer.clear()
   }
@@ -46,6 +46,15 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
 
   override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = {
     currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    snapshotsBuffer += currentSnapshot
+  }
+
+  def removeDeletedExecutors(): Unit = {
+    val nonDeleted = currentSnapshot.executorPods.filter {
+      case (_, PodDeleted(_)) => false
+      case _ => true
+    }
+    currentSnapshot = ExecutorPodsSnapshot(nonDeleted)
     snapshotsBuffer += currentSnapshot
   }
 }

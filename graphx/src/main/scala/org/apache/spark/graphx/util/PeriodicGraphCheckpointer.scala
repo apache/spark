@@ -98,7 +98,7 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
     }
   }
 
-  override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist(blocking = false)
+  override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist()
 
   override protected def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = {
     data.getCheckpointFiles

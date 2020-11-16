@@ -68,8 +68,8 @@ private[ml] class HingeAggregator(
 
       val dotProduct = {
         var sum = 0.0
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             sum += localCoefficients(index) * value / localFeaturesStd(index)
           }
         }
@@ -87,8 +87,8 @@ private[ml] class HingeAggregator(
 
       if (1.0 > labelScaled * dotProduct) {
         val gradientScale = -labelScaled * weight
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
+        features.foreachNonZero { (index, value) =>
+          if (localFeaturesStd(index) != 0.0) {
             localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
           }
         }

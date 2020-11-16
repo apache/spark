@@ -35,6 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.internal.config.Network.RPC_NUM_RETRIES
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -393,7 +394,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
       // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
       // fails to talk to the StateStoreCoordinator and unloads all the StateStores
-      .set("spark.rpc.numRetries", "1")
+      .set(RPC_NUM_RETRIES, 1)
     val opId = 0
     val dir = newDir()
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
@@ -405,7 +406,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     var latestStoreVersion = 0
 
-    def generateStoreVersions() {
+    def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
         val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)
@@ -415,7 +416,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 60 seconds
+    val timeoutDuration = 1.minute
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
@@ -568,7 +569,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
       implicit val sqlContext = spark.sqlContext
-      spark.conf.set("spark.sql.shuffle.partitions", "1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
       val inputData = MemoryStream[Int]
 
@@ -585,7 +586,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         query.processAllAvailable()
         require(query.lastProgress != null) // at least one batch processed after start
         val loadedProvidersMethod =
-          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]]('loadedProviders)
+          PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
+            Symbol("loadedProviders"))
         val loadedProvidersMap = StateStore invokePrivate loadedProvidersMethod()
         val loadedProviders = loadedProvidersMap.synchronized { loadedProvidersMap.values.toSeq }
         query.stop()
@@ -780,7 +782,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider: HDFSBackedStateStoreProvider,
       version: Long,
       isSnapshot: Boolean): Boolean = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)
@@ -788,7 +790,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   def deleteFilesEarlierThanVersion(provider: HDFSBackedStateStoreProvider, version: Long): Unit = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     for (version <- 0 until version.toInt) {
       for (isSnapshot <- Seq(false, true)) {
@@ -803,7 +805,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     provider: HDFSBackedStateStoreProvider,
     version: Long,
     isSnapshot: Boolean): Unit = {
-    val method = PrivateMethod[Path]('baseDir)
+    val method = PrivateMethod[Path](Symbol("baseDir"))
     val basePath = provider invokePrivate method()
     val fileName = if (isSnapshot) s"$version.snapshot" else s"$version.delta"
     val filePath = new File(basePath.toString, fileName)

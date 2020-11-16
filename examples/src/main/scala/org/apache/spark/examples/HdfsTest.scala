@@ -18,13 +18,15 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
+import java.util.concurrent.TimeUnit
+
 import org.apache.spark.sql.SparkSession
 
 
 object HdfsTest {
 
   /** Usage: HdfsTest [file] */
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       System.err.println("Usage: HdfsTest <file>")
       System.exit(1)
@@ -36,10 +38,10 @@ object HdfsTest {
     val file = spark.read.text(args(0)).rdd
     val mapped = file.map(s => s.length).cache()
     for (iter <- 1 to 10) {
-      val start = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       for (x <- mapped) { x + 2 }
-      val end = System.currentTimeMillis()
-      println(s"Iteration $iter took ${end-start} ms")
+      val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
+      println(s"Iteration $iter took $durationMs ms")
     }
     println(s"File contents: ${file.map(_.toString).take(1).mkString(",").slice(0, 10)}")
     println(s"Returned length(s) of: ${file.map(_.length).sum().toString}")

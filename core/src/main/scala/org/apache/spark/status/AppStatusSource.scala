@@ -22,7 +22,7 @@ import AppStatusSource.getCounter
 import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.Status.APP_STATUS_METRICS_ENABLED
+import org.apache.spark.internal.config.Status.METRICS_APP_STATUS_SOURCE_ENABLED
 import org.apache.spark.metrics.source.Source
 
 private [spark] class JobDuration(val value: AtomicLong) extends Gauge[Long] {
@@ -71,7 +71,7 @@ private[spark] object AppStatusSource {
   }
 
   def createSource(conf: SparkConf): Option[AppStatusSource] = {
-    Option(conf.get(APP_STATUS_METRICS_ENABLED))
+    Option(conf.get(METRICS_APP_STATUS_SOURCE_ENABLED))
       .filter(identity)
       .map { _ => new AppStatusSource() }
   }

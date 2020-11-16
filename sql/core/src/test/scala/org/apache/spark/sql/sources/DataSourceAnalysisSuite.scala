@@ -22,9 +22,10 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, Expression, Literal}
 import org.apache.spark.sql.execution.datasources.DataSourceAnalysis
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
 
 class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -52,7 +53,12 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
   Seq(true, false).foreach { caseSensitive =>
     val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
     def cast(e: Expression, dt: DataType): Expression = {
-      Cast(e, dt, Option(conf.sessionLocalTimeZone))
+      conf.storeAssignmentPolicy match {
+        case StoreAssignmentPolicy.ANSI | StoreAssignmentPolicy.STRICT =>
+          AnsiCast(e, dt, Option(conf.sessionLocalTimeZone))
+        case _ =>
+          Cast(e, dt, Option(conf.sessionLocalTimeZone))
+      }
     }
     val rule = DataSourceAnalysis(conf)
     test(

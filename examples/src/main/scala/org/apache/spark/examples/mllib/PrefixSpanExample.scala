@@ -25,7 +25,7 @@ import org.apache.spark.mllib.fpm.PrefixSpan
 
 object PrefixSpanExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("PrefixSpanExample")
     val sc = new SparkContext(conf)
 

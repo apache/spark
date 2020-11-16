@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.util.{Arrays, Comparator}
+import java.util.Arrays
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.unsafe.array.LongArray
@@ -38,21 +38,17 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 object SortBenchmark extends BenchmarkBase {
 
-  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
+  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int,
+      refCmp: PrefixComparator): Unit = {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
-    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
-        override def compare(
-          r1: RecordPointerAndKeyPrefix,
-          r2: RecordPointerAndKeyPrefix): Int = {
-          refCmp.compare(r1.keyPrefix, r2.keyPrefix)
-        }
-      })
+    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(buf, lo, hi,
+      (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
+        refCmp.compare(r1.keyPrefix, r2.keyPrefix))
   }
 
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](size * 2) { i => rand }
-    val extended = ref ++ Array.fill[Long](size * 2)(0)
+    val extended = ref ++ Array.ofDim[Long](size * 2)
     (new LongArray(MemoryBlock.fromLongArray(ref)),
       new LongArray(MemoryBlock.fromLongArray(extended)))
   }

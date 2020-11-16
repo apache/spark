@@ -18,6 +18,7 @@
 import unittest
 
 from pyspark.rdd import PythonEvalType
+from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
@@ -25,6 +26,10 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
+
+if have_pandas:
+    import pandas as pd
+    from pandas.util.testing import assert_frame_equal
 
 
 @unittest.skipIf(
@@ -50,8 +55,6 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def pandas_scalar_plus_two(self):
-        import pandas as pd
-
         @pandas_udf('double', PandasUDFType.SCALAR)
         def plus_two(v):
             assert isinstance(v, pd.Series)
@@ -107,7 +110,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
              [9, 335.0, 33.5, [33.5]]],
             ['id', 'sum(v)', 'avg(v)', 'avg(array(v))'])
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_basic(self):
         df = self.data
@@ -116,19 +119,19 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         # Groupby one column and aggregate one UDF with literal
         result1 = df.groupby('id').agg(weighted_mean_udf(df.v, lit(1.0))).sort('id')
         expected1 = df.groupby('id').agg(mean(df.v).alias('weighted_mean(v, 1.0)')).sort('id')
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
         # Groupby one expression and aggregate one UDF with literal
         result2 = df.groupby((col('id') + 1)).agg(weighted_mean_udf(df.v, lit(1.0)))\
             .sort(df.id + 1)
         expected2 = df.groupby((col('id') + 1))\
             .agg(mean(df.v).alias('weighted_mean(v, 1.0)')).sort(df.id + 1)
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
 
         # Groupby one column and aggregate one UDF without literal
         result3 = df.groupby('id').agg(weighted_mean_udf(df.v, df.w)).sort('id')
         expected3 = df.groupby('id').agg(mean(df.v).alias('weighted_mean(v, w)')).sort('id')
-        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
+        assert_frame_equal(expected3.toPandas(), result3.toPandas())
 
         # Groupby one expression and aggregate one UDF without literal
         result4 = df.groupby((col('id') + 1).alias('id'))\
@@ -137,7 +140,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected4 = df.groupby((col('id') + 1).alias('id'))\
             .agg(mean(df.v).alias('weighted_mean(v, w)'))\
             .sort('id')
-        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
+        assert_frame_equal(expected4.toPandas(), result4.toPandas())
 
     def test_unsupported_types(self):
         with QuietTest(self.sc):
@@ -166,7 +169,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         result1 = df.groupby('id').agg(mean_udf(df.v).alias('mean_alias'))
         expected1 = df.groupby('id').agg(mean(df.v).alias('mean_alias'))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_mixed_sql(self):
         """
@@ -200,9 +203,9 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                      .agg(sum(df.v + 1) + 2)
                      .sort('id'))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
-        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected3.toPandas(), result3.toPandas())
 
     def test_mixed_udfs(self):
         """
@@ -262,12 +265,12 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                      .agg(plus_two(sum(plus_two(df.v))))
                      .sort('plus_two(id)'))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
-        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
-        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
-        self.assertPandasEqual(expected5.toPandas(), result5.toPandas())
-        self.assertPandasEqual(expected6.toPandas(), result6.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected3.toPandas(), result3.toPandas())
+        assert_frame_equal(expected4.toPandas(), result4.toPandas())
+        assert_frame_equal(expected5.toPandas(), result5.toPandas())
+        assert_frame_equal(expected6.toPandas(), result6.toPandas())
 
     def test_multiple_udfs(self):
         """
@@ -291,7 +294,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                      .sort('id')
                      .toPandas())
 
-        self.assertPandasEqual(expected1, result1)
+        assert_frame_equal(expected1, result1)
 
     def test_complex_groupby(self):
         df = self.data
@@ -316,24 +319,26 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v))
 
         # groupby one scalar pandas UDF
-        result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v))
-        expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v))
+        result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v)).sort('sum(v)')
+        expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v)).sort('sum(v)')
 
         # groupby one expression and one python UDF
         result6 = df.groupby(df.v % 2, plus_one(df.id)).agg(sum_udf(df.v))
         expected6 = df.groupby(df.v % 2, plus_one(df.id)).agg(sum(df.v))
 
         # groupby one expression and one scalar pandas UDF
-        result7 = df.groupby(df.v % 2, plus_two(df.id)).agg(sum_udf(df.v)).sort('sum(v)')
-        expected7 = df.groupby(df.v % 2, plus_two(df.id)).agg(sum(df.v)).sort('sum(v)')
+        result7 = (df.groupby(df.v % 2, plus_two(df.id))
+                   .agg(sum_udf(df.v)).sort(['sum(v)', 'plus_two(id)']))
+        expected7 = (df.groupby(df.v % 2, plus_two(df.id))
+                     .agg(sum(df.v)).sort(['sum(v)', 'plus_two(id)']))
 
-        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
-        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
-        self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
-        self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
-        self.assertPandasEqual(expected5.toPandas(), result5.toPandas())
-        self.assertPandasEqual(expected6.toPandas(), result6.toPandas())
-        self.assertPandasEqual(expected7.toPandas(), result7.toPandas())
+        assert_frame_equal(expected1.toPandas(), result1.toPandas())
+        assert_frame_equal(expected2.toPandas(), result2.toPandas())
+        assert_frame_equal(expected3.toPandas(), result3.toPandas())
+        assert_frame_equal(expected4.toPandas(), result4.toPandas())
+        assert_frame_equal(expected5.toPandas(), result5.toPandas())
+        assert_frame_equal(expected6.toPandas(), result6.toPandas())
+        assert_frame_equal(expected7.toPandas(), result7.toPandas())
 
     def test_complex_expressions(self):
         df = self.data
@@ -351,8 +356,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                         sum_udf(col('v2')) + 5,
                         plus_one(sum_udf(col('v1'))),
                         sum_udf(plus_one(col('v2'))))
-                   .sort('id')
-                   .toPandas())
+                   .sort(['id', '(v % 2)'])
+                   .toPandas().sort_values(by=['id', '(v % 2)']))
 
         expected1 = (df.withColumn('v1', df.v + 1)
                      .withColumn('v2', df.v + 2)
@@ -362,8 +367,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                           sum(col('v2')) + 5,
                           plus_one(sum(col('v1'))),
                           sum(plus_one(col('v2'))))
-                     .sort('id')
-                     .toPandas())
+                     .sort(['id', '(v % 2)'])
+                     .toPandas().sort_values(by=['id', '(v % 2)']))
 
         # Test complex expressions with sql expression, scala pandas UDF and
         # group aggregate pandas UDF
@@ -375,8 +380,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                         sum_udf(col('v2')) + 5,
                         plus_two(sum_udf(col('v1'))),
                         sum_udf(plus_two(col('v2'))))
-                   .sort('id')
-                   .toPandas())
+                   .sort(['id', '(v % 2)'])
+                   .toPandas().sort_values(by=['id', '(v % 2)']))
 
         expected2 = (df.withColumn('v1', df.v + 1)
                      .withColumn('v2', df.v + 2)
@@ -386,8 +391,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                           sum(col('v2')) + 5,
                           plus_two(sum(col('v1'))),
                           sum(plus_two(col('v2'))))
-                     .sort('id')
-                     .toPandas())
+                     .sort(['id', '(v % 2)'])
+                     .toPandas().sort_values(by=['id', '(v % 2)']))
 
         # Test sequential groupby aggregate
         result3 = (df.groupby('id')
@@ -404,9 +409,9 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                      .sort('id')
                      .toPandas())
 
-        self.assertPandasEqual(expected1, result1)
-        self.assertPandasEqual(expected2, result2)
-        self.assertPandasEqual(expected3, result3)
+        assert_frame_equal(expected1, result1)
+        assert_frame_equal(expected2, result2)
+        assert_frame_equal(expected3, result3)
 
     def test_retain_group_columns(self):
         with self.sql_conf({"spark.sql.retainGroupColumns": False}):
@@ -415,7 +420,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
             result1 = df.groupby(df.id).agg(sum_udf(df.v))
             expected1 = df.groupby(df.id).agg(sum(df.v))
-            self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+            assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_array_type(self):
         df = self.data
@@ -459,13 +464,57 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected = [1, 5]
         self.assertEqual(actual, expected)
 
+    def test_grouped_with_empty_partition(self):
+        data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
+        expected = [Row(id=1, sum=5), Row(id=2, x=4)]
+        num_parts = len(data) + 1
+        df = self.spark.createDataFrame(self.sc.parallelize(data, numSlices=num_parts))
+
+        f = pandas_udf(lambda x: x.sum(),
+                       'int', PandasUDFType.GROUPED_AGG)
+
+        result = df.groupBy('id').agg(f(df['x']).alias('sum')).collect()
+        self.assertEqual(result, expected)
+
+    def test_grouped_without_group_by_clause(self):
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def max_udf(v):
+            return v.max()
+
+        df = self.spark.range(0, 100)
+        self.spark.udf.register('max_udf', max_udf)
+
+        with self.tempView("table"):
+            df.createTempView('table')
+
+            agg1 = df.agg(max_udf(df['id']))
+            agg2 = self.spark.sql("select max_udf(id) from table")
+            assert_frame_equal(agg1.toPandas(), agg2.toPandas())
+
+    def test_no_predicate_pushdown_through(self):
+        # SPARK-30921: We should not pushdown predicates of PythonUDFs through Aggregate.
+        import numpy as np
+
+        @pandas_udf('float', PandasUDFType.GROUPED_AGG)
+        def mean(x):
+            return np.mean(x)
+
+        df = self.spark.createDataFrame([
+            Row(id=1, foo=42), Row(id=2, foo=1), Row(id=2, foo=2)
+        ])
+
+        agg = df.groupBy('id').agg(mean('foo').alias("mean"))
+        filtered = agg.filter(agg['mean'] > 40.0)
+
+        assert(filtered.collect()[0]["mean"] == 42.0)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf_grouped_agg import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -22,18 +22,21 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
-class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with SharedSQLContext {
+// Disable AQE because metric info is different with AQE on/off
+class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
+  with DisableAdaptiveExecutionSuite {
   import testImplicits._
 
   /**
@@ -84,9 +87,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     // TODO: update metrics in generated operators
     val ds = spark.range(10).filter('id < 5)
     testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
-      0L -> (("WholeStageCodegen", Map(
-        "duration total (min, med, max)" -> {_.toString.matches(timingMetricPattern)})))
-    ), true)
+      0L -> (("WholeStageCodegen (1)", Map(
+        "duration" -> {
+          _.toString.matches(timingMetricPattern)
+        })))), true)
   }
 
   test("Aggregate metrics") {
@@ -96,9 +100,11 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = testData2.groupBy().count() // 2 partitions
     val expected1 = Seq(
       Map("number of output rows" -> 2L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters" ->
+          aggregateMetricsPattern),
       Map("number of output rows" -> 1L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters" ->
+          aggregateMetricsPattern))
     val shuffleExpected1 = Map(
       "records read" -> 2L,
       "local blocks read" -> 2L,
@@ -114,9 +120,12 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df2 = testData2.groupBy('a).count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"),
+        "avg hash probe bucket list iters" ->
+          aggregateMetricsPattern),
       Map("number of output rows" -> 3L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))
+        "avg hash probe bucket list iters" ->
+          aggregateMetricsPattern))
+
     val shuffleExpected2 = Map(
       "records read" -> 4L,
       "local blocks read" -> 4L,
@@ -162,9 +171,17 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       }
       val metrics = getSparkPlanMetrics(df, 1, nodeIds, enableWholeStage).get
       nodeIds.foreach { nodeId =>
-        val probes = metrics(nodeId)._2("avg hash probe (min, med, max)")
-        probes.toString.stripPrefix("\n(").stripSuffix(")").split(", ").foreach { probe =>
-          assert(probe.toDouble > 1.0)
+        val probes = metrics(nodeId)._2("avg hash probe bucket list iters").toString
+        if (!probes.contains("\n")) {
+          // It's a single metrics value
+          assert(probes.toDouble > 1.0)
+        } else {
+          val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
+          // Extract min, med, max from the string and strip off everthing else.
+          val index = mainValue.indexOf(" (", 0)
+          mainValue.slice(0, index).split(", ").foreach {
+            probe => assert(probe.toDouble > 1.0)
+          }
         }
       }
     }
@@ -209,9 +226,15 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df = Seq(1, 3, 2).toDF("id").sort('id)
     testSparkPlanMetricsWithPredicates(df, 2, Map(
       0L -> (("Sort", Map(
-        "sort time total (min, med, max)" -> {_.toString.matches(timingMetricPattern)},
-        "peak memory total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)},
-        "spill size total (min, med, max)" -> {_.toString.matches(sizeMetricPattern)})))
+        "sort time" -> {
+          _.toString.matches(timingMetricPattern)
+        },
+        "peak memory" -> {
+          _.toString.matches(sizeMetricPattern)
+        },
+        "spill size" -> {
+          _.toString.matches(sizeMetricPattern)
+        })))
     ))
   }
 
@@ -277,9 +300,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("ShuffledHashJoin metrics") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
@@ -345,10 +368,10 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 1)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> (("BroadcastHashJoin", Map(
+      1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L))))
     )
   }
@@ -389,7 +412,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       data.write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
+      sparkContext.listenerBus.waitUntilEmpty()
       val executionIds = currentExecutionIds().diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
@@ -437,28 +460,34 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     )
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
-    withTempDir { tempDir =>
-      val dir = new File(tempDir, "pqS").getCanonicalPath
+    // TODO: test file source V2 as well when its statistics is correctly computed.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempDir { tempDir =>
+        withTempView("pqS") {
+          val dir = new File(tempDir, "pqS").getCanonicalPath
 
-      spark.range(10).write.parquet(dir)
-      spark.read.parquet(dir).createOrReplaceTempView("pqS")
+          spark.range(10).write.parquet(dir)
+          spark.read.parquet(dir).createOrReplaceTempView("pqS")
 
-      // The executed plan looks like:
-      // Exchange RoundRobinPartitioning(2)
-      // +- BroadcastNestedLoopJoin BuildLeft, Cross
-      //   :- BroadcastExchange IdentityBroadcastMode
-      //   :  +- Exchange RoundRobinPartitioning(3)
-      //   :     +- *Range (0, 30, step=1, splits=2)
-      //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
-      val res3 = InputOutputMetricsHelper.run(
-        spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
-      )
-      // The query above is executed in the following stages:
-      //   1. range(30)                   => (30, 0, 30)
-      //   2. sql("select * from pqS")    => (0, 30, 0)
-      //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
-      //   4. shuffle & return results    => (0, 300, 0)
-      assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) :: Nil)
+          // The executed plan looks like:
+          // Exchange RoundRobinPartitioning(2)
+          // +- BroadcastNestedLoopJoin BuildLeft, Cross
+          //   :- BroadcastExchange IdentityBroadcastMode
+          //   :  +- Exchange RoundRobinPartitioning(3)
+          //   :     +- *Range (0, 30, step=1, splits=2)
+          //   +- *FileScan parquet [id#465L] Batched: true, Format: Parquet, Location: ...(ignored)
+          val res3 = InputOutputMetricsHelper.run(
+            spark.range(30).repartition(3).crossJoin(sql("select * from pqS")).repartition(2).toDF()
+          )
+          // The query above is executed in the following stages:
+          //   1. range(30)                   => (30, 0, 30)
+          //   2. sql("select * from pqS")    => (0, 30, 0)
+          //   3. crossJoin(...) of 1. and 2. => (10, 0, 300)
+          //   4. shuffle & return results    => (0, 300, 0)
+          assert(res3 === (30L, 0L, 30L) :: (0L, 30L, 0L) :: (10L, 0L, 300L) :: (0L, 300L, 0L) ::
+            Nil)
+        }
+      }
     }
   }
 
@@ -570,8 +599,55 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       testSparkPlanMetrics(df, 1, Map(
         0L -> (("Scan parquet default.testdataforscan", Map(
           "number of output rows" -> 3L,
-          "number of files" -> 2L))))
+          "number of files read" -> 2L))))
       )
     }
+  }
+
+  test("InMemoryTableScan shows the table name on UI if possible") {
+    // Show table name on UI
+    withView("inMemoryTable", "```a``b```") {
+      sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
+      sql("CACHE TABLE inMemoryTable")
+      testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
+        Map(1L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+      )
+
+      sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
+      sql("CACHE TABLE ```a``b```")
+      testSparkPlanMetrics(spark.table("```a``b```"), 1,
+        Map(1L -> (("Scan In-memory table ```a``b```", Map.empty)))
+      )
+    }
+
+    // Show InMemoryTableScan on UI
+    testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
+      Map(1L -> (("InMemoryTableScan", Map.empty)))
+    )
+  }
+
+  test("SPARK-28332: SQLMetric merge should handle -1 properly") {
+    def checkSparkPlanMetrics(plan: SparkPlan, expected: Map[String, Long]): Unit = {
+      expected.foreach { case (metricName: String, metricValue: Long) =>
+        assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
+        val actualMetric = plan.metrics.get(metricName).get
+        assert(actualMetric.value == metricValue,
+          s"The query plan metric $metricName did not match, " +
+            s"expected:$metricValue, actual:${actualMetric.value}")
+      }
+    }
+
+    val df = testData.join(testData2.filter('b === 0), $"key" === $"a", "left_outer")
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+
+    val exchanges = plan.collect {
+      case s: ShuffleExchangeExec => s
+    }
+
+    assert(exchanges.size == 2, "The query plan should have two shuffle exchanges")
+
+    checkSparkPlanMetrics(exchanges(0), Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
+    checkSparkPlanMetrics(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
   }
 }

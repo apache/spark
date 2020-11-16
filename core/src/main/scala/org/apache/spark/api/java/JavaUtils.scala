@@ -81,7 +81,7 @@ private[spark] object JavaUtils {
           }
         }
 
-        override def remove() {
+        override def remove(): Unit = {
           prev match {
             case Some(k) =>
               underlying match {

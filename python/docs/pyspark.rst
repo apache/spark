@@ -11,6 +11,7 @@ Subpackages
     pyspark.streaming
     pyspark.ml
     pyspark.mllib
+    pyspark.resource
 
 Contents
 --------

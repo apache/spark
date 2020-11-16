@@ -15,12 +15,16 @@
 # limitations under the License.
 #
 
-import collections
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
+
 
 __all__ = ["ResultIterable"]
 
 
-class ResultIterable(collections.Iterable):
+class ResultIterable(Iterable):
 
     """
     A special result iterable. This is used because the standard

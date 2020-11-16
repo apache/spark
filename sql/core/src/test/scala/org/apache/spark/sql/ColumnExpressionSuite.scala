@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -25,13 +26,15 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
-class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
+class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private lazy val booleanData = {
@@ -257,26 +260,28 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("nanvl") {
-    val testData = spark.createDataFrame(sparkContext.parallelize(
-      Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
-      StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
-        StructField("c", DoubleType), StructField("d", DoubleType),
-        StructField("e", FloatType), StructField("f", IntegerType))))
+    withTempView("t") {
+      val testData = spark.createDataFrame(sparkContext.parallelize(
+        Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
+        StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
+          StructField("c", DoubleType), StructField("d", DoubleType),
+          StructField("e", FloatType), StructField("f", IntegerType))))
 
-    checkAnswer(
-      testData.select(
-        nanvl($"a", lit(5)), nanvl($"b", lit(10)), nanvl(lit(10), $"b"),
-        nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10)),
-        nanvl($"b", $"e"), nanvl($"e", $"f")),
-      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
-    )
-    testData.createOrReplaceTempView("t")
-    checkAnswer(
-      sql(
-        "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
-          " nanvl(b, e), nanvl(e, f) from t"),
-      Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
-    )
+      checkAnswer(
+        testData.select(
+          nanvl($"a", lit(5)), nanvl($"b", lit(10)), nanvl(lit(10), $"b"),
+          nanvl($"c", lit(null).cast(DoubleType)), nanvl($"d", lit(10)),
+          nanvl($"b", $"e"), nanvl($"e", $"f")),
+        Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
+      )
+      testData.createOrReplaceTempView("t")
+      checkAnswer(
+        sql(
+          "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
+            " nanvl(b, e), nanvl(e, f) from t"),
+        Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
+      )
+    }
   }
 
   test("===") {
@@ -413,27 +418,121 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       }
   }
 
-  test("isInCollection: Scala Collection") {
-    val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    // Test with different types of collections
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-    checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
-    checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
-      df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
-
-    val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
-
-    val e = intercept[AnalysisException] {
-      df2.filter($"a".isInCollection(Seq($"b")))
+  test("IN/INSET with bytes, shorts, ints, dates") {
+    def check(): Unit = {
+      val values = Seq(
+        (Byte.MinValue, Some(Short.MinValue), Int.MinValue, Date.valueOf("2017-01-01")),
+        (Byte.MaxValue, None, Int.MaxValue, null))
+      val df = values.toDF("b", "s", "i", "d")
+      checkAnswer(df.select($"b".isin(Byte.MinValue, Byte.MaxValue)), Seq(Row(true), Row(true)))
+      checkAnswer(df.select($"b".isin(-1.toByte, 2.toByte)), Seq(Row(false), Row(false)))
+      checkAnswer(df.select($"s".isin(Short.MinValue, 1.toShort)), Seq(Row(true), Row(null)))
+      checkAnswer(df.select($"s".isin(0.toShort, null)), Seq(Row(null), Row(null)))
+      checkAnswer(df.select($"i".isin(0, Int.MinValue)), Seq(Row(true), Row(false)))
+      checkAnswer(df.select($"i".isin(null, Int.MinValue)), Seq(Row(true), Row(null)))
+      checkAnswer(
+        df.select($"d".isin(Date.valueOf("1950-01-01"), Date.valueOf("2017-01-01"))),
+        Seq(Row(true), Row(null)))
+      checkAnswer(
+        df.select($"d".isin(Date.valueOf("1950-01-01"), null)),
+        Seq(Row(null), Row(null)))
     }
-    Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
-      .foreach { s =>
-        assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "10") {
+      check()
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "0",
+      SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "0") {
+      check()
+    }
+
+    withSQLConf(
+      SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "0",
+      SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "20") {
+      check()
+    }
+  }
+
+  test("isInCollection: Scala Collection") {
+    Seq(0, 1, 10).foreach { optThreshold =>
+      Seq(0, 1, 10).foreach { switchThreshold =>
+        withSQLConf(
+          SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> optThreshold.toString,
+          SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> switchThreshold.toString) {
+          val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+          // Test with different types of collections
+          checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
+            df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+          checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
+            df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+          checkAnswer(df.filter($"a".isInCollection(Seq(3, 2).toArray)),
+            df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
+          checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
+            df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+          val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
+
+          val e = intercept[AnalysisException] {
+            df2.filter($"a".isInCollection(Seq($"b")))
+          }
+          Seq("cannot resolve", "due to data type mismatch: Arguments must be same type but were")
+            .foreach { s =>
+              assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
+            }
+        }
       }
+    }
+  }
+
+  test("SPARK-31553: isInCollection - collection element types") {
+    val expected = Seq(Row(true), Row(false))
+    Seq(0, 1, 10).foreach { optThreshold =>
+      Seq(0, 1, 10).foreach { switchThreshold =>
+        withSQLConf(
+          SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> optThreshold.toString,
+          SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> switchThreshold.toString) {
+          checkAnswer(Seq(0).toDS.select($"value".isInCollection(Seq(null))), Seq(Row(null)))
+          checkAnswer(
+            Seq(true).toDS.select($"value".isInCollection(Seq(true, false))),
+            Seq(Row(true)))
+          checkAnswer(
+            Seq(0.toByte, 1.toByte).toDS.select($"value".isInCollection(Seq(0.toByte, 2.toByte))),
+            expected)
+          checkAnswer(
+            Seq(0.toShort, 1.toShort).toDS
+              .select($"value".isInCollection(Seq(0.toShort, 2.toShort))),
+            expected)
+          checkAnswer(Seq(0, 1).toDS.select($"value".isInCollection(Seq(0, 2))), expected)
+          checkAnswer(Seq(0L, 1L).toDS.select($"value".isInCollection(Seq(0L, 2L))), expected)
+          checkAnswer(Seq(0.0f, 1.0f).toDS
+            .select($"value".isInCollection(Seq(0.0f, 2.0f))), expected)
+          checkAnswer(Seq(0.0D, 1.0D).toDS
+            .select($"value".isInCollection(Seq(0.0D, 2.0D))), expected)
+          checkAnswer(
+            Seq(BigDecimal(0), BigDecimal(2)).toDS
+              .select($"value".isInCollection(Seq(BigDecimal(0), BigDecimal(1)))),
+            expected)
+          checkAnswer(
+            Seq("abc", "def").toDS.select($"value".isInCollection(Seq("abc", "xyz"))),
+            expected)
+          checkAnswer(
+            Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-05-01")).toDS
+              .select($"value".isInCollection(
+                Seq(Date.valueOf("2020-04-29"), Date.valueOf("2020-04-30")))),
+            expected)
+          checkAnswer(
+            Seq(new Timestamp(0), new Timestamp(2)).toDS
+              .select($"value".isInCollection(Seq(new Timestamp(0), new Timestamp(1)))),
+            expected)
+          checkAnswer(
+            Seq(Array("a", "b"), Array("c", "d")).toDS
+              .select($"value".isInCollection(Seq(Array("a", "b"), Array("x", "z")))),
+            expected)
+        }
+      }
+    }
   }
 
   test("&&") {
@@ -487,12 +586,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("sqrt") {
     checkAnswer(
-      testData.select(sqrt('key)).orderBy('key.asc),
+      testData.select(sqrt($"key")).orderBy($"key".asc),
       (1 to 100).map(n => Row(math.sqrt(n)))
     )
 
     checkAnswer(
-      testData.select(sqrt('value), 'key).orderBy('key.asc, 'value.asc),
+      testData.select(sqrt($"value"), $"key").orderBy($"key".asc, $"value".asc),
       (1 to 100).map(n => Row(math.sqrt(n), n))
     )
 
@@ -504,12 +603,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("upper") {
     checkAnswer(
-      lowerCaseData.select(upper('l)),
+      lowerCaseData.select(upper($"l")),
       ('a' to 'd').map(c => Row(c.toString.toUpperCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(upper('value), 'key),
+      testData.select(upper($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -525,12 +624,12 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("lower") {
     checkAnswer(
-      upperCaseData.select(lower('L)),
+      upperCaseData.select(lower($"L")),
       ('A' to 'F').map(c => Row(c.toString.toLowerCase(Locale.ROOT)))
     )
 
     checkAnswer(
-      testData.select(lower('value), 'key),
+      testData.select(lower($"value"), $"key"),
       (1 to 100).map(n => Row(n.toString, n))
     )
 
@@ -703,8 +802,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("columns can be compared") {
-    assert('key.desc == 'key.desc)
-    assert('key.desc != 'key.asc)
+    assert($"key".desc == $"key".desc)
+    assert($"key".desc != $"key".asc)
   }
 
   test("alias with metadata") {
@@ -767,7 +866,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("randn") {
-    val randCol = testData.select('key, randn(5L).as("rand"))
+    val randCol = testData.select($"key", randn(5L).as("rand"))
     randCol.columns.length should be (2)
     val rows = randCol.collect()
     rows.foreach { row =>
@@ -818,5 +917,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(typedLit(("a", 2, 1.0))),
       Row(Row("a", 2, 1.0)) :: Nil)
+  }
+
+  test("SPARK-31563: sql of InSet for UTF8String collection") {
+    val inSet = InSet(Literal("a"), Set("a", "b").map(UTF8String.fromString))
+    assert(inSet.sql === "('a' IN ('a', 'b'))")
   }
 }

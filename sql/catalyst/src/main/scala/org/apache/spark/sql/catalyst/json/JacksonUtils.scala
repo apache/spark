@@ -34,8 +34,7 @@ object JacksonUtils {
 
   def verifyType(name: String, dataType: DataType): Unit = {
     dataType match {
-      case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType |
-           DoubleType | StringType | TimestampType | DateType | BinaryType | _: DecimalType =>
+      case NullType | _: AtomicType | CalendarIntervalType =>
 
       case st: StructType => st.foreach(field => verifyType(field.name, field.dataType))
 
