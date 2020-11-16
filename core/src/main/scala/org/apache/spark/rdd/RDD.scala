@@ -1551,6 +1551,7 @@ abstract class RDD[T: ClassTag](
     if (context.checkpointDir.isEmpty) {
       throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
+      //判断checkpointData是否为空
       checkpointData = Some(new ReliableRDDCheckpointData(this))
     }
   }

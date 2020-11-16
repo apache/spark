@@ -122,13 +122,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       originalRDD: RDD[T],
       checkpointDir: String,
       blockSize: Int = -1): ReliableCheckpointRDD[T] = {
+    //记录开始时间
     val checkpointStartTimeNs = System.nanoTime()
 
     val sc = originalRDD.sparkContext
 
     // Create the output path for the checkpoint
     val checkpointDirPath = new Path(checkpointDir)
+
     val fs = checkpointDirPath.getFileSystem(sc.hadoopConfiguration)
+    //创建目录
     if (!fs.mkdirs(checkpointDirPath)) {
       throw new SparkException(s"Failed to create checkpoint path $checkpointDirPath")
     }
