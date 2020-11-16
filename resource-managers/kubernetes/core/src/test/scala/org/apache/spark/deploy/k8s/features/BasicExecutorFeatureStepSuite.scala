@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesTestConf, SecretVolumeUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -160,17 +160,17 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
     assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
-    // There is exactly 1 container with no volume mounts and default memory limits.
+    // There is exactly 1 container with 1 volume mount and default memory limits.
     // Default memory limit is 1024M + 384M (minimum overhead constant).
     assert(executor.container.getImage === EXECUTOR_IMAGE)
-    assert(executor.container.getVolumeMounts.isEmpty)
+    assert(executor.container.getVolumeMounts.size() == 1)
     assert(executor.container.getResources.getLimits.size() === 1)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1408Mi")
 
-    // The pod has no node selector, volumes.
+    // The pod has no node selector, and 1 volume.
     assert(executor.pod.getSpec.getNodeSelector.isEmpty)
-    assert(executor.pod.getSpec.getVolumes.isEmpty)
+    assert(executor.pod.getSpec.getVolumes.size() == 1)
 
     checkEnv(executor, baseConf, Map())
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
@@ -318,6 +318,16 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(executor.container.getResources.getLimits.size() === 2)
     assert(amountAndFormat(executor.container.getResources.getLimits.get("nvidia.com/gpu")) === "2")
+  }
+
+  test("Verify spark conf dir is mounted as configmap volume on executor pod's container.") {
+    val baseDriverPod = SparkPod.initialPod()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured = step.configurePod(baseDriverPod)
+    SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL)
+    SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC)
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

@@ -67,6 +67,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var configMapsOperations: CONFIG_MAPS = _
+
+  @Mock
+  private var labledConfigMaps: LABELED_CONFIG_MAPS = _
+
+  @Mock
   private var taskScheduler: TaskSchedulerImpl = _
 
   @Mock
@@ -105,6 +111,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
         driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
+    when(kubernetesClient.configMaps()).thenReturn(configMapsOperations)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
@@ -124,16 +131,22 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
+    verify(configMapsOperations).create(any())
   }
 
   test("Stop all components") {
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(configMapsOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(labledConfigMaps)
+    when(labledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labledConfigMaps)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
     verify(labeledPods).delete()
+    verify(labledConfigMaps).delete()
     verify(kubernetesClient).close()
   }
 
