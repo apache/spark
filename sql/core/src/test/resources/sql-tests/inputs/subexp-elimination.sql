@@ -8,8 +8,8 @@
 --CONFIG_DIM2 spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM2 spark.sql.codegen.factoryMode=NO_CODEGEN
 
---CONFIG_DIM3 SUBEXPRESSION_ELIMINATION_ENABLED=true
---CONFIG_DIM3 SUBEXPRESSION_ELIMINATION_ENABLED=false
+--CONFIG_DIM3 spark.sql.subexpressionElimination.enabled=true
+--CONFIG_DIM3 spark.sql.subexpressionElimination.enabled=false
 
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
