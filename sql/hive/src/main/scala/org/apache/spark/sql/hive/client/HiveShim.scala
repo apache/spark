@@ -753,6 +753,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name))) =>
         Some(s"$value ${op.symbol} $name")
 
+      case Contains(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
+        Some(s"$name like " + (("\".*" + value.drop(1)).dropRight(1) + ".*\""))
+
+      case StartsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
+        Some(s"$name like " + (value.dropRight(1) + ".*\""))
+
+      case EndsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
+        Some(s"$name like " + ("\".*" + value.drop(1)))
+
       case And(expr1, expr2) if useAdvanced =>
         val converted = convert(expr1) ++ convert(expr2)
         if (converted.isEmpty) {
