@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, GroupingID}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
  * Currently it includes all AnalysisExcpetions created and thrown directly in
  * org.apache.spark.sql.catalyst.analysis.Analyzer.
  */
-object CatalystErrors {
+object QueryCompilationErrors {
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
       s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +
