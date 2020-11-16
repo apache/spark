@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -49,14 +48,6 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       df2.createOrReplaceTempView("source2")
       f
     }
-  }
-
-  // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
-  test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchDatabaseException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.contains("Database 'unknown' not found"))
   }
 
   // `SHOW TABLES` from v2 catalog returns empty result.

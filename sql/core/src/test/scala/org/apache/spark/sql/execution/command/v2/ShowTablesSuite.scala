@@ -44,12 +44,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
 
-  // The test fails with the exception `NoSuchDatabaseException` in V1 catalog.
-  // TODO(SPARK-33394): Throw `NoSuchDatabaseException` for not existing namespace
-  test("show table in a not existing namespace") {
-    runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-  }
-
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:
   //   The namespace in session catalog must have exactly one name part: spark_catalog.n1.n2.db
