@@ -1,5 +1,5 @@
-TakeOrderedAndProject [order count ,total shipping cost ,total net profit ]
-  WholeStageCodegen (8)
+WholeStageCodegen (8)
+  Sort [order count ]
     HashAggregate [sum,sum,count] [sum(UnscaledValue(cs_ext_ship_cost)),sum(UnscaledValue(cs_net_profit)),count(cs_order_number),order count ,total shipping cost ,total net profit ,sum,sum,count]
       InputAdapter
         Exchange #1
