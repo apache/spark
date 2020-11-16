@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -36,7 +37,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command
 
-class UnsupportedOperationsSuite extends SparkFunSuite {
+class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   val attribute = AttributeReference("a", IntegerType, nullable = true)()
   val watermarkMetadata = new MetadataBuilder()
@@ -218,6 +219,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("flatMapGroupsWithState in append mode", "update"))
 
   // FlatMapGroupsWithState(Append) in streaming with aggregation
+  // Only supported when `spark.sql.streaming.statefulOperator.correctnessCheck` is disabled.
   for (outputMode <- Seq(Append, Update, Complete)) {
     assertSupportedInStreamingPlan(
       "flatMapGroupsWithState - flatMapGroupsWithState(Append) " +
@@ -228,7 +230,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         FlatMapGroupsWithState(
           null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
           streamRelation)),
-      outputMode = outputMode)
+      outputMode = outputMode,
+      SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
   }
 
   for (outputMode <- Seq(Append, Update)) {
@@ -268,6 +271,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   }
 
   // multiple FlatMapGroupsWithStates
+  // Only supported when `spark.sql.streaming.statefulOperator.correctnessCheck` is disabled.
   assertSupportedInStreamingPlan(
     "flatMapGroupsWithState - multiple flatMapGroupsWithStates on streaming relation and all are " +
       "in append mode",
@@ -275,7 +279,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       isMapGroupsWithState = false, null,
       FlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null, streamRelation)),
-    outputMode = Append)
+    outputMode = Append,
+    SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false")
 
   assertNotSupportedInStreamingPlan(
     "flatMapGroupsWithState -  multiple flatMapGroupsWithStates on s streaming relation but some" +
@@ -995,9 +1000,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   def assertSupportedInStreamingPlan(
       name: String,
       plan: LogicalPlan,
-      outputMode: OutputMode): Unit = {
+      outputMode: OutputMode,
+      configs: (String, String)*): Unit = {
     test(s"streaming plan - $name: supported") {
-      UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+      withSQLConf(configs: _*) {
+        UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), outputMode)
+      }
     }
   }
 
@@ -1070,14 +1078,18 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       expectFailure: Boolean): Unit = {
     test(s"Global watermark limit - $testNamePostfix") {
       if (expectFailure) {
-        val e = intercept[AnalysisException] {
-          UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
-            wrapInStreaming(plan), outputMode, failWhenDetected = true)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "true") {
+          val e = intercept[AnalysisException] {
+            UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
+              wrapInStreaming(plan), outputMode)
+          }
+          assert(e.message.contains("Detected pattern of possible 'correctness' issue"))
         }
-        assert(e.message.contains("Detected pattern of possible 'correctness' issue"))
       } else {
-        UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
-          wrapInStreaming(plan), outputMode, failWhenDetected = true)
+        withSQLConf(SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
+          UnsupportedOperationChecker.checkStreamingQueryGlobalWatermarkLimit(
+            wrapInStreaming(plan), outputMode)
+        }
       }
     }
   }

@@ -34,8 +34,10 @@ case class ProjectionOverSchema(schema: StructType) {
     expr match {
       case a: AttributeReference if fieldNames.contains(a.name) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
-      case GetArrayItem(child, arrayItemOrdinal) =>
-        getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
+      case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
+        getProjection(child).map {
+          projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)
+        }
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>

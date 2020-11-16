@@ -1421,7 +1421,7 @@ case class MonthsBetween(
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
-  def this(left: Expression, format: Expression) {
+  def this(left: Expression, format: Expression) = {
     this(left, Option(format), Cast(GetTimestamp(left, format), DateType))
   }
 

@@ -999,9 +999,9 @@ class AdaptiveQueryExecSuite
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val df = spark.range(10).select(sum('id))
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      SparkSession.setActiveSessionInternal(null)
+      SparkSession.setActiveSession(null)
       checkAnswer(df, Seq(Row(45)))
-      SparkSession.setActiveSessionInternal(spark) // recover the active session.
+      SparkSession.setActiveSession(spark) // recover the active session.
     }
   }
 

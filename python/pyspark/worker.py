@@ -387,7 +387,10 @@ def read_udfs(pickleSer, infile, eval_type):
         Helper function to extract the key and value indexes from arg_offsets for the grouped and
         cogrouped pandas udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
 
-        :param grouped_arg_offsets:  List containing the key and value indexes of columns of the
+        Parameters
+        ----------
+        grouped_arg_offsets:  list
+            List containing the key and value indexes of columns of the
             DataFrames to be passed to the udf. It consists of n repeating groups where n is the
             number of DataFrames.  Each group has the following format:
                 group[0]: length of group
@@ -604,7 +607,7 @@ def main(infile, outfile):
         # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
-    except Exception:
+    except BaseException:
         try:
             exc_info = traceback.format_exc()
             if isinstance(exc_info, bytes):
@@ -618,7 +621,7 @@ def main(infile, outfile):
         except IOError:
             # JVM close the socket
             pass
-        except Exception:
+        except BaseException:
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)

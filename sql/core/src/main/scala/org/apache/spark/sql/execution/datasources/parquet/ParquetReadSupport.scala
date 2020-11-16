@@ -59,7 +59,7 @@ class ParquetReadSupport(
   extends ReadSupport[InternalRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
-  def this() {
+  def this() = {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
     // and the values here are ignored.

@@ -110,7 +110,14 @@ SELECT * FROM t;
 ### SQL Functions
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
-  - `size`: This function returns null for null input under ANSI mode.
+  - `size`: This function returns null for null input.
+  - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices. 
+  - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+
+### SQL Operators
+
+The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
+  - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
 
 ### SQL Keywords
 

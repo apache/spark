@@ -57,7 +57,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, SparkListenerBloc
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
+import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
@@ -1972,6 +1972,27 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       // Avoid thread leak
       decomManager.stopOffloadingShuffleBlocks()
     }
+  }
+
+  test("SPARK-33387 Support ordered shuffle block migration") {
+    val blocks: Seq[ShuffleBlockInfo] = Seq(
+      ShuffleBlockInfo(1, 0L),
+      ShuffleBlockInfo(0, 1L),
+      ShuffleBlockInfo(0, 0L),
+      ShuffleBlockInfo(1, 1L))
+    val sortedBlocks = blocks.sortBy(b => (b.shuffleId, b.mapId))
+
+    val resolver = mock(classOf[MigratableResolver])
+    when(resolver.getStoredShuffles).thenReturn(blocks)
+
+    val bm = mock(classOf[BlockManager])
+    when(bm.migratableResolver).thenReturn(resolver)
+    when(bm.getPeers(mc.any())).thenReturn(Seq.empty)
+
+    val decomManager = new BlockManagerDecommissioner(conf, bm)
+    decomManager.refreshOffloadingShuffleBlocks()
+
+    assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }
 
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {

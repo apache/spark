@@ -47,8 +47,8 @@ abstract class StreamingJoinSuite
   import testImplicits._
 
   before {
-    SparkSession.setActiveSessionInternal(spark) // set this before force initializing 'joinExec'
-    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
+    SparkSession.setActiveSession(spark)  // set this before force initializing 'joinExec'
+    spark.streams.stateStoreCoordinator   // initialize the lazy coordinator
   }
 
   after {

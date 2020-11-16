@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.{ResourceID, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
@@ -191,7 +191,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   ).foreach { case (name, resource, factor, expectedFactor) =>
     test(s"memory overhead factor: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
-      val driverMem = MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+      val driverMem =
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)

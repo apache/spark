@@ -1546,14 +1546,9 @@ private[history] class AppListingListener(
   private class MutableApplicationInfo {
     var id: String = null
     var name: String = null
-    var coresGranted: Option[Int] = None
-    var maxCores: Option[Int] = None
-    var coresPerExecutor: Option[Int] = None
-    var memoryPerExecutorMB: Option[Int] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
-        memoryPerExecutorMB, Nil)
+      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
 

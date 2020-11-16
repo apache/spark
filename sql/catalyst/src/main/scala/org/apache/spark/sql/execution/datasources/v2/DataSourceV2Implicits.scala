@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{SupportsDelete, SupportsRead, SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
@@ -52,6 +53,26 @@ object DataSourceV2Implicits {
       }
     }
 
+    def asPartitionable: SupportsPartitionManagement = {
+      table match {
+        case support: SupportsPartitionManagement =>
+          support
+        case _ =>
+          throw new AnalysisException(
+            s"Table does not support partition management: ${table.name}")
+      }
+    }
+
+    def asAtomicPartitionable: SupportsAtomicPartitionManagement = {
+      table match {
+        case support: SupportsAtomicPartitionManagement =>
+          support
+        case _ =>
+          throw new AnalysisException(
+            s"Table does not support atomic partition management: ${table.name}")
+      }
+    }
+
     def supports(capability: TableCapability): Boolean = table.capabilities.contains(capability)
 
     def supportsAny(capabilities: TableCapability*): Boolean = capabilities.exists(supports)
@@ -61,5 +82,13 @@ object DataSourceV2Implicits {
     def asOptions: CaseInsensitiveStringMap = {
       new CaseInsensitiveStringMap(options.asJava)
     }
+  }
+
+  implicit class PartitionSpecsHelper(partSpecs: Seq[PartitionSpec]) {
+    def asUnresolvedPartitionSpecs: Seq[UnresolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[UnresolvedPartitionSpec])
+
+    def asResolvedPartitionSpecs: Seq[ResolvedPartitionSpec] =
+      partSpecs.map(_.asInstanceOf[ResolvedPartitionSpec])
   }
 }

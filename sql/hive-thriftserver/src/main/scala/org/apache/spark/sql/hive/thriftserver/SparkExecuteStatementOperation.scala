@@ -306,7 +306,9 @@ private[hive] class SparkExecuteStatementOperation(
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
 
-      val substitutorStatement = new VariableSubstitution(sqlContext.conf).substitute(statement)
+      val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+        new VariableSubstitution().substitute(statement)
+      }
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
