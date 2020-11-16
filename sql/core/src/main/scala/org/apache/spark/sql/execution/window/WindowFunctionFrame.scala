@@ -97,13 +97,15 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Index of the input row currently used for output. */
   protected var inputIndex = 0
 
+  /** Attributes of the input row currently used for output. */
+  protected val inputAttrs = inputSchema.map(_.withNullability(true))
+
   /**
    * Create the projection used when the offset row exists.
    * Please note that this project always respect null input values (like PostgreSQL).
    */
   protected val projection = {
     // Collect the expressions and bind them.
-    val inputAttrs = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
       expressions.toSeq.map(_.input), inputAttrs)
 
@@ -114,7 +116,6 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Create the projection used when the offset row DOES NOT exists. */
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val inputAttrs: AttributeSeq = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
@@ -151,6 +152,17 @@ class FrameLessOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
+  val ignoreNulls = expressions.head.ignoreNulls
+
+  lazy val inputAttr = expressions.toSeq.map(_.input).head
+
+  lazy val (dataType, idx) = inputAttrs.zipWithIndex.find(_._1 == inputAttr)
+    .map { x => (x._1.dataType, x._2)}.head
+
+  var cachedRow: UnsafeRow = null
+
+  var step: Int = 0
+
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
@@ -163,7 +175,33 @@ class FrameLessOffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
-  override def write(index: Int, current: InternalRow): Unit = {
+  val doWrite = (current: InternalRow) => if (ignoreNulls) {
+    if (inputIndex >= 0 && inputIndex < input.length) {
+      if (step == 0) {
+        if (offset > 0) {
+          cachedRow = null
+        }
+        do {
+          val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+          if (r == null || r.get(idx, dataType) != null) {
+            cachedRow = r
+          }
+          step += 1
+          inputIndex += 1
+        } while (offset > 0 && cachedRow == null && inputIndex < input.length)
+      }
+      step -= 1
+      if (cachedRow == null) {
+        fillDefaultValue(current)
+      } else {
+        projection(cachedRow)
+      }
+    } else {
+      // Use default values since the offset row does not exist.
+      fillDefaultValue(current)
+      inputIndex += 1
+    }
+  } else {
     if (inputIndex >= 0 && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       projection(r)
@@ -172,6 +210,10 @@ class FrameLessOffsetWindowFunctionFrame(
       fillDefaultValue(current)
     }
     inputIndex += 1
+  }
+
+  override def write(index: Int, current: InternalRow): Unit = {
+    doWrite(current)
   }
 }
 

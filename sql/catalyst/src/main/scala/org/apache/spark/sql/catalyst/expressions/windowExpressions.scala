@@ -387,8 +387,6 @@ abstract class FrameLessOffsetWindowFunction
 
   override def nullable: Boolean = default == null || default.nullable || input.nullable
 
-  override val ignoreNulls = false
-
   override lazy val frame: WindowFrame = fakeFrame
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -443,7 +441,8 @@ abstract class FrameLessOffsetWindowFunction
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Lead(input: Expression, offset: Expression, default: Expression)
+case class Lead(
+    input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean = false)
     extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
@@ -485,7 +484,8 @@ case class Lead(input: Expression, offset: Expression, default: Expression)
   since = "2.0.0",
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
-case class Lag(input: Expression, inputOffset: Expression, default: Expression)
+case class Lag(
+    input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean = false)
     extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
