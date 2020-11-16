@@ -58,15 +58,14 @@ import org.apache.spark.util.Utils
  */
 object SimpleAnalyzer extends Analyzer(
   new CatalogManager(
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
     new SessionCatalog(
       new InMemoryCatalog,
-      EmptyFunctionRegistry,
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+      EmptyFunctionRegistry) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    }),
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    })) {
+  override def resolver: Resolver = caseSensitiveResolution
+}
 
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
@@ -130,10 +129,8 @@ object AnalysisContext {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-class Analyzer(
-    override val catalogManager: CatalogManager,
-    conf: SQLConf)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
+class Analyzer(override val catalogManager: CatalogManager)
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -144,10 +141,8 @@ class Analyzer(
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
 
   // Only for tests.
-  def this(catalog: SessionCatalog, conf: SQLConf) = {
-    this(
-      new CatalogManager(conf, FakeV2SessionCatalog, catalog),
-      conf)
+  def this(catalog: SessionCatalog) = {
+    this(new CatalogManager(FakeV2SessionCatalog, catalog))
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {

@@ -15,24 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Checks legitimization of various execution commands.
+ * Trait for getting the active SQLConf.
  */
-object CommandCheck extends (LogicalPlan => Unit) with SQLConfHelper {
+trait SQLConfHelper {
 
-  override def apply(plan: LogicalPlan): Unit = {
-    plan.foreach {
-      case AnalyzeColumnCommand(_, colsOpt, allColumns) if !allColumns =>
-        colsOpt.foreach(SchemaUtils.checkColumnNameDuplication(
-          _, "in analyze columns.", conf.caseSensitiveAnalysis))
-
-      case _ =>
-    }
-  }
+  /**
+   * The active config object within the current scope.
+   * See [[SQLConf.get]] for more information.
+   */
+  def conf: SQLConf = SQLConf.get
 }
