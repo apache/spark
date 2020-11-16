@@ -207,9 +207,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
   private def contains(s1: String, s2: String): Boolean = {
     if (SQLConf.get.caseSensitiveAnalysis) {
-      s1.contains(s2)
+      s1.contains("(" + s2)
     } else {
-      s1.toLowerCase(Locale.ROOT).contains(s2.toLowerCase(Locale.ROOT))
+      s1.toLowerCase(Locale.ROOT).contains("(" + s2.toLowerCase(Locale.ROOT))
     }
   }
 }
