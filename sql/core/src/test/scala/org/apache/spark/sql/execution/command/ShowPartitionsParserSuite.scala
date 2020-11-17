@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
@@ -27,15 +27,15 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
   test("SHOW PARTITIONS") {
     Seq(
-      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedNamespace(Seq("t1")), None),
-      "SHOW PARTITIONS db1.t1" -> ShowPartitions(UnresolvedNamespace(Seq("db1", "t1")), None),
+      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTableOrView(Seq("t1")), None),
+      "SHOW PARTITIONS db1.t1" -> ShowPartitions(UnresolvedTableOrView(Seq("db1", "t1")), None),
       "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
         ShowPartitions(
-          UnresolvedNamespace(Seq("t1")),
+          UnresolvedTableOrView(Seq("t1")),
           Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue"))),
-      "SHOW PARTITIONS a.b.c" -> ShowPartitions(UnresolvedNamespace(Seq("a", "b", "c")), None),
+      "SHOW PARTITIONS a.b.c" -> ShowPartitions(UnresolvedTableOrView(Seq("a", "b", "c")), None),
       "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
-        ShowPartitions(UnresolvedNamespace(Seq("a", "b", "c")), Some(Map("ds" -> "2017-06-10")))
+        ShowPartitions(UnresolvedTableOrView(Seq("a", "b", "c")), Some(Map("ds" -> "2017-06-10")))
     ).foreach { case (sql, expected) =>
       val parsed = parsePlan(sql)
       comparePlans(parsed, expected)
