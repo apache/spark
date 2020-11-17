@@ -44,6 +44,24 @@ case class ShowPartitionsExec(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${table.name()}")
     }
 
+    /**
+     * Validate the partitioning spec by making sure all the referenced columns are
+     * defined as partitioning columns in table definition. An AnalysisException exception is
+     * thrown if the partitioning spec is invalid.
+     */
+    if (spec.isDefined) {
+      val partitionColumnNames =
+        table.partitioning().flatMap(_.references.flatMap(_.fieldNames)).toSet
+      val specKeys = spec.get.keySet
+      if (!specKeys.subsetOf(partitionColumnNames)) {
+        val badColumns = specKeys
+          .filterNot(partitionColumnNames.contains)
+          .mkString("[", ", ", "]")
+        throw new AnalysisException(
+          s"Non-partitioning column(s) $badColumns are specified for SHOW PARTITIONS")
+      }
+    }
+
     // scalastyle:off
     throw new NotImplementedError("SHOW PARTITIONS is not implemented")
     // scalastyle:on

@@ -29,17 +29,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
 
-  private def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int, year int, month int)
-      |$defaultUsing
-      |partitioned by (year, month)""".stripMargin)
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
-  }
-
   test("show everything") {
     val table = "dateTable"
     withTable(table) {
@@ -99,17 +88,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         sql(s"show partitions $table"),
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
-    }
-  }
-
-  test("non-partitioning columns") {
-    val table = "dateTable"
-    withTable(table) {
-      createDateTable(table)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
-      }.getMessage
-      assert(errMsg.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
     }
   }
 
