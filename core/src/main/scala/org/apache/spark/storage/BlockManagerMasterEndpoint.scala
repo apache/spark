@@ -712,11 +712,11 @@ class BlockManagerMasterEndpoint(
         if (filteredMergersWithoutExecutors.size >
           numMergersNeeded - filteredMergersWithExecutors.size) {
           Utils.randomize(filteredMergersWithoutExecutors)
+            .take(numMergersNeeded - filteredMergersWithExecutors.size)
         } else {
           filteredMergersWithoutExecutors
         }
       filteredMergersWithExecutors.toSeq ++ randomFilteredMergersLocations
-        .take(numMergersNeeded - filteredMergersWithExecutors.size)
     }
   }
 
