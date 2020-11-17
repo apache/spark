@@ -249,10 +249,10 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   }
 
   def generateAggregatedCustomMetrics(
-     query: StreamingQueryUIData,
-     minBatchTime: Long,
-     maxBatchTime: Long,
-     jsCollector: JsCollector): NodeBuffer = {
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): NodeBuffer = {
     val result: NodeBuffer = new NodeBuffer
 
     // This is made sure on caller side but put it here to be defensive
