@@ -816,7 +816,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
-    buildStaticConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
+    buildConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
         "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
         "to be greater than or equal to the minimum value in set and less than or equal to the " +
