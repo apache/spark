@@ -943,7 +943,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
   }
 
-  test("SPARK-33468: ParseUrl should fail if input string is not a valid url") {
+  test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val msg = intercept[IllegalArgumentException] {
         evaluateWithoutCodegen(
