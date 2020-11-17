@@ -2862,7 +2862,7 @@ test_that("mutate(), transform(), rename() and names()", {
   #   (which has always been true as of 2020-11-15)
   newDF <- mutate(
     df,
-    df$age + 123456789012345678901234567890 + 123456789012345678901234567890
+    df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
   )
   expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
