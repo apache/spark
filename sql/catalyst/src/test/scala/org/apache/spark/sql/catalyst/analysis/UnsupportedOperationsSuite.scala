@@ -411,11 +411,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
-    "full outer join",
+    "FullOuter join",
     _.join(_, joinType = FullOuter),
     streamStreamSupported = false,
     batchStreamSupported = false,
-    streamBatchSupported = false)
+    streamBatchSupported = false,
+    expectedMsg = "FullOuter join")
 
   // Left outer, left semi, left anti join: *-stream not allowed
   Seq((LeftOuter, "LeftOuter join"), (LeftSemi, "LeftSemi join"), (LeftAnti, "LeftAnti join"))
@@ -430,14 +431,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   // Right outer joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
-    "right outer join",
+    "RightOuter join",
     _.join(_, joinType = RightOuter),
     streamBatchSupported = false,
     streamStreamSupported = false,
-    expectedMsg = "outer join")
+    expectedMsg = "RightOuter join")
 
-  // Left outer, right outer, left semi joins
-  Seq(LeftOuter, RightOuter, LeftSemi).foreach { joinType =>
+  // Left outer, right outer, full outer, left semi joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
     // Update mode not allowed
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and update mode",
