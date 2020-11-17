@@ -283,7 +283,8 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
-  test("hive table: num hive client calls does not scale with partition count") {
+  // FIXME: SPARK-33452
+  ignore("hive table: num hive client calls does not scale with partition count") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
@@ -306,7 +307,8 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
-  test("datasource table: num hive client calls does not scale with partition count") {
+  // FIXME: SPARK-33452
+  ignore("datasource table: num hive client calls does not scale with partition count") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
