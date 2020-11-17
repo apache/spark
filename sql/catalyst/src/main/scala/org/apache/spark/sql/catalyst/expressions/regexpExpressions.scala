@@ -187,7 +187,7 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
 
   protected def patterns: Seq[UTF8String]
 
-  protected def isNotDefined: Boolean
+  protected def isNotLikeAll: Boolean
 
   override def inputTypes: Seq[DataType] = StringType :: Nil
 
@@ -205,7 +205,7 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     if (exprValue == null) {
       null
     } else {
-      val allMatched = if (isNotDefined) {
+      val allMatched = if (isNotLikeAll) {
         !cache.exists(p => p.matcher(exprValue.toString).matches())
       } else {
         cache.forall(p => p.matcher(exprValue.toString).matches())
@@ -226,10 +226,9 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     val allMatched = ctx.freshName("allMatched")
     val valueIsNull = ctx.freshName("valueIsNull")
     val valueArg = ctx.freshName("valueArg")
-    val patternHasNull = ctx.addReferenceObj("hasNull", hasNull)
     val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
 
-    val matchCode = if (isNotDefined) {
+    val matchCode = if (isNotLikeAll) {
       s"$pattern.matcher($valueArg.toString()).matches()"
     } else {
       s"!$pattern.matcher($valueArg.toString()).matches()"
@@ -250,18 +249,18 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
             |    }
             |  }
             |}
-            |final boolean ${ev.isNull} = $valueIsNull || ($allMatched && $patternHasNull);
+            |final boolean ${ev.isNull} = $valueIsNull || ($allMatched && $hasNull);
             |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }
 }
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
-  override def isNotDefined: Boolean = false
+  override def isNotLikeAll: Boolean = false
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
-  override def isNotDefined: Boolean = true
+  override def isNotLikeAll: Boolean = true
 }
 
 // scalastyle:off line.contains.tab
