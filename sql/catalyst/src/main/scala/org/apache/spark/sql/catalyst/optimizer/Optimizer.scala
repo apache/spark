@@ -377,9 +377,8 @@ object SimpleTestOptimizer extends SimpleTestOptimizer
 
 class SimpleTestOptimizer extends Optimizer(
   new CatalogManager(
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf())))
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change

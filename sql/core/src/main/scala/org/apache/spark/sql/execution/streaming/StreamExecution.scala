@@ -315,7 +315,7 @@ abstract class StreamExecution(
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
-      SparkSession.setActiveSessionInternal(sparkSession)
+      SparkSession.setActiveSession(sparkSession)
 
       updateStatusMessage("Initializing sources")
       // force initialization of the logical plan so that the sources can be created

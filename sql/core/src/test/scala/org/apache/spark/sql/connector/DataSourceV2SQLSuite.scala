@@ -1909,21 +1909,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SHOW PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |USING foo
-           |PARTITIONED BY (id)
-         """.stripMargin)
-
-      testV1Command("SHOW PARTITIONS", t)
-      testV1Command("SHOW PARTITIONS", s"$t PARTITION(id='1')")
-    }
-  }
-
   test("LOAD DATA INTO TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

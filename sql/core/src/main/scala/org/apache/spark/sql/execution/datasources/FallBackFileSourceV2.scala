@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
  * This is a temporary hack for making current data source V2 work. It should be
  * removed when Catalog support of file data source v2 is finished.
  */
-object FallBackFileSourceV2 extends Rule[LogicalPlan] {
+class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @
         InsertIntoStatement(d @ DataSourceV2Relation(table: FileTable, _, _, _, _), _, _, _, _) =>
@@ -42,7 +42,7 @@ object FallBackFileSourceV2 extends Rule[LogicalPlan] {
         table.schema,
         None,
         v1FileFormat,
-        d.options.asScala.toMap)(SparkSession.active)
+        d.options.asScala.toMap)(sparkSession)
       i.copy(table = LogicalRelation(relation))
   }
 }
