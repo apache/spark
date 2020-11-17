@@ -124,8 +124,8 @@ class KafkaDataConsumerSuite extends SparkFunSuite with MockitoSugar with Before
     @volatile var error: Throwable = null
 
     def consume(i: Int): Unit = {
-      val useCache = Random.nextBoolean
-      val taskContext = if (Random.nextBoolean) {
+      val useCache = Random.nextBoolean()
+      val taskContext = if (Random.nextBoolean()) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
       } else {
         null

@@ -87,7 +87,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.count()
     } else {
-      offsetRanges.map(_.count).sum
+      offsetRanges.map(_.count()).sum
     }
 
   override def countApprox(
@@ -97,7 +97,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.countApprox(timeout, confidence)
     } else {
-      val c = count
+      val c = count()
       new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
     }
 
@@ -105,7 +105,7 @@ private[spark] class KafkaRDD[K, V](
     if (compacted) {
       super.isEmpty()
     } else {
-      count == 0L
+      count() == 0L
     }
 
   override def take(num: Int): Array[ConsumerRecord[K, V]] =
@@ -116,7 +116,7 @@ private[spark] class KafkaRDD[K, V](
     } else {
       val nonEmptyPartitions = this.partitions
         .map(_.asInstanceOf[KafkaRDDPartition])
-        .filter(_.count > 0)
+        .filter(_.count() > 0)
 
       if (nonEmptyPartitions.isEmpty) {
         Array.empty[ConsumerRecord[K, V]]
@@ -125,7 +125,7 @@ private[spark] class KafkaRDD[K, V](
         val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
           val remain = num - result.values.sum
           if (remain > 0) {
-            val taken = Math.min(remain, part.count)
+            val taken = Math.min(remain, part.count())
             result + (part.index -> taken.toInt)
           } else {
             result
@@ -135,7 +135,7 @@ private[spark] class KafkaRDD[K, V](
         context.runJob(
           this,
           (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
-          it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
+          it.take(parts(tc.partitionId())).toArray, parts.keys.toArray
         ).flatten
       }
     }
@@ -162,7 +162,7 @@ private[spark] class KafkaRDD[K, V](
     // TODO what about hosts specified by ip vs name
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     val allExecs = executors()
-    val tp = part.topicPartition
+    val tp = part.topicPartition()
     val prefHost = preferredHosts.get(tp)
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
