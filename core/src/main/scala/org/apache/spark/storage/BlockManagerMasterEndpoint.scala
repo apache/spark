@@ -378,8 +378,8 @@ class BlockManagerMasterEndpoint(
 
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
     if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
-      val shuffleServerId = BlockManagerId(blockManagerId.executorId, blockManagerId.host,
-        StorageUtils.externalShuffleServicePort(conf))
+      val shuffleServerId = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
+        blockManagerId.host, externalShuffleServicePort)
       if (shuffleMergerLocations.size >= maxRetainedMergerLocations) {
         shuffleMergerLocations -= shuffleMergerLocations.head._1
       }
@@ -696,7 +696,8 @@ class BlockManagerMasterEndpoint(
     val filteredBlockManagersWithExecutors = blockManagersWithExecutors
       .filterNot(x => hostsToFilter.contains(x.host))
     val filteredMergersWithExecutors = filteredBlockManagersWithExecutors.map(
-      x => BlockManagerId(x.executorId, x.host, StorageUtils.externalShuffleServicePort(conf)))
+      x => BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
+        x.host, externalShuffleServicePort))
 
     // Enough mergers are available as part of active executors list
     if (filteredMergersWithExecutors.size >= numMergersNeeded) {

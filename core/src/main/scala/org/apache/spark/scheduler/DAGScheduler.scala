@@ -1889,11 +1889,6 @@ private[spark] class DAGScheduler(
               // host, including from those that we still haven't confirmed as lost due to heartbeat
               // delays.
               ignoreShuffleFileLostEpoch = isHostDecommissioned)
-
-            if (pushBasedShuffleEnabled) {
-              // Remove fetchFailed host in the shuffle push merger list for push based shuffle
-              env.blockManager.master.removeShufflePushMergerLocation(bmAddress.host)
-            }
           }
         }
 
@@ -2067,6 +2062,11 @@ private[spark] class DAGScheduler(
     if (!executorFailureEpoch.contains(execId) || executorFailureEpoch(execId) < currentEpoch) {
       executorFailureEpoch(execId) = currentEpoch
       logInfo(s"Executor lost: $execId (epoch $currentEpoch)")
+      if (pushBasedShuffleEnabled) {
+        // Remove fetchFailed host in the shuffle push merger list for push based shuffle
+        hostToUnregisterOutputs.foreach(
+          host => blockManagerMaster.removeShufflePushMergerLocation(host))
+      }
       blockManagerMaster.removeExecutor(execId)
       clearCacheLocs()
     }
