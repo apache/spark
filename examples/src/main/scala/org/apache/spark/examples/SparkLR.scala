@@ -64,7 +64,7 @@ object SparkLR {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkLR")
       .getOrCreate()
 

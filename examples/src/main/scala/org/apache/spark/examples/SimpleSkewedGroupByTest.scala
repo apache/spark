@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 object SimpleSkewedGroupByTest {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SimpleSkewedGroupByTest")
       .getOrCreate()
 
@@ -55,11 +55,11 @@ object SimpleSkewedGroupByTest {
         }
       }
       result
-    }.cache
+    }.cache()
     // Enforce that everything has been calculated and in cache
-    pairs1.count
+    pairs1.count()
 
-    println(s"RESULT: ${pairs1.groupByKey(numReducers).count}")
+    println(s"RESULT: ${pairs1.groupByKey(numReducers).count()}")
 
     spark.stop()
   }

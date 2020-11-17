@@ -116,7 +116,7 @@ object SynthBenchmark {
       println(s"Total PageRank = $totalPR")
     } else if (app == "cc") {
       println("Running Connected Components")
-      val numComponents = graph.connectedComponents.vertices.map(_._2).distinct().count()
+      val numComponents = graph.connectedComponents().vertices.map(_._2).distinct().count()
       println(s"Number of components = $numComponents")
     }
     val runTime = System.currentTimeMillis() - startTime

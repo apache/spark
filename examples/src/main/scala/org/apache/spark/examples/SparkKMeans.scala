@@ -67,7 +67,7 @@ object SparkKMeans {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkKMeans")
       .getOrCreate()
 

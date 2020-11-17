@@ -50,10 +50,10 @@ object CorrelationExample {
     )
 
     val df = data.map(Tuple1.apply).toDF("features")
-    val Row(coeff1: Matrix) = Correlation.corr(df, "features").head
+    val Row(coeff1: Matrix) = Correlation.corr(df, "features").head()
     println(s"Pearson correlation matrix:\n $coeff1")
 
-    val Row(coeff2: Matrix) = Correlation.corr(df, "features", "spearman").head
+    val Row(coeff2: Matrix) = Correlation.corr(df, "features", "spearman").head()
     println(s"Spearman correlation matrix:\n $coeff2")
     // $example off$
 
