@@ -691,14 +691,10 @@ class BlockManagerMasterEndpoint(
   private def getShufflePushMergerLocations(
       numMergersNeeded: Int,
       hostsToFilter: Set[String]): Seq[BlockManagerId] = {
-    val blockManagersWithExecutors = blockManagerIdByExecutor.groupBy(_._2.host)
-      .mapValues(_.head).values.map(_._2).toSet
-    val filteredBlockManagersWithExecutors = blockManagersWithExecutors
-      .filterNot(x => hostsToFilter.contains(x.host))
-    val filteredMergersWithExecutors = filteredBlockManagersWithExecutors.map(
-      x => BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
-        x.host, externalShuffleServicePort))
-
+    val blockManagerHosts = blockManagerIdByExecutor.values.map(_.host).toSet
+    val filteredBlockManagerHosts = blockManagerHosts.filterNot(hostsToFilter.contains(_))
+    val filteredMergersWithExecutors = filteredBlockManagerHosts.map(
+      BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, _, externalShuffleServicePort))
     // Enough mergers are available as part of active executors list
     if (filteredMergersWithExecutors.size >= numMergersNeeded) {
       filteredMergersWithExecutors.toSeq
