@@ -33,12 +33,6 @@ case class ShowPartitionsExec(
     table: Table,
     spec: Option[TablePartitionSpec]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    /**
-     * Validate and throws an [[AnalysisException]] exception under the following conditions:
-     * 1. If the table is not partitioned.
-     * 2. If it is a datasource table.
-     * 3. If it is a view.
-     */
     if (table.partitioning.isEmpty) {
       throw new AnalysisException(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${table.name()}")
