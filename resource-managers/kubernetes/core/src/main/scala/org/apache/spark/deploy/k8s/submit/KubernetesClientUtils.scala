@@ -18,15 +18,18 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.{File, StringWriter}
+import java.nio.charset.MalformedInputException
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.SortedSet
+import scala.collection.mutable
 import scala.io.{Codec, Source}
 
 import io.fabric8.kubernetes.api.model.{ConfigMap, ConfigMapBuilder, KeyToPath}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.{Constants, KubernetesUtils}
+import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
 
@@ -51,6 +54,29 @@ private[spark] object KubernetesClientUtils extends Logging {
     propertiesWriter.toString
   }
 
+  object StringLengthOrdering extends Ordering[(String, String)] {
+    override def compare(x: (String, String), y: (String, String)): Int = {
+      // compare based on file length and break the tie with string comparison of keys.
+      (x._1.length + x._2.length).compare(y._1.length + y._2.length) * 10 +
+        x._1.compareTo(y._1)
+    }
+  }
+
+  def truncateToSize(seq: Seq[(String, String)], maxSize: Long): Map[String, String] = {
+    // First order the entries in order of their size.
+    // Skip entries if the resulting Map size exceeds maxSize.
+    val ordering: Ordering[(String, String)] = StringLengthOrdering
+    val sortedSet = SortedSet[(String, String)](seq : _*)(ordering)
+    var i: Int = 0
+    val map = mutable.HashMap[String, String]()
+    for (item <- sortedSet) {
+      i += item._1.length + item._2.length
+      if ( i < maxSize) {
+        map.put(item._1, item._2)
+      }
+    }
+    map.toMap
+  }
   /**
    * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
    */
@@ -94,25 +120,41 @@ private[spark] object KubernetesClientUtils extends Logging {
     val confDir = Option(conf.getenv(ENV_SPARK_CONF_DIR)).orElse(
       conf.getOption("spark.home").map(dir => s"$dir/conf"))
     if (confDir.isDefined) {
-      val confFiles = listConfFiles(confDir.get)
-      logInfo(s"Spark configuration files loaded from $confDir : ${confFiles.mkString(",")}")
-      confFiles.map { file =>
-        val source = Source.fromFile(file)(Codec.UTF8)
-        val mapping = (file.getName -> source.mkString)
-        source.close()
-        mapping
-      }.toMap
+      val confFiles = listConfFiles(confDir.get, conf.get(Config.CONFIG_MAP_MAXSIZE))
+      val filesSeq: Seq[Option[(String, String)]] = confFiles.map { file =>
+        try {
+          val source = Source.fromFile(file)(Codec.UTF8)
+          val mapping = Some(file.getName -> source.mkString)
+          source.close()
+          mapping
+        } catch {
+          case e: MalformedInputException =>
+            logWarning(s"skipped a non UTF-8 encoded file ${file.getAbsolutePath}.", e)
+            None
+        }
+      }
+      val truncatedMap = truncateToSize(filesSeq.flatten, conf.get(Config.CONFIG_MAP_MAXSIZE))
+      logInfo(s"Spark configuration files loaded from $confDir :" +
+        s" ${truncatedMap.keys.mkString(",")}")
+      truncatedMap
     } else {
       Map.empty[String, String]
     }
   }
 
-  private def listConfFiles(confDir: String): Seq[File] = {
-    // We exclude all the template files and user provided spark conf or properties.
-    // As spark properties are resolved in a different step.
+  private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
+    // At the moment configmaps does not support storing binary content.
+    // configMaps do not allow for size greater than 1.5 MiB(configurable).
+    // https://etcd.io/docs/v3.4.0/dev-guide/limit/
+    // We exclude all the template files and user provided spark conf or properties,
+    // and binary files (e.g. jars and zip). Spark properties are resolved in a different step.
+    def test(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
+      f.getName.matches(".*\\.(gz|zip|jar|tar)") ||
+      f.getName.matches(".*\\.template") ||
+      f.getName.matches("spark.*(conf|properties)")
+
     val fileFilter = (f: File) => {
-      f.isFile && !(f.getName.endsWith("template") ||
-        f.getName.matches("spark.*(conf|properties)"))
+      f.isFile && !test(f)
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
