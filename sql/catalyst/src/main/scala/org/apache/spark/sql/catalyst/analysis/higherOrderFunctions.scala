@@ -74,7 +74,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   type LambdaVariableMap = Map[String, NamedExpression]
 
-  private val canonicalizer = {
+  private def canonicalizer = {
     if (!conf.caseSensitiveAnalysis) {
       // scalastyle:off caselocale
       s: String => s.toLowerCase

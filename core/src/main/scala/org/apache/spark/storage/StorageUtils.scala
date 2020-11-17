@@ -61,7 +61,7 @@ private[spark] class StorageStatus(
       maxMemory: Long,
       maxOnHeapMem: Option[Long],
       maxOffHeapMem: Option[Long],
-      initialBlocks: Map[BlockId, BlockStatus]) {
+      initialBlocks: Map[BlockId, BlockStatus]) = {
     this(bmid, maxMemory, maxOnHeapMem, maxOffHeapMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
   }

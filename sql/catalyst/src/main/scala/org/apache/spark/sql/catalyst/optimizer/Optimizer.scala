@@ -82,6 +82,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator combine
         CollapseRepartition,
         CollapseProject,
+        OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
         CombineLimits,
@@ -376,9 +377,8 @@ object SimpleTestOptimizer extends SimpleTestOptimizer
 
 class SimpleTestOptimizer extends Optimizer(
   new CatalogManager(
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf())))
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
@@ -803,6 +803,18 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+  }
+}
+
+/**
+ * Replaces first(col) to nth_value(col, 1) for better performance.
+ */
+object OptimizeWindowFunctions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), spec)
+      if spec.orderSpec.nonEmpty &&
+        spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame].frameType == RowFrame =>
+      we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
   }
 }
 
@@ -1269,6 +1281,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Sort => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: Expand => true
     case _ => false
   }
 

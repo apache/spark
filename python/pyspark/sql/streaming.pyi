@@ -68,7 +68,7 @@ class DataStreamReader(OptionUtils):
         self,
         path: Optional[str] = ...,
         format: Optional[str] = ...,
-        schema: Optional[StructType] = ...,
+        schema: Optional[Union[StructType, str]] = ...,
         **options: OptionalPrimitiveType
     ) -> DataFrame: ...
     def json(
@@ -92,26 +92,31 @@ class DataStreamReader(OptionUtils):
         locale: Optional[str] = ...,
         dropFieldIfAllNull: Optional[Union[bool, str]] = ...,
         encoding: Optional[str] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
+        allowNonNumericNumbers: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def orc(
         self,
         path: str,
         mergeSchema: Optional[bool] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def parquet(
         self,
         path: str,
         mergeSchema: Optional[bool] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def text(
         self,
         path: str,
         wholetext: bool = ...,
         lineSep: Optional[str] = ...,
-        recursiveFileLookup: Optional[bool] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
     def csv(
         self,
@@ -142,6 +147,8 @@ class DataStreamReader(OptionUtils):
         emptyValue: Optional[str] = ...,
         locale: Optional[str] = ...,
         lineSep: Optional[str] = ...,
+        pathGlobFilter: Optional[Union[bool, str]] = ...,
+        recursiveFileLookup: Optional[Union[bool, str]] = ...,
     ) -> DataFrame: ...
 
 class DataStreamWriter:

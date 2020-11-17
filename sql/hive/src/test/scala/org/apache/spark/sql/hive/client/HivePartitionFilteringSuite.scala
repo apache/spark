@@ -272,8 +272,22 @@ class HivePartitionFilteringSuite(version: String)
       day1 :: day2 :: Nil)
   }
 
-  test("create client with sharesHadoopClasses = false") {
-    buildClient(new Configuration(), sharesHadoopClasses = false)
+  test("getPartitionsByFilter: chunk contains bb") {
+    testMetastorePartitionFiltering(
+      attr("chunk").contains("bb"),
+      (20170101 to 20170103, 0 to 4, Seq("bb")) :: Nil)
+  }
+
+  test("getPartitionsByFilter: chunk startsWith b") {
+    testMetastorePartitionFiltering(
+      attr("chunk").startsWith("b"),
+      (20170101 to 20170103, 0 to 4, Seq("ba", "bb")) :: Nil)
+  }
+
+  test("getPartitionsByFilter: chunk endsWith b") {
+    testMetastorePartitionFiltering(
+      attr("chunk").endsWith("b"),
+      (20170101 to 20170103, 0 to 4, Seq("ab", "bb")) :: Nil)
   }
 
   private def testMetastorePartitionFiltering(

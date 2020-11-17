@@ -3468,7 +3468,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     // problem before the fix.
     withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
       val cloned = spark.cloneSession()
-      SparkSession.setActiveSessionInternal(cloned)
+      SparkSession.setActiveSession(cloned)
       assert(SQLConf.get.getConf(SQLConf.CODEGEN_FALLBACK) === true)
     }
   }
@@ -3703,6 +3703,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
       withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
         checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      }
+    }
+  }
+
+  test("SPARK-33338: GROUP BY using literal map should not fail") {
+    withTempDir { dir =>
+      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+      Seq(
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+        checkAnswer(sql(statement), Row("v1"))
       }
     }
   }

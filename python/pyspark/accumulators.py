@@ -15,77 +15,6 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.context import SparkContext
->>> sc = SparkContext('local', 'test')
->>> a = sc.accumulator(1)
->>> a.value
-1
->>> a.value = 2
->>> a.value
-2
->>> a += 5
->>> a.value
-7
-
->>> sc.accumulator(1.0).value
-1.0
-
->>> sc.accumulator(1j).value
-1j
-
->>> rdd = sc.parallelize([1,2,3])
->>> def f(x):
-...     global a
-...     a += x
->>> rdd.foreach(f)
->>> a.value
-13
-
->>> b = sc.accumulator(0)
->>> def g(x):
-...     b.add(x)
->>> rdd.foreach(g)
->>> b.value
-6
-
->>> from pyspark.accumulators import AccumulatorParam
->>> class VectorAccumulatorParam(AccumulatorParam):
-...     def zero(self, value):
-...         return [0.0] * len(value)
-...     def addInPlace(self, val1, val2):
-...         for i in range(len(val1)):
-...              val1[i] += val2[i]
-...         return val1
->>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
->>> va.value
-[1.0, 2.0, 3.0]
->>> def g(x):
-...     global va
-...     va += [x] * 3
->>> rdd.foreach(g)
->>> va.value
-[7.0, 8.0, 9.0]
-
->>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> def h(x):
-...     global a
-...     a.value = 7
->>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-TypeError:...
-"""
-
 import sys
 import select
 import struct
@@ -126,7 +55,54 @@ class Accumulator(object):
 
     While :class:`SparkContext` supports accumulators for primitive data types like :class:`int` and
     :class:`float`, users can also define accumulators for custom types by providing a custom
-    :class:`AccumulatorParam` object. Refer to the doctest of this module for an example.
+    :py:class:`AccumulatorParam` object. Refer to its doctest for an example.
+
+    Examples
+    --------
+    >>> a = sc.accumulator(1)
+    >>> a.value
+    1
+    >>> a.value = 2
+    >>> a.value
+    2
+    >>> a += 5
+    >>> a.value
+    7
+    >>> sc.accumulator(1.0).value
+    1.0
+    >>> sc.accumulator(1j).value
+    1j
+    >>> rdd = sc.parallelize([1,2,3])
+    >>> def f(x):
+    ...     global a
+    ...     a += x
+    >>> rdd.foreach(f)
+    >>> a.value
+    13
+    >>> b = sc.accumulator(0)
+    >>> def g(x):
+    ...     b.add(x)
+    >>> rdd.foreach(g)
+    >>> b.value
+    6
+
+    >>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError: ...
+
+    >>> def h(x):
+    ...     global a
+    ...     a.value = 7
+    >>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError: ...
+
+    >>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    TypeError: ...
     """
 
     def __init__(self, aid, value, accum_param):
@@ -177,6 +153,27 @@ class AccumulatorParam(object):
 
     """
     Helper object that defines how to accumulate values of a given type.
+
+    Examples
+    --------
+    >>> from pyspark.accumulators import AccumulatorParam
+    >>> class VectorAccumulatorParam(AccumulatorParam):
+    ...     def zero(self, value):
+    ...         return [0.0] * len(value)
+    ...     def addInPlace(self, val1, val2):
+    ...         for i in range(len(val1)):
+    ...              val1[i] += val2[i]
+    ...         return val1
+    >>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
+    >>> va.value
+    [1.0, 2.0, 3.0]
+    >>> def g(x):
+    ...     global va
+    ...     va += [x] * 3
+    >>> rdd = sc.parallelize([1,2,3])
+    >>> rdd.foreach(g)
+    >>> va.value
+    [7.0, 8.0, 9.0]
     """
 
     def zero(self, value):
@@ -293,6 +290,14 @@ def _start_update_server(auth_token):
 
 if __name__ == "__main__":
     import doctest
-    (failure_count, test_count) = doctest.testmod()
+
+    from pyspark.context import SparkContext
+    globs = globals().copy()
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    globs['sc'] = SparkContext('local', 'test')
+    (failure_count, test_count) = doctest.testmod(
+        globs=globs, optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
     if failure_count:
         sys.exit(-1)

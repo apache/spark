@@ -315,7 +315,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         builder.append("[")
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
-          if (!array.isNullAt(0)) {
+          if (array.isNullAt(0)) {
+            if (!legacyCastToStr) builder.append("null")
+          } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
           var i = 1
@@ -376,7 +378,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
+            if (!legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -898,8 +900,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     """
   }
 
-  private def outNullElem(buffer: ExprValue): Block = {
-    if (legacyCastToStr) code"" else code"""$buffer.append(" null");"""
+  private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
+    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
   }
 
   private def writeArrayToStringBuilder(
@@ -925,14 +927,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    ${outNullElem(buffer)}
+       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${outNullElem(buffer)}
+       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
@@ -982,7 +984,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${outNullElem(buffer)}
+       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
@@ -992,7 +994,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${outNullElem(buffer)}
+       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
@@ -1016,7 +1018,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  ${outNullElem(buffer)}
+         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
          |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |

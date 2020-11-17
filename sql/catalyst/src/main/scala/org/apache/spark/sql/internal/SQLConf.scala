@@ -1382,6 +1382,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
+    buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
+      .internal()
+      .doc("When true, the stateful operators for streaming query will be checked for possible " +
+        "correctness issue due to global watermark. The correctness issue comes from queries " +
+        "containing stateful operation which can emit rows older than the current watermark " +
+        "plus allowed late record delay, which are \"late rows\" in downstream stateful " +
+        "operations and these rows can be discarded. Please refer the programming guide doc for " +
+        "more details. Once the issue is detected, Spark will throw analysis exception. " +
+        "When this config is disabled, Spark will just print warning message for users. " +
+        "Prior to Spark 3.1.0, the behavior is disabling this config.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -1927,6 +1942,16 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
+  val PYSPARK_SIMPLIFIEID_TRACEBACK =
+    buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
+      .doc(
+        "When true, the traceback from Python UDFs is simplified. It hides " +
+        "the Python worker, (de)serialization, etc from PySpark in tracebacks, and only " +
+        "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
       .internal()
@@ -2144,9 +2169,10 @@ object SQLConf {
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
     .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw a runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser.")
+      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
+      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
+      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -2765,18 +2791,6 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val LEGACY_SCRIPT_TRANSFORM_PAD_NULL =
-    buildConf("spark.sql.legacy.transformationPadNullWhenValueLessThenSchema")
-      .internal()
-      .doc("Whether pad null value when transformation output's value size less then " +
-        "schema size in default-serde mode(script transformation with row format of " +
-        "`ROW FORMAT DELIMITED`)." +
-        "When true, Spark will pad NULL value to keep same behavior with hive." +
-        "When false, Spark keep original behavior to throw `ArrayIndexOutOfBoundsException`")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
     buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
       .internal()
@@ -3027,6 +3041,9 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def statefulOperatorCorrectnessCheckEnabled: Boolean =
+    getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
@@ -3398,6 +3415,8 @@ class SQLConf extends Serializable with Logging {
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
+  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIEID_TRACEBACK)
+
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
@@ -3501,12 +3520,6 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def legacyAllowModifyActiveSession: Boolean =
-    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
-
-  def legacyPadNullWhenValueLessThenSchema: Boolean =
-    getConf(SQLConf.LEGACY_SCRIPT_TRANSFORM_PAD_NULL)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

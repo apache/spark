@@ -14,6 +14,28 @@ on:
         required: true
 
 jobs:
+  # This is on the top to give the most visibility in case of failures
+  hadoop-2:
+    name: Hadoop 2 build
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v2
+    - name: Cache Coursier local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/coursier
+        key: hadoop-2-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          hadoop-2-coursier-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Build with SBT
+      run: |
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
+
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
@@ -111,13 +133,13 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-maven-
-    - name: Cache Ivy local repository
+    - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
-        path: ~/.ivy2/cache
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        path: ~/.cache/coursier
+        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
+          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
     - name: Install JDK ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
@@ -139,8 +161,8 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        # Hive tests become flaky when running in parallel as it's too intensive.
-        if [[ "$MODULES_TO_TEST" == "hive" ]]; then export SERIAL_SBT_TESTS=1; fi
+        # Hive and SQL tests become flaky when running in parallel as it's too intensive.
+        if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
         rm -rf ~/.m2/repository/org/apache/spark
@@ -206,13 +228,13 @@ jobs:
         key: pyspark-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           pyspark-maven-
-    - name: Cache Ivy local repository
+    - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
-        path: ~/.ivy2/cache
-        key: pyspark-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        path: ~/.cache/coursier
+        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          pyspark-ivy-
+          pyspark-coursier-
     - name: Install Python 3.6
       uses: actions/setup-python@v2
       with:
@@ -282,13 +304,13 @@ jobs:
         key: sparkr-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           sparkr-maven-
-    - name: Cache Ivy local repository
+    - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
-        path: ~/.ivy2/cache
-        key: sparkr-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        path: ~/.cache/coursier
+        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          sparkr-ivy-
+          sparkr-coursier-
     - name: Run tests
       run: |
         mkdir -p ~/.m2
@@ -404,13 +426,13 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
-    - name: Cache Ivy local repository
+    - name: Cache Coursier local repository
       uses: actions/cache@v2
       with:
-        path: ~/.ivy2/cache
-        key: scala-213-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        path: ~/.cache/coursier
+        key: scala-213-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          scala-213-ivy-
+          scala-213-coursier-
     - name: Install Java 11
       uses: actions/setup-java@v1
       with:

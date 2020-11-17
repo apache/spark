@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1233,55 +1233,6 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
   }
 
-  test("show tables") {
-    comparePlans(
-      parsePlan("SHOW TABLES"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW TABLES '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq.empty[String]), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
-      ShowTables(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-    comparePlans(
-      parsePlan("SHOW TABLES IN ns1 LIKE '*test*'"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
-  }
-
-  test("show table extended") {
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*'"),
-      ShowTableStatement(None, "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*'"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*", None))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09', hr=11)"),
-      ShowTableStatement(None, "*test*", Some(Map("ds" -> "2008-04-09", "hr" -> "11"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED FROM testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-    comparePlans(
-      parsePlan("SHOW TABLE EXTENDED IN testcat.ns1.ns2 LIKE '*test*' " +
-        "PARTITION(ds='2008-04-09')"),
-      ShowTableStatement(Some(Seq("testcat", "ns1", "ns2")), "*test*",
-        Some(Map("ds" -> "2008-04-09"))))
-  }
-
   test("show views") {
     comparePlans(
       parsePlan("SHOW VIEWS"),
@@ -1502,42 +1453,59 @@ class DDLParserSuite extends AnalysisTest {
 
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = false))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map.empty, noScan = false))
     comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map.empty, noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map.empty, noScan = true))
     comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map("a" -> None), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("a" -> None), noScan = true))
 
     // Partitions specified
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
-      AnalyzeTableStatement(
-        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(
-        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09")), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> Some("2008-04-09")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
-      AnalyzeTableStatement(
-        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(
-        Seq("a", "b", "c"), Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(
-        Seq("a", "b", "c"), Map("ds" -> None, "hr" -> Some("11")), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> None, "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = false))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> None, "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
-      AnalyzeTableStatement(Seq("a", "b", "c"), Map("ds" -> None, "hr" -> None), noScan = true))
+      AnalyzeTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        Map("ds" -> None, "hr" -> None), noScan = true))
 
     intercept("analyze table a.b.c compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
@@ -1550,7 +1518,8 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
-      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+      AnalyzeColumn(
+        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified - should be ignored
     comparePlans(
@@ -1559,7 +1528,8 @@ class DDLParserSuite extends AnalysisTest {
            |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
            |COMPUTE STATISTICS FOR COLUMNS key, value
          """.stripMargin),
-      AnalyzeColumnStatement(Seq("a", "b", "c"), Option(Seq("key", "value")), allColumns = false))
+      AnalyzeColumn(
+        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
 
     // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
     comparePlans(
@@ -1568,7 +1538,8 @@ class DDLParserSuite extends AnalysisTest {
            |ANALYZE TABLE a.b.c PARTITION(ds='2017-06-10')
            |COMPUTE STATISTICS FOR ALL COLUMNS
          """.stripMargin),
-      AnalyzeColumnStatement(Seq("a", "b", "c"), None, allColumns = true))
+      AnalyzeColumn(
+        UnresolvedTableOrView(Seq("a", "b", "c")), None, allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
       "mismatched input 'key' expecting {<EOF>, ';'}")
@@ -1585,15 +1556,15 @@ class DDLParserSuite extends AnalysisTest {
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", false, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", false, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
-      LoadDataStatement(Seq("a", "b", "c"), "filepath", true, true, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, true, None))
 
     comparePlans(
       parsePlan(
@@ -1601,8 +1572,8 @@ class DDLParserSuite extends AnalysisTest {
            |LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c
            |PARTITION(ds='2017-06-10')
          """.stripMargin),
-      LoadDataStatement(
-        Seq("a", "b", "c"),
+      LoadData(
+        UnresolvedTable(Seq("a", "b", "c")),
         "filepath",
         true,
         true,
@@ -1612,7 +1583,13 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTableStatement(Seq("a", "b", "c")))
+      ShowCreateTable(UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false)))
+
+    comparePlans(
+      parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
+      ShowCreateTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        asSerde = true))
   }
 
   test("CACHE TABLE") {
@@ -1650,32 +1627,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
       TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
-  }
-
-  test("SHOW PARTITIONS") {
-    val sql1 = "SHOW PARTITIONS t1"
-    val sql2 = "SHOW PARTITIONS db1.t1"
-    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
-    val sql4 = "SHOW PARTITIONS a.b.c"
-    val sql5 = "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 = ShowPartitionsStatement(Seq("t1"),
-      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
-    val parsed5 = parsePlan(sql5)
-    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
   }
 
   test("REFRESH TABLE") {
@@ -1723,15 +1674,15 @@ class DDLParserSuite extends AnalysisTest {
     val parsed1 = parsePlan(sql1)
     val parsed2 = parsePlan(sql2)
 
-    val expected1 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
+    val expected1 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
-    val expected2 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+    val expected2 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
     comparePlans(parsed1, expected1)
@@ -1796,11 +1747,11 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
-    val expected1_table = AlterTableDropPartitionStatement(
-      Seq("table_name"),
+    val expected1_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("table_name")),
       Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = true,
       purge = false,
       retainData = false)
@@ -1812,9 +1763,9 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed1_purge, expected1_purge)
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
-    val expected3_table = AlterTableDropPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq(Map("ds" -> "2017-06-10")),
+    val expected3_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,
       retainData = false)
