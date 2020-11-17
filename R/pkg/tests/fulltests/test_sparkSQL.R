@@ -3254,6 +3254,12 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
+
+  # attach method uses deparse(); ensure no errors from a very long input
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df
+  attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
+  expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
+  detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
 })
 
 test_that("with() on a DataFrame", {
