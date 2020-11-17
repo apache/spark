@@ -7,9 +7,9 @@ OpenJDK 64-Bit Server VM 1.8.0_265-b01 on Mac OS X 10.15.6
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 from_json as subExpr:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-subexpressionElimination off, codegen on           24841          25365         803          0.0   248412787.5       1.0X
-subexpressionElimination off, codegen off          25344          26205         941          0.0   253442656.5       1.0X
-subexpressionElimination on, codegen on             2883           3019         119          0.0    28833086.8       8.6X
-subexpressionElimination on, codegen off           24707          25688         903          0.0   247068775.9       1.0X
+subexpressionElimination off, codegen on           26503          27622        1937          0.0   265033362.4       1.0X
+subexpressionElimination off, codegen off          24920          25376         430          0.0   249196978.2       1.1X
+subexpressionElimination on, codegen on             2421           2466          39          0.0    24213606.1      10.9X
+subexpressionElimination on, codegen off            2360           2435          87          0.0    23604320.7      11.2X
 
 
