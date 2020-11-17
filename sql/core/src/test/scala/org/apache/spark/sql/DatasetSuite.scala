@@ -1947,6 +1947,12 @@ class DatasetSuite extends QueryTest
       df.where($"zoo".contains(Array('a', 'b'))),
       Seq(Row("abc")))
   }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val df = Seq(1).toDF("c")
+    val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+    assert(timezone == SQLConf.get.sessionLocalTimeZone)
+  }
 }
 
 object AssertExecutionId {
