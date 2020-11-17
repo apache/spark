@@ -304,7 +304,7 @@ object UnsupportedOperationChecker extends Logging {
 
             case LeftAnti =>
               if (right.isStreaming) {
-                throwError("Left anti joins with a streaming DataFrame/Dataset " +
+                throwError(s"$LeftAnti joins with a streaming DataFrame/Dataset " +
                     "on the right are not supported")
               }
 

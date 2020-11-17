@@ -336,7 +336,12 @@ trait GetArrayItemUtil {
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
   // todo: current search is O(n), improve it.
-  def getValueEval(value: Any, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any = {
+  def getValueEval(
+      value: Any,
+      ordinal: Any,
+      keyType: DataType,
+      ordering: Ordering[Any],
+      failOnError: Boolean): Any = {
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
@@ -352,14 +357,24 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
       }
     }
 
-    if (!found || values.isNullAt(i)) {
+    if (!found) {
+      if (failOnError) {
+        throw new NoSuchElementException(s"Key $ordinal does not exist.")
+      } else {
+        null
+      }
+    } else if (values.isNullAt(i)) {
       null
     } else {
       values.get(i, dataType)
     }
   }
 
-  def doGetValueGenCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode = {
+  def doGetValueGenCode(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      mapType: MapType,
+      failOnError: Boolean): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
@@ -368,12 +383,22 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val values = ctx.freshName("values")
     val keyType = mapType.keyType
     val nullCheck = if (mapType.valueContainsNull) {
-      s" || $values.isNullAt($index)"
+      s"""else if ($values.isNullAt($index)) {
+            ${ev.isNull} = true;
+          }
+       """
     } else {
       ""
     }
+
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+      val keyNotFoundBranch = if (failOnError) {
+        s"""throw new NoSuchElementException("Key " + $eval2 + " does not exist.");"""
+      } else {
+        s"${ev.isNull} = true;"
+      }
+
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
@@ -390,9 +415,9 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
           }
         }
 
-        if (!$found$nullCheck) {
-          ${ev.isNull} = true;
-        } else {
+        if (!$found) {
+          $keyNotFoundBranch
+        } $nullCheck else {
           ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
@@ -405,8 +430,13 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
  *
  * We need to do type checking here as `key` expression maybe unresolved.
  */
-case class GetMapValue(child: Expression, key: Expression)
+case class GetMapValue(
+    child: Expression,
+    key: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with ExtractValue with NullIntolerant {
+
+  def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)
@@ -442,10 +472,10 @@ case class GetMapValue(child: Expression, key: Expression)
 
   // todo: current search is O(n), improve it.
   override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    getValueEval(value, ordinal, keyType, ordering)
+    getValueEval(value, ordinal, keyType, ordering, failOnError)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType])
+    doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
   }
 }

@@ -359,14 +359,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(e.contains("Found duplicate keys 'a'"))
   }
 
-  test("empty values in non-optional partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(e.contains("Found an empty partition key 'b'"))
-  }
-
   test("Test CTAS #1") {
     val s1 =
       """

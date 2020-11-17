@@ -340,8 +340,8 @@ object QueryExecution {
     adaptiveExecutionRule.toSeq ++
     Seq(
       CoalesceBucketsInJoin,
-      PlanDynamicPruningFilters,
-      PlanSubqueries,
+      PlanDynamicPruningFilters(sparkSession),
+      PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       RemoveRedundantSorts,
       EnsureRequirements,
