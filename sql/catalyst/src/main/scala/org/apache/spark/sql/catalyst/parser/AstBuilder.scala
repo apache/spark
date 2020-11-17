@@ -3366,9 +3366,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    ShowPartitionsStatement(table, partitionKeys)
+    ShowPartitions(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      partitionKeys)
   }
 
   /**

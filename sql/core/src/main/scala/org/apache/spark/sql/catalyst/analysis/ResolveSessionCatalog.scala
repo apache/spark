@@ -462,10 +462,9 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitionsStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "SHOW PARTITIONS")
+    case ShowPartitions(SessionCatalogAndNamespace(_, ns), partitionSpec) =>
       ShowPartitionsCommand(
-        v1TableName.asTableIdentifier,
+        parseV1Table(ns, "SHOW PARTITIONS").asTableIdentifier,
         partitionSpec)
 
     case ShowColumnsStatement(tbl, ns) =>
