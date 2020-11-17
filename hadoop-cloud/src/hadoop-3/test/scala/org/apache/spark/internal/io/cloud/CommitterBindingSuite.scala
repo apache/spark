@@ -60,7 +60,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     StubPathOutputCommitterFactory.bind(conf, "http")
     val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
     val parquet = new BindingParquetOutputCommitter(path, tContext)
-    val inner = parquet.boundCommitter.asInstanceOf[StubPathOutputCommitter]
+    val inner = parquet.boundCommitter().asInstanceOf[StubPathOutputCommitter]
     parquet.setupJob(tContext)
     assert(inner.jobSetup, s"$inner job not setup")
     parquet.setupTask(tContext)
