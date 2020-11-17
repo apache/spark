@@ -3369,7 +3369,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
     ShowPartitions(
-      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      UnresolvedTableOrView(multiPart.getOrElse(Seq.empty[String])),
       partitionKeys)
   }
 

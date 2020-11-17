@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession

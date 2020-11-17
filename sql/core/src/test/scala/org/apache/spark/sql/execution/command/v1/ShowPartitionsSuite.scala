@@ -124,6 +124,8 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
+  // The test fails for V2 Table Catalogs with the exception:
+  // org.apache.spark.sql.AnalysisException: CREATE VIEW is only supported with v1 tables.
   test("show partitions of a view") {
     val table = "dateTable"
     withTable(table) {

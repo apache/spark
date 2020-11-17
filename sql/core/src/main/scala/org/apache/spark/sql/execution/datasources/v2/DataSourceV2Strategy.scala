@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -299,8 +299,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowCreateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
-    case r @ ShowPartitions(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowPartitionsExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
+    case r @ ShowPartitions(t: ResolvedTable, pattern) =>
+      ShowPartitionsExec(r.output, t.catalog, t.identifier, t.table, pattern) :: Nil
+
+    case ShowPartitions(v: ResolvedView, _) =>
+      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: ${v.identifier}")
 
     case _ => Nil
   }

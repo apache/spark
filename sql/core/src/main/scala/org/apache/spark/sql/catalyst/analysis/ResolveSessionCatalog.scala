@@ -462,10 +462,8 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitions(SessionCatalogAndNamespace(_, ns), partitionSpec) =>
-      ShowPartitionsCommand(
-        parseV1Table(ns, "SHOW PARTITIONS").asTableIdentifier,
-        partitionSpec)
+    case ShowPartitions(ResolvedV1TableOrViewIdentifier(ident), partitionSpec) =>
+      ShowPartitionsCommand(ident.asTableIdentifier, partitionSpec)
 
     case ShowColumnsStatement(tbl, ns) =>
       if (ns.isDefined && ns.get.length > 1) {
