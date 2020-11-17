@@ -1002,10 +1002,34 @@ object functions {
     lead(e, offset, defaultValue, false)
   }
 
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
+   * the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
   def lead(columnName: String, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = {
     lead(Column(columnName), offset, defaultValue, ignoreNulls)
   }
 
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
+   * the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.1.0
+   */
   def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
     Lead(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
   }
