@@ -39,7 +39,7 @@ sealed abstract class BlockId {
   def asRDDId: Option[RDDBlockId] = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
   def isRDD: Boolean = isInstanceOf[RDDBlockId]
   def isShuffle: Boolean = {
-    (isInstanceOf[ShuffleBlockId] || isInstanceOf[ShuffleBlockBatchId] ||
+    (isInstanceOf[ShuffleBlockId] ||
      isInstanceOf[ShuffleDataBlockId] || isInstanceOf[ShuffleIndexBlockId])
   }
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
