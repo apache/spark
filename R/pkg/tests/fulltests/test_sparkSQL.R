@@ -3256,7 +3256,7 @@ test_that("attach() on a DataFrame", {
   expect_error(age)
 
   # attach method uses deparse(); ensure no errors from a very long input
-  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df # nolint
   attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
   expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
   detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
