@@ -67,6 +67,7 @@ private[spark] abstract class SocketAuthServer[T](
           logTrace("Client authenticated")
           promise.complete(Try(handleConnection(sock)))
         } finally {
+          logTrace("Closing server")
           JavaUtils.closeQuietly(serverSocket)
           JavaUtils.closeQuietly(sock)
         }
