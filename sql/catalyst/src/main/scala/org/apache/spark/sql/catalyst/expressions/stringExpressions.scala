@@ -1404,7 +1404,10 @@ case class ParseUrl(children: Seq[Expression])
     try {
       new URI(url.toString)
     } catch {
-      case e: URISyntaxException => null
+      // We fail on error if in ansi mode.
+      case e: URISyntaxException if SQLConf.get.ansiEnabled =>
+        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+      case _: URISyntaxException => null
     }
   }
 

@@ -943,6 +943,21 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
   }
 
+  test("SPARK-33468: ParseUrl should fail if input string is not a valid url") {
+    // fail on error if in ansi mode.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val msg = intercept[IllegalArgumentException] {
+        evaluateWithoutCodegen(
+          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
+      }.getMessage
+      assert(msg.contains("Find an invaild url string"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(
+        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+    }
+  }
+
   test("Sentences") {
     val nullString = Literal.create(null, StringType)
     checkEvaluation(Sentences(nullString, nullString, nullString), null)
