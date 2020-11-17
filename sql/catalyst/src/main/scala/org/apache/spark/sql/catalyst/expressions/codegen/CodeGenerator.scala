@@ -1044,7 +1044,7 @@ class CodegenContext extends Logging {
     val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree)
+    expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.

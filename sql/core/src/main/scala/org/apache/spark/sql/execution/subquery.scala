@@ -200,7 +200,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
  * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
  * references.
  */
-case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
+object ReuseSubquery extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {

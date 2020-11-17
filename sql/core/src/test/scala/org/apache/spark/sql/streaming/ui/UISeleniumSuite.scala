@@ -75,10 +75,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
           h3Text should not contain ("Streaming Query")
 
+          val input1 = spark.readStream.format("rate").load()
+          val input2 = spark.readStream.format("rate").load()
           val activeQuery =
-            spark.readStream.format("rate").load().writeStream.format("noop").start()
+            input1.join(input2, "value").writeStream.format("noop").start()
           val completedQuery =
-            spark.readStream.format("rate").load().writeStream.format("noop").start()
+            input1.join(input2, "value").writeStream.format("noop").start()
           completedQuery.stop()
           val failedQuery = spark.readStream.format("rate").load().select("value").as[Long]
             .map(_ / 0).writeStream.format("noop").start()
@@ -129,6 +131,15 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             findAll(cssSelector("""#stat-table th""")).map(_.text).toSeq should be {
               List("", "Timelines", "Histograms")
             }
+            summaryText should contain ("Input Rate (?)")
+            summaryText should contain ("Process Rate (?)")
+            summaryText should contain ("Input Rows (?)")
+            summaryText should contain ("Batch Duration (?)")
+            summaryText should contain ("Operation Duration (?)")
+            summaryText should contain ("Aggregated Number Of Total State Rows (?)")
+            summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
+            summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
+            summaryText should contain ("Aggregated Number Of State Rows Dropped By Watermark (?)")
           }
         } finally {
           spark.streams.active.foreach(_.stop())

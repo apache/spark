@@ -30,7 +30,7 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
  * {{{
  *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
- *     ./build/sbt -Pdocker-integration-tests "test-only *DB2IntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.DB2IntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -72,5 +72,13 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE VARCHAR(10)")
     }.getMessage
     assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
+  }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+      s" TBLPROPERTIES('CCSID'='UNICODE')")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
   }
 }

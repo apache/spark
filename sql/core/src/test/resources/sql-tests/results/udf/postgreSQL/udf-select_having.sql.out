@@ -174,9 +174,10 @@ struct<one:int>
 -- !query
 SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2
 -- !query schema
-struct<one:int>
+struct<>
 -- !query output
-1
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
