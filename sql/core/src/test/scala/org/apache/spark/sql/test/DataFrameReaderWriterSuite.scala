@@ -1033,30 +1033,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
-  test("abc2") {
-    spark.sql("create table SPARK_33045(id string) using parquet")
-    val values = Range(1, 90000)
-    spark.sql(s"select concat_ws(${values.mkString(", ")})").show
-  }
-
-  test("abc1") {
-    spark.sql("create table SPARK_33045(id string) using parquet")
-    val values = Range(1, 9000)
-    spark.sql(s"select * from SPARK_33045 where id in (${values.mkString(", ")}, id)").show
-  }
-
-  test("abc") {
-    spark.sql("create table SPARK_33045(id string) using parquet")
-    val values = Range(1, 9000)
-    spark.sql(s"select * from SPARK_33045 where id like all (${values.mkString(", ")})").show
-  }
-
-  test("concat") {
-    spark.sql("create table SPARK_33045(id int) using parquet")
-    val values = Range(1, 900)
-    spark.sql(s"select concat(${values.mkString(", ")}, id) from SPARK_33045").show
-  }
-
   test("Insert overwrite table command should output correct schema: basic") {
     withTable("tbl", "tbl2") {
       withView("view1") {
