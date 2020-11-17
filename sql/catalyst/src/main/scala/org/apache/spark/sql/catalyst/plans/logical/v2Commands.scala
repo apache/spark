@@ -670,3 +670,15 @@ case class LoadData(
 case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the SHOW PARTITIONS command.
+ */
+case class ShowPartitions(
+    namespace: LogicalPlan,
+    spec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("partition", StringType, nullable = false)())
+}
