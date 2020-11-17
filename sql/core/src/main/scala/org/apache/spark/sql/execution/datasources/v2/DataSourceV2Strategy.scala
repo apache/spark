@@ -299,6 +299,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowCreateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
+    case r @ ShowPartitions(ResolvedNamespace(catalog, ns), pattern) =>
+      ShowPartitionsExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
+
     case _ => Nil
   }
 }

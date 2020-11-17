@@ -35,10 +35,10 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
   // TODO(SPARK-33452): Create a V2 SHOW PARTITIONS execution node
   test("not supported SHOW PARTITIONS") {
     def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-      val e = intercept[AnalysisException] {
+      val e = intercept[NotImplementedError] {
         sql(s"$sqlCommand $sqlParams")
       }
-      assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+      assert(e.getMessage.contains("SHOW PARTITIONS is not implemented"))
     }
     val t = s"$catalog.ns1.ns2.tbl"
     withTable(t) {

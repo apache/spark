@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.LeafExecNode
@@ -29,10 +30,10 @@ case class ShowPartitionsExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String]) extends V2CommandExec with LeafExecNode {
+    spec: Option[TablePartitionSpec]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     // scalastyle:off
-    throw new NotImplementedError("")
+    throw new NotImplementedError("SHOW PARTITIONS is not implemented")
     // scalastyle:on
   }
 }
