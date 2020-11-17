@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.test.SQLTestUtils
 
 trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
@@ -32,5 +32,19 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
+  }
+
+  test("show partitions of non-partitioned table") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.not_partitioned_table"
+      withTable(table) {
+        sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $table")
+        }.getMessage
+        assert(errMsg.contains("not allowed on a table that is not partitioned"))
+      }
+    }
   }
 }

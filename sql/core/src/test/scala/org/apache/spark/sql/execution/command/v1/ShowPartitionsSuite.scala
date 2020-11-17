@@ -113,17 +113,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("show partitions of non-partitioned table") {
-    val table = "not_partitioned_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table")
-      }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned"))
-    }
-  }
-
   // The test fails for V2 Table Catalogs with the exception:
   // org.apache.spark.sql.AnalysisException: CREATE VIEW is only supported with v1 tables.
   test("show partitions of a view") {
