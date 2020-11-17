@@ -437,6 +437,9 @@ object UnsupportedOperationChecker extends Logging {
             StreamingJoinHelper.getStateValueWatermark(attributesToFindStateWatermarkFor,
               attributesWithEventWatermark, join.condition, Some(1000000)).isDefined
         }
+      case _ =>
+        throwError(
+          s"Join type ${join.joinType} is not supported with streaming DataFrame/Dataset")(join)
     }
 
     if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
