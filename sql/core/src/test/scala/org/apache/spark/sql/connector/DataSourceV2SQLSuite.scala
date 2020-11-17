@@ -2256,7 +2256,6 @@ class DataSourceV2SQLSuite
         verify(s"CACHE TABLE $t")
         verify(s"UNCACHE TABLE $t")
         verify(s"TRUNCATE TABLE $t")
-        verify(s"SHOW PARTITIONS $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
