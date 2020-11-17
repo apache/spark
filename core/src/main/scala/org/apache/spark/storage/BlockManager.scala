@@ -51,6 +51,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager}
+import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -1423,8 +1424,8 @@ private[spark] class BlockManager(
       existingReplicas: Set[BlockManagerId] = Set.empty,
       maxReplicationFailures: Option[Int] = None): Boolean = {
 
-    val maxReplicationFailureCount = maxReplicationFailures.getOrElse(
-      conf.get(config.STORAGE_MAX_REPLICATION_FAILURE))
+    val maxReplicationFailureCount = maxReplicationFailures.getOrElse(conf.getInt(
+      "spark.storage.maxReplicationFailures", 1))
 
     val tLevel = StorageLevel(
       useDisk = level.useDisk,

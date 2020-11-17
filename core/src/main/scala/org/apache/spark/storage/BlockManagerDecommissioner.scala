@@ -93,28 +93,17 @@ private[storage] class BlockManagerDecommissioner(
 
                   // Migrate the blocks, handle missing blocks
                   try {
-                    if (ess.ExternalShuffleStorage.isEnabled(conf) &&
-                      peer == ess.ExternalShuffleStorage.EXTERNAL_BLOCK_MANAGER_ID) {
-                      logInfo(s"Migrating $shuffleBlockInfo to external shuffle storage")
-                      if (ess.ExternalShuffleStorage.upload(conf, bm, shuffleBlockInfo)) {
-                        logInfo(s"Migrated $shuffleBlockInfo to external shuffle storage")
-                      } else {
-                        logWarning(s"Adding back $shuffleBlockInfo to migration queue")
-                        shufflesToMigrate.add((shuffleBlockInfo, retryCount + 1))
-                      }
-                    } else {
-                      blocks.foreach { case (blockId, buffer) =>
-                        logInfo(s"Migrating sub-block ${blockId}")
-                        bm.blockTransferService.uploadBlockSync(
-                          peer.host,
-                          peer.port,
-                          peer.executorId,
-                          blockId,
-                          buffer,
-                          StorageLevel.DISK_ONLY,
-                          null)// class tag, we don't need for shuffle
-                        logInfo(s"Migrated sub block ${blockId}")
-                      }
+                    blocks.foreach { case (blockId, buffer) =>
+                      logInfo(s"Migrating sub-block ${blockId}")
+                      bm.blockTransferService.uploadBlockSync(
+                        peer.host,
+                        peer.port,
+                        peer.executorId,
+                        blockId,
+                        buffer,
+                        StorageLevel.DISK_ONLY,
+                        null)// class tag, we don't need for shuffle
+                      logInfo(s"Migrated sub block ${blockId}")
                     }
                     logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
                   } catch {

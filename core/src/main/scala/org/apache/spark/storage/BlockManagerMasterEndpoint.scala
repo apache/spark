@@ -455,7 +455,7 @@ class BlockManagerMasterEndpoint(
           // Don't update the map output on just the index block
           logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
           return true
-        case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
+        case ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) =>
           logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
           mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
