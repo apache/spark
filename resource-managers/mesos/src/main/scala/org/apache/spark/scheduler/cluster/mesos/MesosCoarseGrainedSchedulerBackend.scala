@@ -368,8 +368,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         return
       }
 
-      if (numExecutors >= executorLimit) {
-        logDebug("Executor limit reached. numExecutors: " + numExecutors +
+      if (numExecutors() >= executorLimit) {
+        logDebug("Executor limit reached. numExecutors: " + numExecutors() +
           " executorLimit: " + executorLimit)
         offers.asScala.map(_.getId).foreach(d.declineOffer)
         launchingExecutors = false
@@ -587,7 +587,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
-      numExecutors < executorLimit &&
+      numExecutors() < executorLimit &&
       agents.get(agentId).map(_.taskFailures).getOrElse(0) < MAX_AGENT_FAILURES &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
@@ -764,7 +764,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   override def applicationId(): String =
     Option(appId).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
 
   override def doRequestTotalExecutors(

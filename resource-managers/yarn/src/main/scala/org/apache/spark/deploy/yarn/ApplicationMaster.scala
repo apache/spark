@@ -120,7 +120,7 @@ private[spark] class ApplicationMaster(
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = getDefaultFinalStatus
+  @volatile private var finalStatus = getDefaultFinalStatus()
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -305,7 +305,7 @@ private[spark] class ApplicationMaster(
           sparkConf.get(DRIVER_PORT)),
         YarnSchedulerBackend.ENDPOINT_NAME)
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
-      registerAM(Utils.localHostName, -1, sparkConf,
+      registerAM(Utils.localHostName(), -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
       val encodedAppId = URLEncoder.encode(appAttemptId.getApplicationId.toString, "UTF-8")
       addAmIpFilter(Some(driverRef), s"/proxy/$encodedAppId")
@@ -513,7 +513,7 @@ private[spark] class ApplicationMaster(
         val driverRef = rpcEnv.setupEndpointRef(
           RpcAddress(host, port),
           YarnSchedulerBackend.ENDPOINT_NAME)
-        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf)
+        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf())
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -535,7 +535,7 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(): Unit = {
-    val hostname = Utils.localHostName
+    val hostname = Utils.localHostName()
     val amCores = sparkConf.get(AM_CORES)
     val rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
       amCores, true)
@@ -551,7 +551,7 @@ private[spark] class ApplicationMaster(
       YarnSchedulerBackend.ENDPOINT_NAME)
     addAmIpFilter(Some(driverRef),
       System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV))
-    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf)
+    createAllocator(driverRef, sparkConf, rpcEnv, appAttemptId, distCacheConf())
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
