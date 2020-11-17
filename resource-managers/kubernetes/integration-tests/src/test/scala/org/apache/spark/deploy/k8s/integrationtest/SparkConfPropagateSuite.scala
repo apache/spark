@@ -35,7 +35,7 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     assert(loggingConfURL != null, "Logging configuration file not available.")
 
     val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
-    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/$loggingConfigFileName"
+    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j.properties"
 
     try {
       val writer = new BufferedWriter(new FileWriter(logConfFilePath))
@@ -48,7 +48,7 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
         appResource = containerLocalSparkDistroExamplesJar,
         mainClass = SPARK_PI_MAIN_CLASS,
         expectedLogOnCompletion = (Seq("DEBUG",
-          s"log4j: Reading configuration from URL file:/opt/spark/log/$loggingConfigFileName",
+          s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties",
           "Pi is roughly 3")),
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
