@@ -442,8 +442,11 @@ abstract class FrameLessOffsetWindowFunction
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Lead(
-    input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean = false)
+    input: Expression, offset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction {
+
+  def this(input: Expression, offset: Expression, default: Expression) =
+    this(input, offset, default, false)
 
   def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
 
@@ -488,7 +491,10 @@ case class Lag(
     input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean = false)
     extends FrameLessOffsetWindowFunction {
 
-  def this(input: Expression, offset: Expression) = this(input, offset, Literal(null))
+  def this(input: Expression, inputOffset: Expression, default: Expression) =
+    this(input, inputOffset, default, false)
+
+  def this(input: Expression, inputOffset: Expression) = this(input, inputOffset, Literal(null))
 
   def this(input: Expression) = this(input, Literal(1))
 
