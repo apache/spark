@@ -17,12 +17,13 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.IntegerType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
   test("Evaluate ExpressionProxy should create cached result") {
     val runtime = new SubExprEvaluationRuntime(1)
-    val proxy = ExpressionProxy(Literal(1), runtime)
+    val proxy = ExpressionProxy(Literal(1), 0, runtime)
     assert(runtime.cache.size() == 0)
     proxy.eval()
     assert(runtime.cache.size() == 1)
@@ -33,17 +34,17 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     val runtime = new SubExprEvaluationRuntime(2)
     assert(runtime.cache.size() == 0)
 
-    val proxy1 = ExpressionProxy(Literal(1), runtime)
+    val proxy1 = ExpressionProxy(Literal(1), 0, runtime)
     proxy1.eval()
     assert(runtime.cache.size() == 1)
     assert(runtime.cache.get(proxy1) == ResultProxy(1))
 
-    val proxy2 = ExpressionProxy(Literal(2), runtime)
+    val proxy2 = ExpressionProxy(Literal(2), 1, runtime)
     proxy2.eval()
     assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy2) == ResultProxy(2))
 
-    val proxy3 = ExpressionProxy(Literal(3), runtime)
+    val proxy3 = ExpressionProxy(Literal(3), 2, runtime)
     proxy3.eval()
     assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy3) == ResultProxy(3))
@@ -51,13 +52,13 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
   test("setInput should empty cached result") {
     val runtime = new SubExprEvaluationRuntime(2)
-    val proxy1 = ExpressionProxy(Literal(1), runtime)
+    val proxy1 = ExpressionProxy(Literal(1), 0, runtime)
     assert(runtime.cache.size() == 0)
     proxy1.eval()
     assert(runtime.cache.size() == 1)
     assert(runtime.cache.get(proxy1) == ResultProxy(1))
 
-    val proxy2 = ExpressionProxy(Literal(2), runtime)
+    val proxy2 = ExpressionProxy(Literal(2), 1, runtime)
     proxy2.eval()
     assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy2) == ResultProxy(2))
@@ -83,8 +84,8 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     })
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)
-    val expected = ExpressionProxy(mul2, runtime)
-    assert(proxys.head == expected)
+    val expected = ExpressionProxy(mul2, 0, runtime)
+    assert(proxys.forall(_ == expected))
   }
 
   test("ExpressionProxy won't be on non deterministic") {

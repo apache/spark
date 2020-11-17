@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
+import java.util.IdentityHashMap
+
+import scala.collection.JavaConverters._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
@@ -32,6 +34,10 @@ import org.apache.spark.sql.types.DataType
  * intercepts expression evaluation and loads from the cache first.
  */
 class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
+  // The id assigned to `ExpressionProxy`. `SubExprEvaluationRuntime` will use assigned ids of
+  // `ExpressionProxy` to decide the equality when loading from cache. `SubExprEvaluationRuntime`
+  // won't be use by multi-threads so we don't need to consider concurrency here.
+  private var proxyExpressionCurrentId = 0
 
   private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder.newBuilder()
     .maximumSize(cacheMaxEntries)
@@ -68,8 +74,12 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
    */
   private def replaceWithProxy(
       expr: Expression,
-      proxyMap: Map[Expression, ExpressionProxy]): Expression = {
-    proxyMap.getOrElse(expr, expr.mapChildren(replaceWithProxy(_, proxyMap)))
+      proxyMap: IdentityHashMap[Expression, ExpressionProxy]): Expression = {
+    if (proxyMap.containsKey(expr)) {
+      proxyMap.get(expr)
+    } else {
+      expr.mapChildren(replaceWithProxy(_, proxyMap))
+    }
   }
 
   /**
@@ -80,19 +90,20 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
-    val proxyMap = mutable.Map.empty[Expression, ExpressionProxy]
+    val proxyMap = new IdentityHashMap[Expression, ExpressionProxy]
 
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach { e =>
       val expr = e.head
-      val proxy = ExpressionProxy(expr, this)
+      val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
+      proxyExpressionCurrentId += 1
 
-      proxyMap ++= e.map(_ -> proxy).toMap
+      proxyMap.putAll(e.map(_ -> proxy).toMap.asJava)
     }
 
     // Only adding proxy if we find subexpressions.
-    if (proxyMap.nonEmpty) {
-      expressions.map(replaceWithProxy(_, proxyMap.toMap))
+    if (!proxyMap.isEmpty) {
+      expressions.map(replaceWithProxy(_, proxyMap))
     } else {
       expressions
     }
@@ -105,6 +116,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
  */
 case class ExpressionProxy(
     child: Expression,
+    id: Int,
     runtime: SubExprEvaluationRuntime) extends Expression {
 
   final override def dataType: DataType = child.dataType
@@ -118,6 +130,13 @@ case class ExpressionProxy(
   def proxyEval(input: InternalRow = null): Any = child.eval(input)
 
   override def eval(input: InternalRow = null): Any = runtime.getEval(this)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: ExpressionProxy => this.id == other.id
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.id.hashCode()
 }
 
 /**
