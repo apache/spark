@@ -1521,7 +1521,7 @@ abstract class RDD[T: ClassTag](
       if (mapRDDs.partitions.length == 0) {
         Array.empty
       } else {
-        mapRDDs.reduce { (queue1, queue2) =>
+        mapRDDs.treeReduce { (queue1, queue2) =>
           queue1 ++= queue2
           queue1
         }.toArray.sorted(ord)
