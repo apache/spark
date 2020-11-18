@@ -96,17 +96,18 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
-    .doc(s"Comma separated URL of Hive jars, support both local and remote paths," +
-      s"Such as: " +
-      s" 1. file://path/to/jar/xxx.jar\n" +
-      s" 2. hdfs://nameservice/path/to/jar/xxx.jar\n" +
-      s" 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)\n" +
-      s" 4. [http/https/ftp]://path/to/jar/xxx.jar\n" +
-      s"Notice: `http/https/ftp` doesn't support wildcard, but other URLs support" +
-      s"nested path wildcard, Such as: " +
-      s" 1. file://path/to/jar/*, file://path/to/jar/*/*\n" +
-      s" 2. hdfs://nameservice/path/to/jar/*, hdfs://nameservice/path/to/jar/*/*\n" +
-      s"When ${HIVE_METASTORE_JARS.key} is set to `path`, we will use Hive jars configured by this")
+    .doc(s"""
+      | Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
+      | This configuration is useful only when `{$HIVE_METASTORE_JARS.key}` is set as `path`.
+      | The paths can be any of the following format:
+      | 1. file://path/to/jar/foo.jar
+      | 2. hdfs://nameservice/path/to/jar/foo.jar
+      | 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)
+      | 4. [http/https/ftp]://path/to/jar/foo.jar
+      | Note that 1, 2, and 3 support wildcard. For example:
+      | 1. file://path/to/jar/*,file://path2/to/jar/*/*.jar
+      | 2. hdfs://nameservice/path/to/jar/*,hdfs://nameservice2/path/to/jar/*/*.jar
+      """.stripMargin)
     .version("3.1.0")
     .stringConf
     .toSequence
