@@ -38,7 +38,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
 
-class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
+class PushShuffleComponentSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
@@ -84,34 +84,36 @@ class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("Basic block push") {
     interceptPushedBlocksForSuccess()
-    new TestPushShuffleSupport(mock(classOf[File]),
+    new TestPushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
+        .initiateBlockPush()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
-    PushShuffleSupport.stop()
+    PushShuffleComponent.stop()
   }
 
   test("Large blocks are skipped for push") {
     conf.set("spark.shuffle.push.maxBlockSizeToPush", "1k")
     interceptPushedBlocksForSuccess()
-    new TestPushShuffleSupport(mock(classOf[File]), Array(2, 2, 2, 2, 2, 2, 2, 1100),
-      dependency, 0, conf)
+    new TestPushShuffleComponent(mock(classOf[File]), Array(2, 2, 2, 2, 2, 2, 2, 1100),
+      dependency, 0, conf).initiateBlockPush()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions - 1)
-    PushShuffleSupport.stop()
+    PushShuffleComponent.stop()
   }
 
   test("Number of blocks in flight per address are limited by maxBlocksInFlightPerAddress") {
     conf.set("spark.reducer.maxBlocksInFlightPerAddress", "1")
     interceptPushedBlocksForSuccess()
-    new TestPushShuffleSupport(mock(classOf[File]),
+    new TestPushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
+        .initiateBlockPush()
     verify(shuffleClient, times(8))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
-    PushShuffleSupport.stop()
+    PushShuffleComponent.stop()
   }
 
   test("Hit maxBlocksInFlightPerAddress limit so that the blocks are deferred") {
@@ -138,8 +140,9 @@ class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
           })
         }
       })
-    new TestPushShuffleSupport(mock(classOf[File]),
+    new TestPushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
+        .initiateBlockPush()
     verify(shuffleClient, times(1))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == 2)
@@ -148,23 +151,24 @@ class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == 8)
-    PushShuffleSupport.stop()
+    PushShuffleComponent.stop()
   }
 
   test("Number of shuffle blocks grouped in a single push request is limited by " +
       "maxBlockBatchSize") {
     conf.set("spark.shuffle.push.maxBlockBatchSize", "1m")
     interceptPushedBlocksForSuccess()
-    new TestPushShuffleSupport(mock(classOf[File]),
+    new TestPushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 512 * 1024 }, dependency, 0, conf)
+        .initiateBlockPush()
     verify(shuffleClient, times(4))
       .pushBlocks(any(), any(), any(), any(), any())
     assert(pushedBlocks.length == dependency.partitioner.numPartitions)
-    PushShuffleSupport.stop()
+    PushShuffleComponent.stop()
   }
 
   test("Error retries") {
-    val pushShuffleSupport = new PushShuffleSupport(mock(classOf[File]),
+    val pushShuffleSupport = new PushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
     val errorHandler = pushShuffleSupport.createErrorHandler()
     assert(
@@ -178,7 +182,7 @@ class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("Error logging") {
-    val pushShuffleSupport = new PushShuffleSupport(mock(classOf[File]),
+    val pushShuffleSupport = new PushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
     val errorHandler = pushShuffleSupport.createErrorHandler()
     assert(
@@ -204,21 +208,22 @@ class PushShuffleSupportSuite extends SparkFunSuite with BeforeAndAfterEach {
             blockId, new RuntimeException(new ConnectException()))
         })
       })
-    new TestPushShuffleSupport(mock(classOf[File]),
+    new TestPushShuffleComponent(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
+        .initiateBlockPush()
     verify(shuffleClient, times(2))
       .pushBlocks(any(), any(), any(), any(), any())
     // 2 blocks for each merger locations
     assert(pushedBlocks.length == 4)
   }
 
-  private class TestPushShuffleSupport(
+  private class TestPushShuffleComponent(
       dataFile: File,
       partitionLengths: Array[Long],
       dep: ShuffleDependency[_, _, _],
       partitionId: Int,
       conf: SparkConf)
-    extends PushShuffleSupport(dataFile, partitionLengths, dep, partitionId, conf) {
+    extends PushShuffleComponent(dataFile, partitionLengths, dep, partitionId, conf) {
 
     override protected def submitTask(task: Runnable): Unit = {
      // Making this synchronous for testing

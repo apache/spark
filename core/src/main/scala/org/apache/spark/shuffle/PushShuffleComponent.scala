@@ -36,7 +36,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.shuffle.PushShuffleSupport._
+import org.apache.spark.shuffle.PushShuffleComponent._
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShufflePushBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -53,7 +53,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * @param partitionId      map index of the shuffle map task
  * @param conf             spark configuration
  */
-private[spark] class PushShuffleSupport(
+private[spark] class PushShuffleComponent(
     dataFile: File,
     partitionLengths: Array[Long],
     dep: ShuffleDependency[_, _, _],
@@ -70,8 +70,6 @@ private[spark] class PushShuffleSupport(
   private[this] val errorHandler = createErrorHandler()
   private[this] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
 
-  initiateBlockPush()
-
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
     new BlockPushErrorHandler() {
@@ -85,7 +83,7 @@ private[spark] class PushShuffleSupport(
     }
   }
 
-  def initiateBlockPush(): Unit = {
+  private[shuffle] def initiateBlockPush(): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
@@ -418,7 +416,7 @@ private[spark] class PushShuffleSupport(
   }
 }
 
-private[spark] object PushShuffleSupport {
+private[spark] object PushShuffleComponent {
 
   /**
    * A request to push blocks to a remote shuffle service
