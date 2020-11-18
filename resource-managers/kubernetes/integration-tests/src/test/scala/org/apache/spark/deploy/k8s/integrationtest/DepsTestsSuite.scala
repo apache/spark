@@ -30,6 +30,7 @@ import org.scalatest.time.{Minutes, Span}
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
@@ -152,37 +153,14 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("Launcher client dependencies", k8sTestTag, MinikubeTag) {
-    val packages = if (Utils.isHadoop3) {
-      "org.apache.hadoop:hadoop-aws:3.2.0"
-    } else {
-      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
-    }
-    val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
-    try {
-      setupMinioStorage()
-      val minioUrlStr = getServiceUrl(svcName)
-      val minioUrl = new URL(minioUrlStr)
-      val minioHost = minioUrl.getHost
-      val minioPort = minioUrl.getPort
-      val examplesJar = Utils.getExamplesJarAbsolutePath(sparkHomeDir)
-      sparkAppConf
-        .set("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
-        .set("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
-        .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
-        .set("spark.hadoop.fs.s3a.endpoint", s"$minioHost:$minioPort")
-        .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
-        .set("spark.files", s"$HOST_PATH/$fileName")
-        .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .set("spark.jars.packages", packages)
-        .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
-      createS3Bucket(ACCESS_KEY, SECRET_KEY, minioUrlStr)
+    tryDepsTest({
+      val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      sparkAppConf.set("spark.files", s"$HOST_PATH/$fileName")
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
       runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
         appArgs = Array(fileName),
         timeout = Option(DEPS_TIMEOUT))
-    } finally {
-      // make sure this always runs
-      deleteMinioStorage()
-    }
+    })
   }
 
   test("Launcher python client dependencies using a zip file", k8sTestTag, MinikubeTag) {
@@ -262,14 +240,18 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       conf: SparkAppConf,
       minioUrlStr: String): Unit = {
     val (minioHost, minioPort) = getServiceHostAndPort(minioUrlStr)
+    val packages = if (Utils.isHadoop3) {
+      "org.apache.hadoop:hadoop-aws:3.2.0"
+    } else {
+      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
+    }
     conf.set("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
       .set("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
       .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
       .set("spark.hadoop.fs.s3a.endpoint", s"$minioHost:$minioPort")
       .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-      .set("spark.jars.packages", "com.amazonaws:aws-java-sdk:" +
-        "1.7.4,org.apache.hadoop:hadoop-aws:2.7.6")
+      .set("spark.jars.packages", packages)
       .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
   }
 
