@@ -14,6 +14,10 @@ import org.apache.spark.sql.types.StructType;
  * requested projections. Sources that implement this interface and column projection using
  * {@link SupportsPushDownRequiredColumns} must accept metadata fields passed to
  * {@link SupportsPushDownRequiredColumns#pruneColumns(StructType)}.
+ * <p>
+ * If a table column and a metadata column have the same name, the metadata column will never be
+ * requested. It is recommended that Table implementations reject data column name that conflict
+ * with metadata column names.
  */
 @Evolving
 public interface SupportsMetadataColumns extends Table {
@@ -22,6 +26,10 @@ public interface SupportsMetadataColumns extends Table {
    * <p>
    * The columns returned by this method may be passed as {@link StructField} in requested
    * projections using {@link SupportsPushDownRequiredColumns#pruneColumns(StructType)}.
+   * <p>
+   * If a table column and a metadata column have the same name, the metadata column will never be
+   * requested and is ignored. It is recommended that Table implementations reject data column names
+   * that conflict with metadata column names.
    *
    * @return an array of {@link MetadataColumn}
    */
