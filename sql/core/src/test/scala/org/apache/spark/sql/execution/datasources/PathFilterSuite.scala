@@ -22,10 +22,10 @@ import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import scala.util.Random
+
 import org.apache.spark.sql.{AnalysisException, DataFrameReader, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, stringToFile}
+import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
