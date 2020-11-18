@@ -25,7 +25,6 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -200,7 +199,7 @@ private class PartitionFileExistCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean)
-  extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
