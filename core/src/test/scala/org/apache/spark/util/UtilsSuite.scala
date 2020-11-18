@@ -17,9 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
-import java.lang.{Double => JDouble, Float => JFloat}
+import java.io._
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -42,6 +40,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
@@ -1405,6 +1404,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     hostnamePort = Utils.parseHostPort("localhost:")
     assert(hostnamePort._1.equals("localhost"))
     assert(hostnamePort._2 === 0)
+  }
+
+  test("Test Push-based shuffle is enabled only when both" +
+    " spark.shuffle.service.enabled and spark.shuffle.push.enabled are enabled") {
+    val conf = new SparkConf()
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, false)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
 }
 
