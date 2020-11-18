@@ -303,6 +303,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               """.stripMargin)
             checkAnswer(spark.table("insertTable"),
               Row(2, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 3) :: Nil)
+
+            sql(
+              """
+                |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=1)
+                |SELECT i + 1 FROM insertTable
+              """.stripMargin)
+            checkAnswer(spark.table("insertTable"),
+              Row(3, 1, 1) :: Row(3, 1, 2) :: Row(4, 1, 1) :: Row(4, 1, 3) :: Row(5, 1, 1) :: Nil)
           } else {
             val message = intercept[AnalysisException] {
               sql(
