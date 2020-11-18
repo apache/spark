@@ -34,17 +34,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
     super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
   }
 
-  protected def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int, year int, month int)
-      |$defaultUsing
-      |partitioned by (year, month)""".stripMargin)
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
-  }
-
   test("show partitions of non-partitioned table") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
@@ -55,20 +44,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
           sql(s"SHOW PARTITIONS $table")
         }.getMessage
         assert(errMsg.contains("not allowed on a table that is not partitioned"))
-      }
-    }
-  }
-
-  test("non-partitioning columns") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val table = s"$catalog.ns.dateTable"
-      withTable(table) {
-        createDateTable(table)
-        val errMsg = intercept[AnalysisException] {
-          sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
-        }.getMessage
-        assert(errMsg.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
       }
     }
   }

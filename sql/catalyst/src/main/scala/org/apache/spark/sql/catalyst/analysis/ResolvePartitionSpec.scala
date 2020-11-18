@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
@@ -38,6 +38,9 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
     case r @ AlterTableDropPartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
       r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
+
+    case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
+      r.copy(pattern = resolvePartitionSpecs(partSpecs.toSeq, table.partitionSchema()).headOption)
   }
 
   private def resolvePartitionSpecs(

@@ -37,7 +37,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
       val e = intercept[NotImplementedError] {
         sql(s"$sqlCommand $sqlParams")
       }
-      assert(e.getMessage.contains("SHOW PARTITIONS is not implemented"))
+      assert(e.getMessage.contains(s"SHOW PARTITIONS is not implemented"))
     }
     val t = s"$catalog.ns1.ns2.tbl"
     withTable(t) {

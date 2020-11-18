@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{SupportsPartitionManagement, TableCatalog}
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
@@ -30,29 +30,15 @@ import org.apache.spark.sql.execution.LeafExecNode
 case class ShowPartitionsExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
-    table: Table,
-    spec: Option[TablePartitionSpec]) extends V2CommandExec with LeafExecNode {
+    table: SupportsPartitionManagement,
+    spec: Option[ResolvedPartitionSpec]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     if (table.partitioning.isEmpty) {
       throw new AnalysisException(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${table.name()}")
     }
 
-    /**
-     * Validate the partitioning spec by making sure all the referenced columns are
-     * defined as partitioning columns in table definition. An AnalysisException exception is
-     * thrown if the partitioning spec is invalid.
-     */
-    if (spec.isDefined) {
-      val partitionColumnNames =
-        table.partitioning().flatMap(_.references.flatMap(_.fieldNames))
-      val badColumns = spec.get.keySet.filterNot(partitionColumnNames.contains)
-      if (badColumns.nonEmpty) {
-        val badCols = badColumns.mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
-      }
-    }
+    // table.listPartitionIdentifiers(spec.get.spec)
 
     // scalastyle:off
     throw new NotImplementedError("SHOW PARTITIONS is not implemented")
