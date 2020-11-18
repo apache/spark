@@ -191,7 +191,7 @@ object LDAExample {
       stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
 
     val spark = SparkSession
-      .builder
+      .builder()
       .sparkContext(sc)
       .getOrCreate()
     import spark.implicits._

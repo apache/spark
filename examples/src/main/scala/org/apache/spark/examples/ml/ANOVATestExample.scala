@@ -35,7 +35,7 @@ object ANOVATestExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("ANOVATestExample")
       .getOrCreate()
     import spark.implicits._
@@ -51,7 +51,7 @@ object ANOVATestExample {
     )
 
     val df = data.toDF("label", "features")
-    val anova = ANOVATest.test(df, "features", "label").head
+    val anova = ANOVATest.test(df, "features", "label").head()
     println(s"pValues = ${anova.getAs[Vector](0)}")
     println(s"degreesOfFreedom ${anova.getSeq[Int](1).mkString("[", ",", "]")}")
     println(s"fValues ${anova.getAs[Vector](2)}")

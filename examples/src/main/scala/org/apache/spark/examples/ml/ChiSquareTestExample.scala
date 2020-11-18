@@ -35,7 +35,7 @@ object ChiSquareTestExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("ChiSquareTestExample")
       .getOrCreate()
     import spark.implicits._

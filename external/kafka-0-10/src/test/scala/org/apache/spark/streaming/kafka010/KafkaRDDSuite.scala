@@ -205,7 +205,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(received === compactedMessages.toSet)
 
     // size-related method optimizations return sane results
-    assert(rdd.count === compactedMessages.size)
+    assert(rdd.count() === compactedMessages.size)
     assert(rdd.countApprox(0).getFinalValue().mean === compactedMessages.size)
     assert(!rdd.isEmpty)
     assert(rdd.take(1).size === 1)

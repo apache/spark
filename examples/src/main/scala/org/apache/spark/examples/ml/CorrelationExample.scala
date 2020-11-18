@@ -36,7 +36,7 @@ object CorrelationExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("CorrelationExample")
       .getOrCreate()
     import spark.implicits._

@@ -35,7 +35,7 @@ object FValueTestExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("FValueTestExample")
       .getOrCreate()
     import spark.implicits._
@@ -51,7 +51,7 @@ object FValueTestExample {
     )
 
     val df = data.toDF("label", "features")
-    val fValue = FValueTest.test(df, "features", "label").head
+    val fValue = FValueTest.test(df, "features", "label").head()
     println(s"pValues ${fValue.getAs[Vector](0)}")
     println(s"degreesOfFreedom ${fValue.getSeq[Int](1).mkString("[", ",", "]")}")
     println(s"fValues ${fValue.getAs[Vector](2)}")

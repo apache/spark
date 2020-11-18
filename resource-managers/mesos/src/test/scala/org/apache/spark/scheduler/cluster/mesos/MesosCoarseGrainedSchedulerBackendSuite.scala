@@ -623,10 +623,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val offers = List(Resources(backend.executorMemory(sc), expectedCores))
     offerResources(offers)
     val launchedTasks = verifyTaskLaunched(driver, "o1")
-    assert(!backend.isReady)
+    assert(!backend.isReady())
 
     registerMockExecutor(launchedTasks(0).getTaskId.getValue, "s1", expectedCores)
-    assert(backend.isReady)
+    assert(backend.isReady())
   }
 
   test("supports data locality with dynamic allocation") {
@@ -833,7 +833,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.excludedNodes).thenReturn(Set[String]())
+    when(taskScheduler.excludedNodes()).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
 
     externalShuffleClient = mock[MesosExternalBlockStoreClient]

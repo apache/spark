@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession
 object QuantileDiscretizerExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("QuantileDiscretizerExample")
       .getOrCreate()
 
