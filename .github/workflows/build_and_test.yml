@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 1.8
+          - 8
         hadoop:
           - hadoop2.6
         # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
@@ -51,12 +51,12 @@ jobs:
         include:
           # Hive tests
           - modules: hive
-            java: 1.8
+            java: 8
             hadoop: hadoop2.6
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
-            java: 1.8
+            java: 8
             hadoop: hadoop2.6
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
@@ -84,16 +84,10 @@ jobs:
           build/zinc-*
           build/scala-*
           build/*.jar
+          ~/.sbt
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.m2/repository
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-
     - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
@@ -101,7 +95,7 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
-    - name: Install JDK ${{ matrix.java }}
+    - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java }}
@@ -160,9 +154,7 @@ jobs:
       run: |
         # Hive tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]]; then export SERIAL_SBT_TESTS=1; fi
-        mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
-        rm -rf ~/.m2/repository/org/apache/spark
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -183,17 +175,37 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Cache Scala, SBT, Maven and Zinc
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/zinc-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Ivy local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.ivy2/cache
+        key: docs-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docs-ivy-
     - name: Cache Maven local repository
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
-        key: docs-maven-repo-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           docs-maven-
-    - name: Install JDK 1.8
+    - name: Install Java 8
       uses: actions/setup-java@v1
       with:
-        java-version: 1.8
+        java-version: 8
     - name: Install Python 3.6
       uses: actions/setup-python@v2
       with:
