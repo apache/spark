@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.sql.Date
 import java.util.Collections
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
@@ -63,6 +64,24 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
     "1 = intcol and \"a\" = strcol")
 
+  filterTest("date filter",
+    (a("datecol", DateType) === Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "datecol = 2019-01-01")
+
+  filterTest("date filter with IN predicate",
+    (a("datecol", DateType) in
+      (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-07")))) :: Nil,
+    "(datecol = 2019-01-01 or datecol = 2019-01-07)")
+
+  filterTest("date and string filter",
+    (Literal(Date.valueOf("2019-01-01")) === a("datecol", DateType)) ::
+      (Literal("a") === a("strcol", IntegerType)) :: Nil,
+    "2019-01-01 = datecol and \"a\" = strcol")
+
+  filterTest("date filter with null",
+    (a("datecol", DateType) ===  Literal(null)) :: Nil,
+    "")
+
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
     "")
@@ -89,7 +108,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
     test(name) {
       withSQLConf(SQLConf.ADVANCED_PARTITION_PREDICATE_PUSHDOWN.key -> "true") {
-        val converted = shim.convertFilters(testTable, filters)
+        val converted = shim.convertFilters(testTable, filters, conf.sessionLocalTimeZone)
         if (converted != result) {
           fail(s"Expected ${filters.mkString(",")} to convert to '$result' but got '$converted'")
         }
@@ -104,7 +123,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
         val filters =
           (Literal(1) === a("intcol", IntegerType) ||
             Literal(2) === a("intcol", IntegerType)) :: Nil
-        val converted = shim.convertFilters(testTable, filters)
+        val converted = shim.convertFilters(testTable, filters, conf.sessionLocalTimeZone)
         if (enabled) {
           assert(converted == "(1 = intcol or 2 = intcol)")
         } else {
@@ -116,7 +135,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
 
   test("SPARK-33416: Avoid Hive metastore stack overflow when InSet predicate have many values") {
     def checkConverted(inSet: InSet, result: String): Unit = {
-      assert(shim.convertFilters(testTable, inSet :: Nil) == result)
+      assert(shim.convertFilters(testTable, inSet :: Nil, conf.sessionLocalTimeZone) == result)
     }
 
     withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "15") {
@@ -139,6 +158,11 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
         InSet(a("doublecol", DoubleType),
           Range(1, 20).map(s => Literal(s.toDouble).eval(EmptyRow)).toSet),
         "")
+
+      checkConverted(
+        InSet(a("datecol", DateType),
+          Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
+        "(datecol >= 1970-01-02 and datecol <= 1970-01-20)")
     }
   }
 

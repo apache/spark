@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.client
 
+import java.sql.Date
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
@@ -28,7 +30,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
@@ -38,15 +41,16 @@ class HivePartitionFilteringSuite(version: String)
 
   private val testPartitionCount = 3 * 5 * 4
 
-  private def init(tryDirectSql: Boolean): HiveClient = {
-    val storageFormat = CatalogStorageFormat(
-      locationUri = None,
-      inputFormat = None,
-      outputFormat = None,
-      serde = None,
-      compressed = false,
-      properties = Map.empty)
+  private val storageFormat = CatalogStorageFormat(
+    locationUri = None,
+    inputFormat = Some(classOf[TextInputFormat].getName),
+    outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+    serde = Some(classOf[LazySimpleSerDe].getName()),
+    compressed = false,
+    properties = Map.empty
+  )
 
+  private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
     hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
@@ -58,14 +62,7 @@ class HivePartitionFilteringSuite(version: String)
       tableType = CatalogTableType.MANAGED,
       schema = tableSchema,
       partitionColumnNames = Seq("ds", "h", "chunk"),
-      storage = CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = Some(classOf[TextInputFormat].getName),
-        outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-        serde = Some(classOf[LazySimpleSerDe].getName()),
-        compressed = false,
-        properties = Map.empty
-      ))
+      storage = storageFormat)
     client.createTable(table, ignoreIfExists = false)
 
     val partitions =
@@ -102,7 +99,7 @@ class HivePartitionFilteringSuite(version: String)
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val client = init(false)
     val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
-      Seq(attr("ds") === 20170101))
+      Seq(attr("ds") === 20170101), SQLConf.get.sessionLocalTimeZone)
 
     assert(filteredPartitions.size == testPartitionCount)
   }
@@ -290,6 +287,61 @@ class HivePartitionFilteringSuite(version: String)
       (20170101 to 20170103, 0 to 4, Seq("ab", "bb")) :: Nil)
   }
 
+  test("getPartitionsByFilter: date type pruning by metastore") {
+    val table = CatalogTable(
+      identifier = TableIdentifier("test_date", Some("default")),
+      tableType = CatalogTableType.MANAGED,
+      schema = new StructType().add("value", "int").add("part", "date"),
+      partitionColumnNames = Seq("part"),
+      storage = storageFormat)
+    client.createTable(table, ignoreIfExists = false)
+
+    val partitions =
+      for {
+        date <- Seq("2019-01-01", "2019-01-02", "2019-01-03", "2019-01-04")
+      } yield CatalogTablePartition(Map(
+        "part" -> date
+      ), storageFormat)
+    assert(partitions.size == 4)
+
+    client.createPartitions("default", "test_date", partitions, ignoreIfExists = false)
+
+    def testDataTypeFiltering(
+        filterExprs: Seq[Expression],
+        expectedPartitionCubes: Seq[Seq[Date]]): Unit = {
+      val filteredPartitions = client.getPartitionsByFilter(
+        client.getTable("default", "test_date"),
+        filterExprs,
+        SQLConf.get.sessionLocalTimeZone)
+
+      val expectedPartitions = expectedPartitionCubes.map {
+        expectedDt =>
+          for {
+            dt <- expectedDt
+          } yield Set(
+            "part" -> dt.toString
+          )
+      }.reduce(_ ++ _)
+
+      assert(filteredPartitions.map(_.spec.toSet).toSet == expectedPartitions.toSet)
+    }
+
+    testDataTypeFiltering(
+      Seq(AttributeReference("part", DateType)() === Date.valueOf("2019-01-01")),
+      Seq("2019-01-01").map(Date.valueOf) :: Nil)
+    testDataTypeFiltering(
+      Seq(AttributeReference("part", DateType)() > Date.valueOf("2019-01-02")),
+      Seq("2019-01-03", "2019-01-04").map(Date.valueOf) :: Nil)
+    testDataTypeFiltering(
+      Seq(In(AttributeReference("part", DateType)(),
+        Seq("2019-01-01", "2019-01-02").map(d => Literal(Date.valueOf(d))))),
+      Seq("2019-01-01", "2019-01-02").map(Date.valueOf) :: Nil)
+    testDataTypeFiltering(
+      Seq(InSet(AttributeReference("part", DateType)(),
+        Set("2019-01-01", "2019-01-02").map(d => Literal(Date.valueOf(d)).eval(EmptyRow)))),
+      Seq("2019-01-01", "2019-01-02").map(Date.valueOf) :: Nil)
+  }
+
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
       expectedDs: Seq[Int],
@@ -326,7 +378,7 @@ class HivePartitionFilteringSuite(version: String)
     val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
       Seq(
         transform(filterExpr)
-      ))
+      ), SQLConf.get.sessionLocalTimeZone)
 
     val expectedPartitionCount = expectedPartitionCubes.map {
       case (expectedDs, expectedH, expectedChunks) =>
