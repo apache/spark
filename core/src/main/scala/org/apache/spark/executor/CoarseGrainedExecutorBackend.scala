@@ -146,7 +146,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
     case DecommissionSelf =>
-      logInfo("Received decommission self")
+      logError("Received decommission self")
       decommissionSelf()
   }
 
@@ -193,6 +193,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   private def decommissionSelf(): Boolean = {
+    logError("Decommissioning self")
     val msg = "Decommissioning self w/sync"
     logInfo(msg)
     try {
@@ -217,11 +218,12 @@ private[spark] class CoarseGrainedExecutorBackend(
 
       val shutdownThread = new Thread("wait-for-blocks-to-migrate") {
         override def run(): Unit = {
+          logError("Hello! Waiting for blocks")
           var lastTaskRunningTime = System.nanoTime()
           val sleep_time = 1000 // 1s
 
           while (true) {
-            logInfo("Checking to see if we can shutdown.")
+            logError("Checking to see if we can shutdown.")
             Thread.sleep(sleep_time)
             if (executor == null || executor.numRunningTasks == 0) {
               if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {

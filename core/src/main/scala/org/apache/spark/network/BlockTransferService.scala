@@ -127,6 +127,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * This method is similar to [[uploadBlock]], except this one blocks the thread
    * until the upload finishes.
    */
+  @throws[java.io.IOException]
   def uploadBlockSync(
       hostname: String,
       port: Int,

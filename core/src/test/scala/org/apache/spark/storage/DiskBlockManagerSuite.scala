@@ -23,6 +23,7 @@ import java.util.UUID
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.util.Utils
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
@@ -75,6 +76,15 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   test("enumerating blocks") {
     val ids = (1 to 100).map(i => TestBlockId("test_" + i))
+    val files = ids.map(id => diskBlockManager.getFile(id))
+    files.foreach(file => writeToFile(file, 10))
+    assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+  }
+
+  test("enumerating shuffle blocks") {
+    val ids = (1 to 100).map { i =>
+      ShuffleIndexBlockId(i, i, NOOP_REDUCE_ID)
+    }
     val files = ids.map(id => diskBlockManager.getFile(id))
     files.foreach(file => writeToFile(file, 10))
     assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)

@@ -40,6 +40,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   val TaskEnded = "TASK_ENDED"
   val JobEnded = "JOB_ENDED"
 
+/*
   testRetry(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)
@@ -49,15 +50,22 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     s"on a decommissioned executor after one task ends but before job ends") {
     runDecomTest(true, false, TaskEnded)
   }
+ */
+/*
+  test(s"verify that cache blocks migrated post job end") {
+    runDecomTest(true, false, JobEnded)
+  }
+ */
 
   test(s"verify that shuffle blocks are migrated") {
     runDecomTest(false, true, JobEnded)
   }
 
+/*
   test(s"verify that both migrations can work at the same time") {
     runDecomTest(true, true, JobEnded)
   }
-
+ */
   private def runDecomTest(
       persist: Boolean,
       shuffle: Boolean,

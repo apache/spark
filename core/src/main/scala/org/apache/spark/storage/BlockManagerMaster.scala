@@ -46,7 +46,7 @@ class BlockManagerMaster(
    * Non-blocking.
    */
   def decommissionBlockManagers(executorIds: Seq[String]): Unit = {
-    driverEndpoint.ask[Boolean](DecommissionBlockManagers(executorIds))
+    driverEndpoint.askSync[Boolean](DecommissionBlockManagers(executorIds))
   }
 
   /** Get Replication Info for all the RDD blocks stored in given blockManagerId */

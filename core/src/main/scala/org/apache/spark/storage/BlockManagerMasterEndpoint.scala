@@ -272,6 +272,7 @@ class BlockManagerMasterEndpoint(
    *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerSlaveEndpoint]]
    */
   def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
+    logInfo("Marking executors for decommission " + blockManagerIds.toString())
     val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
     val futures = newBlockManagersToDecommission.map { blockManagerId =>
       decommissioningBlockManagerSet.add(blockManagerId)
@@ -447,16 +448,16 @@ class BlockManagerMasterEndpoint(
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
-    logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
+    logInfo(s"Updating block info on master ${blockId} for ${blockManagerId}")
 
     if (blockId.isShuffle) {
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
           // Don't update the map output on just the index block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          logInfo(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) =>
-          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
+          logInfo(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
           mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case _ =>

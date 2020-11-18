@@ -1601,6 +1601,7 @@ private[spark] class BlockManager(
   }
 
   def decommissionBlockManager(): Unit = synchronized {
+    logError("Asked to decommission")
     decommissioner match {
       case None =>
         logInfo("Starting block manager decommissioning process...")

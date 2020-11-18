@@ -62,6 +62,7 @@ class BlockManagerSlaveEndpoint(
       }
 
     case DecommissionBlockManager =>
+      logInfo("Asked to decommission this block manager")
       context.reply(blockManager.decommissionBlockManager())
 
     case RemoveBroadcast(broadcastId, _) =>

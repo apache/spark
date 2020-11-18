@@ -28,7 +28,7 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -47,12 +47,15 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     MockitoAnnotations.initMocks(this)
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
+    when(diskBlockManager.getAllBlocks()).thenReturn(Seq(
+      ShuffleIndexBlockId(1, 2, 0)))
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
       new Answer[File] {
         override def answer(invocation: InvocationOnMock): File = {
           new File(tempDir, invocation.getArguments.head.toString)
         }
       })
+    when(diskBlockManager.localDirs).thenReturn(Array(tempDir))
   }
 
   override def afterEach(): Unit = {
@@ -78,6 +81,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
+    val storedShuffles = resolver.getStoredShuffles()
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
     val dataFile = resolver.getDataFile(shuffleId, mapId)
 
@@ -86,6 +90,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
     assert(!dataTmp.exists())
+    assert(storedShuffles.toSet === Set(ShuffleBlockInfo(1, 2)))
 
     val lengths2 = new Array[Long](3)
     val dataTmp2 = File.createTempFile("shuffle", null, tempDir)
@@ -159,5 +164,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       indexIn2.close()
     }
+  }
+
+  test("SPARK-33198 getMigrationBlocks should not fail at missing files") {
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    assert(resolver.getMigrationBlocks(ShuffleBlockInfo(Int.MaxValue, Int.MaxValue)).isEmpty)
   }
 }

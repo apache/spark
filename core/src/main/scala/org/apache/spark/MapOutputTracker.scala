@@ -690,7 +690,12 @@ private[spark] class MapOutputTrackerMaster(
   override def stop() {
     mapOutputRequests.offer(PoisonPill)
     threadpool.shutdown()
-    sendTracker(StopMapOutputTracker)
+    try {
+      sendTracker(StopMapOutputTracker)
+    } catch {
+      case e: SparkException =>
+        logError("Could not tell tracker we are stopping.", e)
+    }
     trackerEndpoint = null
     shuffleStatuses.clear()
   }
