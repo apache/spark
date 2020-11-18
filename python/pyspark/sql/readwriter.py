@@ -125,6 +125,12 @@ class DataFrameReader(OptionUtils):
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
+            * ``modifiedBefore``: an optional timestamp to only include files with
+                modification times occurring before the specified time. The provided timestamp
+                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+            * ``modifiedAfter``: an optional timestamp to only include files with
+                modification times occurring after the specified time. The provided timestamp
+                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -149,6 +155,12 @@ class DataFrameReader(OptionUtils):
             * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
+            * ``modifiedBefore``: an optional timestamp to only include files with
+                modification times occurring before the specified time. The provided timestamp
+                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+            * ``modifiedAfter``: an optional timestamp to only include files with
+                modification times occurring after the specified time. The provided timestamp
+                must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
@@ -203,7 +215,8 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
-             recursiveFileLookup=None, allowNonNumericNumbers=None):
+             recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
+             allowNonNumericNumbers=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -309,6 +322,12 @@ class DataFrameReader(OptionUtils):
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option
             disables
@@ -344,6 +363,7 @@ class DataFrameReader(OptionUtils):
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep,
             samplingRatio=samplingRatio, dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
             locale=locale, pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
             allowNonNumericNumbers=allowNonNumericNumbers)
         if isinstance(path, str):
             path = [path]
@@ -410,6 +430,15 @@ class DataFrameReader(OptionUtils):
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
         Examples
         --------
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
@@ -418,13 +447,18 @@ class DataFrameReader(OptionUtils):
         """
         mergeSchema = options.get('mergeSchema', None)
         pathGlobFilter = options.get('pathGlobFilter', None)
+        modifiedBefore = options.get('modifiedBefore', None)
+        modifiedAfter = options.get('modifiedAfter', None)
         recursiveFileLookup = options.get('recursiveFileLookup', None)
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup)
+                       recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
+                       modifiedAfter=modifiedAfter)
+
         return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     def text(self, paths, wholetext=False, lineSep=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, modifiedBefore=None,
+             modifiedAfter=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
@@ -453,6 +487,15 @@ class DataFrameReader(OptionUtils):
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
         Examples
         --------
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
@@ -464,7 +507,9 @@ class DataFrameReader(OptionUtils):
         """
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
-            recursiveFileLookup=recursiveFileLookup)
+            recursiveFileLookup=recursiveFileLookup, modifiedBefore=modifiedBefore,
+            modifiedAfter=modifiedAfter)
+
         if isinstance(paths, str):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -476,7 +521,7 @@ class DataFrameReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             samplingRatio=None, enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None):
         r"""Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -631,6 +676,15 @@ class DataFrameReader(OptionUtils):
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
         Examples
         --------
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
@@ -652,7 +706,8 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter)
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
@@ -679,7 +734,8 @@ class DataFrameReader(OptionUtils):
         else:
             raise TypeError("path can be only string, list or RDD")
 
-    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
+    def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+            modifiedBefore=None, modifiedAfter=None):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 1.5.0
@@ -701,6 +757,15 @@ class DataFrameReader(OptionUtils):
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
         Examples
         --------
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
@@ -708,6 +773,7 @@ class DataFrameReader(OptionUtils):
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
+                       modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
                        recursiveFileLookup=recursiveFileLookup)
         if isinstance(path, str):
             path = [path]
@@ -765,7 +831,8 @@ class DataFrameReader(OptionUtils):
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties",
+                          self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         if column is not None:
@@ -777,7 +844,8 @@ class DataFrameReader(OptionUtils):
                                                int(numPartitions), jprop))
         if predicates is not None:
             gateway = self._spark._sc._gateway
-            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
+            jpredicates = utils.toJArray(
+                gateway, gateway.jvm.java.lang.String, predicates)
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
@@ -790,6 +858,7 @@ class DataFrameWriter(OptionUtils):
 
     .. versionadded:: 1.4
     """
+
     def __init__(self, df):
         self._df = df
         self._spark = df.sql_ctx
@@ -931,18 +1000,21 @@ class DataFrameWriter(OptionUtils):
         ...     .saveAsTable('bucketed_table'))
         """
         if not isinstance(numBuckets, int):
-            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise TypeError(
+                "numBuckets should be an int, got {0}.".format(type(numBuckets)))
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise ValueError(
+                    "col is a {0} but cols are not empty".format(type(col)))
 
             col, cols = col[0], col[1:]
 
         if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
+        self._jwrite = self._jwrite.bucketBy(
+            numBuckets, col, _to_seq(self._spark._sc, cols))
         return self
 
     def sortBy(self, col, *cols):
@@ -967,7 +1039,8 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
+                raise ValueError(
+                    "col is a {0} but cols are not empty".format(type(col)))
 
             col, cols = col[0], col[1:]
 
@@ -1349,7 +1422,8 @@ class DataFrameWriter(OptionUtils):
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties",
+                          self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
@@ -1515,7 +1589,8 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['df'] = spark.read.parquet(
+        'python/test_support/sql/parquet_partitioned')
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
