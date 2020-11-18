@@ -28,7 +28,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from json import JSONDecodeError
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse
 
 import lazy_object_proxy
 import nvd3
@@ -108,7 +108,13 @@ def get_safe_url(url):
     valid_schemes = ['http', 'https', '']
     valid_netlocs = [request.host, '']
 
+    if not url:
+        return url_for('Airflow.index')
+
     parsed = urlparse(url)
+
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    url = parsed._replace(query=urlencode(query)).geturl()
 
     if parsed.scheme in valid_schemes and parsed.netloc in valid_netlocs:
         return url
