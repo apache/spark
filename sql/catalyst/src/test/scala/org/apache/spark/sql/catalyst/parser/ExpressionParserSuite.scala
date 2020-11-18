@@ -190,6 +190,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
     assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
     assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+    assertEqual("a similar to 'pattern%'", 'a rlike "pattern%")
+    assertEqual("a not similar to 'pattern%'", !('a rlike "pattern%"))
+    assertEqual("a similar \r\t\nto 'pattern%'", 'a rlike "pattern%")
+    assertEqual("a not similar \r\t\nto 'pattern%'", !('a rlike "pattern%"))
   }
 
   test("like escape expressions") {
