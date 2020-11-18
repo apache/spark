@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
@@ -53,6 +55,12 @@ case class UnresolvedTableOrView(
   override def output: Seq[Attribute] = Nil
 }
 
+sealed trait PartitionSpec
+
+case class UnresolvedPartitionSpec(
+    spec: TablePartitionSpec,
+    location: Option[String] = None) extends PartitionSpec
+
 /**
  * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedFunc]] during analysis.
@@ -77,6 +85,10 @@ case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: T
   extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
+
+case class ResolvedPartitionSpec(
+    spec: InternalRow,
+    location: Option[String] = None) extends PartitionSpec
 
 /**
  * A plan containing resolved (temp) views.

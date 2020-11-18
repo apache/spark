@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
@@ -51,10 +51,8 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging {
+class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
   import ParserUtils._
-
-  def this() = this(new SQLConf())
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -3282,7 +3280,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[LoadDataStatement]].
+   * Create a [[LoadData]].
    *
    * For example:
    * {{{
@@ -3291,8 +3289,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadDataStatement(
-      tableName = visitMultipartIdentifier(ctx.multipartIdentifier),
+    LoadData(
+      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3301,10 +3299,14 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Creates a [[ShowCreateTableStatement]]
+   * Creates a [[ShowCreateTable]]
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowCreateTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()), ctx.SERDE != null)
+    ShowCreateTable(
+      UnresolvedTableOrView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        allowTempView = false),
+      ctx.SERDE != null)
   }
 
   /**
@@ -3411,7 +3413,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AlterTableAddPartitionStatement]].
+   * Create an [[AlterTableAddPartition]].
    *
    * For example:
    * {{{
@@ -3431,10 +3433,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val specsAndLocs = ctx.partitionSpecLocation.asScala.map { splCtx =>
       val spec = visitNonOptionalPartitionSpec(splCtx.partitionSpec)
       val location = Option(splCtx.locationSpec).map(visitLocationSpec)
-      spec -> location
+      UnresolvedPartitionSpec(spec, location)
     }
-    AlterTableAddPartitionStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterTableAddPartition(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3456,7 +3458,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create an [[AlterTableDropPartitionStatement]]
+   * Create an [[AlterTableDropPartition]]
    *
    * For example:
    * {{{
@@ -3473,9 +3475,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     if (ctx.VIEW != null) {
       operationNotAllowed("ALTER VIEW ... DROP PARTITION", ctx)
     }
-    AlterTableDropPartitionStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec).toSeq,
+    val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
+      .map(spec => UnresolvedPartitionSpec(spec))
+    AlterTableDropPartition(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
       retainData = false)

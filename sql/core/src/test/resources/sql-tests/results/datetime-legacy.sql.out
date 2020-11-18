@@ -872,32 +872,32 @@ struct<unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE):bigint>
 
 
 -- !query
-select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
+select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_json({"time":"26/October/2015"}):struct<time:timestamp>>
+struct<from_json({"t":"26/October/2015"}):struct<t:timestamp>>
 -- !query output
-{"time":2015-10-26 00:00:00}
+{"t":2015-10-26 00:00:00}
 
 
 -- !query
-select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'))
+select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_json({"date":"26/October/2015"}):struct<date:date>>
+struct<from_json({"d":"26/October/2015"}):struct<d:date>>
 -- !query output
-{"date":2015-10-26}
+{"d":2015-10-26}
 
 
 -- !query
-select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
+select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_csv(26/October/2015):struct<time:timestamp>>
+struct<from_csv(26/October/2015):struct<t:timestamp>>
 -- !query output
-{"time":2015-10-26 00:00:00}
+{"t":2015-10-26 00:00:00}
 
 
 -- !query
-select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'))
+select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_csv(26/October/2015):struct<date:date>>
+struct<from_csv(26/October/2015):struct<d:date>>
 -- !query output
-{"date":2015-10-26}
+{"d":2015-10-26}
