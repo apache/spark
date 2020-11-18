@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
@@ -3097,7 +3097,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         val projection = TableOutputResolver.resolveOutputColumns(
           v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
         if (projection != v2Write.query) {
-          v2Write.withNewQuery(projection)
+          val cleanedTable = v2Write.table match {
+            case r: DataSourceV2Relation =>
+              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+            case other => other
+          }
+          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
         } else {
           v2Write
         }

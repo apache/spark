@@ -761,16 +761,6 @@ object JdbcUtils extends Logging {
       schema: StructType,
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
-    def typeName(f: StructField): String = {
-      // char/varchar gets translated to string type. Real data type specified by the user
-      // is available in the field metadata as HIVE_TYPE_STRING
-      if (f.metadata.contains(HIVE_TYPE_STRING)) {
-        f.metadata.getString(HIVE_TYPE_STRING)
-      } else {
-        f.dataType.catalogString
-      }
-    }
-
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
     val nameEquality = if (caseSensitive) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -791,7 +781,7 @@ object JdbcUtils extends Logging {
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
+    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
     if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 

@@ -17,8 +17,27 @@
 
 package org.apache.spark.sql
 
-/**
- * Contains a type system for attributes produced by relations, including complex types like
- * structs, arrays and maps.
- */
-package object types
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+
+class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
+
+  // The default Hive serde doesn't support nested null values.
+  override def format: String = "hive OPTIONS(fileFormat='parquet')"
+
+  private var originalPartitionMode = ""
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    originalPartitionMode = spark.conf.get("hive.exec.dynamic.partition.mode", "")
+    spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
+  }
+
+  override protected def afterAll(): Unit = {
+    if (originalPartitionMode == "") {
+      spark.conf.unset("hive.exec.dynamic.partition.mode")
+    } else {
+      spark.conf.set("hive.exec.dynamic.partition.mode", originalPartitionMode)
+    }
+    super.afterAll()
+  }
+}

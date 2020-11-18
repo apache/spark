@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -203,6 +203,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       extraOptions + ("path" -> path.get)
     }
 
+    val cleanedUserSpecifiedSchema = userSpecifiedSchema
+      .map(CharVarcharUtils.replaceCharVarcharWithStringInSchema)
+
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
       getConstructor().newInstance()
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
@@ -210,7 +213,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     // writer or whether the query is continuous.
     val v1DataSource = DataSource(
       sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
+      userSpecifiedSchema = cleanedUserSpecifiedSchema,
       className = source,
       options = optionsWithPath.originalMap)
     val v1Relation = ds match {
@@ -225,7 +228,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
             optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
+        val table = DataSourceV2Utils.getTableFromProvider(
+          provider, dsOptions, cleanedUserSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>

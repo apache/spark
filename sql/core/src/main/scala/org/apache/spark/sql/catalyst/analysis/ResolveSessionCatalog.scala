@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -50,9 +50,6 @@ class ResolveSessionCatalog(
       cols.foreach(c => failNullType(c.dataType))
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
-            cols.foreach(c => failCharType(c.dataType))
-          }
           cols.foreach { c =>
             assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
             if (!c.nullable) {
@@ -62,7 +59,6 @@ class ResolveSessionCatalog(
           }
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
-        cols.foreach(c => failCharType(c.dataType))
         val changes = cols.map { col =>
           TableChange.addColumn(
             col.name.toArray,
@@ -81,7 +77,6 @@ class ResolveSessionCatalog(
         case Some(_: V1Table) =>
           throw new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
         case Some(table) =>
-          cols.foreach(c => failCharType(c.dataType))
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
           val deleteChanges = table.schema.fieldNames.map { name =>
             TableChange.deleteColumn(Array(name))
@@ -104,10 +99,6 @@ class ResolveSessionCatalog(
       a.dataType.foreach(failNullType)
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
-            a.dataType.foreach(failCharType)
-          }
-
           if (a.column.length > 1) {
             throw new AnalysisException(
               "ALTER COLUMN with qualified column is only supported with v2 tables.")
@@ -133,19 +124,13 @@ class ResolveSessionCatalog(
                     s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
               }
           }
-          // Add Hive type string to metadata.
-          val cleanedDataType = HiveStringType.replaceCharType(dataType)
-          if (dataType != cleanedDataType) {
-            builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
-          }
           val newColumn = StructField(
             colName,
-            cleanedDataType,
+            dataType,
             nullable = true,
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
       }.getOrElse {
-        a.dataType.foreach(failCharType)
         val colName = a.column.toArray
         val typeChange = a.dataType.map { newDataType =>
           TableChange.updateColumnType(colName, newDataType)
@@ -269,16 +254,12 @@ class ResolveSessionCatalog(
       assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        if (!DDLUtils.isHiveTable(Some(provider))) {
-          assertNoCharTypeInSchema(c.tableSchema)
-        }
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
           c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
           c.comment, c.ifNotExists)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
-        assertNoCharTypeInSchema(c.tableSchema)
         CreateV2Table(
           catalog.asTableCatalog,
           tbl.asIdentifier,
@@ -328,7 +309,6 @@ class ResolveSessionCatalog(
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
       } else {
-        assertNoCharTypeInSchema(c.tableSchema)
         ReplaceTable(
           catalog.asTableCatalog,
           tbl.asIdentifier,
@@ -716,17 +696,7 @@ class ResolveSessionCatalog(
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-
-    val cleanedDataType = HiveStringType.replaceCharType(col.dataType)
-    if (col.dataType != cleanedDataType) {
-      builder.putString(HIVE_TYPE_STRING, col.dataType.catalogString)
-    }
-
-    StructField(
-      col.name.head,
-      cleanedDataType,
-      nullable = true,
-      builder.build())
+    StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 
   private def isV2Provider(provider: String): Boolean = {

@@ -14,11 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.types
 
-package org.apache.spark.sql
+import scala.math.Ordering
+import scala.reflect.runtime.universe.typeTag
 
-/**
- * Contains a type system for attributes produced by relations, including complex types like
- * structs, arrays and maps.
- */
-package object types
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.unsafe.types.UTF8String
+
+@Experimental
+case class VarcharType(length: Int) extends AtomicType {
+  private[sql] type InternalType = UTF8String
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val ordering = implicitly[Ordering[InternalType]]
+
+  override def defaultSize: Int = length
+  override def typeName: String = s"varchar($length)"
+  override def toString: String = s"CharType($length)"
+  private[spark] override def asNullable: VarcharType = this
+}
