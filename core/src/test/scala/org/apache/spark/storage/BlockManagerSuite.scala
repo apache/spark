@@ -1975,7 +1975,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  test("Shuffle push merger locations should be bounded with in" +
+  test("SPARK-32919: Shuffle push merger locations should be bounded with in" +
     " spark.shuffle.push.retainedMergerLocations") {
     assert(master.getShufflePushMergerLocations(10, Set.empty).isEmpty)
     makeBlockManager(100, "execA",
@@ -1994,7 +1994,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getShufflePushMergerLocations(10, Set("hostB")).size == 3)
   }
 
-  test("Prefer active executors locations for shuffle push mergers") {
+  test("SPARK-32919: Prefer active executor locations for shuffle push mergers") {
     makeBlockManager(100, "execA",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     makeBlockManager(100, "execB",

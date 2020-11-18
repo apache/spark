@@ -80,7 +80,7 @@ class BlockManagerMasterEndpoint(
   private val shuffleMergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
 
   // Maximum number of merger locations to cache
-  private val maxRetainedMergerLocations = conf.get(config.SHUFFLE_MERGERS_MAX_RETAINED_LOCATIONS)
+  private val maxRetainedMergerLocations = conf.get(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS)
 
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)

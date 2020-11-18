@@ -1263,7 +1263,7 @@ private[spark] class DAGScheduler(
    * locations for block push/merge by getting the historical locations of past executors.
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
-    // TODO SPARK-32920: Handle stage reuse/retry cases separately as without finalize
+    // TODO(SPARK-32920) Handle stage reuse/retry cases separately as without finalize
     // TODO changes we cannot disable shuffle merge for the retry/reuse cases
     val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
       stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
@@ -1276,7 +1276,7 @@ private[spark] class DAGScheduler(
       logDebug("List of shuffle push merger locations " +
         s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     } else {
-      logInfo(s"No available merger locations." +
+      logInfo("No available merger locations." +
         s" Push-based shuffle disabled for $stage (${stage.name})")
     }
   }

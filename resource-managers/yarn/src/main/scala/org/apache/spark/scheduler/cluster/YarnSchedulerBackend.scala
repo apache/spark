@@ -176,8 +176,8 @@ private[spark] abstract class YarnSchedulerBackend(
   override def getShufflePushMergerLocations(
       numPartitions: Int,
       resourceProfileId: Int): Seq[BlockManagerId] = {
-    // Currently this is naive way of calculating numMergersDesired for a stage. In future,
-    // we can use better heuristics to calculate numMergersDesired for a stage.
+    // TODO (SPARK-33481) This is a naive way of calculating numMergersDesired for a stage,
+    // TODO we can use better heuristics to calculate numMergersDesired for a stage.
     val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
       maxNumExecutors
     } else {
@@ -191,13 +191,14 @@ private[spark] abstract class YarnSchedulerBackend(
       math.floor(numMergersDesired * minMergersThresholdRatio).toInt)
 
     // Request for numMergersDesired shuffle mergers to BlockManagerMasterEndpoint
-    // and if its less than minMergersNeeded, we disable push based shuffle.
+    // and if it's less than minMergersNeeded, we disable push based shuffle.
     val mergerLocations = blockManagerMaster
       .getShufflePushMergerLocations(numMergersDesired, scheduler.excludedNodes())
     if (mergerLocations.size < numMergersDesired && mergerLocations.size < minMergersNeeded) {
       Seq.empty[BlockManagerId]
     } else {
-      logDebug(s"Num merger locations available ${mergerLocations.length}")
+      logDebug(s"The number of shuffle mergers desired ${numMergersDesired}" +
+        s" and available locations are ${mergerLocations.length}")
       mergerLocations
     }
   }

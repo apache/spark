@@ -1941,7 +1941,7 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
-      .doc("Set to 'true' to enable push based shuffle on the client side and this works in " +
+      .doc("Set to 'true' to enable push-based shuffle on the client side and this works in " +
         "conjunction with the server side flag spark.shuffle.server.mergedShuffleFileManagerImpl " +
         "which needs to be set with the appropriate " +
         "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based " +
@@ -1950,9 +1950,9 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_MERGERS_MAX_RETAINED_LOCATIONS =
+  private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
-      .doc("Maximum number of shuffle push mergers locations cached for push based shuffle. " +
+      .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
         "Currently, shuffle push merger locations are nothing but external shuffle services " +
         "which are responsible for handling pushed blocks and merging them and serving " +
         "merged blocks for later shuffle fetch.")
@@ -1973,15 +1973,15 @@ package object config {
 
   private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD =
     ConfigBuilder("spark.shuffle.push.mergersMinStaticThreshold")
-      .doc(s"The static threshold for number of shuffle push mergers locations should be " +
+      .doc(s"The static threshold for number of shuffle push merger locations should be " +
         "available in order to enable push based shuffle for a stage. Note this config " +
         s"works in conjunction with ${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key}. " +
-        s"Maximum of spark.shuffle.push.mergersMinStaticThreshold and " +
+        "Maximum of spark.shuffle.push.mergersMinStaticThreshold and " +
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} ratio number of mergers needed to " +
         "enable push based shuffle for a stage. For eg: with 1000 partitions for the child " +
-        s"stage with spark.shuffle.push.mergersMinStaticThreshold as 5 and " +
+        "stage with spark.shuffle.push.mergersMinStaticThreshold as 5 and " +
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
-        s"atleast 50 mergers to enable push based shuffle for that stage.")
+        "at least 50 mergers to enable push based shuffle for that stage.")
       .version("3.1.0")
       .doubleConf
       .createWithDefault(5)
