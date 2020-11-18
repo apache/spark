@@ -23,9 +23,10 @@ import java.time.format.DateTimeFormatter
 
 import scala.util.Random
 
-import org.apache.spark.sql.{AnalysisException, DataFrameReader, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -34,8 +35,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
-      executeTest(dir, Seq(curTime), modifiedBefore = Some(formatTime(curTime)),
-        expectedCount = None)
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formatTime(curTime)))
     }
   }
 
@@ -43,8 +43,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
-      executeTest(dir, Seq(curTime), modifiedAfter = Some(formatTime(curTime)),
-        expectedCount = None)
+      executeTest(dir, Seq(curTime), 0, modifiedAfter = Some(formatTime(curTime)))
     }
   }
 
@@ -53,8 +52,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val formattedTime = formatTime(curTime)
-      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime),
-        modifiedAfter = Some(formattedTime), expectedCount = None)
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -64,8 +63,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val fileTime = curTime.minusDays(3)
       val formattedTime = formatTime(curTime)
-      executeTest(dir, Seq(fileTime), modifiedBefore = Some(formattedTime),
-        modifiedAfter = Some(formattedTime), expectedCount = None)
+      executeTest(dir, Seq(fileTime), 0, modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -74,8 +73,8 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val formattedTime = formatTime(curTime)
-      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime),
-        modifiedAfter = Some(formattedTime), expectedCount = None)
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -84,8 +83,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val pastTime = curTime.minusYears(1)
       val formattedTime = formatTime(pastTime)
-      executeTest(dir, Seq(curTime), modifiedAfter = Some(formattedTime),
-        expectedCount = Some(1))
+      executeTest(dir, Seq(curTime), 1, modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -94,7 +92,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val futureTime = curTime.plusYears(1)
       val formattedTime = formatTime(futureTime)
-      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime), expectedCount = Some(1))
+      executeTest(dir, Seq(curTime), 1, modifiedBefore = Some(formattedTime))
     }
   }
 
@@ -103,7 +101,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val pastTime = curTime.minusYears(1)
       val formattedTime = formatTime(pastTime)
-      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime), expectedCount = None)
+      executeTest(dir, Seq(curTime), 0, modifiedBefore = Some(formattedTime))
     }
   }
 
@@ -113,8 +111,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val fileTime2 = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
       val pastTime = fileTime1.minusYears(1)
       val formattedTime = formatTime(pastTime)
-      executeTest(dir, Seq(fileTime1, fileTime2), modifiedAfter = Some(formattedTime),
-        expectedCount = Some(1))
+      executeTest(dir, Seq(fileTime1, fileTime2), 1, modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -123,8 +120,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val curTime = LocalDateTime.now(ZoneOffset.UTC)
       val pastTime = curTime.minusYears(1)
       val formattedTime = formatTime(pastTime)
-      executeTest(dir, Seq(curTime, curTime), modifiedAfter = Some(formattedTime),
-        expectedCount = Some(2))
+      executeTest(dir, Seq(curTime, curTime), 2, modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -133,8 +129,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val fileTime = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
       val pastTime = LocalDateTime.now(ZoneOffset.UTC).minusYears(1)
       val formattedTime = formatTime(pastTime)
-      executeTest(dir, Seq(fileTime, fileTime), modifiedAfter = Some(formattedTime),
-        expectedCount = None)
+      executeTest(dir, Seq(fileTime, fileTime), 0, modifiedAfter = Some(formattedTime))
     }
   }
 
@@ -143,8 +138,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val fileTime = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
       val futureTime = LocalDateTime.now(ZoneOffset.UTC).plusYears(1)
       val formattedTime = formatTime(futureTime)
-      executeTest(dir, Seq(fileTime, fileTime), modifiedBefore = Some(formattedTime),
-        expectedCount = Some(2))
+      executeTest(dir, Seq(fileTime, fileTime), 2, modifiedBefore = Some(formattedTime))
     }
   }
 
@@ -154,8 +148,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val fileTime1 = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
       val fileTime2 = curTime.plusDays(3)
       val formattedTime = formatTime(curTime)
-      executeTest(dir, Seq(fileTime1, fileTime2), modifiedBefore = Some(formattedTime),
-        expectedCount = Some(1))
+      executeTest(dir, Seq(fileTime1, fileTime2), 1, modifiedBefore = Some(formattedTime))
     }
   }
 
@@ -163,8 +156,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val fileTime = LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
       val formattedTime = formatTime(fileTime)
-      executeTest(dir, Seq(fileTime, fileTime), modifiedBefore = Some(formattedTime),
-        expectedCount = None)
+      executeTest(dir, Seq(fileTime, fileTime), 0, modifiedBefore = Some(formattedTime))
     }
   }
 
@@ -233,7 +225,7 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
   private def executeTest(
       dir: File,
       fileDates: Seq[LocalDateTime],
-      expectedCount: Option[Long],
+      expectedCount: Long,
       modifiedBefore: Option[String] = None,
       modifiedAfter: Option[String] = None): Unit = {
     fileDates.foreach { fileDate =>
@@ -241,33 +233,27 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       setFileTime(fileDate, file)
     }
 
-    var dfReader = spark.read.format("csv").option("timeZone", "UTC")
+    val schema = StructType(Seq(StructField("a", StringType)))
+
+    var dfReader = spark.read.format("csv").option("timeZone", "UTC").schema(schema)
     modifiedBefore.foreach { opt => dfReader = dfReader.option("modifiedBefore", opt) }
     modifiedAfter.foreach { opt => dfReader = dfReader.option("modifiedAfter", opt) }
 
-    def assertQueryFailure(dfReader: DataFrameReader): Unit = {
-      val exc = intercept[AnalysisException] {
-        dfReader.load(dir.getCanonicalPath)
-      }
-      assert(exc.getMessage.contains("Unable to infer schema for CSV"))
-    }
+    if (expectedCount > 0) {
+      // without pathGlobFilter
+      val df1 = dfReader.load(dir.getCanonicalPath)
+      assert(df1.count() === expectedCount)
 
-    expectedCount match {
-      case Some(count) =>
-        // without pathGlobFilter
-        val df1 = dfReader.load(dir.getCanonicalPath)
-        assert(df1.count() === count)
+      // pathGlobFilter matched
+      val df2 = dfReader.option("pathGlobFilter", "*.csv").load(dir.getCanonicalPath)
+      assert(df2.count() === expectedCount)
 
-        // pathGlobFilter matched
-        val df2 = dfReader.option("pathGlobFilter", "*.csv").load(dir.getCanonicalPath)
-        assert(df2.count() === count)
-
-        // pathGlobFilter mismatched
-        assertQueryFailure(dfReader.option("pathGlobFilter", "*.txt"))
-
-      case None =>
-        // expecting failure
-        assertQueryFailure(dfReader)
+      // pathGlobFilter mismatched
+      val df3 = dfReader.option("pathGlobFilter", "*.txt").load(dir.getCanonicalPath)
+      assert(df3.count() === 0)
+    } else {
+      val df = dfReader.load(dir.getCanonicalPath)
+      assert(df.count() === 0)
     }
   }
 
