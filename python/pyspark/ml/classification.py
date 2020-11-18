@@ -783,7 +783,7 @@ class LinearSVCTrainingSummary(LinearSVCSummary, _TrainingSummary):
 class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
                                 HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
                                 HasStandardization, HasWeightCol, HasAggregationDepth,
-                                HasThreshold, HasBlockSize):
+                                HasThreshold, HasMaxBlockSizeInMB):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
@@ -836,7 +836,7 @@ class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
     def __init__(self, *args):
         super(_LogisticRegressionParams, self).__init__(*args)
         self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
-                         blockSize=1)
+                         maxBlockSizeInMB=0.0)
 
     @since("1.4.0")
     def setThreshold(self, value):
@@ -980,8 +980,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     LogisticRegressionModel...
     >>> blorModel.getProbabilityCol()
     'newProbability'
-    >>> blorModel.getBlockSize()
-    1
+    >>> blorModel.getMaxBlockSizeInMB()
+    0.0
     >>> blorModel.setThreshold(0.1)
     LogisticRegressionModel...
     >>> blorModel.getThreshold()
@@ -1047,7 +1047,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  aggregationDepth=2, family="auto",
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
-                 blockSize=1):
+                 maxBlockSizeInMB=0.0):
 
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1057,7 +1057,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  aggregationDepth=2, family="auto", \
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                 blockSize=1):
+                 maxBlockSizeInMB=0.0):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -1076,7 +1076,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   aggregationDepth=2, family="auto",
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
-                  blockSize=1):
+                  maxBlockSizeInMB=0.0):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
@@ -1085,7 +1085,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   aggregationDepth=2, family="auto", \
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                  blockSize=1):
+                  maxBlockSizeInMB=0.0):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -1181,11 +1181,11 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
         return self._set(aggregationDepth=value)
 
     @since("3.1.0")
-    def setBlockSize(self, value):
+    def setMaxBlockSizeInMB(self, value):
         """
-        Sets the value of :py:attr:`blockSize`.
+        Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
-        return self._set(blockSize=value)
+        return self._set(maxBlockSizeInMB=value)
 
 
 class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRegressionParams,
