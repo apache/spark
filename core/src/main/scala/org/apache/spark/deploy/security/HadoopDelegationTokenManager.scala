@@ -231,7 +231,7 @@ private[spark] class HadoopDelegationTokenManager(
         val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
         val delay = (ratio * (nextRenewal - now)).toLong
         logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
-          s"and the ratio $ratio")
+          s"and the ratio $ratio, and current time $now")
         scheduleRenewal(delay)
         creds
       }
