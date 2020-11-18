@@ -339,10 +339,8 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val spark = SparkSession.builder().sparkContext(input.context).getOrCreate()
         val df = spark.createDataFrame(input.map(_.asML))
-        // Determine if we should cache the DF
-        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model
-        val mlLogisticRegressionModel = lr.train(df, handlePersistence)
+        val mlLogisticRegressionModel = lr.train(df)
         // convert the model
         val weights = Vectors.dense(mlLogisticRegressionModel.coefficients.toArray)
         createModel(weights, mlLogisticRegressionModel.intercept)
