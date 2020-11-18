@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -31,25 +32,24 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
 
-  // TODO(SPARK-33452): Create a V2 SHOW PARTITIONS execution node
-  test("not supported SHOW PARTITIONS") {
-    def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-      val e = intercept[NotImplementedError] {
-        sql(s"$sqlCommand $sqlParams")
-      }
-      assert(e.getMessage.contains(s"SHOW PARTITIONS is not implemented"))
-    }
-    val t = s"$catalog.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |$defaultUsing
-           |PARTITIONED BY (id)
-         """.stripMargin)
+  private def createDateTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (price int, qty int, year int, month int)
+      |$defaultUsing
+      |partitioned by (year, month)""".stripMargin)
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 1)")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 2)")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
 
-      testV1Command("SHOW PARTITIONS", t)
-      testV1Command("SHOW PARTITIONS", s"$t PARTITION(id='1')")
+  test("filter by partitions") {
+    val table = s"$catalog.dateTable"
+    withTable(table) {
+      createDateTable(table)
+      checkAnswer(
+        sql(s"show partitions $table PARTITION(year=2015, month=1)"),
+        Row("year=2015/month=1") :: Nil)
     }
   }
 }
