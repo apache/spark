@@ -163,7 +163,7 @@ object CommandUtils extends Logging {
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
-      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, isRootLevel = true).map {
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined

@@ -271,6 +271,13 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
+  private[spark] val EXECUTOR_METRICS_FILESYSTEM_SCHEMES =
+    ConfigBuilder("spark.executor.metrics.fileSystemSchemes")
+      .doc("The file system schemes to report in executor metrics.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefaultString("file,hdfs")
+
   private[spark] val EXECUTOR_JAVA_OPTIONS =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
