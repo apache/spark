@@ -611,10 +611,10 @@ class ParquetFilters(
             if (caseSensitive) f.name.equals(name) else f.name.equalsIgnoreCase(name)
           }.map(_.dataType) match {
             case Some(dataType) =>
-              val sortedValues = values.sorted(TypeUtils.getInterpretedOrdering(dataType))
+              val (min, max) = TypeUtils.getMinMaxValue(dataType, values)
               createFilterHelper(
-                sources.And(sources.GreaterThanOrEqual(name, sortedValues.head),
-                  sources.LessThanOrEqual(name, sortedValues.last)),
+                sources.And(sources.GreaterThanOrEqual(name, min),
+                  sources.LessThanOrEqual(name, max)),
                 canPartialPushDownConjuncts)
             case _ => None
           }

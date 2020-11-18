@@ -745,9 +745,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
-        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
-        convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
-          LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
+        val (min, max) = TypeUtils.getMinMaxValue(dataType, values.toArray)
+        convert(And(GreaterThanOrEqual(child, Literal(min, dataType)),
+          LessThanOrEqual(child, Literal(max, dataType))))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>

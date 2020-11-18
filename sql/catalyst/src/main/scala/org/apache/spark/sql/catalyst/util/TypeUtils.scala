@@ -113,4 +113,9 @@ object TypeUtils {
       case _ =>
     }
   }
+
+  def getMinMaxValue(dataType: DataType, values: Array[Any]): (Any, Any) = {
+    val sortedValues = values.sorted(getInterpretedOrdering(dataType))
+    (sortedValues.head, sortedValues.last)
+  }
 }
