@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.client
 
 import java.io.Closeable
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
 import scala.concurrent.duration._
 
@@ -32,6 +32,7 @@ import org.apache.spark.deploy.master.{ApplicationInfo, Master}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.ExecutorDecommissionInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -189,6 +190,7 @@ class AppClientSuite
     val deadReasonList = new ConcurrentLinkedQueue[String]()
     val execAddedList = new ConcurrentLinkedQueue[String]()
     val execRemovedList = new ConcurrentLinkedQueue[String]()
+    val execDecommissionedMap = new ConcurrentHashMap[String, ExecutorDecommissionInfo]()
 
     def connected(id: String): Unit = {
       connectedIdList.add(id)
@@ -216,6 +218,11 @@ class AppClientSuite
     def executorRemoved(
         id: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
       execRemovedList.add(id)
+    }
+
+    def executorDecommissioned(id: String, decommissionInfo: ExecutorDecommissionInfo): Unit = {
+      val previousDecommissionInfo = execDecommissionedMap.putIfAbsent(id, decommissionInfo)
+      assert(previousDecommissionInfo === null, s"Expected no previous decommission info for $id")
     }
 
     def workerRemoved(workerId: String, host: String, message: String): Unit = {}

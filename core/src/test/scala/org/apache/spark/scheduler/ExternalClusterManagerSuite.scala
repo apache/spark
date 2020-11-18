@@ -93,4 +93,9 @@ private class DummyTaskScheduler extends TaskScheduler {
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean = true
+  override def executorDecommission(
+    executorId: String,
+    decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+  override def getExecutorDecommissionInfo(
+    executorId: String): Option[ExecutorDecommissionInfo] = None
 }
