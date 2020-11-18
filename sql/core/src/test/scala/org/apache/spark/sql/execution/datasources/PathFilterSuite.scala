@@ -22,10 +22,10 @@ import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import scala.util.Random
-
 import org.apache.spark.sql.{AnalysisException, DataFrameReader, QueryTest, Row}
-import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, stringToFile}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -160,7 +160,6 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-31962: modifiedBefore specified with a future date, multiple files, none valid") {
-
     withTempDir { dir =>
       val fileTime = LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
       val formattedTime = formatTime(fileTime)
@@ -196,24 +195,6 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       Seq("CET", "HST").foreach { tzId =>
         testModifiedDateFilterWithTimezone(tzId, filterName)
       }
-    }
-  }
-
-  private def testModifiedDateFilterWithTimezone(
-      timezoneId: String,
-      filterParamName: String): Unit = {
-    val curTime = LocalDateTime.now(ZoneOffset.UTC)
-    val zoneId: ZoneId = DateTimeUtils.getTimeZone(timezoneId).toZoneId
-    val strategyTimeInMicros =
-      ModifiedDateFilter.toThreshold(
-        curTime.toString,
-        timezoneId,
-        filterParamName)
-    val strategyTimeInSeconds = strategyTimeInMicros / 1000 / 1000
-
-    val curTimeAsSeconds = curTime.atZone(zoneId).toEpochSecond
-    withClue(s"timezone: $timezoneId / param: $filterParamName,") {
-      assert(strategyTimeInSeconds === curTimeAsSeconds)
     }
   }
 
@@ -303,6 +284,24 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
         dfReader.load(dir.getCanonicalPath)
       }
       expectedMsgParts.foreach { msg => assert(exc.getMessage.contains(msg)) }
+    }
+  }
+
+  private def testModifiedDateFilterWithTimezone(
+      timezoneId: String,
+      filterParamName: String): Unit = {
+    val curTime = LocalDateTime.now(ZoneOffset.UTC)
+    val zoneId: ZoneId = DateTimeUtils.getTimeZone(timezoneId).toZoneId
+    val strategyTimeInMicros =
+      ModifiedDateFilter.toThreshold(
+        curTime.toString,
+        timezoneId,
+        filterParamName)
+    val strategyTimeInSeconds = strategyTimeInMicros / 1000 / 1000
+
+    val curTimeAsSeconds = curTime.atZone(zoneId).toEpochSecond
+    withClue(s"timezone: $timezoneId / param: $filterParamName,") {
+      assert(strategyTimeInSeconds === curTimeAsSeconds)
     }
   }
 

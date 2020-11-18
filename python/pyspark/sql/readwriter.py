@@ -433,10 +433,10 @@ class DataFrameReader(OptionUtils):
 
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore : an optional timestamp to only include files with
+        modifiedBefore (batch only) : an optional timestamp to only include files with
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
+        modifiedAfter (batch only) : an optional timestamp to only include files with
             modification times occurring after the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
 
@@ -490,10 +490,10 @@ class DataFrameReader(OptionUtils):
 
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore : an optional timestamp to only include files with
+        modifiedBefore (batch only) : an optional timestamp to only include files with
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
+        modifiedAfter (batch only) : an optional timestamp to only include files with
             modification times occurring after the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
 
@@ -679,10 +679,10 @@ class DataFrameReader(OptionUtils):
 
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedBefore : an optional timestamp to only include files with
+        modifiedBefore (batch only) : an optional timestamp to only include files with
             modification times occurring before the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
+        modifiedAfter (batch only) : an optional timestamp to only include files with
             modification times occurring after the specified time. The provided timestamp
             must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
 

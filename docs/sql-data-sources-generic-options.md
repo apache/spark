@@ -121,9 +121,11 @@ To load all files recursively, you can use:
 </div>
 
 ### Modification Time Path Filters
+
 `modifiedBefore` and `modifiedAfter` are options that can be 
 applied together or separately in order to achieve greater
 granularity over which files may load during a Spark batch query.
+(Structured Streaming file source doesn't support these options.)
 
 * `modifiedBefore`: an optional timestamp to only include files with
 modification times occurring before the specified time. The provided timestamp
