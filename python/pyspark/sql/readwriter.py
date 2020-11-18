@@ -215,8 +215,8 @@ class DataFrameReader(OptionUtils):
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None, allowUnquotedControlChars=None, lineSep=None, samplingRatio=None,
              dropFieldIfAllNull=None, encoding=None, locale=None, pathGlobFilter=None,
-             recursiveFileLookup=None, modifiedBefore=None, modifiedAfter=None,
-             allowNonNumericNumbers=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None,
+             modifiedBefore=None, modifiedAfter=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -322,12 +322,6 @@ class DataFrameReader(OptionUtils):
             the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
             It does not change the behavior of
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
-        modifiedBefore : an optional timestamp to only include files with
-            modification times occurring before the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
-        modifiedAfter : an optional timestamp to only include files with
-            modification times occurring after the specified time. The provided timestamp
-            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option
             disables
@@ -341,6 +335,13 @@ class DataFrameReader(OptionUtils):
                             ``+Infinity`` and ``Infinity``.
                 *  ``-INF``: for negative infinity, alias ``-Infinity``.
                 *  ``NaN``: for other not-a-numbers, like result of division by zero.
+        modifiedBefore : an optional timestamp to only include files with
+            modification times occurring before the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+        modifiedAfter : an optional timestamp to only include files with
+            modification times occurring after the specified time. The provided timestamp
+            must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
 
         Examples
         --------

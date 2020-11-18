@@ -495,10 +495,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`modifiedBefore`: an optional timestamp to only include files with
    * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`modifiedAfter`: an optional timestamp to only include files with
    * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
@@ -758,10 +758,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`modifiedBefore`: an optional timestamp to only include files with
    * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`modifiedAfter`: an optional timestamp to only include files with
    * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -795,10 +795,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`modifiedBefore`: an optional timestamp to only include files with
    * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`modifiedAfter`: an optional timestamp to only include files with
    * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -834,10 +834,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`modifiedBefore`: an optional timestamp to only include files with
    * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`modifiedAfter`: an optional timestamp to only include files with
    * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -906,10 +906,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * It does not change the behavior of partition discovery.</li>
    * <li>`modifiedBefore`: an optional timestamp to only include files with
    * modification times  occurring before the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`modifiedAfter`: an optional timestamp to only include files with
    * modification times occurring after the specified Time. The provided timestamp
-   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>

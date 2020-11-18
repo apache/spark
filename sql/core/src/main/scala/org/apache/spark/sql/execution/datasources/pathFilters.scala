@@ -31,8 +31,7 @@ trait PathFilterStrategy extends Serializable {
 }
 
 trait StrategyBuilder {
-  def strategy: String
-  def create(parameters: CaseInsensitiveMap[String]): PathFilterStrategy
+  def create(parameters: CaseInsensitiveMap[String]): Option[PathFilterStrategy]
 }
 
 class PathGlobFilter(filePatten: String) extends PathFilterStrategy {
@@ -44,11 +43,10 @@ class PathGlobFilter(filePatten: String) extends PathFilterStrategy {
 }
 
 object PathGlobFilter extends StrategyBuilder {
+  val PARAM_NAME = "pathglobfilter"
 
-  override def strategy: String = "pathglobfilter"
-
-  override def create(parameters: CaseInsensitiveMap[String]): PathFilterStrategy = {
-    new PathGlobFilter(parameters(strategy))
+  override def create(parameters: CaseInsensitiveMap[String]): Option[PathFilterStrategy] = {
+    parameters.get(PARAM_NAME).map(new PathGlobFilter(_))
   }
 }
 
@@ -115,12 +113,14 @@ class ModifiedBeforeFilter(thresholdTime: Long, val timeZoneId: String)
 object ModifiedBeforeFilter extends StrategyBuilder {
   import ModifiedDateFilter._
 
-  override val strategy: String = "modifiedbefore"
+  val PARAM_NAME = "modifiedbefore"
 
-  override def create(parameters: CaseInsensitiveMap[String]): PathFilterStrategy = {
-    val timeZoneId = getTimeZoneId(parameters)
-    val thresholdTime = toThreshold(parameters(strategy), timeZoneId, strategy)
-    new ModifiedBeforeFilter(thresholdTime, timeZoneId)
+  override def create(parameters: CaseInsensitiveMap[String]): Option[PathFilterStrategy] = {
+    parameters.get(PARAM_NAME).map { value =>
+      val timeZoneId = getTimeZoneId(parameters)
+      val thresholdTime = toThreshold(value, timeZoneId, PARAM_NAME)
+      new ModifiedBeforeFilter(thresholdTime, timeZoneId)
+    }
   }
 }
 
@@ -139,12 +139,14 @@ class ModifiedAfterFilter(thresholdTime: Long, val timeZoneId: String)
 object ModifiedAfterFilter extends StrategyBuilder {
   import ModifiedDateFilter._
 
-  override val strategy: String = "modifiedafter"
+  val PARAM_NAME = "modifiedafter"
 
-  override def create(parameters: CaseInsensitiveMap[String]): PathFilterStrategy = {
-    val timeZoneId = getTimeZoneId(parameters)
-    val thresholdTime = toThreshold(parameters(strategy), timeZoneId, strategy)
-    new ModifiedAfterFilter(thresholdTime, timeZoneId)
+  override def create(parameters: CaseInsensitiveMap[String]): Option[PathFilterStrategy] = {
+    parameters.get(PARAM_NAME).map { value =>
+      val timeZoneId = getTimeZoneId(parameters)
+      val thresholdTime = toThreshold(value, timeZoneId, PARAM_NAME)
+      new ModifiedAfterFilter(thresholdTime, timeZoneId)
+    }
   }
 }
 
@@ -154,10 +156,6 @@ object PathFilterFactory {
     Seq(PathGlobFilter, ModifiedBeforeFilter, ModifiedAfterFilter)
 
   def create(parameters: CaseInsensitiveMap[String]): Seq[PathFilterStrategy] = {
-    strategies.flatMap { s =>
-      parameters.get(s.strategy).map { _ =>
-        s.create(parameters)
-      }
-    }
+    strategies.flatMap { _.create(parameters) }
   }
 }

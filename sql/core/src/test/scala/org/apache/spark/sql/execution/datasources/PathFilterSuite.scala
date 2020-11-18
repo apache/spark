@@ -18,544 +18,202 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.File
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
 import scala.util.Random
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrameReader, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PathFilterSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  def createSingleFile(dir: File): File = {
-    val file = new File(dir, "temp" + Random.nextInt(1000) + ".csv")
-    stringToFile(file, "text")
-  }
-
-  def setFileTime(time: LocalDateTime, file: File): Boolean = {
-    val sameTime = time.toEpochSecond(ZoneOffset.UTC)
-    file.setLastModified(sameTime * 1000)
-  }
-
-  def setPlusFileTime(time: LocalDateTime, file: File, interval: Long): Boolean = {
-    val sameTime = time.plusDays(interval).toEpochSecond(ZoneOffset.UTC)
-    file.setLastModified(sameTime * 1000)
-  }
-
-  def setMinusFileTime(time: LocalDateTime, file: File, interval: Long): Boolean = {
-    val sameTime = time.minusDays(interval).toEpochSecond(ZoneOffset.UTC)
-    file.setLastModified(sameTime * 1000)
-  }
-
-  def formatTime(time: LocalDateTime): String = {
-    time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-  }
-
-  test(
-    "SPARK-31962: when modifiedBefore specified" +
+  test("SPARK-31962: modifiedBefore specified" +
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      val time = LocalDateTime.now(ZoneOffset.UTC)
-      setFileTime(time, file)
-      val formattedTime = formatTime(time)
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedBefore", formattedTime)
-          .option("timeZone", "UTC")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      executeTest(dir, Seq(curTime), modifiedBefore = Some(formatTime(curTime)),
+        expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified" +
+  test("SPARK-31962: modifiedAfter specified" +
       " and sharing same timestamp with file last modified time.") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      val time = LocalDateTime.now()
-      setFileTime(time, file)
-      val formattedTime = formatTime(time)
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", formattedTime)
-          .option("timeZone", "UTC")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      executeTest(dir, Seq(curTime), modifiedAfter = Some(formatTime(curTime)),
+        expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with file last modified time.") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      val time = LocalDateTime.now()
-      setFileTime(time, file)
-      val formattedTime = formatTime(time)
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", formattedTime)
-          .option("modifiedBefore", formattedTime)
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val formattedTime = formatTime(curTime)
+      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime), expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with earlier file last modified time.") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      val time = LocalDateTime.now()
-      setMinusFileTime(time, file, 3)
-
-      val formattedTime = formatTime(time)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", formattedTime)
-          .option("modifiedBefore", formattedTime)
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val fileTime = curTime.minusDays(3)
+      val formattedTime = formatTime(curTime)
+      executeTest(dir, Seq(fileTime), modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime), expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter option" +
+  test("SPARK-31962: modifiedBefore and modifiedAfter option" +
       " share same timestamp with later file last modified time.") {
     withTempDir { dir =>
-      createSingleFile(dir)
-      val time = LocalDateTime.now()
-      val formattedTime = formatTime(time)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", formattedTime)
-          .option("modifiedBefore", formattedTime)
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val formattedTime = formatTime(curTime)
+      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime),
+        modifiedAfter = Some(formattedTime), expectedCount = None)
     }
   }
 
   test("SPARK-31962: when modifiedAfter specified with a past date") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      file.setLastModified(DateTimeUtils.currentTimestamp())
-      val df = spark.read
-        .option("modifiedAfter", "2019-05-10T01:11:00")
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val pastTime = curTime.minusYears(1)
+      val formattedTime = formatTime(pastTime)
+      executeTest(dir, Seq(curTime), modifiedAfter = Some(formattedTime),
+        expectedCount = Some(1))
     }
   }
 
   test("SPARK-31962: when modifiedBefore specified with a future date") {
     withTempDir { dir =>
-      createSingleFile(dir)
-      val afterTime = LocalDateTime.now().plusDays(25)
-      val formattedTime = formatTime(afterTime)
-      val df = spark.read
-        .option("modifiedBefore", formattedTime)
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val futureTime = curTime.plusYears(1)
+      val formattedTime = formatTime(futureTime)
+      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime), expectedCount = Some(1))
     }
   }
 
   test("SPARK-31962: with modifiedBefore option provided using a past date") {
     withTempDir { dir =>
-      val file = createSingleFile(dir)
-      file.setLastModified(DateTimeUtils.currentTimestamp())
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedBefore", "1984-05-01T01:00:00")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val pastTime = curTime.minusYears(1)
+      val formattedTime = formatTime(pastTime)
+      executeTest(dir, Seq(curTime), modifiedBefore = Some(formattedTime), expectedCount = None)
     }
   }
 
-  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, one valid") {
+  test("SPARK-31962: modifiedAfter specified with a past date, multiple files, one valid") {
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-      file1.setLastModified(DateTimeUtils.currentTimestamp())
-      file2.setLastModified(0)
-
-      val df = spark.read
-        .option("modifiedAfter", "2019-05-10T01:11:00")
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
+      val fileTime1 = LocalDateTime.now(ZoneOffset.UTC)
+      val fileTime2 = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
+      val pastTime = fileTime1.minusYears(1)
+      val formattedTime = formatTime(pastTime)
+      executeTest(dir, Seq(fileTime1, fileTime2), modifiedAfter = Some(formattedTime),
+        expectedCount = Some(1))
     }
   }
 
-  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, both valid") {
+  test("SPARK-31962: modifiedAfter specified with a past date, multiple files, both valid") {
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-      file1.setLastModified(DateTimeUtils.currentTimestamp())
-      file2.setLastModified(DateTimeUtils.currentTimestamp())
-      val df = spark.read
-        .option("modifiedAfter", "2019-05-10T01:11:00")
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 2)
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val pastTime = curTime.minusYears(1)
+      val formattedTime = formatTime(pastTime)
+      executeTest(dir, Seq(curTime, curTime), modifiedAfter = Some(formattedTime),
+        expectedCount = Some(2))
     }
   }
 
-  test("SPARK-31962: when modifiedAfter specified with a past date, multiple files, none valid") {
+  test("SPARK-31962: modifiedAfter specified with a past date, multiple files, none valid") {
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-      file1.setLastModified(0)
-      file2.setLastModified(0)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", "1984-05-01T01:00:00")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val fileTime = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
+      val pastTime = LocalDateTime.now(ZoneOffset.UTC).minusYears(1)
+      val formattedTime = formatTime(pastTime)
+      executeTest(dir, Seq(fileTime, fileTime), modifiedAfter = Some(formattedTime),
+        expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore specified with a future date, " +
-      "multiple files, both valid") {
+  test("SPARK-31962: modifiedBefore specified with a future date, multiple files, both valid") {
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-      file1.setLastModified(0)
-      file2.setLastModified(0)
-
-      val time = LocalDateTime.now().plusDays(3)
-      val formattedTime = formatTime(time)
-
-      val df = spark.read
-        .option("modifiedBefore", formattedTime)
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 2)
+      val fileTime = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
+      val futureTime = LocalDateTime.now(ZoneOffset.UTC).plusYears(1)
+      val formattedTime = formatTime(futureTime)
+      executeTest(dir, Seq(fileTime, fileTime), modifiedBefore = Some(formattedTime),
+        expectedCount = Some(2))
     }
   }
 
-  test("SPARK-31962: when modifiedBefore specified with a future date, multiple files, one valid") {
+  test("SPARK-31962: modifiedBefore specified with a future date, multiple files, one valid") {
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-      file1.setLastModified(0)
-      val time = LocalDateTime.now()
-      setPlusFileTime(time, file2, 3)
-
-      val formattedTime = formatTime(time)
-      val df = spark.read
-        .option("modifiedBefore", formattedTime)
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
+      val curTime = LocalDateTime.now(ZoneOffset.UTC)
+      val fileTime1 = LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC)
+      val fileTime2 = curTime.plusDays(3)
+      val formattedTime = formatTime(curTime)
+      executeTest(dir, Seq(fileTime1, fileTime2), modifiedBefore = Some(formattedTime),
+        expectedCount = Some(1))
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedBefore specified with a future date, " +
-      "multiple files, none valid") {
+  test("SPARK-31962: modifiedBefore specified with a future date, multiple files, none valid") {
+
     withTempDir { dir =>
-      val file1 = createSingleFile(dir)
-      val file2 = createSingleFile(dir)
-
-      val time = LocalDateTime
-        .now()
-        .minusDays(1)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-
-      file1.setLastModified(DateTimeUtils.currentTimestamp())
-      file2.setLastModified(DateTimeUtils.currentTimestamp())
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedBefore", time)
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
+      val fileTime = LocalDateTime.now(ZoneOffset.UTC).minusDays(1)
+      val formattedTime = formatTime(fileTime)
+      executeTest(dir, Seq(fileTime, fileTime), modifiedBefore = Some(formattedTime),
+        expectedCount = None)
     }
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with a past date and " +
-      "pathGlobalFilter returning results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val df = spark.read
-        .option("modifiedAfter", "1984-05-10T01:11:00")
-        .option("pathGlobFilter", "*.csv")
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
-    }
+  test("SPARK-31962: modifiedBefore/modifiedAfter is specified with an invalid date") {
+    executeTestWithBadOption(
+      Map("modifiedBefore" -> "2024-05+1 01:00:00"),
+      Seq("The timestamp provided", "modifiedbefore", "2024-05+1 01:00:00"))
+
+    executeTestWithBadOption(
+      Map("modifiedAfter" -> "2024-05+1 01:00:00"),
+      Seq("The timestamp provided", "modifiedafter", "2024-05+1 01:00:00"))
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with past date " +
-      "and pathGlobFilter filtering results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", "1984-05-01T01:00:00")
-          .option("pathGlobFilter", "*.txt")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-    }
+  test("SPARK-31962: modifiedBefore/modifiedAfter - empty option") {
+    executeTestWithBadOption(
+      Map("modifiedBefore" -> ""),
+      Seq("The timestamp provided", "modifiedbefore"))
+
+    executeTestWithBadOption(
+      Map("modifiedAfter" -> ""),
+      Seq("The timestamp provided", "modifiedafter"))
   }
 
-  test(
-    "SPARK-31962: when modifiedAfter specified with future date and " +
-      "pathGlobFilter returning results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val time = LocalDateTime
-        .now()
-        .plusDays(10)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", time)
-          .option("pathGlobFilter", "*.csv")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-    }
-  }
-
-  test(
-    "SPARK-31962: when modifiedAfter specified with future date and " +
-      "pathGlobFilter filtering results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val time = LocalDateTime
-        .now()
-        .plusDays(10)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", time)
-          .option("pathGlobFilter", "*.txt")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-    }
-  }
-
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter are specified out of range and " +
-      "pathGlobFilter returning results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val time = LocalDateTime.now().plusDays(10)
-      val formattedTime = formatTime(time)
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", formattedTime)
-          .option("modifiedBefore", formattedTime)
-          .option("pathGlobFilter", "*.csv")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-    }
-  }
-
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter are specified in range and " +
-      "pathGlobFilter returning results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val beforeTime = LocalDateTime
-        .now()
-        .minusDays(25)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-      val afterTime = LocalDateTime
-        .now()
-        .plusDays(25)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-
-      val df = spark.read
-        .option("modifiedAfter", beforeTime)
-        .option("modifiedBefore", afterTime)
-        .option("pathGlobFilter", "*.csv")
-        .format("csv")
-        .load(dir.getCanonicalPath)
-      assert(df.count() == 1)
-    }
-  }
-
-  test(
-    "SPARK-31962: when modifiedBefore and modifiedAfter are specified in range and " +
-      "pathGlobFilter filtering results") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val beforeTime = LocalDateTime
-        .now()
-        .minusDays(25)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-      val afterTime = LocalDateTime
-        .now()
-        .plusDays(25)
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
-
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", beforeTime)
-          .option("modifiedBefore", afterTime)
-          .option("pathGlobFilter", "*.txt")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(msg.contains("Unable to infer schema for CSV"))
-    }
-  }
-
-  test("SPARK-31962: when modifiedAfter is specified with an invalid date") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", "2024-05+1 01:00:00")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      Seq("The timestamp provided", "modifiedafter", "2024-05+1 01:00:00").foreach {
-        expectedMsg =>
-          assert(msg.contains(expectedMsg))
+  test("SPARK-31962: modifiedBefore/modifiedAfter filter takes into account local timezone " +
+      "when specified as an option.") {
+    Seq("modifiedbefore", "modifiedafter").foreach { filterName =>
+      // CET = UTC + 1 hour, HST = UTC - 10 hours
+      Seq("CET", "HST").foreach { tzId =>
+        testModifiedDateFilterWithTimezone(tzId, filterName)
       }
     }
   }
 
-  test("SPARK-31962: modifiedBefore - empty option") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedBefore", "")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      assert(
-        msg.contains("The timestamp provided for")
-          && msg.contains("modifiedbefore"))
-    }
-  }
+  private def testModifiedDateFilterWithTimezone(
+      timezoneId: String,
+      filterParamName: String): Unit = {
+    val curTime = LocalDateTime.now(ZoneOffset.UTC)
+    val zoneId: ZoneId = DateTimeUtils.getTimeZone(timezoneId).toZoneId
+    val strategyTimeInMicros =
+      ModifiedDateFilter.toThreshold(
+        curTime.toString,
+        timezoneId,
+        filterParamName)
+    val strategyTimeInSeconds = strategyTimeInMicros / 1000 / 1000
 
-  test("SPARK-31962: modifiedAfter - empty option") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val msg = intercept[AnalysisException] {
-        spark.read
-          .option("modifiedAfter", "")
-          .format("csv")
-          .load(dir.getCanonicalPath)
-      }.getMessage
-      Seq("The timestamp provided", "modifiedafter").foreach { expectedMsg =>
-        assert(msg.contains(expectedMsg))
-      }
-    }
-  }
-
-  test(
-    "SPARK-31962: modifiedAfter filter takes into account local timezone " +
-      "when specified as an option. After UTC.") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val timeZone = DateTimeUtils.getTimeZone("UTC")
-      val strategyTime =
-        ModifiedDateFilter.toThreshold(
-          LocalDateTime.now(timeZone.toZoneId).toString,
-          "HST",
-          "modifiedafter")
-
-      assert(
-        strategyTime - DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) > 0)
-    }
-  }
-
-  test(
-    "SPARK-31962: modifiedAfter filter takes into account local timezone " +
-      "when specified as an option. Before UTC.") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-
-      val timeZone = DateTimeUtils.getTimeZone("UTC")
-      val strategyTime =
-        ModifiedDateFilter.toThreshold(
-          LocalDateTime.now(timeZone.toZoneId).toString,
-          "HST",
-          "modifiedafter")
-      assert(
-        DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) - strategyTime < 0)
-    }
-  }
-
-  test(
-    "SPARK-31962: modifiedBefore filter takes into account local timezone " +
-      "when specified as an option. After UTC.") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val timeZone = DateTimeUtils.getTimeZone("UTC")
-      val strategyTime =
-        ModifiedDateFilter.toThreshold(
-          LocalDateTime.now(timeZone.toZoneId).toString,
-          "CET",
-          "modifiedbefore")
-      assert(
-        DateTimeUtils
-          .getMicroseconds(DateTimeUtils.currentTimestamp(), ZoneOffset.UTC) - strategyTime < 0)
-    }
-  }
-
-  test(
-    "SPARK-31962: modifiedBefore filter takes into account local timezone " +
-      "when specified as an option. Before UTC.") {
-    withTempDir { dir =>
-      createSingleFile(dir)
-      val timeZone = DateTimeUtils.getTimeZone("UTC")
-      val strategyTime =
-        ModifiedDateFilter.toThreshold(
-          LocalDateTime.now(timeZone.toZoneId).toString,
-          "HST",
-          "modifiedbefore")
-      assert(
-        strategyTime - DateTimeUtils.fromUTCTime(DateTimeUtils.currentTimestamp(), "UTC") > 0)
+    val curTimeAsSeconds = curTime.atZone(zoneId).toEpochSecond
+    withClue(s"timezone: $timezoneId / param: $filterParamName,") {
+      assert(strategyTimeInSeconds === curTimeAsSeconds)
     }
   }
 
@@ -589,5 +247,76 @@ class PathFilterSuite extends QueryTest with SharedSparkSession {
       val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
       checkAnswer(df2, input)
     }
+  }
+
+  private def executeTest(
+      dir: File,
+      fileDates: Seq[LocalDateTime],
+      expectedCount: Option[Long],
+      modifiedBefore: Option[String] = None,
+      modifiedAfter: Option[String] = None): Unit = {
+    fileDates.foreach { fileDate =>
+      val file = createSingleFile(dir)
+      setFileTime(fileDate, file)
+    }
+
+    var dfReader = spark.read.format("csv").option("timeZone", "UTC")
+    modifiedBefore.foreach { opt => dfReader = dfReader.option("modifiedBefore", opt) }
+    modifiedAfter.foreach { opt => dfReader = dfReader.option("modifiedAfter", opt) }
+
+    def assertQueryFailure(dfReader: DataFrameReader): Unit = {
+      val exc = intercept[AnalysisException] {
+        dfReader.load(dir.getCanonicalPath)
+      }
+      assert(exc.getMessage.contains("Unable to infer schema for CSV"))
+    }
+
+    expectedCount match {
+      case Some(count) =>
+        // without pathGlobFilter
+        val df1 = dfReader.load(dir.getCanonicalPath)
+        assert(df1.count() === count)
+
+        // pathGlobFilter matched
+        val df2 = dfReader.option("pathGlobFilter", "*.csv").load(dir.getCanonicalPath)
+        assert(df2.count() === count)
+
+        // pathGlobFilter mismatched
+        assertQueryFailure(dfReader.option("pathGlobFilter", "*.txt"))
+
+      case None =>
+        // expecting failure
+        assertQueryFailure(dfReader)
+    }
+  }
+
+  private def executeTestWithBadOption(
+      options: Map[String, String],
+      expectedMsgParts: Seq[String]): Unit = {
+    withTempDir { dir =>
+      createSingleFile(dir)
+      val exc = intercept[AnalysisException] {
+        var dfReader = spark.read.format("csv")
+        options.foreach { case (key, value) =>
+          dfReader = dfReader.option(key, value)
+        }
+        dfReader.load(dir.getCanonicalPath)
+      }
+      expectedMsgParts.foreach { msg => assert(exc.getMessage.contains(msg)) }
+    }
+  }
+
+  private def createSingleFile(dir: File): File = {
+    val file = new File(dir, "temp" + Random.nextInt(1000000) + ".csv")
+    stringToFile(file, "text")
+  }
+
+  private def setFileTime(time: LocalDateTime, file: File): Boolean = {
+    val sameTime = time.toEpochSecond(ZoneOffset.UTC)
+    file.setLastModified(sameTime * 1000)
+  }
+
+  private def formatTime(time: LocalDateTime): String = {
+    time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
   }
 }
