@@ -204,6 +204,39 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(0, BooleanType), IntegerType), 0)
   }
 
+  test("cast from int") {
+    checkCast(0, false)
+    checkCast(1, true)
+    checkCast(-5, true)
+    checkCast(1, 1.toByte)
+    checkCast(1, 1.toShort)
+    checkCast(1, 1)
+    checkCast(1, 1.toLong)
+    checkCast(1, 1.0f)
+    checkCast(1, 1.0)
+    checkCast(123, "123")
+
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(1, LongType), 1.toLong)
+  }
+
+  test("cast from long") {
+    checkCast(0L, false)
+    checkCast(1L, true)
+    checkCast(-5L, true)
+    checkCast(1L, 1.toByte)
+    checkCast(1L, 1.toShort)
+    checkCast(1L, 1)
+    checkCast(1L, 1.toLong)
+    checkCast(1L, 1.0f)
+    checkCast(1L, 1.0)
+    checkCast(123L, "123")
+
+    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+  }
+
   test("cast from float") {
     checkCast(0.0f, false)
     checkCast(0.5f, true)
@@ -926,7 +959,7 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("null cast II") {
+  test("null cast #2") {
     import DataTypeTestUtils._
 
     checkNullCast(DateType, BooleanType)
@@ -937,51 +970,15 @@ class CastSuite extends CastSuiteBase {
     numericTypes.foreach(dt => checkNullCast(DateType, dt))
   }
 
-  test("cast from int") {
-    checkCast(0, false)
-    checkCast(1, true)
-    checkCast(-5, true)
-    checkCast(1, 1.toByte)
-    checkCast(1, 1.toShort)
-    checkCast(1, 1)
-    checkCast(1, 1.toLong)
-    checkCast(1, 1.0f)
-    checkCast(1, 1.0)
-    checkCast(123, "123")
-
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 1)), null)
-    checkEvaluation(cast(123, DecimalType(2, 0)), null)
-  }
-
-  test("cast from long") {
-    checkCast(0L, false)
-    checkCast(1L, true)
-    checkCast(-5L, true)
-    checkCast(1L, 1.toByte)
-    checkCast(1L, 1.toShort)
-    checkCast(1L, 1)
-    checkCast(1L, 1.toLong)
-    checkCast(1L, 1.0f)
-    checkCast(1L, 1.0)
-    checkCast(123L, "123")
-
-    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+  test("cast from long #2") {
     checkEvaluation(cast(123L, DecimalType(3, 1)), null)
-
     checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
-  test("cast from int 2") {
-    checkEvaluation(cast(1, LongType), 1.toLong)
-
+  test("cast from int #2") {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
@@ -1511,7 +1508,7 @@ class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
 /**
  * Test suite for data type casting expression [[AnsiCast]] with ANSI mode enabled.
  */
-class AnsiCastSuiteWithAnsiModeOn extends CastSuiteBase {
+class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
@@ -1533,7 +1530,7 @@ class AnsiCastSuiteWithAnsiModeOn extends CastSuiteBase {
 /**
  * Test suite for data type casting expression [[AnsiCast]] with ANSI mode disabled.
  */
-class AnsiCastSuiteWithAnsiModeOff extends CastSuiteBase {
+class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
