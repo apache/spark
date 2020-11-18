@@ -2026,9 +2026,9 @@ package object config {
 
   private[spark] val PUSH_SHUFFLE_NUM_PUSH_THREADS =
     ConfigBuilder("spark.shuffle.push.numPushThreads")
-      .doc("Specify the number of threads in the block pusher pool. These threads assist  " +
+      .doc("Specify the number of threads in the block pusher pool. These threads assist " +
         "in creating connections and pushing blocks to remote shuffle services when push based " +
-        "shuffle is enabled. By default, the threadpool size is equal to the number of cores")
+        "shuffle is enabled. By default, the threadpool size is equal to the number of cores.")
       .version("3.1.0")
       .intConf
       .createOptional

@@ -62,12 +62,13 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
       if (mapStatus.isDefined) {
         // Initiate shuffle push process if push based shuffle is enabled
         // The map task only takes care of converting the shuffle data file into multiple
-        // block push requests and pushing the first batch of blocks to the remote shuffle
-        // service. The remaining block pushes is handled by netty client threads.
+        // block push requests. It delegates pushing the blocks to a different thread-pool -
+        // PushShuffleSupport.BLOCK_PUSHER_POOL.
         if (Utils.isPushShuffleEnabled(SparkEnv.get.conf) && dep.getMergerLocs.nonEmpty) {
-          writer.initiateBlockPush(
-            manager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
-            writer.getPartitionLengths(), dep, partition.index, mapId, SparkEnv.get.conf)
+          val dataFile = manager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+            .getDataFile(dep.shuffleId, mapId)
+          new PushShuffleSupport(dataFile, writer.getPartitionLengths(), dep,
+            partition.index, SparkEnv.get.conf)
         }
       }
       mapStatus.get
