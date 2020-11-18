@@ -114,6 +114,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices. 
   - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+  - `parse_url`: This function throws `IllegalArgumentException` if input string is not a valid url.
 
 ### SQL Operators
 
