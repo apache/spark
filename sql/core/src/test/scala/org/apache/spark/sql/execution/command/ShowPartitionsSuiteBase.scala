@@ -36,9 +36,9 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
 
   protected def createDateTable(table: String): Unit = {
     sql(s"""
-           |CREATE TABLE $table (price int, qty int, year int, month int)
-           |$defaultUsing
-           |partitioned by (year, month)""".stripMargin)
+      |CREATE TABLE $table (price int, qty int, year int, month int)
+      |$defaultUsing
+      |partitioned by (year, month)""".stripMargin)
     sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
     sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")

@@ -45,14 +45,12 @@ case class ShowPartitionsExec(
      */
     if (spec.isDefined) {
       val partitionColumnNames =
-        table.partitioning().flatMap(_.references.flatMap(_.fieldNames)).toSet
-      val specKeys = spec.get.keySet
-      if (!specKeys.subsetOf(partitionColumnNames)) {
-        val badColumns = specKeys
-          .filterNot(partitionColumnNames.contains)
-          .mkString("[", ", ", "]")
+        table.partitioning().flatMap(_.references.flatMap(_.fieldNames))
+      val badColumns = spec.get.keySet.filterNot(partitionColumnNames.contains)
+      if (badColumns.nonEmpty) {
+        val badCols = badColumns.mkString("[", ", ", "]")
         throw new AnalysisException(
-          s"Non-partitioning column(s) $badColumns are specified for SHOW PARTITIONS")
+          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
       }
     }
 

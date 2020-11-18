@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -29,7 +29,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
   override def defaultUsing: String = "USING _"
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
+    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
 
   // TODO(SPARK-33452): Create a V2 SHOW PARTITIONS execution node
   test("not supported SHOW PARTITIONS") {

@@ -299,11 +299,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowCreateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
-    case r @ ShowPartitions(t: ResolvedTable, pattern) =>
-      ShowPartitionsExec(r.output, t.catalog, t.table, pattern) :: Nil
-
     case ShowPartitions(v: ResolvedView, _) =>
       throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: ${v.identifier}")
+    case r @ ShowPartitions(t: ResolvedTable, pattern) =>
+      ShowPartitionsExec(r.output, t.catalog, t.table, pattern) :: Nil
 
     case _ => Nil
   }
