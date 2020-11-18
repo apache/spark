@@ -1973,8 +1973,8 @@ class DataSourceV2SQLSuite
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1CommandSupportingTempView("UNCACHE TABLE", t)
-      testV1CommandSupportingTempView("UNCACHE TABLE", s"IF EXISTS $t")
+      testNotSupportedV2Command("UNCACHE TABLE", t)
+      testNotSupportedV2Command("UNCACHE TABLE", s"IF EXISTS $t")
     }
   }
 
