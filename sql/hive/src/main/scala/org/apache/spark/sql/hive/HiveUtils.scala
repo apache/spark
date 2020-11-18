@@ -97,8 +97,8 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
     .doc(s"""
-      | Comma-separated paths of the jars that should be used to instantiate the HiveMetastoreClient.
-      | This configuration is effective only when `{$HIVE_METASTORE_JARS.key}` is set as `path`.
+      | Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
+      | This configuration is useful only when `{$HIVE_METASTORE_JARS.key}` is set as `path`.
       | The paths can be any of the following format:
       | 1. file://path/to/jar/foo.jar
       | 2. hdfs://nameservice/path/to/jar/foo.jar
