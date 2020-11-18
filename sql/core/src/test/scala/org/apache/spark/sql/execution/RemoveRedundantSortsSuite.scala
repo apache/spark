@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -136,13 +138,11 @@ abstract class RemoveRedundantSortsSuiteBase
     }
   }
 
-  test("shuffled join with different left and right side partition numbers") {
+  test("SPARK-33472: shuffled join with different left and right side partition numbers") {
     withTempView("t1", "t2") {
       spark.range(0, 100, 1, 2).select('id as "key").createOrReplaceTempView("t1")
       (0 to 100).toDF("key").createOrReplaceTempView("t2")
 
-      // left side partitioning: RangePartitioning(key ASC, 2)
-      // right side partitioning: UnknownPartitioning(0)
       val queryTemplate = """
         |SELECT /*+ %s(t1) */ t1.key
         |FROM t1 JOIN t2 ON t1.key = t2.key
@@ -151,7 +151,14 @@ abstract class RemoveRedundantSortsSuiteBase
       """.stripMargin
 
       Seq(("MERGE", 3), ("SHUFFLE_HASH", 1)).foreach { case (hint, count) =>
-        checkSorts(queryTemplate.format(hint), count, count)
+        val query = queryTemplate.format(hint)
+        val df = sql(query)
+        val sparkPlan = df.queryExecution.sparkPlan
+        val join = sparkPlan.collect { case j: ShuffledJoin => j }.head
+        val range = sparkPlan.collect { case r: RangeExec => r }.head
+        assert(join.left.outputPartitioning == range.outputPartitioning)
+        assert(join.right.outputPartitioning == UnknownPartitioning(0))
+        checkSorts(query, count, count)
       }
     }
   }
