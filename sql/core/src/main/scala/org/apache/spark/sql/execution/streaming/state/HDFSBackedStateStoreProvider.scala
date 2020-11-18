@@ -303,15 +303,15 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
     StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
-      "estimated size of state only on current version")
+      "estimated size of state only on current version", "bytes")
 
   private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheHitCount",
-      "count of cache hit on states cache in provider")
+      "count of cache hit on states cache in provider", "hit count")
 
   private lazy val metricLoadedMapCacheMiss: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheMissCount",
-      "count of cache miss on states cache in provider")
+      "count of cache miss on states cache in provider", "hit count")
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 

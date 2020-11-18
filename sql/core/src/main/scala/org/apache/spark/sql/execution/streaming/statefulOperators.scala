@@ -127,11 +127,11 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
     val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
-      case StateStoreCustomSumMetric(name, desc) =>
+      case StateStoreCustomSumMetric(name, desc, _) =>
         name -> SQLMetrics.createMetric(sparkContext, desc)
-      case StateStoreCustomSizeMetric(name, desc) =>
+      case StateStoreCustomSizeMetric(name, desc, _) =>
         name -> SQLMetrics.createSizeMetric(sparkContext, desc)
-      case StateStoreCustomTimingMetric(name, desc) =>
+      case StateStoreCustomTimingMetric(name, desc, _) =>
         name -> SQLMetrics.createTimingMetric(sparkContext, desc)
     }.toMap
   }

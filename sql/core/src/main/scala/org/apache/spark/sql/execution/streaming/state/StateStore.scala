@@ -178,11 +178,15 @@ object StateStoreMetrics {
 trait StateStoreCustomMetric {
   def name: String
   def desc: String
+  def unit: String
 }
 
-case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomSumMetric(name: String, desc: String, unit: String)
+  extends StateStoreCustomMetric
+case class StateStoreCustomSizeMetric(name: String, desc: String, unit: String)
+  extends StateStoreCustomMetric
+case class StateStoreCustomTimingMetric(name: String, desc: String, unit: String)
+  extends StateStoreCustomMetric
 
 /**
  * An exception thrown when an invalid UnsafeRow is detected in state store.

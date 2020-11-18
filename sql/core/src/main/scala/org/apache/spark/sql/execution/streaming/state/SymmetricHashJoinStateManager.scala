@@ -313,11 +313,11 @@ class SymmetricHashJoinStateManager(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
       keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
       keyWithIndexToValueMetrics.customMetrics.map {
-        case (s @ StateStoreCustomSumMetric(_, desc), value) =>
+        case (s @ StateStoreCustomSumMetric(_, desc, _), value) =>
           s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomSizeMetric(_, desc), value) =>
+        case (s @ StateStoreCustomSizeMetric(_, desc, _), value) =>
           s.copy(desc = newDesc(desc)) -> value
-        case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
+        case (s @ StateStoreCustomTimingMetric(_, desc, _), value) =>
           s.copy(desc = newDesc(desc)) -> value
         case (s, _) =>
           throw new IllegalArgumentException(

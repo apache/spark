@@ -26,12 +26,20 @@ import scala.collection.JavaConverters._
 import scala.xml.{Node, NodeBuffer, Unparsed}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
+import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
+
+  // State store provider implementation mustn't do any heavyweight initialiation in constructor
+  // but in its init method.
+  private val supportedMetrics = StateStoreProvider.create(
+    parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
+  logDebug(s"Supported metrics: $supportedMetrics")
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
@@ -264,6 +272,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
           p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
         val max = data.maxBy(_._2)._2
+        val metric = supportedMetrics.find(_.name == metricName).get
 
         val graphUIData =
           new GraphUIData(
@@ -274,7 +283,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             maxBatchTime,
             0,
             max,
-            "")
+            metric.unit)
         graphUIData.generateDataJs(jsCollector)
 
         result ++=
@@ -282,7 +291,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           <tr>
             <td style="vertical-align: middle;">
               <div style="width: 240px;">
-                <div><strong>Aggregated Custom Metric {s"$metricName"} {SparkUIUtils.tooltip("Custom metric.", "right")}</strong></div>
+                <div><strong>Aggregated Custom Metric {s"$metricName"} {SparkUIUtils.tooltip(metric.desc, "right")}</strong></div>
               </div>
             </td>
             <td class={s"aggregated-$metricName-timeline"}>{graphUIData.generateTimelineHtml(jsCollector)}</td>
