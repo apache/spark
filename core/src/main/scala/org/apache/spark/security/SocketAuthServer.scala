@@ -26,7 +26,7 @@ import scala.util.Try
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Python.PYTHON_GATEWAY_CONNECT_TIMEOUT
+import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -51,7 +51,7 @@ private[spark] abstract class SocketAuthServer[T](
     logTrace("Creating listening socket")
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
     // Close the socket if no connection in configured seconds
-    val timeout = SparkEnv.get.conf.get(PYTHON_GATEWAY_CONNECT_TIMEOUT).toInt
+    val timeout = SparkEnv.get.conf.get(PYTHON_AUTH_SOCKET_TIMEOUT).toInt
     logTrace(s"Setting timeout to $timeout sec")
     serverSocket.setSoTimeout(timeout * 1000)
 

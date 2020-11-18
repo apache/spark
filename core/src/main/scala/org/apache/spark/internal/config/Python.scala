@@ -51,7 +51,8 @@ private[spark] object Python {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
-  val PYTHON_GATEWAY_CONNECT_TIMEOUT = ConfigBuilder("spark.python.gateway.connectTimeout")
+  val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
+    .internal()
     .version("3.1.0")
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("15s")
