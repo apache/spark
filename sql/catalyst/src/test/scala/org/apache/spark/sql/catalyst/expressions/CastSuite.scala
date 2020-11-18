@@ -38,15 +38,6 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
-  // Whether this test suite is for checking AnsiCast or default Cast.
-  protected def isAnsiCast: Boolean
-
-  // For default `Cast`, we need to set `SQLConf.ANSI_ENABLED` as true to for testing the behavior
-  // of ANSI mode.
-  // As for `AnsiCast`, we set `SQLConf.ANSI_ENABLED` as false to verify all the ANSI mode features
-  // are enabled by default for this expression.
-  protected val ansiConfForTestingAnsiMode = SQLConf.ANSI_ENABLED.key -> (!isAnsiCast).toString
-
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
 
   // expected cannot be null
@@ -235,10 +226,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, 1.toLong)
     checkCast(1.5, 1.5f)
     checkCast(1.5, "1.5")
-    // AnsiCast doesn't support casting DoubleType as TimestampType
-    if (!isAnsiCast) {
-      checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
-    }
   }
 
   test("cast from string") {
@@ -304,20 +291,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(cast(cast(
       cast(cast("5", ByteType), ShortType), IntegerType), FloatType), DoubleType), LongType),
       5.toLong)
-
-    if (!isAnsiCast) {
-      checkEvaluation(
-        cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
-          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-        5.toShort)
-      checkEvaluation(
-        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
-          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-        null)
-      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
-        ByteType), TimestampType), LongType), StringType), ShortType),
-        5.toShort)
-    }
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -585,7 +558,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("", BooleanType), null)
   }
 
-  private def checkInvalidCastFromNumericType(to: DataType): Unit = {
+  protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
     assert(cast(1.toByte, to).checkInputDataTypes().isFailure)
     assert(cast(1.toShort, to).checkInputDataTypes().isFailure)
     assert(cast(1, to).checkInputDataTypes().isFailure)
@@ -599,60 +572,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
     assert(cast(false, DateType).checkInputDataTypes().isFailure)
     checkInvalidCastFromNumericType(DateType)
-  }
-
-  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
-    import DataTypeTestUtils.numericTypes
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      checkInvalidCastFromNumericType(TimestampType)
-      val timestampLiteral = Literal(1L, TimestampType)
-      numericTypes.foreach { numericType =>
-        assert(cast(timestampLiteral, numericType).checkInputDataTypes().isFailure)
-      }
-    }
-  }
-
-  test("ANSI mode: disallow type conversions between Numeric types and Date type") {
-    import DataTypeTestUtils.numericTypes
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      checkInvalidCastFromNumericType(DateType)
-      val dateLiteral = Literal(1, DateType)
-      numericTypes.foreach { numericType =>
-        assert(cast(dateLiteral, numericType).checkInputDataTypes().isFailure)
-      }
-    }
-  }
-
-  test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
-    import DataTypeTestUtils.numericTypes
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      checkInvalidCastFromNumericType(BinaryType)
-      val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
-      numericTypes.foreach { numericType =>
-        assert(cast(binaryLiteral, numericType).checkInputDataTypes().isFailure)
-      }
-    }
-  }
-
-  test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      val timestampLiteral = Literal(1L, TimestampType)
-      assert(cast(timestampLiteral, BooleanType).checkInputDataTypes().isFailure)
-      val dateLiteral = Literal(1, DateType)
-      assert(cast(dateLiteral, BooleanType).checkInputDataTypes().isFailure)
-
-      val booleanLiteral = Literal(true, BooleanType)
-      assert(cast(booleanLiteral, TimestampType).checkInputDataTypes().isFailure)
-      assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
-    }
-  }
-
-  test("ANSI mode: disallow casting complex types as String type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
-      assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
-      assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
-    }
   }
 
   test("SPARK-20302 cast with same structure") {
@@ -766,17 +685,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
-    }
-  }
-
   test("Process Infinity, -Infinity, NaN in case insensitive manner") {
     Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
       checkEvaluation(cast(value, FloatType), Float.PositiveInfinity)
@@ -797,6 +705,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(value, DoubleType), Double.NaN)
     }
   }
+}
+
+abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
@@ -822,78 +733,184 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      testIntMaxAndMin(ByteType)
-      Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
-        checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
-      }
+  test("ANSI mode: Throw exception on casting out-of-range value to byte type") {
+    testIntMaxAndMin(ByteType)
+    Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
+    }
 
-      Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
-        checkEvaluation(cast(value, ByteType), value)
-        checkEvaluation(cast(value.toString, ByteType), value)
-        checkEvaluation(cast(Decimal(value.toString), ByteType), value)
-        checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
-        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
-      }
+    Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ByteType), value)
+      checkEvaluation(cast(value.toString, ByteType), value)
+      checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+      checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
+      checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
     }
   }
 
-  test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      testIntMaxAndMin(ShortType)
-      Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
-        checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
-      }
+  test("ANSI mode: Throw exception on casting out-of-range value to short type") {
+    testIntMaxAndMin(ShortType)
+    Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
+    }
 
-      Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
-        checkEvaluation(cast(value, ShortType), value)
-        checkEvaluation(cast(value.toString, ShortType), value)
-        checkEvaluation(cast(Decimal(value.toString), ShortType), value)
-        checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
-        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
-      }
+    Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ShortType), value)
+      checkEvaluation(cast(value.toString, ShortType), value)
+      checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+      checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
+      checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
     }
   }
 
-  test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      testIntMaxAndMin(IntegerType)
-      testLongMaxAndMin(IntegerType)
+  test("ANSI mode: Throw exception on casting out-of-range value to int type") {
+    testIntMaxAndMin(IntegerType)
+    testLongMaxAndMin(IntegerType)
 
-      Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
-        checkEvaluation(cast(value, IntegerType), value)
-        checkEvaluation(cast(value.toString, IntegerType), value)
-        checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
-        checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
-      }
-      checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
-      checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+    Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
+      checkEvaluation(cast(value, IntegerType), value)
+      checkEvaluation(cast(value.toString, IntegerType), value)
+      checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
+    }
+    checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+    checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+  }
+
+  test("ANSI mode: Throw exception on casting out-of-range value to long type") {
+    testLongMaxAndMin(LongType)
+
+    Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
+      checkEvaluation(cast(value, LongType), value)
+      checkEvaluation(cast(value.toString, LongType), value)
+      checkEvaluation(cast(Decimal(value.toString), LongType), value)
+    }
+    checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+    checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+  }
+
+  test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+  }
+
+  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(TimestampType)
+    val timestampLiteral = Literal(1L, TimestampType)
+    numericTypes.foreach { numericType =>
+      assert(cast(timestampLiteral, numericType).checkInputDataTypes().isFailure)
     }
   }
 
-  test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(ansiConfForTestingAnsiMode) {
-      testLongMaxAndMin(LongType)
-
-      Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
-        checkEvaluation(cast(value, LongType), value)
-        checkEvaluation(cast(value.toString, LongType), value)
-        checkEvaluation(cast(Decimal(value.toString), LongType), value)
-      }
-      checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
-      checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
-      checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
-      checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+  test("ANSI mode: disallow type conversions between Numeric types and Date type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(DateType)
+    val dateLiteral = Literal(1, DateType)
+    numericTypes.foreach { numericType =>
+      assert(cast(dateLiteral, numericType).checkInputDataTypes().isFailure)
     }
+  }
+
+  test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(BinaryType)
+    val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
+    numericTypes.foreach { numericType =>
+      assert(cast(binaryLiteral, numericType).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
+    val timestampLiteral = Literal(1L, TimestampType)
+    assert(cast(timestampLiteral, BooleanType).checkInputDataTypes().isFailure)
+    val dateLiteral = Literal(1, DateType)
+    assert(cast(dateLiteral, BooleanType).checkInputDataTypes().isFailure)
+
+    val booleanLiteral = Literal(true, BooleanType)
+    assert(cast(booleanLiteral, TimestampType).checkInputDataTypes().isFailure)
+    assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
+  }
+
+  test("ANSI mode: disallow casting complex types as String type") {
+    assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
+    assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
+    assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
+  }
+
+  test("cast from invalid string to numeric should throw NumberFormatException") {
+    // cast to IntegerType
+    Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
+      val array = Literal.create(Seq("123", "true", "f", null),
+        ArrayType(StringType, containsNull = true))
+      checkExceptionInExpression[NumberFormatException](
+        cast(array, ArrayType(dataType, containsNull = true)),
+        "invalid input syntax for type numeric: true")
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input syntax for type numeric: string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
+      checkExceptionInExpression[NumberFormatException](
+        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
+    }
+
+    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input syntax for type numeric: string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
+      checkExceptionInExpression[NumberFormatException](
+        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
+    }
+  }
+
+  test("Fast fail for cast string type to decimal type in ansi mode") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+38", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+37", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("abcd", DecimalType(38, 1)),
+      "invalid input syntax for type numeric")
   }
 }
 
@@ -901,8 +918,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
  * Test suite for data type casting expression [[Cast]].
  */
 class CastSuite extends CastSuiteBase {
-  // It is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  override def isAnsiCast: Boolean = false
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
@@ -911,7 +926,7 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("null cast: extra test cases for non-ANSI cast") {
+  test("null cast II") {
     import DataTypeTestUtils._
 
     checkNullCast(DateType, BooleanType)
@@ -1451,14 +1466,61 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("data type casting II") {
+    checkEvaluation(
+      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        null)
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimestampType), LongType), StringType), ShortType),
+        5.toShort)
+  }
+
+  test("Cast from double II") {
+    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+  }
 }
 
 /**
- * Test suite for data type casting expression [[AnsiCast]].
+ * Test suite for data type casting expression [[Cast]] with ANSI mode disabled.
  */
-class AnsiCastSuite extends CastSuiteBase {
-  // It is not required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  override def isAnsiCast: Boolean = true
+class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId)
+      case _ => Cast(Literal(v), targetType, timeZoneId)
+    }
+  }
+}
+
+/**
+ * Test suite for data type casting expression [[AnsiCast]] with ANSI mode enabled.
+ */
+class AnsiCastSuiteWithAnsiModeOn extends CastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
@@ -1466,65 +1528,26 @@ class AnsiCastSuite extends CastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+}
 
-  test("cast from invalid string to numeric should throw NumberFormatException") {
-    // cast to IntegerType
-    Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      val array = Literal.create(Seq("123", "true", "f", null),
-        ArrayType(StringType, containsNull = true))
-      checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)),
-        "invalid input syntax for type numeric: true")
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: string")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
-      checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
-      checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
-    }
-
-    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: string")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
-      checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
-    }
+/**
+ * Test suite for data type casting expression [[AnsiCast]] with ANSI mode disabled.
+ */
+class AnsiCastSuiteWithAnsiModeOff extends CastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
   }
 
-  test("Fast fail for cast string type to decimal type in ansi mode") {
-    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
-      Decimal("12345678901234567890123456789012345678"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
-      "out of decimal type range")
-    checkExceptionInExpression[ArithmeticException](
-      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
-      "cannot be represented as Decimal(38, 1)")
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
 
-    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
-      Decimal("0"))
-    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
-      Decimal("0"))
-    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
-      Decimal("0E-18"))
-    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
-      Decimal("0"))
-
-    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
-      Decimal("60000000000000000000000000000000000000"))
-    checkExceptionInExpression[ArithmeticException](
-      cast("6E+38", DecimalType(38, 0)),
-      "out of decimal type range")
-    checkExceptionInExpression[ArithmeticException](
-      cast("6E+37", DecimalType(38, 1)),
-      "cannot be represented as Decimal(38, 1)")
-
-    checkExceptionInExpression[NumberFormatException](
-      cast("abcd", DecimalType(38, 1)),
-      "invalid input syntax for type numeric")
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
+      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
+    }
   }
 }
