@@ -104,7 +104,7 @@ private[spark] object HiveUtils extends Logging {
       | 2. hdfs://nameservice/path/to/jar/foo.jar
       | 3. /path/to/jar/ (path without URI scheme follow conf `fs.defaultFS`'s URI schema)
       | 4. [http/https/ftp]://path/to/jar/foo.jar
-      | All the above formats support wildcard except for the `http/https/ftp` URL. For example:
+      | Note that 1, 2, and 3 support wildcard. For example:
       | 1. file://path/to/jar/*,file://path2/to/jar/*/*.jar
       | 2. hdfs://nameservice/path/to/jar/*,hdfs://nameservice2/path/to/jar/*/*.jar
       """.stripMargin)
