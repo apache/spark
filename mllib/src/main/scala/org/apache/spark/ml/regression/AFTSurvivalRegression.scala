@@ -128,6 +128,10 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
  * (see <a href="https://en.wikipedia.org/wiki/Accelerated_failure_time_model">
  * Accelerated failure time model (Wikipedia)</a>)
  * based on the Weibull distribution of the survival time.
+ *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
  */
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
@@ -186,7 +190,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   /**
    * Sets the value of param [[maxBlockSizeInMB]].
-   * Default is 0.0.
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */

@@ -276,6 +276,10 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  *
  * This class supports fitting traditional logistic regression model by LBFGS/OWLQN and
  * bound (box) constrained logistic regression model by LBFGSB.
+ *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV/GEMM for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
  */
 @Since("1.2.0")
 class LogisticRegression @Since("1.2.0") (
@@ -427,7 +431,7 @@ class LogisticRegression @Since("1.2.0") (
 
   /**
    * Sets the value of param [[maxBlockSizeInMB]].
-   * Default is 0.0.
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */

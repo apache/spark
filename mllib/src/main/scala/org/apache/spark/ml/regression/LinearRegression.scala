@@ -175,6 +175,10 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *   $$
  * </blockquote>
  *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
+ *
  * Note: Fitting with huber loss only supports none and L2 regularization.
  */
 @Since("1.3.0")
@@ -313,7 +317,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   /**
    * Sets the value of param [[maxBlockSizeInMB]].
-   * Default is 0.0.
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */
