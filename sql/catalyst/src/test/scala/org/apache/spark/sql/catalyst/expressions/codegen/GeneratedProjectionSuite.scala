@@ -248,7 +248,7 @@ class GeneratedProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(result === row2)
   }
 
-  test("subexpression elimination for SafeProjection") {
+  test("SPARK-33473: subexpression elimination for interpreted SafeProjection") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> enabled,

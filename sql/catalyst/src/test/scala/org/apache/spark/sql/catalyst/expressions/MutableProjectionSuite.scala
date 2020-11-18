@@ -81,7 +81,7 @@ class MutableProjectionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("subexpression elimination for MutableProjection") {
+  test("SPARK-33473: subexpression elimination for interpreted MutableProjection") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(
         SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> enabled,
