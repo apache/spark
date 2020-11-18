@@ -111,7 +111,7 @@ private[spark] class Executor(
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
   private val schemes = conf.get(EXECUTOR_METRICS_FILESYSTEM_SCHEMES)
-    .toLowerCase(Locale.ROOT).split(",").map(_.trim)
+    .toLowerCase(Locale.ROOT).split(",").map(_.trim).filter(_.nonEmpty)
   private val executorSource = new ExecutorSource(threadPool, executorId, schemes)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
