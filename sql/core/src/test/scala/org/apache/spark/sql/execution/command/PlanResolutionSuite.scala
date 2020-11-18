@@ -151,7 +151,7 @@ class PlanResolutionSuite extends AnalysisTest {
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager, conf)
+    val analyzer = new Analyzer(catalogManager)
     // TODO: run the analyzer directly.
     val rules = Seq(
       CTESubstitution,

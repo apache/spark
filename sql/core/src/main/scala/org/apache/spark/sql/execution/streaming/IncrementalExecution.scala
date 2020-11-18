@@ -50,7 +50,6 @@ class IncrementalExecution(
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
       sparkSession,
-      sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++

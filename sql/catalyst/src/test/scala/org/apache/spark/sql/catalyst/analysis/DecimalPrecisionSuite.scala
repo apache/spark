@@ -30,8 +30,8 @@ import org.apache.spark.sql.types._
 
 
 class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
-  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  private val analyzer = new Analyzer(catalog, conf)
+  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
+  private val analyzer = new Analyzer(catalog)
 
   private val relation = LocalRelation(
     AttributeReference("i", IntegerType)(),
