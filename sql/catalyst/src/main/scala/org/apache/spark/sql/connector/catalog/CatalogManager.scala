@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -37,9 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
 //       need to track current database at all.
 private[sql]
 class CatalogManager(
-    conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends Logging {
+    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 

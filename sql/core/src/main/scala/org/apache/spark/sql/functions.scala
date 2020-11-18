@@ -4151,7 +4151,7 @@ object functions {
   /**
    * Parses a JSON string and infers its schema in DDL format.
    *
-   * @param json a string literal containing a JSON string.
+   * @param json a foldable string column containing a JSON string.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -4161,7 +4161,7 @@ object functions {
   /**
    * Parses a JSON string and infers its schema in DDL format using options.
    *
-   * @param json a string column containing JSON data.
+   * @param json a foldable string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
    *                json data source. See [[DataFrameReader#json]].
    * @return a column with string literal containing schema in DDL format.
@@ -4426,7 +4426,7 @@ object functions {
   /**
    * Parses a CSV string and infers its schema in DDL format.
    *
-   * @param csv a string literal containing a CSV string.
+   * @param csv a foldable string column containing a CSV string.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -4436,7 +4436,7 @@ object functions {
   /**
    * Parses a CSV string and infers its schema in DDL format using options.
    *
-   * @param csv a string literal containing a CSV string.
+   * @param csv a foldable string column containing a CSV string.
    * @param options options to control how the CSV is parsed. accepts the same options and the
    *                json data source. See [[DataFrameReader#csv]].
    * @return a column with string literal containing schema in DDL format.

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.internal.config._
+import org.apache.spark.sql.catalyst.SQLConfHelper
 
 /**
  * A helper class that enables substitution using syntax like
@@ -25,9 +26,7 @@ import org.apache.spark.internal.config._
  *
  * Variable substitution is controlled by `SQLConf.variableSubstituteEnabled`.
  */
-class VariableSubstitution {
-
-  private def conf = SQLConf.get
+class VariableSubstitution extends SQLConfHelper {
 
   private val provider = new ConfigProvider {
     override def get(key: String): Option[String] = Option(conf.getConfString(key, ""))

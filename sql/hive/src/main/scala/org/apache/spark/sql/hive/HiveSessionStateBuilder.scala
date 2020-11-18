@@ -62,7 +62,6 @@ class HiveSessionStateBuilder(
       () => session.sharedState.globalTempViewManager,
       new HiveMetastoreCatalog(session),
       functionRegistry,
-      conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -73,7 +72,7 @@ class HiveSessionStateBuilder(
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
+  override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
@@ -98,7 +97,7 @@ class HiveSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         TableCapabilityCheck +:
-        CommandCheck(conf) +:
+        CommandCheck +:
         customCheckRules
   }
 
@@ -109,7 +108,7 @@ class HiveSessionStateBuilder(
    * Planner that takes into account Hive-specific strategies.
    */
   override protected def planner: SparkPlanner = {
-    new SparkPlanner(session, conf, experimentalMethods) with HiveStrategies {
+    new SparkPlanner(session, experimentalMethods) with HiveStrategies {
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
