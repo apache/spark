@@ -197,16 +197,12 @@ private[ml] class BlockAFTAggregator(
    * @return This BlockAFTAggregator object.
    */
   def add(block: InstanceBlock): this.type = {
-    // here use Instance.weight to store censor for convenience
-    val (matrix, labels, censors) = (block.matrix, block.labels, block.weightIter.toArray)
-    require(matrix.isTransposed)
-    require(numFeatures == matrix.numCols, s"Dimensions mismatch when adding new " +
-      s"instance. Expecting $numFeatures but got ${matrix.numCols}.")
-    require(labels.forall(_ > 0.0), "The lifetime or label should be  greater than 0.")
+    require(block.matrix.isTransposed)
+    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
+    require(block.labels.forall(_ > 0.0), "The lifetime or label should be  greater than 0.")
 
-    val size = matrix.numRows
-    require(labels.length == size && censors.length == size)
-
+    val size = block.size
     val intercept = coefficientsArray(dim - 2)
     // sigma is the scale parameter of the AFT model
     val sigma = math.exp(coefficientsArray(dim - 1))
@@ -217,26 +213,30 @@ private[ml] class BlockAFTAggregator(
     } else {
       Vectors.zeros(size).toDense
     }
-    BLAS.gemv(1.0, matrix, linear, 1.0, vec)
+    BLAS.gemv(1.0, block.matrix, linear, 1.0, vec)
 
     // in-place convert margins to gradient scales
     // then, vec represents gradient scales
+    var localLossSum = 0.0
     var i = 0
     var sigmaGradSum = 0.0
     while (i < size) {
-      val ti = labels(i)
-      val delta = censors(i)
+      val ti = block.getLabel(i)
+      // here use Instance.weight to store censor for convenience
+      val delta = block.getWeight(i)
       val margin = vec(i)
       val epsilon = (math.log(ti) - margin) / sigma
       val expEpsilon = math.exp(epsilon)
-      lossSum += delta * math.log(sigma) - delta * epsilon + expEpsilon
+      localLossSum += delta * math.log(sigma) - delta * epsilon + expEpsilon
       val multiplier = (delta - expEpsilon) / sigma
       vec.values(i) = multiplier
       sigmaGradSum += delta + multiplier * sigma * epsilon
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += size
 
-    matrix match {
+    block.matrix match {
       case dm: DenseMatrix =>
         BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
           vec.values, 1, 1.0, gradientSumArray, 1)
@@ -250,7 +250,6 @@ private[ml] class BlockAFTAggregator(
 
     if (fitIntercept) gradientSumArray(dim - 2) += vec.values.sum
     gradientSumArray(dim - 1) += sigmaGradSum
-    weightSum += size
 
     this
   }
