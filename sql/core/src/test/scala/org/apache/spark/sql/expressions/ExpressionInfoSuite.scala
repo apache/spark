@@ -150,6 +150,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CurrentDate",
       "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
       "org.apache.spark.sql.catalyst.expressions.Now",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
       // Random output without a seed
       "org.apache.spark.sql.catalyst.expressions.Rand",
       "org.apache.spark.sql.catalyst.expressions.Randn",
