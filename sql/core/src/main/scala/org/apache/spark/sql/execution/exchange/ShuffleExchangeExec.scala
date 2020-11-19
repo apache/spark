@@ -56,10 +56,27 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def numPartitions: Int
 
+  def partitioningFlexibility: PartitioningFlexibility.Value
+
   /**
    * Returns whether the shuffle partition number can be changed.
    */
-  def canChangeNumPartitions: Boolean
+  def canChangeNumPartitions: Boolean = {
+    // If users specify the num partitions via APIs like `repartition(5, col)`, we shouldn't change
+    // it. For `SinglePartition`, it requires exactly one partition and we can't change it either.
+    partitioningFlexibility != PartitioningFlexibility.STRICT &&
+      outputPartitioning != SinglePartition
+  }
+
+  /**
+   * Returns whether the shuffle output clustering can be changed.
+   */
+  def canChangeClustering: Boolean = {
+    // If users specify the partitioning via APIs like `repartition(col)`, we shouldn't change it.
+    // For `SinglePartition`, itself is a special partitioning and we can't change it either.
+    partitioningFlexibility == PartitioningFlexibility.UNSPECIFIED &&
+      outputPartitioning != SinglePartition
+  }
 
   /**
    * The asynchronous job that materializes the shuffle.
@@ -77,18 +94,26 @@ trait ShuffleExchangeLike extends Exchange {
   def runtimeStatistics: Statistics
 }
 
+object PartitioningFlexibility extends Enumeration {
+  type PartitioningFlexibility = Value
+  // STRICT means we can't change the partitioning at all, including the partition number, even if
+  // we lose performance improvement opportunity.
+  val STRICT = Value
+  // PRESERVE_CLUSTERING means we must preserve the data clustering even if it's useless to the
+  // downstream operators. Shuffle partition number can be changed.
+  val PRESERVE_CLUSTERING = Value
+  // UNSPECIFIED means the partitioning can be changed as long as it doesn't break query semantic.
+  val UNSPECIFIED = Value
+}
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
-
-  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
-  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
-  override def canChangeNumPartitions: Boolean =
-    noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
+    partitioningFlexibility: PartitioningFlexibility.Value = PartitioningFlexibility.UNSPECIFIED)
+  extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
