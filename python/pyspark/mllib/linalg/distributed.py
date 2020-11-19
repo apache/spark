@@ -171,7 +171,7 @@ class RowMatrix(DistributedMatrix):
 
         Returns
         -------
-        py:class:`MultivariateStatisticalSummary`
+        :py:class:`MultivariateStatisticalSummary`
             object containing column-wise summary statistics.
 
         Examples
@@ -321,7 +321,7 @@ class RowMatrix(DistributedMatrix):
 
         Returns
         -------
-        :py:class:`QRDecomposition`
+        :py:class:`pyspark.mllib.linalg.QRDecomposition`
             QRDecomposition(Q: RowMatrix, R: Matrix), where
             Q = None if computeQ = false.
 
@@ -523,7 +523,7 @@ class IndexedRow(object):
     ----------
     index : int
         The index for the given row.
-    vector : :py:class:`pyspark.mllib.inalg.Vector` or convertible
+    vector : :py:class:`pyspark.mllib.linalg.Vector` or convertible
         The row in the matrix at the given index.
     """
     def __init__(self, index, vector):

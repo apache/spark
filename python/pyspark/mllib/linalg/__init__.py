@@ -1163,7 +1163,7 @@ class DenseMatrix(Matrix):
 
         Returns
         -------
-        :return: :py:class:`pyspark.ml.linalg.DenseMatrix`
+        :py:class:`pyspark.ml.linalg.DenseMatrix`
         """
         return newlinalg.DenseMatrix(self.numRows, self.numCols, self.values, self.isTransposed)
 
@@ -1217,8 +1217,8 @@ class SparseMatrix(Matrix):
         """
         Pretty printing of a SparseMatrix
 
-        Returns
-        -------
+        Examples
+        --------
         >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
         >>> print(sm1)
         2 X 2 CSCMatrix
@@ -1265,8 +1265,8 @@ class SparseMatrix(Matrix):
         """
         Representation of a SparseMatrix
 
-        Returns
-        -------
+        Examples
+        --------
         >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
         >>> sm1
         SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
@@ -1352,7 +1352,7 @@ class SparseMatrix(Matrix):
 
         Returns
         -------
-        :return: :py:class:`pyspark.ml.linalg.SparseMatrix`
+        :py:class:`pyspark.ml.linalg.SparseMatrix`
         """
         return newlinalg.SparseMatrix(self.numRows, self.numCols, self.colPtrs, self.rowIndices,
                                       self.values, self.isTransposed)
