@@ -44,17 +44,10 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     s"Non-partitioning column(s) ${columns.mkString("[", ", ", "]")} are specified"
   }
 
-  test("show everything") {
+  test("show everything in the default database") {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions $table"),
-        Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
-
       checkAnswer(
         sql(s"show partitions default.$table"),
         Row("year=2015/month=1") ::

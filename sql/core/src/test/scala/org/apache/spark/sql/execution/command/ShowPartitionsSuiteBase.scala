@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{StringType, StructType}
 
 trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
@@ -30,6 +31,12 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def defaultUsing: String
   protected def createDateTable(table: String): Unit
   protected def wrongPartitionColumnsError(columns: String*): String
+
+  protected def runShowPartitionsSql(sqlText: String, expected: Seq[Row]): Unit = {
+    val df = spark.sql(sqlText)
+    assert(df.schema === new StructType().add("partition", StringType, false))
+    checkAnswer(df, expected)
+  }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
@@ -60,6 +67,22 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
           sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
         }.getMessage
         assert(errMsg.contains(wrongPartitionColumnsError("abcd", "xyz")))
+      }
+    }
+  }
+
+  test("show everything") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table",
+          Row("year=2015/month=1") ::
+            Row("year=2015/month=2") ::
+            Row("year=2016/month=2") ::
+            Row("year=2016/month=3") :: Nil)
       }
     }
   }
