@@ -64,7 +64,9 @@ case class SortOrder(
     direction: SortDirection,
     nullOrdering: NullOrdering,
     sameOrderExpressions: Set[Expression])
-  extends UnaryExpression with Unevaluable {
+  extends Expression with Unevaluable {
+
+  override def children: Seq[Expression] = child +: sameOrderExpressions.toSeq
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (RowOrdering.isOrderable(dataType)) {
