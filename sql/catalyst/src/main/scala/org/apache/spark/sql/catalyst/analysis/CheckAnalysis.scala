@@ -1015,6 +1015,10 @@ trait CheckAnalysis extends PredicateHelper {
     case ShowPartitions(rt: ResolvedTable, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement), _)
+        if partTable.partitionSchema().isEmpty =>
+      failAnalysis(
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")
     case _ =>
   }
 }

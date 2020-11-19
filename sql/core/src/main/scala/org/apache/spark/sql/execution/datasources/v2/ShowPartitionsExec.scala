@@ -36,11 +36,6 @@ case class ShowPartitionsExec(
     table: SupportsPartitionManagement,
     partitionSpec: Option[ResolvedPartitionSpec]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    if (table.partitioning.isEmpty) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${table.name()}")
-    }
-
     // Empty `InternalRow` without any partition values is supposed to be the prefix of all
     // partitions, and listPartitionIdentifiers() should return all partitions in that case.
     val spec = partitionSpec.map(_.spec).getOrElse(InternalRow.empty)
