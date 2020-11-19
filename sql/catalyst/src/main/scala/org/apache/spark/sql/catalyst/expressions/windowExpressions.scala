@@ -488,7 +488,7 @@ case class Lead(
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Lag(
-    input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean = false)
+    input: Expression, inputOffset: Expression, default: Expression, ignoreNulls: Boolean)
     extends FrameLessOffsetWindowFunction {
 
   def this(input: Expression, inputOffset: Expression, default: Expression) =
