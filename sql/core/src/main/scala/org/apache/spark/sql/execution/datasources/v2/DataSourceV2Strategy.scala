@@ -172,7 +172,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query, r) :: Nil
         case v2 =>
           AppendDataExec(session, v2, r, writeOptions.asOptions, planLater(query)) :: Nil
       }
@@ -186,7 +186,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query, r) :: Nil
         case v2 =>
           OverwriteByExpressionExec(session, v2, r, filters,
             writeOptions.asOptions, planLater(query)) :: Nil

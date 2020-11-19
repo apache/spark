@@ -398,7 +398,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       catalog: TableCatalog,
       table: Table,
       ident: Identifier): Unit = {
-    // TODO: what about options? do they matter when comparing?
     val plan = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
     session.sharedState.cacheManager.uncacheQuery(session, plan, cascade = true)
   }
