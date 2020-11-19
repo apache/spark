@@ -30,6 +30,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
   protected def createDateTable(table: String): Unit
+  protected def createWideTable(table: String): Unit
   protected def wrongPartitionColumnsError(columns: String*): String
   // Gets the schema of `SHOW PARTITIONS`
   private val showSchema: StructType = new StructType().add("partition", StringType, false)
@@ -97,6 +98,21 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
         runShowPartitionsSql(
           s"show partitions $table PARTITION(year=2015, month=1)",
           Row("year=2015/month=1") :: Nil)
+      }
+    }
+  }
+
+
+  test("show everything more than 5 part keys") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.wideTable"
+      withTable(table) {
+        createWideTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table",
+          Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
+          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
       }
     }
   }

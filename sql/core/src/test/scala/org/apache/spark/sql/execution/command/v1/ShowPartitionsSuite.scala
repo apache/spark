@@ -40,6 +40,23 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
   }
 
+  override protected def createWideTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (
+      |  price int, qty int,
+      |  year int, month int, hour int, minute int, sec int, extra int)
+      |$defaultUsing
+      |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
+    sql(s"""
+      |INSERT INTO $table
+      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
+    sql(s"""
+      |INSERT INTO $table
+      |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
+  }
+
   override protected def wrongPartitionColumnsError(columns: String*): String = {
     s"Non-partitioning column(s) ${columns.mkString("[", ", ", "]")} are specified"
   }
@@ -69,30 +86,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         s"show partitions default.$table PARTITION(month=2)",
         Row("year=2015/month=2") ::
           Row("year=2016/month=2") :: Nil)
-    }
-  }
-
-  test("show everything more than 5 part keys") {
-    val table = "wideTable"
-    withTable(table) {
-      sql(s"""
-        |CREATE TABLE $table (
-        |  price int, qty int,
-        |  year int, month int, hour int, minute int, sec int, extra int)
-        |$defaultUsing
-        |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
-      sql(s"""
-        |INSERT INTO $table
-        |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-      sql(s"""
-        |INSERT INTO $table
-        |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-      runShowPartitionsSql(
-        s"show partitions $table",
-        Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
-          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
   }
 
