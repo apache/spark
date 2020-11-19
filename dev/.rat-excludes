@@ -46,7 +46,7 @@ jsonFormatter.min.js
 .*txt
 .*json
 .*data
-.*log
+.*\.log
 pyspark-coverage-site/*
 cloudpickle/*
 join.py
