@@ -1274,6 +1274,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val COLLAPSE_AGGREGATE_NODES_ENABLED = buildConf("spark.sql.execution.collapseAggregateNodes")
+    .internal()
+    .doc("Whether to collapse the Partial and the Final aggregate exec nodes based on whether there is " +
+      "exchange between them")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val REMOVE_REDUNDANT_SORTS_ENABLED = buildConf("spark.sql.execution.removeRedundantSorts")
     .internal()
     .doc("Whether to remove redundant physical sort node")

@@ -345,6 +345,7 @@ object QueryExecution {
       RemoveRedundantProjects,
       RemoveRedundantSorts,
       EnsureRequirements,
+      CollapseAggregates,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(),
