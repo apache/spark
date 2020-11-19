@@ -62,7 +62,7 @@ private[spark] abstract class SocketAuthServer[T](
         try {
           logTrace(s"Waiting for connection on port ${serverSocket.getLocalPort}")
           sock = serverSocket.accept()
-          logTrace(s"Connection accepted from port ${sock.getLocalPort}")
+          logTrace(s"Connection accepted from address ${sock.getRemoteSocketAddress}")
           authHelper.authClient(sock)
           logTrace("Client authenticated")
           promise.complete(Try(handleConnection(sock)))
