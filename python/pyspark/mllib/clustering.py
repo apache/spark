@@ -326,6 +326,8 @@ class KMeansModel(Saveable, Loader):
 
 class KMeans(object):
     """
+    K-means clustering.
+
     .. versionadded:: 0.9.0
     """
 
@@ -602,7 +604,7 @@ class GaussianMixture(object):
 class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     """
-    Model produced by [[PowerIterationClustering]].
+    Model produced by :py:class:`PowerIterationClustering`.
 
     .. versionadded:: 1.5.0
 
@@ -682,13 +684,19 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
 class PowerIterationClustering(object):
     """
-    Power Iteration Clustering (PIC), a scalable graph clustering algorithm
-    developed by [[http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf Lin and Cohen]].
-    From the abstract: PIC finds a very low-dimensional embedding of a
-    dataset using truncated power iteration on a normalized pair-wise
-    similarity matrix of the data.
+    Power Iteration Clustering (PIC), a scalable graph clustering algorithm.
+
+
+    Developed by Lin and Cohen [1]_. From the abstract:
+
+        "PIC finds a very low-dimensional embedding of a
+        dataset using truncated power iteration on a normalized pair-wise
+        similarity matrix of the data."
 
     .. versionadded:: 1.5.0
+
+    .. [1] Lin, Frank & Cohen, William. (2010). Power Iteration Clustering.
+        http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf
     """
 
     @classmethod
@@ -737,19 +745,19 @@ class StreamingKMeansModel(KMeansModel):
 
     The update formula for each centroid is given by
 
-    * c_t+1 = ((c_t * n_t * a) + (x_t * m_t)) / (n_t + m_t)
-    * n_t+1 = n_t * a + m_t
+    - c_t+1 = ((c_t * n_t * a) + (x_t * m_t)) / (n_t + m_t)
+    - n_t+1 = n_t * a + m_t
 
     where
 
-    * c_t: Centroid at the n_th iteration.
-    * n_t: Number of samples (or) weights associated with the centroid
-           at the n_th iteration.
-    * x_t: Centroid of the new data closest to c_t.
-    * m_t: Number of samples (or) weights of the new data closest to c_t
-    * c_t+1: New centroid.
-    * n_t+1: New number of weights.
-    * a: Decay Factor, which gives the forgetfulness.
+    - c_t: Centroid at the n_th iteration.
+    - n_t: Number of samples (or) weights associated with the centroid
+      at the n_th iteration.
+    - x_t: Centroid of the new data closest to c_t.
+    - m_t: Number of samples (or) weights of the new data closest to c_t
+    - c_t+1: New centroid.
+    - n_t+1: New number of weights.
+    - a: Decay Factor, which gives the forgetfulness.
 
     .. versionadded:: 1.5.0
 
@@ -1070,6 +1078,8 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
 
 class LDA(object):
     """
+    Train Latent Dirichlet Allocation (LDA) model.
+
     .. versionadded:: 1.5.0
     """
 
