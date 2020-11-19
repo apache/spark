@@ -187,19 +187,19 @@ class FrameLessOffsetWindowFunctionFrame(
     // For illustration, here are two examples:
     // Here are six rows of data, and the input values of each row are: 1, 2, null, null, 3, 4.
     // First example: we use Lead(input, 1) and the process is as follows:
-    // 1. current -> 1, cachedRow -> 2, step = 0;
-    // 2. current -> 2, cachedRow -> 3, step = 2;
-    // 3. current -> null, cachedRow -> 3, step = 1;
-    // 4. current -> null, cachedRow -> 3, step = 0;
-    // 5. current -> 3, cachedRow -> 4, step = 0;
-    // 6. current -> 4, cachedRow -> null, step = 0;
+    // 1. current row -> 1, cachedRow -> 2, step = 0;
+    // 2. current row -> 2, cachedRow -> 3, step = 2;
+    // 3. current row -> null, cachedRow -> 3, step = 1;
+    // 4. current row -> null, cachedRow -> 3, step = 0;
+    // 5. current row -> 3, cachedRow -> 4, step = 0;
+    // 6. current row -> 4, cachedRow -> null, step = 0;
     // Second example: we use Lead(input, -1) and the process is as follows:
-    // 1. current -> 1, cachedRow -> null, step = 0;
-    // 2. current -> 2, cachedRow -> 1, step = 0;
-    // 3. current -> null, cachedRow -> 2, step = 0;
-    // 4. current -> null, cachedRow -> 2, step = 0;
-    // 5. current -> 3, cachedRow -> 2, step = 0;
-    // 6. current -> 4, cachedRow -> 3, step = 0;
+    // 1. current row -> 1, cachedRow -> null, step = 0;
+    // 2. current row -> 2, cachedRow -> 1, step = 0;
+    // 3. current row -> null, cachedRow -> 2, step = 0;
+    // 4. current row -> null, cachedRow -> 2, step = 0;
+    // 5. current row -> 3, cachedRow -> 2, step = 0;
+    // 6. current row -> 4, cachedRow -> 3, step = 0;
     (current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
         if (step == 0) {
