@@ -2589,7 +2589,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTable("t") {
       sql("CREATE TABLE t(name STRING) PARTITIONED BY (part DATE) STORED AS ORC")
       sql("INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')")
-      checkAnswer(sql("SELECT * FROM t"), Row("a", "2019-01-02"))
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t"), Row("a", "2019-01-02"))
     }
   }
 }
