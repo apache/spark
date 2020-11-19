@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileCommitProtocolV2}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -118,7 +118,6 @@ class SingleDirectoryDataWriter(
     val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
-      "",
       f"-c$fileCounter%03d" + ext)
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -165,6 +164,10 @@ class DynamicPartitionDataWriter(
          |partitioned or bucketed. In this case neither is true.
          |WriteJobDescription: $description
        """.stripMargin)
+
+  /** Flag saying whether or not to use [[FileCommitProtocolV2]]. */
+  private val isFileCommitProtocolV2 = committer.isInstanceOf[FileCommitProtocolV2] &&
+    description.bucketFileNamePrefix.isDefined
 
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
@@ -221,11 +224,6 @@ class DynamicPartitionDataWriter(
     val partDir = partitionValues.map(getPartitionPath(_))
     partDir.foreach(updatedPartitions.add)
 
-    val prefix = (description.bucketFileNamePrefix, bucketId) match {
-      case (Some(prefix), Some(id)) => prefix(id)
-      case _ => ""
-    }
-
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
     // This must be in a form that matches our bucketing format. See BucketingUtils.
@@ -235,11 +233,39 @@ class DynamicPartitionDataWriter(
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
-    val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, prefix, ext)
-    } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, prefix, ext)
-    }
+
+    val currentPath =
+      if (isFileCommitProtocolV2) {
+        val fileNamePrefix = (description.bucketFileNamePrefix, bucketId) match {
+          case (Some(prefix), Some(id)) => Some(prefix(id))
+          case _ => None
+        }
+
+        (committer, fileNamePrefix) match {
+          case (c: FileCommitProtocolV2, Some(prefix)) =>
+            val fileName = FileCommitProtocolV2.getFilename(
+              taskAttemptContext, description.uuid, prefix, ext)
+            if (customPath.isDefined) {
+              val absoluteFilePath = new Path(customPath.get, fileName).toString
+              c.newTaskTempFileAbsPathV2(taskAttemptContext, absoluteFilePath)
+            } else {
+              val relativeFilePath = partDir match {
+                case Some(dir) => new Path(dir, fileName).toString
+                case None => fileName
+              }
+              c.newTaskTempFileV2(taskAttemptContext, relativeFilePath)
+            }
+          case c =>
+            throw new IllegalArgumentException(
+              s"DynamicPartitionDataWriter should not take $c as the file commit protocol")
+        }
+      } else {
+        if (customPath.isDefined) {
+          committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+        } else {
+          committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+        }
+      }
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,

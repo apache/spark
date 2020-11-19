@@ -53,9 +53,10 @@ class HadoopMapReduceCommitProtocol(
     jobId: String,
     path: String,
     dynamicPartitionOverwrite: Boolean = false)
-  extends FileCommitProtocol with Serializable with Logging {
+  extends FileCommitProtocolV2 with Serializable with Logging {
 
   import FileCommitProtocol._
+  import FileCommitProtocolV2._
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
   @transient private var committer: OutputCommitter = _
@@ -101,9 +102,40 @@ class HadoopMapReduceCommitProtocol(
     format.getOutputCommitter(context)
   }
 
+  override def newTaskTempFileV2(
+      taskContext: TaskAttemptContext, relativeFilePath: String): String = {
+    val stagingDir: Path = committer match {
+      case _ if dynamicPartitionOverwrite =>
+        val dir = new Path(relativeFilePath).getParent
+        assert(dir != null,
+          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+        partitionPaths += dir.toString
+        this.stagingDir
+      // For FileOutputCommitter it has its own staging path called "work path".
+      case f: FileOutputCommitter =>
+        new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
+      case _ => new Path(path)
+    }
+
+    new Path(stagingDir, relativeFilePath).toString
+  }
+
+  override def newTaskTempFileAbsPathV2(
+      taskContext: TaskAttemptContext, absoluteFilePath: String): String = {
+    val filename = new Path(absoluteFilePath).getName
+    val absOutputPath = new Path(absoluteFilePath).toString
+
+    // Include a UUID here to prevent file collisions for one task writing to different dirs.
+    // In principle we could include hash(absoluteDir) instead but this is simpler.
+    val tmpOutputPath = new Path(stagingDir, UUID.randomUUID().toString + "-" + filename).toString
+
+    addedAbsPathFiles(tmpOutputPath) = absOutputPath
+    tmpOutputPath
+  }
+
   override def newTaskTempFile(
-      taskContext: TaskAttemptContext, dir: Option[String], prefix: String, ext: String): String = {
-    val filename = getFilename(taskContext, prefix, ext)
+      taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+    val filename = getFilename(taskContext, jobId, "", ext)
 
     val stagingDir: Path = committer match {
       case _ if dynamicPartitionOverwrite =>
@@ -125,8 +157,8 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, prefix: String, ext: String): String = {
-    val filename = getFilename(taskContext, prefix, ext)
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+    val filename = getFilename(taskContext, jobId, "", ext)
     val absOutputPath = new Path(absoluteDir, filename).toString
 
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
@@ -135,15 +167,6 @@ class HadoopMapReduceCommitProtocol(
 
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
     tmpOutputPath
-  }
-
-  protected def getFilename(
-      taskContext: TaskAttemptContext, prefix: String, ext: String): String = {
-    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
-    // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"${prefix}part-$split%05d-$jobId$ext"
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
