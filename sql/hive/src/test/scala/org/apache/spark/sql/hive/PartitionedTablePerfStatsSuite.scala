@@ -283,8 +283,7 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
-  // FIXME: SPARK-33452
-  ignore("hive table: num hive client calls does not scale with partition count") {
+  test("hive table: num hive client calls does not scale with partition count") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
@@ -301,14 +300,13 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }
   }
 
-  // FIXME: SPARK-33452
-  ignore("datasource table: num hive client calls does not scale with partition count") {
+  test("datasource table: num hive client calls does not scale with partition count") {
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "true") {
       withTable("test") {
         withTempDir { dir =>
@@ -325,7 +323,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }
