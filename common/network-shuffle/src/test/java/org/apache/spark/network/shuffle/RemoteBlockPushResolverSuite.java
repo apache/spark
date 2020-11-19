@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -409,6 +410,64 @@ public class RemoteBlockPushResolverSuite {
     for (String mergeDir : mergeDirs) {
       Assert.assertFalse(Files.exists(Paths.get(mergeDir)));
     }
+  }
+
+  @Test
+  public void testChunksInMetaAndIndexFilesWhenWriteToIndexFails() throws IOException {
+    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
+    callback1.onComplete(callback1.getID());
+
+    // Close the index file so there is an exception writing to it again.
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
+    RandomAccessFile indexFile = partitionInfo.getIndexFile();
+    indexFile.close();
+
+    StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, 0, 1, 0, 0));
+    callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
+    // This will throw an exception because the index file doesn't exist.
+    try {
+      callback2.onComplete(callback2.getID());
+    } catch (IOException ioe) {
+      // ignore
+    }
+    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
+      new FinalizeShuffleMerge(TEST_APP, 0));
+    validateMergeStatuses(statuses, new int[] {0}, new long[] {4});
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
+    validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+  }
+
+  @Test
+  public void testChunksInMetaAndIndexFilesWhenWriteToMetaFails() throws IOException {
+    RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[4]));
+    callback1.onComplete(callback1.getID());
+
+    // Close the meta file so there is an exception writing to it again.
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback1.getPartitionInfo();
+    RandomAccessFile metaFile = partitionInfo.getMetaFile();
+    metaFile.close();
+
+    StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(TEST_APP, 0, 1, 0, 0));
+    callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
+    // This will throw an exception because the index file doesn't exist.
+    try {
+      callback2.onComplete(callback2.getID());
+    } catch (IOException ioe) {
+      // ignore
+    }
+    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
+      new FinalizeShuffleMerge(TEST_APP, 0));
+    validateMergeStatuses(statuses, new int[] {0}, new long[] {4});
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
+    validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
 
   private Path[] createLocalDirs(int numLocalDirs) throws IOException {

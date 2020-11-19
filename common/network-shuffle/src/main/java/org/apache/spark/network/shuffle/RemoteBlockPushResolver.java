@@ -687,6 +687,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         }
       }
     }
+
+    @VisibleForTesting
+    AppShufflePartitionInfo getPartitionInfo() {
+      return partitionInfo;
+    }
   }
 
   /**
@@ -827,13 +832,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     void updateChunkInfo(long chunkOffset, int mapIndex) throws IOException {
       long idxStartPos = -1;
       try {
-        // update the chunk tracker to meta file before index file
-        writeChunkTracker(mapIndex);
         idxStartPos = indexFile.getFilePointer();
         logger.trace("{} shuffleId {} reduceId {} updated index current {} updated {}",
           appShuffleId.appId, appShuffleId.shuffleId, reduceId, this.lastChunkOffset,
           chunkOffset);
         indexFile.writeLong(chunkOffset);
+        // Chunk bitmap should be written to the meta file after the index file because if there are
+        // any exceptions during writing the offset to the index file, meta file should not be
+        // updated. If the update to the index file is successful but the update to meta file isn't
+        // then the index file position is reset in the catch clause.
+        writeChunkTracker(mapIndex);
       } catch (IOException ioe) {
         if (idxStartPos != -1) {
           // reset the position to avoid corrupting index files during exception.
@@ -877,7 +885,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
       if (metaFile != null) {
         try {
-          // if the stream is closed, channel get's closed as well.
+          metaFile.setLength(metaFile.getFilePointer());
           metaFile.close();
         } catch (IOException ioe) {
           logger.warn("Error closing meta file for {} shuffleId {} reduceId {}",
@@ -888,6 +896,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
       if (indexFile != null) {
         try {
+          indexFile.setLength(indexFile.getFilePointer());
           indexFile.close();
         } catch (IOException ioe) {
           logger.warn("Error closing index file for {} shuffleId {} reduceId {}",
@@ -901,6 +910,15 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     @Override
     protected void finalize() throws Throwable {
       closeAllFiles();
+    }
+
+    @VisibleForTesting
+    RandomAccessFile getIndexFile() {
+      return indexFile;
+    }
+
+    RandomAccessFile getMetaFile() {
+      return metaFile;
     }
   }
 
