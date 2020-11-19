@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 1.8
+          - 8
         hadoop:
           - hadoop2.7
         hive:
@@ -46,26 +46,26 @@ jobs:
         include:
           # Hive tests
           - modules: hive
-            java: 1.8
+            java: 8
             hadoop: hadoop2.7
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
-            java: 1.8
+            java: 8
             hadoop: hadoop2.7
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest,org.apache.spark.tags.GitHubActionsUnstableTest
             comment: "- other tests"
           # SQL tests
           - modules: sql
-            java: 1.8
+            java: 8
             hadoop: hadoop2.7
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
-            java: 1.8
+            java: 8
             hadoop: hadoop2.7
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest,org.apache.spark.tags.GitHubActionsUnstableTest
@@ -94,16 +94,10 @@ jobs:
           build/zinc-*
           build/scala-*
           build/*.jar
+          ~/.sbt
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.m2/repository
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-maven-
     - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
@@ -111,7 +105,7 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-ivy-
-    - name: Install JDK ${{ matrix.java }}
+    - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
         java-version: ${{ matrix.java }}
@@ -134,9 +128,7 @@ jobs:
       run: |
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
-        mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
-        rm -rf ~/.m2/repository/org/apache/spark
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -185,16 +177,10 @@ jobs:
           build/zinc-*
           build/scala-*
           build/*.jar
+          ~/.sbt
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.m2/repository
-        key: pyspark-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          pyspark-maven-
     - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
@@ -214,24 +200,22 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        mkdir -p ~/.m2
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
-        rm -rf ~/.m2/repository/org/apache/spark
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-${{ matrix.modules }}--1.8-hadoop2.7-hive2.3
+        name: test-results-${{ matrix.modules }}--8-hadoop2.7-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-${{ matrix.modules }}--1.8-hadoop2.7-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--8-hadoop2.7-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
-    name: Build modules - sparkr
+    name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
        image: dongjoon/apache-spark-github-action-image:20201025
@@ -254,16 +238,10 @@ jobs:
           build/zinc-*
           build/scala-*
           build/*.jar
+          ~/.sbt
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Maven local repository
-      uses: actions/cache@v2
-      with:
-        path: ~/.m2/repository
-        key: sparkr-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          sparkr-maven-
     - name: Cache Ivy local repository
       uses: actions/cache@v2
       with:
@@ -273,24 +251,22 @@ jobs:
           sparkr-ivy-
     - name: Run tests
       run: |
-        mkdir -p ~/.m2
         # The followings are also used by `r-lib/actions/setup-r` to avoid
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
         ./dev/run-tests --parallelism 2 --modules sparkr
-        rm -rf ~/.m2/repository/org/apache/spark
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-sparkr--1.8-hadoop2.7-hive2.3
+        name: test-results-sparkr--8-hadoop2.7-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-sparkr--1.8-hadoop2.7-hive2.3
+        name: unit-tests-log-sparkr--8-hadoop2.7-hive2.3
         path: "**/target/unit-tests.log"
 
   # Static analysis, and documentation build
@@ -300,17 +276,37 @@ jobs:
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
+    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    - name: Cache Scala, SBT, Maven and Zinc
+      uses: actions/cache@v2
+      with:
+        path: |
+          build/apache-maven-*
+          build/zinc-*
+          build/scala-*
+          build/*.jar
+          ~/.sbt
+        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        restore-keys: |
+          build-
+    - name: Cache Ivy local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.ivy2/cache
+        key: docs-ivy-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        restore-keys: |
+          docs-ivy-
     - name: Cache Maven local repository
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
-        key: docs-maven-repo-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           docs-maven-
-    - name: Install JDK 1.8
+    - name: Install Java 8
       uses: actions/setup-java@v1
       with:
-        java-version: 1.8
+        java-version: 8
     - name: Install Python 3.6
       uses: actions/setup-python@v2
       with:
@@ -356,8 +352,8 @@ jobs:
         cd docs
         jekyll build
 
-  java11:
-    name: Java 11 build
+  java-11:
+    name: Java 11 build with Maven
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
@@ -377,6 +373,6 @@ jobs:
       run: |
         export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
-        mkdir -p ~/.m2
+        # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
         rm -rf ~/.m2/repository/org/apache/spark
