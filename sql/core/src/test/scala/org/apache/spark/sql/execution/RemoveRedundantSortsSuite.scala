@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
 import org.apache.spark.sql.internal.SQLConf
@@ -155,8 +155,9 @@ abstract class RemoveRedundantSortsSuiteBase
         val df = sql(query)
         val sparkPlan = df.queryExecution.sparkPlan
         val join = sparkPlan.collect { case j: ShuffledJoin => j }.head
-        val range = sparkPlan.collect { case r: RangeExec => r }.head
-        assert(join.left.outputPartitioning == range.outputPartitioning)
+        val leftPartitioning = join.left.outputPartitioning
+        assert(leftPartitioning.isInstanceOf[RangePartitioning])
+        assert(leftPartitioning.numPartitions == 2)
         assert(join.right.outputPartitioning == UnknownPartitioning(0))
         checkSorts(query, count, count)
       }
