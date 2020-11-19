@@ -22,7 +22,6 @@ import java.io.IOException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
-
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
 /**
@@ -134,7 +133,7 @@ class PathOutputCommitProtocol(
     val parent = dir.map {
       d => new Path(workDir, d)
     }.getOrElse(workDir)
-    val file = new Path(parent, getFilename(taskContext, ext))
+    val file = new Path(parent, getFilename(taskContext, jobId, "", ext))
     logTrace(s"Creating task file $file for dir $dir and ext $ext")
     file.toString
   }
