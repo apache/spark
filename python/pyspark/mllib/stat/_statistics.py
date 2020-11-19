@@ -124,7 +124,8 @@ class Statistics(object):
 
         Returns
         -------
-        Correlation matrix comparing columns in x.
+        :py:class:`pyspark.mllib.linalg.Matrix`
+            Correlation matrix comparing columns in x.
 
         Examples
         --------
@@ -192,21 +193,22 @@ class Statistics(object):
 
         Parameters
         ----------
-        observed : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.mllib.inalg.Matrix`
+        observed : :py:class:`pyspark.mllib.linalg.Vector` or \
+            :py:class:`pyspark.mllib.linalg.Matrix`
             it could be a vector containing the observed categorical
             counts/relative frequencies, or the contingency matrix
             (containing either counts or relative frequencies),
             or an RDD of LabeledPoint containing the labeled dataset
             with categorical features. Real-valued features will be
             treated as categorical for each distinct value.
-        expected : :py:class:`pyspark.mllib.inalg.Vector`
+        expected : :py:class:`pyspark.mllib.linalg.Vector`
             Vector containing the expected categorical counts/relative
             frequencies. `expected` is rescaled if the `expected` sum
             differs from the `observed` sum.
 
         Returns
         -------
-        :py:class:`ChiSquaredTest`
+        :py:class:`pyspark.mllib.stat.test.ChiSqTestResult`
             object containing the test statistic, degrees
             of freedom, p-value, the method used, and the null hypothesis.
 
@@ -305,7 +307,7 @@ class Statistics(object):
 
         Returns
         -------
-        `KolmogorovSmirnovTestResult`
+        :py:class:`pyspark.mllib.stat.test.KolmogorovSmirnovTestResult`
             object containing the test statistic, degrees of freedom, p-value,
             the method used, and the null hypothesis.
 
