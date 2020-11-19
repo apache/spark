@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
 
+import org.apache.spark.internal.io.FileCommitProtocolV2._
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
 /**
