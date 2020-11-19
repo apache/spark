@@ -38,6 +38,9 @@ private[spark] trait Schedulable {
   def priority: Int
   def stageId: Int
   def name: String
+  def totalTasks: Int = {
+    throw new UnsupportedOperationException("Calculate total tasks is unsupported here.")
+  }
 
   def isSchedulable: Boolean
   def addSchedulable(schedulable: Schedulable): Unit

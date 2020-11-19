@@ -73,3 +73,14 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
   }
 }
 
+private[spark] class SJFSchedulingAlgorithm extends SchedulingAlgorithm {
+  override def comparator(s1: Schedulable, s2: Schedulable): Boolean = {
+    val res = math.signum(s1.totalTasks - s2.totalTasks)
+    if (res == 0) {
+      return s1.name < s2.name
+    }
+    res < 0
+  }
+}
+
+
