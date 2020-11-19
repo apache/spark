@@ -1276,8 +1276,8 @@ object SQLConf {
 
   val COLLAPSE_AGGREGATE_NODES_ENABLED = buildConf("spark.sql.execution.collapseAggregateNodes")
     .internal()
-    .doc("Whether to collapse the Partial and the Final aggregate exec nodes based on whether there is " +
-      "exchange between them")
+    .doc("Whether to collapse the Partial and the Final aggregate exec nodes based " +
+      "on whether there is exchange between them")
     .version("3.1.0")
     .booleanConf
     .createWithDefault(true)

@@ -38,7 +38,7 @@ object CollapseAggregates extends Rule[SparkPlan] {
     }
 
   private def collapseAggregates(plan: SparkPlan): SparkPlan = {
-    plan transformDown {
+    plan transform {
       case parent@HashAggregateExec(_, _, _, _, _, _, child: HashAggregateExec)
         if checkIfAggregatesCanBeCollapsed(parent, child) =>
         val completeAggregateExpressions = child.aggregateExpressions.map(_.copy(mode = Complete))
@@ -77,8 +77,9 @@ object CollapseAggregates extends Rule[SparkPlan] {
     }
   }
 
-  private def checkIfAggregatesCanBeCollapsed(parent: BaseAggregateExec,
-                                              child: BaseAggregateExec): Boolean = {
+  private def checkIfAggregatesCanBeCollapsed(
+      parent: BaseAggregateExec,
+      child: BaseAggregateExec): Boolean = {
     val parentHasFinalMode = parent.aggregateExpressions.forall(_.mode == Final)
     if (!parentHasFinalMode) {
       return false
