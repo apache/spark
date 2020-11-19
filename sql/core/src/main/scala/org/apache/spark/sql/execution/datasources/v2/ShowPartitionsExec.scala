@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
