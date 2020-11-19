@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Disable unnecessary bucketed table scan based on actual physical query plan.

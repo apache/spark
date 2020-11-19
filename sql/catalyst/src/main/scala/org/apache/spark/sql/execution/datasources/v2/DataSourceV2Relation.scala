@@ -21,10 +21,10 @@ import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelat
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.connector.write.WriteBuilder
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -35,8 +35,9 @@ import org.apache.spark.util.Utils
  * @param output the output attributes of this relation.
  * @param catalog catalogPlugin for the table. None if no catalog is specified.
  * @param identifier the identifier for the table. None if no identifier is defined.
- * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
- *                and [[WriteBuilder]].
+ * @param options The options for this table operation. It's used to create fresh
+ *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,
@@ -47,6 +48,21 @@ case class DataSourceV2Relation(
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
+
+  override lazy val metadataOutput: Seq[AttributeReference] = table match {
+    case hasMeta: SupportsMetadataColumns =>
+      val resolve = SQLConf.get.resolver
+      val outputNames = outputSet.map(_.name)
+      def isOutputColumn(col: MetadataColumn): Boolean = {
+        outputNames.exists(name => resolve(col.name, name))
+      }
+      // filter out metadata columns that have names conflicting with output columns. if the table
+      // has a column "line" and the table can produce a metadata column called "line", then the
+      // data column should be returned, not the metadata column.
+      hasMeta.metadataColumns.filterNot(isOutputColumn).toAttributes
+    case _ =>
+      Nil
+  }
 
   override def name: String = table.name()
 
@@ -77,6 +93,14 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
+  }
+
+  def withMetadataColumns(): DataSourceV2Relation = {
+    if (metadataOutput.nonEmpty) {
+      DataSourceV2Relation(table, output ++ metadataOutput, catalog, identifier, options)
+    } else {
+      this
+    }
   }
 }
 

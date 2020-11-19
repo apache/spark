@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 
 /**
  * A simple implementation of [[Cost]], which takes a number of [[Long]] as the cost value.

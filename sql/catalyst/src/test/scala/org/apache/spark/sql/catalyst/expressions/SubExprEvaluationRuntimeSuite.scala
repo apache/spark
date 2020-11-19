@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.IntegerType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
@@ -84,8 +83,7 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     })
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)
-    val expected = ExpressionProxy(mul2, 0, runtime)
-    assert(proxys.forall(_ == expected))
+    assert(proxys.forall(_.child == mul2))
   }
 
   test("ExpressionProxy won't be on non deterministic") {
