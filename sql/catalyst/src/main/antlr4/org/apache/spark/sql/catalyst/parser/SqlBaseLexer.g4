@@ -241,6 +241,7 @@ NOT: 'NOT' | '!';
 NULL: 'NULL';
 NULLS: 'NULLS';
 OF: 'OF';
+OFFSET: 'OFFSET';
 ON: 'ON';
 ONLY: 'ONLY';
 OPTION: 'OPTION';

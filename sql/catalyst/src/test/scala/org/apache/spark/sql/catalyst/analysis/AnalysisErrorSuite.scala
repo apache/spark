@@ -256,6 +256,39 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "an evaluated offset class must not be null",
+    testRelation.offset(Literal(null, IntegerType)),
+    "The evaluated offset expression must not be null, but got " :: Nil
+  )
+
+  errorTest(
+    "num_rows in offset clause must be equal to or greater than 0",
+    listRelation.offset(-1),
+    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause is outermost node",
+    testRelation.offset(Literal(10, IntegerType)),
+    "Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET" ::
+      "clause is found to be the outermost node." :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause in other node",
+    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
+    "Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET" ::
+      "clause found in: Filter." :: Nil
+  )
+
+  errorTest(
+    "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
+    testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
+    "The sum of limit and offset must not be greater than Int.MaxValue" :: Nil
+  )
+
+
+  errorTest(
     "offset window function",
     testRelation2.select(
       WindowExpression(
