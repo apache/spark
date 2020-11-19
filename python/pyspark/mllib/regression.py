@@ -39,15 +39,15 @@ class LabeledPoint(object):
     """
     Class that represents the features and labels of a data point.
 
+    .. versionadded:: 1.0.0
+
     Parameters
     ----------
     label : int
         Label for this data point.
-    features : :py:class:`pyspark.mllib.inalg.Vector` or convertible
+    features : :py:class:`pyspark.mllib.linalg.Vector` or convertible
         Vector of features for this point (NumPy array, list,
         pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
-
-    .. versionadded:: 1.0.0
 
     Notes
     -----
@@ -77,7 +77,7 @@ class LinearModel(object):
 
     Parameters
     ----------
-    weights : :py:class:`pyspark.mllib.inalg.Vector`
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
         Weights computed for every feature.
     intercept : float
       Intercept computed for this model.
@@ -234,6 +234,8 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 
 class LinearRegressionWithSGD(object):
     """
+    Train a linear regression model with no regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     .. deprecated:: 2.0.0.
         Use :py:class:`pyspark.ml.regression.LinearRegression`.
@@ -258,7 +260,7 @@ class LinearRegressionWithSGD(object):
 
         Parameters
         ----------
-        data : py:class:`pyspark.RDD`
+        data : :py:class:`pyspark.RDD`
             The training data, an RDD of LabeledPoint.
         iterations : int, optional
             The number of iterations.
@@ -269,7 +271,7 @@ class LinearRegressionWithSGD(object):
         miniBatchFraction : float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
-        initialWeights : :py:class:`pyspark.mllib.inalg.Vector` or convertible, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         regParam : float, optional
@@ -392,6 +394,8 @@ class LassoModel(LinearRegressionModelBase):
 
 class LassoWithSGD(object):
     """
+    Train a regression model with L1-regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     .. deprecated:: 2.0.0
         Use :py:class:`pyspark.ml.regression.LinearRegression` with elasticNetParam = 1.0.
@@ -430,7 +434,7 @@ class LassoWithSGD(object):
         miniBatchFraction : float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
-        initialWeights : :py:class:`pyspark.mllib.inalg.Vector` or convertible, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         intercept : bool, optional
@@ -543,6 +547,8 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 class RidgeRegressionWithSGD(object):
     """
+    Train a regression model with L2-regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     .. deprecated:: 2.0.0
         Use :py:class:`pyspark.ml.regression.LinearRegression` with elasticNetParam = 0.0.
@@ -582,7 +588,7 @@ class RidgeRegressionWithSGD(object):
         miniBatchFraction : float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
-        initialWeights : py:class:`pyspark.mllib.inalg.Vector` or convertible, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         intercept : bool, optional
@@ -682,7 +688,7 @@ class IsotonicRegressionModel(Saveable, Loader):
 
         Parameters
         ----------
-        x : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Feature or RDD of Features to be labeled.
         """
         if isinstance(x, RDD):
@@ -715,22 +721,26 @@ class IsotonicRegression(object):
     Currently implemented using parallelized pool adjacent violators
     algorithm. Only univariate (single feature) algorithm supported.
 
-    Sequential PAV implementation based on:
+    .. versionadded:: 1.4.0
 
-      Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
-      "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
-      Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+    Notes
+    -----
+    Sequential PAV implementation based on
+    Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani (2011) [1]_
 
-    Sequential PAV parallelization based on:
+    Sequential PAV parallelization based on
+    Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset (1996) [2]_
 
-        Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
+    See also
+    `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
+
+    .. [1] Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
+        "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
+        Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+    .. [2] Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset
         "An approach to parallelizing isotonic regression."
         Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
         Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
-
-    See `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
-
-    .. versionadded:: 1.4.0
     """
 
     @classmethod
