@@ -66,9 +66,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         Row("year=2015/month=1") ::
           Row("year=2015/month=2") :: Nil)
       runShowPartitionsSql(
-        s"show partitions default.$table PARTITION(year=2015, month=1)",
-        Row("year=2015/month=1") :: Nil)
-      runShowPartitionsSql(
         s"show partitions default.$table PARTITION(month=2)",
         Row("year=2015/month=2") ::
           Row("year=2016/month=2") :: Nil)

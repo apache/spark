@@ -62,16 +62,6 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     }
   }
 
-  test("filter by partitions") {
-    val table = s"$catalog.dateTable"
-    withTable(table) {
-      createDateTable(table)
-      runShowPartitionsSql(
-        s"show partitions $table PARTITION(year=2015, month=1)",
-        Row("year=2015/month=1") :: Nil)
-    }
-  }
-
   test("show everything more than 5 part keys") {
     val table = s"$catalog.wideTable"
     withTable(table) {

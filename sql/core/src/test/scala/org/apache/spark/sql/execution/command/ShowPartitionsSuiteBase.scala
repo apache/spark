@@ -87,4 +87,17 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("filter by partitions with all partitioned columns") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table PARTITION(year=2015, month=1)",
+          Row("year=2015/month=1") :: Nil)
+      }
+    }
+  }
 }
