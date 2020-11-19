@@ -183,6 +183,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     } catch (Exception e) {
       logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
         host, port, e);
+      listener.onShuffleMergeFailure(e);
     }
   }
 
