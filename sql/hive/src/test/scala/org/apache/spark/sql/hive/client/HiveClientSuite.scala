@@ -259,7 +259,7 @@ class HiveClientSuite(version: String)
   }
 
   test("getPartitionsByFilter: chunk in ('ab', 'ba') and ((cast(ds as string)>'20170102')") {
-    val day = (20170101 to 20170103, 0 to 4, Seq("ab", "ba"))
+    val day = (20170101 to 20170103, 0 to 23, Seq("ab", "ba"))
     testMetastorePartitionFiltering(
       attr("chunk").in("ab", "ba") && (attr("ds").cast(StringType) > "20170102"),
       day :: Nil)
