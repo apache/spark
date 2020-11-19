@@ -19,10 +19,14 @@ package org.apache.spark.deploy
 
 import scala.collection.JavaConverters._
 
+import org.scalatest.Ignore
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.{SHUFFLE_SERVICE_DB_ENABLED, SHUFFLE_SERVICE_ENABLED}
 import org.apache.spark.util.Utils
 
+
+@Ignore
 class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
 
   var sparkConf: SparkConf = _
@@ -47,7 +51,7 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
     super.afterAll()
   }
 
-  test("SPARK-31646: metrics should be registered") {
+  ignore("SPARK-31646: metrics should be registered") {
     val sourceRef = classOf[ExternalShuffleService].getDeclaredField("shuffleServiceSource")
     sourceRef.setAccessible(true)
     val source = sourceRef.get(externalShuffleService).asInstanceOf[ExternalShuffleServiceSource]
