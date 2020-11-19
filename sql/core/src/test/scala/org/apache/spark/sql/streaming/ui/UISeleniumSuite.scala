@@ -68,7 +68,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     go to (spark.sparkContext.ui.get.webUrl.stripSuffix("/") + path)
   }
 
-  test("SPARK-30984: Structured Streaming UI should be activated when running a streaming query") {
+  ignore("SPARK-30984: Structured Streaming UI should be activated ") {
     quietly {
       withSparkSession(newSparkSession()) { spark =>
         import spark.implicits._
