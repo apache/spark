@@ -98,7 +98,8 @@ class HiveUDAFSuite extends QueryTest
 
   test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
     withTempView("v") {
-      spark.range(100).createTempView("v")
+      // Setting numPartitions > 1 explicitly so that we get two Physical aggregation nodes
+      spark.range(0, 100, 1, 10).createTempView("v")
       val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
       val aggs = collect(df.queryExecution.executedPlan) {

@@ -43,7 +43,7 @@ object CollapseAggregates extends Rule[SparkPlan] {
         if checkIfAggregatesCanBeCollapsed(parent, child) =>
         val completeAggregateExpressions = child.aggregateExpressions.map(_.copy(mode = Complete))
         HashAggregateExec(
-          requiredChildDistributionExpressions = None,
+          requiredChildDistributionExpressions = parent.requiredChildDistributionExpressions,
           groupingExpressions = child.groupingExpressions,
           aggregateExpressions = completeAggregateExpressions,
           aggregateAttributes = completeAggregateExpressions.map(_.resultAttribute),
@@ -55,7 +55,7 @@ object CollapseAggregates extends Rule[SparkPlan] {
         if checkIfAggregatesCanBeCollapsed(parent, child) =>
         val completeAggregateExpressions = child.aggregateExpressions.map(_.copy(mode = Complete))
         SortAggregateExec(
-          requiredChildDistributionExpressions = None,
+          requiredChildDistributionExpressions = parent.requiredChildDistributionExpressions,
           groupingExpressions = child.groupingExpressions,
           aggregateExpressions = completeAggregateExpressions,
           aggregateAttributes = completeAggregateExpressions.map(_.resultAttribute),
@@ -67,7 +67,7 @@ object CollapseAggregates extends Rule[SparkPlan] {
         if checkIfAggregatesCanBeCollapsed(parent, child) =>
         val completeAggregateExpressions = child.aggregateExpressions.map(_.copy(mode = Complete))
         ObjectHashAggregateExec(
-          requiredChildDistributionExpressions = None,
+          requiredChildDistributionExpressions = parent.requiredChildDistributionExpressions,
           groupingExpressions = child.groupingExpressions,
           aggregateExpressions = completeAggregateExpressions,
           aggregateAttributes = completeAggregateExpressions.map(_.resultAttribute),
