@@ -1144,13 +1144,13 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
   test("SPARK-32956 Ensure that the generated and existing headers are not duplicated") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTempPath { path =>
-        Seq("a3,A,c,A,,_c4,_c44").toDF().write.text(path.getAbsolutePath)
+        Seq("a,A3,a33,A,,_c4").toDF().write.text(path.getAbsolutePath)
         val actualSchema = spark.read
           .format("csv")
           .option("header", true)
           .load(path.getAbsolutePath)
           .schema
-        val fields = Seq("a30", "A1", "c", "A33", "_c444", "_c45", "_c446")
+        val fields = Seq("a0", "A3", "a33", "A333", "_c44", "_c45")
           .map(StructField(_, StringType, true))
         val expectedSchema = StructType(fields)
         assert(actualSchema == expectedSchema)
