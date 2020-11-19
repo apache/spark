@@ -1134,11 +1134,9 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite {
   def executePlan(plan: LogicalPlan, optimizerType: OptimizerTypes.Value):
   (LogicalPlan, ExpressionSet) = {
     object SimpleAnalyzer extends Analyzer(
-      new SessionCatalog(
-        new InMemoryCatalog,
-        EmptyFunctionRegistry,
-        SQLConf.get), SQLConf.get)
-
+      new CatalogManager(FakeV2SessionCatalog,
+        new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
+          SQLConf.get)))
 
     val optimizedPlan = GetOptimizer(optimizerType, Some(SQLConf.get)).
       execute(SimpleAnalyzer.execute(plan))
@@ -1155,10 +1153,7 @@ object GetOptimizer {
   def apply(optimizerType: OptimizerTypes.Value, useConf: Option[SQLConf] = None): Optimizer =
     optimizerType match {
       case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_PRUNING =>
-
-
         new Optimizer( new CatalogManager(
-          useConf.getOrElse(SQLConf.get),
           FakeV2SessionCatalog,
           new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
             useConf.getOrElse(SQLConf.get)))) {
@@ -1176,7 +1171,6 @@ object GetOptimizer {
         }
       case OptimizerTypes.NO_PUSH_DOWN_NO_COMBINE_FILTERS_ONLY_PRUNING =>
         new Optimizer( new CatalogManager(
-          useConf.getOrElse(SQLConf.get),
           FakeV2SessionCatalog,
           new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
             useConf.getOrElse(SQLConf.get)))) {
@@ -1191,7 +1185,6 @@ object GetOptimizer {
         }
       case OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING =>
         new Optimizer( new CatalogManager(
-          useConf.getOrElse(SQLConf.get),
           FakeV2SessionCatalog,
           new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
             useConf.getOrElse(SQLConf.get)))) {
@@ -1208,7 +1201,6 @@ object GetOptimizer {
 
       case OptimizerTypes.WITH_FILTER_PUSHDOWN_THRU_JOIN_AND_UNIONS_PRUNING =>
         new Optimizer( new CatalogManager(
-          useConf.getOrElse(SQLConf.get),
           FakeV2SessionCatalog,
           new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry,
             useConf.getOrElse(SQLConf.get)))) {
