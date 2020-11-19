@@ -198,7 +198,7 @@ class RandomRDDs(object):
 
         Returns
         -------
-        py:class:`pyspark.RDD`
+        :py:class:`pyspark.RDD`
             RDD of float comprised of i.i.d. samples ~ Pois(mean).
 
         Examples
