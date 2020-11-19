@@ -104,4 +104,15 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
   }
+
+  test("non-partitioning columns") {
+    val table = s"$catalog.dateTable"
+    withTable(table) {
+      createDateTable(table)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
+      }.getMessage
+      assert(errMsg.contains("Partition key abcd,xyz not exists"))
+    }
+  }
 }
