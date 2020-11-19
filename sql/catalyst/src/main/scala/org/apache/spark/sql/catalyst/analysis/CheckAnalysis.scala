@@ -571,6 +571,8 @@ trait CheckAnalysis extends PredicateHelper {
           case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
             checkAlterTablePartition(table, parts)
 
+          case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -1002,5 +1004,13 @@ trait CheckAnalysis extends PredicateHelper {
 
       case _ =>
     }
+  }
+
+  // Make sure that the `SHOW PARTITIONS` command is allowed for the table
+  private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
+    case ShowPartitions(v: ResolvedView, _) =>
+      failAnalysis(s"SHOW PARTITIONS is not allowed on a view: ${v.identifier}")
+
+    case _ =>
   }
 }
