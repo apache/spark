@@ -706,6 +706,23 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite {
     comparePlans(correctAnswer, optimized)
   }
 
+  test("Duplicate removed attributes with different metadata causes assert failure") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int, 'd.int)
+    val aliasedRelation = tr.select('a, 'a.as("a1"), 'a, 'a.as("a2"),
+      'a.as("a3"), 'c, 'c.as("c1")).select('c1, 'a3).where('a3 > 5).
+      analyze
+    val bugify = aliasedRelation.transformUp {
+      case Project(projList, child) if projList.exists(_.name == "a") =>
+        Project(projList.zipWithIndex.map{ case(ne, i) =>
+          ne match {
+            case att: AttributeReference => att.withQualifier(Seq(i.toString))
+            case _ => ne
+          }
+        }, child)
+    }
+    GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).execute(bugify)
+  }
+
   test("filter push down on join with aggregate") {
     def getTestPlan: LogicalPlan = {
       val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
