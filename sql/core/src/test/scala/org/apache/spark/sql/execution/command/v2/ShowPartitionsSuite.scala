@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -31,6 +31,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
+    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
   private def createDateTable(table: String): Unit = {
     sql(s"""
@@ -41,6 +42,20 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 2)")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
+
+  test("a table does not support partitioning") {
+    val table = s"non_part_$catalog.tab1"
+    withTable(table) {
+      sql(s"""
+        |CREATE TABLE $table (price int, qty int, year int, month int)
+        |$defaultUsing""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $table")
+      }.getMessage
+      assert(errMsg.contains(
+        "SHOW PARTITIONS cannot run for a table which does not support partitioning"))
+    }
   }
 
   test("show everything") {
