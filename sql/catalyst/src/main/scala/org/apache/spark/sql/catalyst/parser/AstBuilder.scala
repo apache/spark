@@ -37,11 +37,11 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -503,6 +503,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
+  def convertTypeConstructedLiteralToString(literal: Literal): String = literal match {
+    case Literal(data: Int, dataType: DateType) =>
+      UTF8String.fromString(
+        DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
+          .format(data)).toString
+    case Literal(data: Long, dataType: TimestampType) =>
+      UTF8String.fromString(
+        TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
+          .format(data)).toString
+    case Literal(data: CalendarInterval, dataType: CalendarIntervalType) =>
+      UTF8String.fromString(data.toString).toString
+    case Literal(data: Array[Byte], dataType: BinaryType) =>
+      UTF8String.fromBytes(data).toString
+    case Literal(data, dataType) =>
+      UTF8String.fromString(data.toString).toString
+  }
+
   /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
@@ -510,6 +527,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
     ctx match {
+      case l: TypeConstructorContext =>
+        convertTypeConstructedLiteralToString(visitTypeConstructor(l))
       case s: StringLiteralContext => createString(s)
       case o => o.getText
     }

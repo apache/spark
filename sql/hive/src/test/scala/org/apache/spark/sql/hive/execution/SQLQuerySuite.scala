@@ -2584,6 +2584,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-33474: Support TypeConstructed partition spec value") {
+    withTable("t") {
+      sql("CREATE TABLE t(name STRING) PARTITIONED BY (part DATE) STORED AS ORC")
+      sql("INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')")
+      checkAnswer(sql("SELECT * FROM t"), Row("a", "2019-01-02"))
+    }
+  }
 }
 
 @SlowHiveTest
