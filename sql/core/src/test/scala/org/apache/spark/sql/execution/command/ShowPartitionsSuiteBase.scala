@@ -31,10 +31,11 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def defaultUsing: String
   protected def createDateTable(table: String): Unit
   protected def wrongPartitionColumnsError(columns: String*): String
-
+  // Gets the schema of `SHOW PARTITIONS`
+  private val showSchema: StructType = new StructType().add("partition", StringType, false)
   protected def runShowPartitionsSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
-    assert(df.schema === new StructType().add("partition", StringType, false))
+    assert(df.schema === showSchema)
     checkAnswer(df, expected)
   }
 

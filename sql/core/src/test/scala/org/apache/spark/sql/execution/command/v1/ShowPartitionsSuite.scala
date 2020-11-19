@@ -48,8 +48,8 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions default.$table"),
+      runShowPartitionsSql(
+        s"show partitions default.$table",
         Row("year=2015/month=1") ::
           Row("year=2015/month=2") ::
           Row("year=2016/month=2") ::
@@ -61,15 +61,15 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(year=2015)"),
+      runShowPartitionsSql(
+        s"show partitions default.$table PARTITION(year=2015)",
         Row("year=2015/month=1") ::
           Row("year=2015/month=2") :: Nil)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(year=2015, month=1)"),
+      runShowPartitionsSql(
+        s"show partitions default.$table PARTITION(year=2015, month=1)",
         Row("year=2015/month=1") :: Nil)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(month=2)"),
+      runShowPartitionsSql(
+        s"show partitions default.$table PARTITION(month=2)",
         Row("year=2015/month=2") ::
           Row("year=2016/month=2") :: Nil)
     }
@@ -92,8 +92,8 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         |INSERT INTO $table
         |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
       """.stripMargin)
-      checkAnswer(
-        sql(s"show partitions $table"),
+      runShowPartitionsSql(
+        s"show partitions $table",
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
@@ -136,8 +136,8 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSessio
     val viewName = "test_view"
     withTempView(viewName) {
       sql(s"""
-             |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
-             |$defaultUsing""".stripMargin)
+        |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
+        |$defaultUsing""".stripMargin)
       val errMsg = intercept[NoSuchTableException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage

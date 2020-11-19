@@ -66,8 +66,8 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     val table = s"$catalog.dateTable"
     withTable(table) {
       createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions $table PARTITION(year=2015, month=1)"),
+      runShowPartitionsSql(
+        s"show partitions $table PARTITION(year=2015, month=1)",
         Row("year=2015/month=1") :: Nil)
     }
   }
@@ -89,8 +89,8 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
         |ALTER TABLE $table
         |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
         """.stripMargin)
-      checkAnswer(
-        sql(s"show partitions $table"),
+      runShowPartitionsSql(
+        s"show partitions $table",
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
