@@ -586,7 +586,13 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    if (groupingExpressions.isEmpty) {
+      Some(1L)
+    } else {
+      child.maxRows
+    }
+  }
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
@@ -880,6 +886,12 @@ case class SubqueryAlias(
     val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
+
+  override def metadataOutput: Seq[Attribute] = {
+    val qualifierList = identifier.qualifier :+ alias
+    child.metadataOutput.map(_.withQualifier(qualifierList))
+  }
+
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 

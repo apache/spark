@@ -21,10 +21,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.connector.InMemoryTableCatalog
-import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class ShowTablesSuite extends CommonShowTablesSuite {
+class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSession {
   override def version: String = "V2"
   override def catalog: String = "test_catalog"
   override def defaultNamespace: Seq[String] = Nil
@@ -42,12 +43,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
-
-  // The test fails with the exception `NoSuchDatabaseException` in V1 catalog.
-  // TODO(SPARK-33394): Throw `NoSuchDatabaseException` for not existing namespace
-  test("show table in a not existing namespace") {
-    runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-  }
 
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:

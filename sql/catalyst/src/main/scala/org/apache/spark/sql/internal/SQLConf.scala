@@ -539,6 +539,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES =
+    buildConf("spark.sql.subexpressionElimination.cache.maxEntries")
+      .internal()
+      .doc("The maximum entries of the cache used for interpreted subexpression elimination.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "The maximum must not be negative")
+      .createWithDefault(100)
+
   val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -814,6 +823,18 @@ object SQLConf {
       .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
+
+  val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
+    buildConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
+      .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
+        "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
+        "to be greater than or equal to the minimum value in set and less than or equal to the " +
+        "maximum value in set. Larger values may cause Hive Metastore stack overflow.")
+      .version("3.1.0")
+      .internal()
+      .intConf
+      .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
+      .createWithDefault(1000)
 
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
@@ -1882,7 +1903,7 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "MapType, ArrayType of TimestampType, and nested StructType.")
+        "ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
@@ -1941,6 +1962,16 @@ object SQLConf {
         "pipelined; however, it might degrade performance. See SPARK-27870.")
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
+
+  val PYSPARK_SIMPLIFIEID_TRACEBACK =
+    buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
+      .doc(
+        "When true, the traceback from Python UDFs is simplified. It hides " +
+        "the Python worker, (de)serialization, etc from PySpark in tracebacks, and only " +
+        "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -3142,6 +3173,9 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
+  def metastorePartitionPruningInSetThreshold: Int =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD)
+
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
   def filesourcePartitionFileCacheSize: Long = getConf(HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE)
@@ -3232,6 +3266,9 @@ class SQLConf extends Serializable with Logging {
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+
+  def subexpressionEliminationCacheMaxEntries: Int =
+    getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -3405,6 +3442,8 @@ class SQLConf extends Serializable with Logging {
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
+  def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIEID_TRACEBACK)
+
   def pandasGroupedMapAssignColumnsByName: Boolean =
     getConf(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME)
 
@@ -3508,9 +3547,6 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def legacyAllowModifyActiveSession: Boolean =
-    getConf(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION)
 
   def legacyAllowCastNumericToTimestamp: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)

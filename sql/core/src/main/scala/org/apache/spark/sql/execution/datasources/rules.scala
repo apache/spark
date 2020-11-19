@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
-object ResolveSQLOnFile extends Rule[LogicalPlan] {
+class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
@@ -47,7 +47,7 @@ object ResolveSQLOnFile extends Rule[LogicalPlan] {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
-          SparkSession.active,
+          sparkSession,
           paths = u.multipartIdentifier.last :: Nil,
           className = u.multipartIdentifier.head)
 
@@ -73,9 +73,9 @@ object ResolveSQLOnFile extends Rule[LogicalPlan] {
 /**
  * Preprocess [[CreateTable]], to do some normalization and checking.
  */
-object PreprocessTableCreation extends Rule[LogicalPlan] {
+case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
-  private def catalog = SparkSession.active.sessionState.catalog
+  private def catalog = sparkSession.sessionState.catalog
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
