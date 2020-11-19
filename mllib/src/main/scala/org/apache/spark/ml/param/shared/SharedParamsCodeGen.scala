@@ -111,8 +111,8 @@ private[shared] object SharedParamsCodeGen {
         isValid = "ParamValidators.gt(0)", isExpertParam = true),
       ParamDesc[Double]("maxBlockSizeInMB", "Maximum memory in MB for stacking input data " +
         "into blocks. Data is stacked within partitions. If more than remaining data size in a " +
-        "partition then it is adjusted to the data size. If 0, try to infer an appropriate " +
-        "value. Must be >= 0.",
+        "partition then it is adjusted to the data size. Default 0.0 represents choosing " +
+        "optimal value, depends on specific algorithm. Must be >= 0.",
         Some("0.0"), isValid = "ParamValidators.gtEq(0.0)", isExpertParam = true)
     )
 

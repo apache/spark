@@ -21,7 +21,7 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import ArrayType, TimestampType, DoubleType, MapType
+from pyspark.sql.types import ArrayType, TimestampType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -159,7 +159,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
-                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
+                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 

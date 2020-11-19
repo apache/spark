@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.cloud
 
-import java.nio.file.Paths
-
 import io.fabric8.kubernetes.client.{Config, DefaultKubernetesClient}
 import io.fabric8.kubernetes.client.utils.Utils
 import org.apache.commons.lang3.StringUtils

@@ -44,7 +44,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -607,17 +607,19 @@ def main(infile, outfile):
         # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
-    except BaseException:
+    except BaseException as e:
         try:
-            exc_info = traceback.format_exc()
-            if isinstance(exc_info, bytes):
-                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
-                # it back to utf-8 again
-                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
-            else:
-                exc_info = exc_info.encode("utf-8")
+            exc_info = None
+            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
+                tb = try_simplify_traceback(sys.exc_info()[-1])
+                if tb is not None:
+                    e.__cause__ = None
+                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
+            if exc_info is None:
+                exc_info = traceback.format_exc()
+
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info, outfile)
+            write_with_length(exc_info.encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass

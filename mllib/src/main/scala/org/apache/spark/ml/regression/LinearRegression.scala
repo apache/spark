@@ -56,7 +56,7 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth with HasLoss with HasBlockSize {
+    with HasAggregationDepth with HasLoss with HasMaxBlockSizeInMB {
 
   import LinearRegression._
 
@@ -107,7 +107,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 
   setDefault(regParam -> 0.0, fitIntercept -> true, standardization -> true,
     elasticNetParam -> 0.0, maxIter -> 100, tol -> 1E-6, solver -> Auto,
-    aggregationDepth -> 2, loss -> SquaredError, epsilon -> 1.35, blockSize -> 1)
+    aggregationDepth -> 2, loss -> SquaredError, epsilon -> 1.35, maxBlockSizeInMB -> 0.0)
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -174,6 +174,10 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *   \end{align}
  *   $$
  * </blockquote>
+ *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
  *
  * Note: Fitting with huber loss only supports none and L2 regularization.
  */
@@ -312,29 +316,26 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setEpsilon(value: Double): this.type = set(epsilon, value)
 
   /**
-   * Set block size for stacking input data in matrices.
-   * If blockSize == 1, then stacking will be skipped, and each vector is treated individually;
-   * If blockSize &gt; 1, then vectors will be stacked to blocks, and high-level BLAS routines
-   * will be used if possible (for example, GEMV instead of DOT, GEMM instead of GEMV).
-   * Recommended size is between 10 and 1000. An appropriate choice of the block size depends
-   * on the sparsity and dim of input datasets, the underlying BLAS implementation (for example,
-   * f2jBLAS, OpenBLAS, intel MKL) and its configuration (for example, number of threads).
-   * Note that existing BLAS implementations are mainly optimized for dense matrices, if the
-   * input dataset is sparse, stacking may bring no performance gain, the worse is possible
-   * performance regression.
-   * Default is 1.
+   * Sets the value of param [[maxBlockSizeInMB]].
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */
   @Since("3.1.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
+  def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
-  override protected def train(dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
+  override protected def train(
+      dataset: Dataset[_]): LinearRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, solver, tol,
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss,
-      epsilon, blockSize)
+      epsilon, maxBlockSizeInMB)
+
+    if (dataset.storageLevel != StorageLevel.NONE) {
+      instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
+        s"then cached during training. Be careful of double caching!")
+    }
 
     // Extract the number of features before deciding optimization solver.
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
@@ -348,35 +349,26 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val instances = extractInstances(dataset)
       .setName("training instances")
 
-    if (dataset.storageLevel == StorageLevel.NONE && $(blockSize) == 1) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
-    }
+    val (summarizer, labelSummarizer) = Summarizer
+      .getRegressionSummarizers(instances, $(aggregationDepth), Seq("mean", "std", "count"))
 
-    var requestedMetrics = Seq("mean", "std", "count")
-    if ($(blockSize) != 1) requestedMetrics +:= "numNonZeros"
-    val (featuresSummarizer, ySummarizer) = Summarizer
-      .getRegressionSummarizers(instances, $(aggregationDepth), requestedMetrics)
+    val yMean = labelSummarizer.mean(0)
+    val rawYStd = labelSummarizer.std(0)
 
-    val yMean = ySummarizer.mean(0)
-    val rawYStd = ySummarizer.std(0)
-
-    instr.logNumExamples(ySummarizer.count)
+    instr.logNumExamples(labelSummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
     instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
-    instr.logSumOfWeights(featuresSummarizer.weightSum)
-    if ($(blockSize) > 1) {
-      val scale = 1.0 / featuresSummarizer.count / numFeatures
-      val sparsity = 1 - featuresSummarizer.numNonzeros.toArray.map(_ * scale).sum
-      instr.logNamedValue("sparsity", sparsity.toString)
-      if (sparsity > 0.5) {
-        instr.logWarning(s"sparsity of input dataset is $sparsity, " +
-          s"which may hurt performance in high-level BLAS.")
-      }
+    instr.logSumOfWeights(summarizer.weightSum)
+
+    var actualBlockSizeInMB = $(maxBlockSizeInMB)
+    if (actualBlockSizeInMB == 0) {
+      actualBlockSizeInMB = InstanceBlock.DefaultBlockSizeInMB
+      require(actualBlockSizeInMB > 0, "inferred actual BlockSizeInMB must > 0")
+      instr.logNamedValue("actualBlockSizeInMB", actualBlockSizeInMB.toString)
     }
 
     if (rawYStd == 0.0) {
       if ($(fitIntercept) || yMean == 0.0) {
-        if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
         return trainWithConstantLabel(dataset, instr, numFeatures, yMean)
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
@@ -389,8 +381,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // if y is constant (rawYStd is zero), then y cannot be scaled. In this case
     // setting yStd=abs(yMean) ensures that y is not scaled anymore in l-bfgs algorithm.
     val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
-    val featuresMean = featuresSummarizer.mean.toArray
-    val featuresStd = featuresSummarizer.std.toArray
+    val featuresMean = summarizer.mean.toArray
+    val featuresStd = summarizer.std.toArray
 
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -426,14 +418,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Vectors.dense(Array.fill(dim)(1.0))
     }
 
-    val (parameters, objectiveHistory) = if ($(blockSize) == 1) {
-      trainOnRows(instances, yMean, yStd, featuresMean, featuresStd,
-        initialValues, regularization, optimizer)
-    } else {
-      trainOnBlocks(instances, yMean, yStd, featuresMean, featuresStd,
-        initialValues, regularization, optimizer)
-    }
-    if (instances.getStorageLevel != StorageLevel.NONE) instances.unpersist()
+    val (parameters, objectiveHistory) =
+      trainImpl(instances, actualBlockSizeInMB, yMean, yStd,
+        featuresMean, featuresStd, initialValues, regularization, optimizer)
 
     if (parameters == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -541,56 +528,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
   }
 
-  private def trainOnRows(
+  private def trainImpl(
       instances: RDD[Instance],
-      yMean: Double,
-      yStd: Double,
-      featuresMean: Array[Double],
-      featuresStd: Array[Double],
-      initialValues: Vector,
-      regularization: Option[L2Regularization],
-      optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
-    val bcFeaturesMean = instances.context.broadcast(featuresMean)
-    val bcFeaturesStd = instances.context.broadcast(featuresStd)
-
-    val costFun = $(loss) match {
-      case SquaredError =>
-        val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
-          bcFeaturesStd, bcFeaturesMean)(_)
-        new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
-      case Huber =>
-        val getAggregatorFunc = new HuberAggregator($(fitIntercept), $(epsilon), bcFeaturesStd)(_)
-        new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
-    }
-
-    val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialValues.asBreeze.toDenseVector)
-
-    /*
-       Note that in Linear Regression, the objective history (loss + regularization) returned
-       from optimizer is computed in the scaled space given by the following formula.
-       <blockquote>
-          $$
-          L &= 1/2n||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2
-               + regTerms \\
-          $$
-       </blockquote>
-     */
-    val arrayBuilder = mutable.ArrayBuilder.make[Double]
-    var state: optimizer.State = null
-    while (states.hasNext) {
-      state = states.next()
-      arrayBuilder += state.adjustedValue
-    }
-
-    bcFeaturesMean.destroy()
-    bcFeaturesStd.destroy()
-
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
-  }
-
-  private def trainOnBlocks(
-      instances: RDD[Instance],
+      actualBlockSizeInMB: Double,
       yMean: Double,
       yStd: Double,
       featuresMean: Array[Double],
@@ -606,9 +546,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
-    val blocks = InstanceBlock.blokify(standardized, $(blockSize))
+
+    val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
-      .setName(s"training blocks (blockSize=${$(blockSize)})")
+      .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val costFun = $(loss) match {
       case SquaredError =>

@@ -117,7 +117,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column):
-        from pyspark.sql.pandas.types import _check_series_localize_timestamps
+        from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
+            _convert_map_items_to_dict
         import pyarrow
 
         # If the given column is a date type column, creates a series of datetime.date directly
@@ -127,6 +128,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         if pyarrow.types.is_timestamp(arrow_column.type):
             return _check_series_localize_timestamps(s, self._timezone)
+        elif pyarrow.types.is_map(arrow_column.type):
+            return _convert_map_items_to_dict(s)
         else:
             return s
 
@@ -147,7 +150,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         import pandas as pd
         import pyarrow as pa
-        from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal
+        from pyspark.sql.pandas.types import _check_series_convert_timestamps_internal, \
+            _convert_dict_to_map_items
         from pandas.api.types import is_categorical_dtype
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
@@ -160,6 +164,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
+            elif t is not None and pa.types.is_map(t):
+                s = _convert_dict_to_map_items(s)
             elif is_categorical_dtype(s.dtype):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
