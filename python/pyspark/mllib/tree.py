@@ -90,7 +90,7 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
         Parameters
         ----------
-        x : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Data point (feature vector), or an RDD of data points (feature
             vectors).
 
