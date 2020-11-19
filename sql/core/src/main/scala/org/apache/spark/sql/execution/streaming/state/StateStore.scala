@@ -178,14 +178,14 @@ object StateStoreMetrics {
 trait StateStoreCustomMetric {
   def name: String
   def desc: String
-  def unit: String
+  def unit: String = ""
 }
 
-case class StateStoreCustomSumMetric(name: String, desc: String, unit: String)
+case class StateStoreCustomSumMetric(name: String, desc: String, override val unit: String)
   extends StateStoreCustomMetric
-case class StateStoreCustomSizeMetric(name: String, desc: String, unit: String)
+case class StateStoreCustomSizeMetric(name: String, desc: String, override val unit: String)
   extends StateStoreCustomMetric
-case class StateStoreCustomTimingMetric(name: String, desc: String, unit: String)
+case class StateStoreCustomTimingMetric(name: String, desc: String, override val unit: String)
   extends StateStoreCustomMetric
 
 /**
