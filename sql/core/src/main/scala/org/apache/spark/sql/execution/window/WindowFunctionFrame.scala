@@ -158,9 +158,8 @@ class FrameLessOffsetWindowFunctionFrame(
   /** The input expression of Lead/Lag. */
   private lazy val inputExpression = expressions.toSeq.map(_.input).head
 
-  /** The type of the input expression and its index in the row. */
-  private lazy val (dataType, idx) = inputAttrs.zipWithIndex.find(_._1 == inputExpression)
-    .map { x => (x._1.dataType, x._2)}.head
+  /** The index of input expression in the row. */
+  private lazy val idx = inputAttrs.zipWithIndex.find(_._1 == inputExpression).map(_._2).head
 
   /** Cache some UnsafeRow that will be used many times. */
   private var cachedRow: UnsafeRow = null
@@ -183,40 +182,46 @@ class FrameLessOffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
-  private val doWrite = if (ignoreNulls) {
-    // For illustration, here are two examples:
-    // Here are six rows of data, and the input values of each row are: 1, 2, null, null, 3, 4.
-    // First example: we use Lead(input, 1) and the process is as follows:
+  private val doWrite = if (ignoreNulls && offset > 0) {
+    // For illustration, here is one example: the input data contains six rows,
+    // and the input values of each row are: 1, 2, null, null, 3, 4.
+    // We use Lead(input, 1) and the process is as follows:
     // 1. current row -> 1, cached row -> 2, step = 0;
     // 2. current row -> 2, cached row -> 3, step = 2;
     // 3. current row -> null, cached row -> 3, step = 1;
     // 4. current row -> null, cached row -> 3, step = 0;
     // 5. current row -> 3, cached row -> 4, step = 0;
     // 6. current row -> 4, cached row -> null, step = 0;
-    // Second example: we use Lead(input, -1) and the process is as follows:
-    // 1. current row -> 1, cached row -> null, step = 0;
-    // 2. current row -> 2, cached row -> 1, step = 0;
-    // 3. current row -> null, cached row -> 2, step = 0;
-    // 4. current row -> null, cached row -> 2, step = 0;
-    // 5. current row -> 3, cached row -> 2, step = 0;
-    // 6. current row -> 4, cached row -> 3, step = 0;
     (current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
         if (step == 0) {
-          if (offset > 0) {
-            cachedRow = null
-          }
-          do {
+          cachedRow = null
+          while (cachedRow == null && inputIndex < input.length) {
             val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-            if (r == null || r.get(idx, dataType) != null) {
+            if (!r.isNullAt(idx)) {
               cachedRow = r
             }
             step += 1
             inputIndex += 1
-          } while (offset > 0 && cachedRow == null && inputIndex < input.length)
+          }
         }
         step -= 1
         if (cachedRow == null) {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(current)
+        } else {
+          projection(cachedRow)
+        }
+      }
+  } else if (ignoreNulls && offset < 0) {
+    (current: InternalRow) =>
+      if (inputIndex >= 0 && inputIndex < input.length) {
+        val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+        if (!r.isNullAt(idx)) {
+          cachedRow = r
+        }
+        if (cachedRow == null) {
+          // Use default values since the offset row whose input value is not null does not exist.
           fillDefaultValue(current)
         } else {
           projection(cachedRow)
@@ -224,8 +229,8 @@ class FrameLessOffsetWindowFunctionFrame(
       } else {
         // Use default values since the offset row does not exist.
         fillDefaultValue(current)
-        inputIndex += 1
       }
+      inputIndex += 1
   } else {
     (current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
