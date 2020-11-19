@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration

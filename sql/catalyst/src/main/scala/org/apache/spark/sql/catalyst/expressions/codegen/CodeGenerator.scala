@@ -38,9 +38,8 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -1555,8 +1554,8 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Generates code creating a [[UnsafeArrayData]] or [[GenericArrayData]] based on
-   * given parameters.
+   * Generates code creating a [[UnsafeArrayData]] or
+   * [[org.apache.spark.sql.catalyst.util.GenericArrayData]] based on given parameters.
    *
    * @param arrayName name of the array to create
    * @param elementType data type of the elements in source array
