@@ -82,6 +82,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
     SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
 
+  private val parquetCellSizeLimit = SQLConf.PARQUET_CELL_SIZE_LIMIT.defaultValue.get
+
   private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
@@ -162,6 +164,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
+  @inline private def checkCellSize(cellLength: Long): Unit = {
+    if (cellLength >= parquetCellSizeLimit) {
+      logInfo(s"single cell size: $cellLength ")
+      logInfo(s"spark.sql.parquet.cellSizeLimit: $parquetCellSizeLimit ")
+      this.needCheckRowSize = true
+    }
+  }
+
   private def makeWriter(dataType: DataType): ValueWriter = {
     dataType match {
       case BooleanType =>
@@ -198,8 +208,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
+          val bytes = row.getUTF8String(ordinal).getBytes
+          checkCellSize(bytes.length)
           recordConsumer.addBinary(
-            Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
+            Binary.fromReusedByteArray(bytes))
 
       case TimestampType =>
         outputTimestampType match {
@@ -225,7 +237,10 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
+          val bytes = row.getBinary(ordinal)
+          checkCellSize(bytes.length)
+          recordConsumer.addBinary(
+            Binary.fromReusedByteArray(bytes))
 
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
