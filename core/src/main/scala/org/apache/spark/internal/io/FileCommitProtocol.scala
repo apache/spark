@@ -101,7 +101,7 @@ abstract class FileCommitProtocol extends Logging {
    * guarantees that files written by different tasks will not conflict.
    */
   def newTaskTempFileAbsPath(
-    taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
 
   /**
    * Commits a task after the writes succeed. Must be called on the executors when running tasks.
