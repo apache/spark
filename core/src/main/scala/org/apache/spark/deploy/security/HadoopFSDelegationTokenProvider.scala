@@ -41,8 +41,6 @@ private[deploy] class HadoopFSDelegationTokenProvider
   // so we cannot get the token renewal interval.
   private var tokenRenewalInterval: Option[Long] = null
 
-  private val tokensWarnedIssueDateProblem = new mutable.HashSet[String]()
-
   override val serviceName: String = "hadoopfs"
 
   override def obtainDelegationTokens(
@@ -140,16 +138,15 @@ private[deploy] class HadoopFSDelegationTokenProvider
   }
 
   private def getIssueDate(kind: String, identifier: AbstractDelegationTokenIdentifier): Long = {
-    if (identifier.getIssueDate > 0L) {
-      identifier.getIssueDate
+    val issueDate = identifier.getIssueDate
+    if (issueDate > 0L) {
+      issueDate
     } else {
-      if (!tokensWarnedIssueDateProblem.contains(kind)) {
-        logWarning(s"Token $kind has not set up issue date properly. Using current timestamp as" +
-          " issue date as a workaround. Consult token implementator to fix the behavior.")
-        tokensWarnedIssueDateProblem.add(kind)
-      }
-
-      System.currentTimeMillis()
+      val now = System.currentTimeMillis()
+      logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
+        s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
+        "the behavior.")
+      now
     }
   }
 }
