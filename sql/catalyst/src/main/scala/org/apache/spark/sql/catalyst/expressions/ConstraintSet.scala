@@ -22,6 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import ConstraintSetImplicit._
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
+
+
+
 /**
  * This class stores the constraints available at each node.
  * The constraint expressions are stored in canonicalized form.
@@ -97,7 +102,7 @@ class ConstraintSet private(
   originals: mutable.Buffer[Expression] = new ArrayBuffer,
   val attribRefBasedEquivalenceList: Seq[mutable.Buffer[Expression]],
   val expressionBasedEquivalenceList: Seq[mutable.Buffer[Expression]]
-) extends ExpressionSet(baseSet, originals) {
+) extends ExpressionSet(baseSet, originals) with Logging {
 
   import ConstraintSetImplicit._
   def this(actuals: mutable.Buffer[Expression]) =
@@ -312,8 +317,42 @@ class ConstraintSet private(
     // is not part of output set, so no point in keeping it in the attribute
     // equivalence list.
     val newAttribBasedEquivalenceList = attribBasedEquivalenceList.filter(_.size > 1)
-    val canonicalized = updatedFilterExprs.map(_.canonicalized).toMutableSet(mutable.Set)
-    assert(canonicalized.size == updatedFilterExprs.size)
+    // val canonicalized = updatedFilterExprs.map(_.canonicalized).toMutableSet(mutable.Set)
+
+    // assert(canonicalized.size == updatedFilterExprs.size)
+    val canonicalized = updatedFilterExprs.map(_.canonicalized).to[mutable.Set]
+    // To debug PRISM-77994, logging error instead of asserting
+    // assert(canonicalized.size == updatedFilterExprs.size)
+    if (canonicalized.size != updatedFilterExprs.size) {
+      this.logError(s"ConstraintSet::updateConstraints:PRISM-77994: Canonicalized filter" +
+        s"expression set not matching with updated filter expressions, indicating duplicate" +
+        s" filters.")
+      val duplicateFilters = mutable.ArrayBuffer[Seq[Expression]]()
+      canonicalized.foreach(canon => {
+        val tempExprs = updatedFilterExprs.filter(_.canonicalized == canon)
+        if (tempExprs.size > 1) {
+          duplicateFilters += tempExprs
+        }
+      })
+      if (Utils.isTesting) {
+        val errorMessage = s"Found following duplicate filters" +
+          s" ${duplicateFilters.flatten.mkString(",")}"
+        assert(false, errorMessage)
+      } else {
+        duplicateFilters.foreach(duplicates => {
+          logError(s"ConstraintSet::updateConstraints:PRISM-77994: duplicate filters" +
+            s" = ${duplicates.mkString("::")}")
+          duplicates.drop(1).foreach(x => {
+            val indx = updatedFilterExprs.indexWhere(_ == x)
+            if (indx != -1) {
+              updatedFilterExprs.remove(indx)
+            }
+          })
+        })
+      }
+    }
+
+
     new ConstraintSet(canonicalized, updatedFilterExprs, newAttribBasedEquivalenceList.toSeq,
       newExprBasedEquivalenceList.toSeq)
   }
@@ -430,16 +469,28 @@ class ConstraintSet private(
     attribsRemoved.foreach(attrib => {
       groupHeadToGroupMap.get(attrib) match {
         case Some(buff) =>
-          val exprRemoved = buff.remove(0)
-          assert(attrib.exprId == exprRemoved.asInstanceOf[Attribute].exprId)
+          if (attrib.canonicalized == buff.head.canonicalized) {
+            buff.remove(0)
+          } else {
+            val errorMessage = s"ConstraintSet::fillReplacementOrClearGroupHead..:PRISM-77994:" +
+              s"GroupHead =$attrib not matching with the buffer head = ${buff.head}." +
+              s"Not removing the head from the buffer"
+            if (Utils.isTesting) {
+              assert(false, errorMessage)
+            } else {
+              this.logError(errorMessage)
+            }
+          }
           // remove any attributes which may be in position other than 0 in the buffer
           attribsRemoved.foreach(x => ConstraintSet.removeCanonicalizedAttribute(buff, x))
+          // if there is no replacement and the attribute being removed
+          // was the only one present, then the buffer is purged
+          // else replaced by updated key
+          // groupHeadToGroupMap.remove(exprRemoved)
+          groupHeadToGroupMap.remove(attrib)
           if (buff.nonEmpty) {
             replaceableAttributeMap += attrib -> buff.head.asInstanceOf[Attribute]
-          } else {
-            // purge the buffer if there is no replacement and the attribute being removed
-            // was the only one present
-            groupHeadToGroupMap.remove(exprRemoved)
+            groupHeadToGroupMap.put(buff.head.asInstanceOf[Attribute], buff)
           }
         case None => // there may be attributes which are removed but lying in
           // position other than 0th
@@ -447,10 +498,36 @@ class ConstraintSet private(
           // removed & hence escaped in above op. so we need to again filter the map
           // at this point it is guaranteed that once the filtering has happened , there will
           // be no buffer which can be empty
-          groupHeadToGroupMap.values.foreach(buff => {
-            ConstraintSet.removeCanonicalizedAttribute(buff, attrib)
-            assert(buff.nonEmpty)
-          })
+          val errorKeys = mutable.ArrayBuffer[Expression]()
+          groupHeadToGroupMap.foreach {
+            case (key, buffer) => val initialHead = buffer.head
+              // The operation below should not touch the head of any buffer
+              ConstraintSet.removeCanonicalizedAttribute(buffer, attrib)
+              // To debug PRISM-77994 disabling the assert instead and logging & recovering
+              // assert(buffer.nonEmpty)
+              if (buffer.isEmpty || initialHead != buffer.head) {
+                errorKeys += key
+                this.logError(s"ConstraintSet::fillReplacementOrClearGroupHead:PRISM-77994:" +
+                  s"for non GroupHead key attribute $attrib, It still modified the 0th" +
+                  s" position of buffer with group head key $key." +
+                  s" The initial head of buffer was $initialHead")
+              }
+          }
+          if (errorKeys.nonEmpty) {
+            if (Utils.isTesting) {
+              val errorMessage = s"ConstraintSet::fillReplacementOrClearGroupHead:PRISM-77994:" +
+                s"for non GroupHead key attribute $attrib, found following modified grouphead" +
+                s" keys. ${errorKeys.mkString(",")}"
+              assert(false, errorMessage)
+            } else {
+              errorKeys.foreach(key => {
+                val oldValOpt = groupHeadToGroupMap.remove(key)
+                oldValOpt.foreach(buff => if (buff.nonEmpty) {
+                  groupHeadToGroupMap.put(buff.head, buff)
+                })
+              })
+            }
+          }
       }
     })
   }
