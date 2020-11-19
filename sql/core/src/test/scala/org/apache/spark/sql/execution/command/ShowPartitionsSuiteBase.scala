@@ -28,6 +28,8 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
+  protected def createDateTable(table: String): Unit
+  protected def wrongPartitionColumnsError(columns: String*): String
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
@@ -44,6 +46,20 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
           sql(s"SHOW PARTITIONS $table")
         }.getMessage
         assert(errMsg.contains("not allowed on a table that is not partitioned"))
+      }
+    }
+  }
+
+  test("non-partitioning columns") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        val errMsg = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
+        }.getMessage
+        assert(errMsg.contains(wrongPartitionColumnsError("abcd", "xyz")))
       }
     }
   }

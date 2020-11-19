@@ -33,7 +33,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
-  private def createDateTable(table: String): Unit = {
+  override protected def createDateTable(table: String): Unit = {
     sql(s"""
       |CREATE TABLE $table (price int, qty int, year int, month int)
       |$defaultUsing
@@ -42,6 +42,10 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 2)")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
+
+  override protected def wrongPartitionColumnsError(columns: String*): String = {
+    s"Partition key ${columns.mkString(",")} not exists"
   }
 
   test("a table does not support partitioning") {
@@ -102,17 +106,6 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
         sql(s"show partitions $table"),
         Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
-    }
-  }
-
-  test("non-partitioning columns") {
-    val table = s"$catalog.dateTable"
-    withTable(table) {
-      createDateTable(table)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
-      }.getMessage
-      assert(errMsg.contains("Partition key abcd,xyz not exists"))
     }
   }
 }
