@@ -207,6 +207,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       loggingPodStatusWatcher,
       KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
-    verify(loggingPodStatusWatcher).watchOrStop("default:driver")
+    verify(loggingPodStatusWatcher).watchOrStop(kubernetesConf.namespace + ":driver")
   }
 }

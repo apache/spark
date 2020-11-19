@@ -29,7 +29,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
-
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
@@ -67,6 +66,10 @@ private[k8s] class LoggingPodStatusWatcherImpl(
 
   private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
 
+  override def reset(): Unit = {
+    resourceTooOldReceived = false
+  }
+
   def start(): Unit = {
     maybeLoggingInterval.foreach { interval =>
       scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
@@ -85,10 +88,6 @@ private[k8s] class LoggingPodStatusWatcherImpl(
           closeWatch()
         }
     }
-  }
-
-  override def reset(): Unit = {
-    resourceTooOldReceived = false
   }
 
   override def onClose(e: KubernetesClientException): Unit = {
@@ -192,7 +191,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   }
 
   override def watchOrStop(sId: String): Boolean = if (waitForCompletion) {
-    logInfo(s"Waiting for application ${conf.appName} with submission ID $sId to finish...")
+    logInfo(s"Waiting for application ${appId} with submission ID $sId to finish...")
     val interval = maybeLoggingInterval
 
     synchronized {
@@ -207,16 +206,10 @@ private[k8s] class LoggingPodStatusWatcherImpl(
         pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
           .getOrElse("No containers were found in the driver pod."))
       logInfo(s"Application ${appId} with submission ID $sId finished")
-    } else {
-      logInfo(s"Got HTTP Gone code, resource version changed in k8s api. Creating a new watcher.")
     }
-
-    logInfo(s"Watcher has stopped, pod completed status: ${podCompleted}")
-
     podCompleted
   } else {
     logInfo(s"Deployed Spark application ${appId} with submission ID $sId into Kubernetes")
-    logInfo(s"It seems we end up here, because we never want to wait for completion...")
     // Always act like the application has completed since we don't want to wait for app completion
     true
   }
