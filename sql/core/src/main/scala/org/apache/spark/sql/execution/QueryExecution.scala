@@ -344,10 +344,10 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements,
-      CollapseAggregates,
       // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
+      CollapseAggregates,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(),
