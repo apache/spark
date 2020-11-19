@@ -82,9 +82,9 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
         runShowPartitionsSql(
           s"show partitions $table",
           Row("year=2015/month=1") ::
-            Row("year=2015/month=2") ::
-            Row("year=2016/month=2") ::
-            Row("year=2016/month=3") :: Nil)
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
       }
     }
   }

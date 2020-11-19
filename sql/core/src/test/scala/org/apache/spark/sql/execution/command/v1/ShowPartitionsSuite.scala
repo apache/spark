@@ -68,9 +68,9 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       runShowPartitionsSql(
         s"show partitions default.$table",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
+        Row("year=2015/month=2") ::
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
     }
   }
 
@@ -81,11 +81,11 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       runShowPartitionsSql(
         s"show partitions default.$table PARTITION(year=2015)",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") :: Nil)
+        Row("year=2015/month=2") :: Nil)
       runShowPartitionsSql(
         s"show partitions default.$table PARTITION(month=2)",
         Row("year=2015/month=2") ::
-          Row("year=2016/month=2") :: Nil)
+        Row("year=2016/month=2") :: Nil)
     }
   }
 
