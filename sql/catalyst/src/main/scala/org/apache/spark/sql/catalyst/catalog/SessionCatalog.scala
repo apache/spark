@@ -48,8 +48,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
-object SessionCatalog {
-  val DEFAULT_DATABASE = "default"
+object SessionCatalog extends Logging {
+  val db = System.getenv("DEFAULT_DATABASE")
+  val DEFAULT_DATABASE = if (db == null) "default" else db
+  logInfo(s"DEFAULT_DATABASE is '$DEFAULT_DATABASE'.")
 }
 
 /**
