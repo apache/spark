@@ -151,26 +151,26 @@ object CharVarcharUtils {
     }.getOrElse(expr)
   }
 
+  private def raiseError(expr: Expression, typeName: String, length: Int): Expression = {
+    val errorMsg = Concat(Seq(
+      Literal("input string '"),
+      expr,
+      Literal(s"' exceeds $typeName type length limitation: $length")))
+    Cast(RaiseError(errorMsg), StringType)
+  }
+
   private def stringLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
     case CharType(length) =>
       val trimmed = StringTrimRight(expr)
-      val errorMsg = Concat(Seq(
-        Literal("input string '"),
-        expr,
-        Literal(s"' exceeds char type length limitation: $length")))
       // Trailing spaces do not count in the length check. We don't need to retain the trailing
       // spaces, as we will pad char type columns/fields at read time.
       If(
         GreaterThan(Length(trimmed), Literal(length)),
-        Cast(RaiseError(errorMsg), StringType),
+        raiseError(expr, "char", length),
         trimmed)
 
     case VarcharType(length) =>
       val trimmed = StringTrimRight(expr)
-      val errorMsg = Concat(Seq(
-        Literal("input string '"),
-        expr,
-        Literal(s"' exceeds varchar type length limitation: $length")))
       // Trailing spaces do not count in the length check. We need to retain the trailing spaces
       // (truncate to length N), as there is no read-time padding for varchar type.
       // TODO: create a special TrimRight function that can trim to a certain length.
@@ -179,7 +179,7 @@ object CharVarcharUtils {
         expr,
         If(
           GreaterThan(Length(trimmed), Literal(length)),
-          Cast(RaiseError(errorMsg), StringType),
+          raiseError(expr, "varchar", length),
           StringRPad(trimmed, Literal(length))))
 
     case StructType(fields) =>

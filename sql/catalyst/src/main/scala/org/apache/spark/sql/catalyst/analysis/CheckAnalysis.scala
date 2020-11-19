@@ -94,9 +94,9 @@ trait CheckAnalysis extends PredicateHelper {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
-      case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+      case p if p.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
         throw new IllegalStateException(
-          "[BUG] leaf logical plan should not have output of char/varchar type: " + leaf)
+          "[BUG] logical plan should not have output of char/varchar type: " + p)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")

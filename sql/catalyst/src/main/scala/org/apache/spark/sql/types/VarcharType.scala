@@ -24,6 +24,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 @Experimental
 case class VarcharType(length: Int) extends AtomicType {
+  require(length >= 0, "The length if varchar type cannot be negative.")
+
   private[sql] type InternalType = UTF8String
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]

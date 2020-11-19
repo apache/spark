@@ -473,12 +473,9 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    removeCharVarcharFromTableSchema(externalCatalog.getTable(db, table))
-  }
-
-  // We replace char/varchar with string type in the table schema, as Spark's type system doesn't
-  // support char/varchar yet.
-  private def removeCharVarcharFromTableSchema(t: CatalogTable): CatalogTable = {
+    val t = externalCatalog.getTable(db, table)
+    // We replace char/varchar with "annotated" string type in the table schema, as the query
+    // engine doesn't support char/varchar yet.
     t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
   }
 

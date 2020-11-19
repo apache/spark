@@ -100,11 +100,11 @@ object TableOutputResolver {
         case _ =>
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone))
       }
-      val strLenChecked = CharVarcharUtils.stringLengthCheck(casted, tableAttr)
+      val exprWithStrLenCheck = CharVarcharUtils.stringLengthCheck(casted, tableAttr)
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
       // 2) Target tables have column metadata
-      Some(Alias(strLenChecked, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
+      Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
     }
 
     storeAssignmentPolicy match {

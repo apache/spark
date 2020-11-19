@@ -172,7 +172,7 @@ object DataSourceV2Relation {
       identifier: Option[Identifier],
       options: CaseInsensitiveStringMap): DataSourceV2Relation = {
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
-    // with string type here as Spark's type system doesn't support char/varchar yet.
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
     DataSourceV2Relation(table, schema.toAttributes, catalog, identifier, options)
   }

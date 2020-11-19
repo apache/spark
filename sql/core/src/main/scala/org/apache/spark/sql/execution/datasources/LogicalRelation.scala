@@ -71,14 +71,14 @@ case class LogicalRelation(
 object LogicalRelation {
   def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
-    // with string type here as Spark's type system doesn't support char/varchar yet.
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
     LogicalRelation(relation, schema.toAttributes, None, isStreaming)
   }
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
-    // with string type here as Spark's type system doesn't support char/varchar yet.
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
     LogicalRelation(relation, schema.toAttributes, Some(table), false)
   }
