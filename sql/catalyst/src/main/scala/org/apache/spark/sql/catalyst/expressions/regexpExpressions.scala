@@ -200,20 +200,21 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
   private lazy val cache = patterns.filterNot(_ == null)
     .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
 
+  private lazy val matchFunc = if (isNotLikeAll) {
+    (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()
+  } else {
+    (p: Pattern, inputValue: String) => p.matcher(inputValue).matches()
+  }
+
   override def eval(input: InternalRow): Any = {
     val exprValue = child.eval(input)
     if (exprValue == null) {
       null
     } else {
-      val allMatched = if (isNotLikeAll) {
-        !cache.exists(p => p.matcher(exprValue.toString).matches())
+      if (cache.forall(matchFunc(_, exprValue.toString))) {
+        if (hasNull) null else true
       } else {
-        cache.forall(p => p.matcher(exprValue.toString).matches())
-      }
-      if (allMatched && hasNull) {
-        null
-      } else {
-        allMatched
+        false
       }
     }
   }
@@ -223,12 +224,10 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     val patternClass = classOf[Pattern].getName
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
-    val allMatched = ctx.freshName("allMatched")
-    val valueIsNull = ctx.freshName("valueIsNull")
     val valueArg = ctx.freshName("valueArg")
     val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
 
-    val matchCode = if (isNotLikeAll) {
+    val checkNotMatchCode = if (isNotLikeAll) {
       s"$pattern.matcher($valueArg.toString()).matches()"
     } else {
       s"!$pattern.matcher($valueArg.toString()).matches()"
@@ -237,20 +236,20 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     ev.copy(code =
       code"""
             |${eval.code}
-            |boolean $allMatched = true;
-            |boolean $valueIsNull = false;
+            |boolean ${ev.isNull} = false;
+            |boolean ${ev.value} = true;
             |if (${eval.isNull}) {
-            |  $valueIsNull = true;
+            |  ${ev.isNull} = true;
             |} else {
             |  $javaDataType $valueArg = ${eval.value};
             |  for ($patternClass $pattern: $patternCache) {
-            |    if ($matchCode) {
-            |      $allMatched = false;
+            |    if ($checkNotMatchCode) {
+            |      ${ev.value} = false;
+            |      break;
             |    }
             |  }
+            |  if (${ev.value} && $hasNull) ${ev.isNull} = true;
             |}
-            |final boolean ${ev.isNull} = $valueIsNull || ($allMatched && $hasNull);
-            |final boolean ${ev.value} = $allMatched;
       """.stripMargin)
   }
 }
