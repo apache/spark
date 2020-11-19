@@ -97,8 +97,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     PlanSubqueries(sparkSession),
-    RemoveRedundantSorts(sparkSession.sessionState.conf),
     EnsureRequirements(sparkSession.sessionState.conf),
+    // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+    // number of partitions when instantiating PartitioningCollection.
+    RemoveRedundantSorts(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
