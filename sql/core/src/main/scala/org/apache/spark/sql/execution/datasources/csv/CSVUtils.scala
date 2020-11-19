@@ -79,12 +79,12 @@ object CSVUtils {
           value
         }
       }
-      val duplicatesSet = {
+      val duplicatesSet = mutable.Set() ++ {
         // scalastyle:off caselocale
         val headerNames = header.map(name => if (caseSensitive) name else name.toLowerCase)
         // scalastyle:on caselocale
         headerNames.diff(headerNames.distinct)
-      }.to[mutable.Set]
+      }
       header.zipWithIndex.map { case (value, index) =>
         var name = value
         // scalastyle:off caselocale
