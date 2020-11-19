@@ -38,21 +38,41 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
-    runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_DECOMISSIONING,
-      mainClass = "",
-      expectedDriverLogOnCompletion = Seq(
-        "Finished waiting, stopping Spark",
-        "Decommission executors",
-        "Final accumulator value is: 100"),
-      appArgs = Array.empty[String],
-      driverPodChecker = doBasicDriverPyPodCheck,
-      executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
-      isJVM = false,
-      pyFiles = None,
-      executorPatience = None,
-      decommissioningTest = true)
+    var execLogs = scala.collection.mutable.HashMap[String, String]()
+
+    def collectExecLogsPodCheck(pod: Pod) = {
+      doBasicExecutorPyPodCheck(pod)
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val myLog = kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .getLog
+        assert(myLog.contains("Exit code"))
+        execLogs += ((pod.getMetadata.getName, myLog))
+      }
+    }
+
+    try {
+      runSparkApplicationAndVerifyCompletion(
+        appResource = PYSPARK_DECOMISSIONING,
+        mainClass = "",
+        expectedDriverLogOnCompletion = Seq(
+          "Finished waiting, stopping Spark",
+          "Decommission executors",
+          "Final accumulator value is: 100"),
+        appArgs = Array.empty[String],
+        driverPodChecker = doBasicDriverPyPodCheck,
+        executorPodChecker = collectExecLogsPodCheck,
+        appLocator = appLocator,
+        isJVM = false,
+        pyFiles = None,
+        executorPatience = None,
+        decommissioningTest = true)
+    } catch {
+      case e: Exception =>
+        println(s"Had an exception, exec logs are ${execLogs.toString}")
+        throw e
+    }
   }
 
   test("Test basic decommissioning with shuffle cleanup", k8sTestTag) {
@@ -102,40 +122,20 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
-    var execLogs = scala.collection.mutable.HashMap[String, String]()
-
-    def collectExecLogsPodCheck(pod: Pod) = {
-      doBasicExecutorPyPodCheck(pod)
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        val myLog = kubernetesTestComponents.kubernetesClient
-          .pods()
-          .withName(pod.getMetadata.getName)
-          .getLog
-        assert(myLog.contains("Exit code"))
-        execLogs += ((pod.getMetadata.getName, myLog))
-      }
-    }
-
-    try {
-      runSparkApplicationAndVerifyCompletion(
-        appResource = PYSPARK_SCALE,
-        mainClass = "",
-        expectedDriverLogOnCompletion = Seq(
-          "Finished waiting, stopping Spark",
-          "Decommission executors"),
-        appArgs = Array.empty[String],
-        driverPodChecker = doBasicDriverPyPodCheck,
-        executorPodChecker = collectExecLogsPodCheck,
-        appLocator = appLocator,
-        isJVM = false,
-        pyFiles = None,
-        executorPatience = None,
-        decommissioningTest = false)
-    } catch {
-      case e: Exception =>
-        println(s"Had an exception, exec logs are ${execLogs.toString}")
-        throw e
-    }
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_SCALE,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "Finished waiting, stopping Spark",
+        "Decommission executors"),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      appLocator = appLocator,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = None,
+      decommissioningTest = false)
   }
 }
 
