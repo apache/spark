@@ -539,11 +539,11 @@ class LinearDataGenerator(object):
         ----------
         intercept : float
             bias factor, the term c in X'w + c
-        weights : :py:class:`pyspark.mllib.inalg.Vector` or convertible
+        weights : :py:class:`pyspark.mllib.linalg.Vector` or convertible
             feature vector, the term w in X'w + c
-        xMean : :py:class:`pyspark.mllib.inalg.Vector` or convertible
+        xMean : :py:class:`pyspark.mllib.linalg.Vector` or convertible
             Point around which the data X is centered.
-        xVariance : :py:class:`pyspark.mllib.inalg.Vector` or convertible
+        xVariance : :py:class:`pyspark.mllib.linalg.Vector` or convertible
             Variance of the given data
         nPoints : int
             Number of points to be generated
