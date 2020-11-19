@@ -507,8 +507,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
 
     val residualDeviancesR = Array(3.809296, 3.70055)
 
-    import GeneralizedLinearRegression._
-
     var idx = 0
     val link = "log"
     val dataset = datasetPoissonLogWithZero
@@ -789,8 +787,6 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
 
     val expected = Seq(0.5108256, 0.1201443, 1.600000, 1.886792, 0.625, 0.530,
       -0.4700036, -0.6348783, 1.325782, 1.463641)
-
-    import GeneralizedLinearRegression._
 
     var idx = 0
     for (family <- GeneralizedLinearRegression.supportedFamilyNames.sortWith(_ < _)) {

@@ -22,7 +22,6 @@ import java.lang.{Long => JLong}
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.Random
 

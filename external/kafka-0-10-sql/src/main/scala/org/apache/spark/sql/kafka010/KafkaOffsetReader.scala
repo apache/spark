@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer, OffsetAndTimestamp}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, OffsetAndTimestamp}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
@@ -33,10 +33,12 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
 
 /**
- * This class uses Kafka's own [[KafkaConsumer]] API to read data offsets from Kafka.
+ * This class uses Kafka's own [[org.apache.kafka.clients.consumer.KafkaConsumer]] API to
+ * read data offsets from Kafka.
  * The [[ConsumerStrategy]] class defines which Kafka topics and partitions should be read
  * by this source. These strategies directly correspond to the different consumption options
- * in. This class is designed to return a configured [[KafkaConsumer]] that is used by the
+ * in. This class is designed to return a configured
+ * [[org.apache.kafka.clients.consumer.KafkaConsumer]] that is used by the
  * [[KafkaSource]] to query for the offsets. See the docs on
  * [[org.apache.spark.sql.kafka010.ConsumerStrategy]]
  * for more details.
@@ -50,7 +52,8 @@ private[kafka010] class KafkaOffsetReader(
     driverGroupIdPrefix: String) extends Logging {
 
   /**
-   * [[UninterruptibleThreadRunner]] ensures that all [[KafkaConsumer]] communication called in an
+   * [[UninterruptibleThreadRunner]] ensures that all
+   * [[org.apache.kafka.clients.consumer.KafkaConsumer]] communication called in an
    * [[UninterruptibleThread]]. In the case of streaming queries, we are already running in an
    * [[UninterruptibleThread]], however for batch mode this is not the case.
    */

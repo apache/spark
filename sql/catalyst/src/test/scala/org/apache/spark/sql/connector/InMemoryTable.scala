@@ -27,6 +27,7 @@ import scala.collection.mutable
 import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
@@ -34,8 +35,9 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
-import org.apache.spark.sql.types.{DataType, DateType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
@@ -45,7 +47,24 @@ class InMemoryTable(
     val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
-  extends Table with SupportsRead with SupportsWrite with SupportsDelete {
+  extends Table with SupportsRead with SupportsWrite with SupportsDelete
+      with SupportsMetadataColumns {
+
+  private object PartitionKeyColumn extends MetadataColumn {
+    override def name: String = "_partition"
+    override def dataType: DataType = StringType
+    override def comment: String = "Partition key used to store the row"
+  }
+
+  private object IndexColumn extends MetadataColumn {
+    override def name: String = "index"
+    override def dataType: DataType = StringType
+    override def comment: String = "Metadata column used to conflict with a data column"
+  }
+
+  // purposely exposes a metadata column that conflicts with a data column in some tests
+  override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
+  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -146,7 +165,7 @@ class InMemoryTable(
       val key = getKey(row)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
-        .getOrElse(key -> new BufferedRows().withRow(row))
+        .getOrElse(key -> new BufferedRows(key.toArray.mkString("/")).withRow(row))
     })
     this
   }
@@ -160,17 +179,38 @@ class InMemoryTable(
     TableCapability.TRUNCATE).asJava
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    () => new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]))
+    new InMemoryScanBuilder(schema)
   }
 
-  class InMemoryBatchScan(data: Array[InputPartition]) extends Scan with Batch {
+  class InMemoryScanBuilder(tableSchema: StructType) extends ScanBuilder
+      with SupportsPushDownRequiredColumns {
+    private var schema: StructType = tableSchema
+
+    override def build: Scan =
+      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema)
+
+    override def pruneColumns(requiredSchema: StructType): Unit = {
+      // if metadata columns are projected, return the table schema and metadata columns
+      val hasMetadataColumns = requiredSchema.map(_.name).exists(metadataColumnNames.contains)
+      if (hasMetadataColumns) {
+        schema = StructType(tableSchema ++ metadataColumnNames
+            .flatMap(name => metadataColumns.find(_.name == name))
+            .map(col => StructField(col.name, col.dataType, col.isNullable)))
+      }
+    }
+  }
+
+  class InMemoryBatchScan(data: Array[InputPartition], schema: StructType) extends Scan with Batch {
     override def readSchema(): StructType = schema
 
     override def toBatch: Batch = this
 
     override def planInputPartitions(): Array[InputPartition] = data
 
-    override def createReaderFactory(): PartitionReaderFactory = BufferedRowsReaderFactory
+    override def createReaderFactory(): PartitionReaderFactory = {
+      val metadataColumns = schema.map(_.name).filter(metadataColumnNames.contains)
+      new BufferedRowsReaderFactory(metadataColumns)
+    }
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -340,7 +380,8 @@ object InMemoryTable {
   }
 }
 
-class BufferedRows extends WriterCommitMessage with InputPartition with Serializable {
+class BufferedRows(
+    val key: String = "") extends WriterCommitMessage with InputPartition with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
 
   def withRow(row: InternalRow): BufferedRows = {
@@ -349,13 +390,24 @@ class BufferedRows extends WriterCommitMessage with InputPartition with Serializ
   }
 }
 
-private object BufferedRowsReaderFactory extends PartitionReaderFactory {
+private class BufferedRowsReaderFactory(
+    metadataColumns: Seq[String]) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new BufferedRowsReader(partition.asInstanceOf[BufferedRows])
+    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumns)
   }
 }
 
-private class BufferedRowsReader(partition: BufferedRows) extends PartitionReader[InternalRow] {
+private class BufferedRowsReader(
+    partition: BufferedRows,
+    metadataColumns: Seq[String]) extends PartitionReader[InternalRow] {
+  private def addMetadata(row: InternalRow): InternalRow = {
+    val metadataRow = new GenericInternalRow(metadataColumns.map {
+      case "index" => index
+      case "_partition" => UTF8String.fromString(partition.key)
+    }.toArray)
+    new JoinedRow(row, metadataRow)
+  }
+
   private var index: Int = -1
 
   override def next(): Boolean = {
@@ -363,7 +415,7 @@ private class BufferedRowsReader(partition: BufferedRows) extends PartitionReade
     index < partition.rows.length
   }
 
-  override def get(): InternalRow = partition.rows(index)
+  override def get(): InternalRow = addMetadata(partition.rows(index))
 
   override def close(): Unit = {}
 }

@@ -470,7 +470,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 

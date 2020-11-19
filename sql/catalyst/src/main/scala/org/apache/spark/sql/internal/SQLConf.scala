@@ -1277,7 +1277,7 @@ object SQLConf {
   val REMOVE_REDUNDANT_SORTS_ENABLED = buildConf("spark.sql.execution.removeRedundantSorts")
     .internal()
     .doc("Whether to remove redundant physical sort node")
-    .version("3.1.0")
+    .version("2.4.8")
     .booleanConf
     .createWithDefault(true)
 
@@ -1903,7 +1903,7 @@ object SQLConf {
         "1. pyspark.sql.DataFrame.toPandas " +
         "2. pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame " +
         "The following data types are unsupported: " +
-        "MapType, ArrayType of TimestampType, and nested StructType.")
+        "ArrayType of TimestampType, and nested StructType.")
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 

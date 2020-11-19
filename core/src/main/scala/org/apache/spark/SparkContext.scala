@@ -1542,8 +1542,8 @@ class SparkContext(config: SparkConf) extends Logging {
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
       case "local" =>
-        logWarning("File with 'local' scheme is not supported to add to file server, since " +
-          "it is already available on every node.")
+        logWarning(s"File with 'local' scheme $path is not supported to add to file server, " +
+          s"since it is already available on every node.")
         return
       case _ => uri
     }

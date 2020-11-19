@@ -19,9 +19,7 @@ package org.apache.spark.network.netty
 
 import java.io.IOException
 import java.nio.ByteBuffer
-import java.util
 import java.util.{HashMap => JHashMap, Map => JMap}
-import java.util.concurrent.CompletableFuture
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
@@ -35,11 +33,11 @@ import org.apache.spark.ExecutorDeadException
 import org.apache.spark.internal.config
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientBootstrap, TransportClientFactory}
+import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
-import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, GetLocalDirsForExecutors, LocalDirsForExecutors, UploadBlock, UploadBlockStream}
+import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.serializer.JavaSerializer
