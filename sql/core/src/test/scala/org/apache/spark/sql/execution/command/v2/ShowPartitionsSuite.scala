@@ -43,6 +43,19 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
   }
 
+  test("show everything") {
+    val table = s"$catalog.dateTable"
+    withTable(table) {
+      createDateTable(table)
+      checkAnswer(
+        sql(s"show partitions $table"),
+        Row("year=2015/month=1") ::
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
+    }
+  }
+
   test("filter by partitions") {
     val table = s"$catalog.dateTable"
     withTable(table) {
@@ -50,6 +63,30 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
       checkAnswer(
         sql(s"show partitions $table PARTITION(year=2015, month=1)"),
         Row("year=2015/month=1") :: Nil)
+    }
+  }
+
+  test("show everything more than 5 part keys") {
+    val table = s"$catalog.wideTable"
+    withTable(table) {
+      sql(s"""
+        |CREATE TABLE $table (
+        |  price int, qty int,
+        |  year int, month int, hour int, minute int, sec int, extra int)
+        |$defaultUsing
+        |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
+      sql(s"""
+        |ALTER TABLE $table
+        |ADD PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1)
+        """.stripMargin)
+      sql(s"""
+        |ALTER TABLE $table
+        |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
+        """.stripMargin)
+      checkAnswer(
+        sql(s"show partitions $table"),
+        Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
+          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
     }
   }
 }
