@@ -883,6 +883,12 @@ case class SubqueryAlias(
     val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
+
+  override def metadataOutput: Seq[Attribute] = {
+    val qualifierList = identifier.qualifier :+ alias
+    child.metadataOutput.map(_.withQualifier(qualifierList))
+  }
+
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
