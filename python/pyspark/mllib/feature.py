@@ -43,7 +43,7 @@ class VectorTransformer(object):
 
         Parameters
         ----------
-        vector : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             vector or convertible or RDD to be transformed.
         """
         raise NotImplementedError
@@ -94,12 +94,12 @@ class Normalizer(VectorTransformer):
 
         Parameters
         ----------
-        vector : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             vector or RDD of vector to be normalized.
 
         Returns
         -------
-        :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             normalized vector(s). If the norm of the input is zero, it
             will return the input vector.
         """
@@ -121,7 +121,7 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
         Parameters
         ----------
-        vector : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Input vector(s) to be transformed.
 
         Notes
@@ -152,12 +152,12 @@ class StandardScalerModel(JavaVectorTransformer):
 
         Parameters
         ----------
-        vector : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Input vector(s) to be standardized.
 
         Returns
         -------
-        :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Standardized vector(s). If the variance of a column is
             zero, it will return default `0.0` for the column with
             zero variance.
@@ -279,7 +279,7 @@ class StandardScaler(object):
 
         Returns
         -------
-        :py:class:`StandardScalarModel`
+        :py:class:`StandardScalerModel`
         """
         dataset = dataset.map(_convert_to_vector)
         jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
@@ -293,19 +293,20 @@ class ChiSqSelectorModel(JavaVectorTransformer):
     .. versionadded:: 1.4.0
     """
 
-    @since('1.4.0')
     def transform(self, vector):
         """
         Applies transformation on a vector.
 
+        .. versionadded:: 1.4.0
+
         Examples
         --------
-        vector : :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             Input vector(s) to be transformed.
 
         Returns
         -------
-        py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             transformed vector(s).
         """
         return JavaVectorTransformer.transform(self, vector)
@@ -571,13 +572,13 @@ class IDFModel(JavaVectorTransformer):
 
         Parameters
         ----------
-        x : :py:class:`pyspark.RDD` or :py:class:`pyspark.mllib.inalg.Vector`
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             an RDD of term frequency vectors or a term frequency
             vector
 
         Returns
         -------
-        :py:class:`pyspark.mllib.inalg.Vector` or :py:class:`pyspark.RDD`
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
             an RDD of TF-IDF vectors or a TF-IDF vector
 
         Notes
@@ -654,10 +655,11 @@ class IDF(object):
     def __init__(self, minDocFreq=0):
         self.minDocFreq = minDocFreq
 
-    @since('1.2.0')
     def fit(self, dataset):
         """
         Computes the inverse document frequency.
+
+        .. versionadded:: 1.2.0
 
         Parameters
         ----------
@@ -688,7 +690,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
 
         Returns
         -------
-        :py:class:`pyspark.mllib.inalg.Vector`
+        :py:class:`pyspark.mllib.linalg.Vector`
             vector representation of word(s)
 
         Notes
@@ -709,7 +711,7 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         Parameters
         ----------
 
-        word : str or  :py:class:`pyspark.mllib.inalg.Vector`
+        word : str or  :py:class:`pyspark.mllib.linalg.Vector`
             a word or a vector representation of word
         num : int
             number of synonyms to find
