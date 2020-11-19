@@ -228,11 +228,11 @@ object SparkBuild extends PomBuild {
           // replace -Xfatal-warnings with fine-grained configuration, since 2.13.2
           // verbose warning on deprecation, error on all others
           // see `scalac -Wconf:help` for details
+          "-Xlint:eta-zero",
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
-          "-Wconf:cat=lint-eta-zero:e",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
