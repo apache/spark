@@ -1,3 +1,7 @@
+-- test cases for like all
+--CONFIG_DIM1 spark.sql.optimizer.likeAllConversionThreshold=0
+--CONFIG_DIM1 spark.sql.optimizer.likeAllConversionThreshold=200
+
 CREATE OR REPLACE TEMPORARY VIEW like_all_table AS SELECT * FROM (VALUES
   ('google', '%oo%'),
   ('facebook', '%oo%'),

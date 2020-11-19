@@ -1178,7 +1178,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   }
 
   testWithUninterruptibleThread("minPartitions is supported") {
-    import testImplicits._
 
     val topic = newTopic()
     val tp = new TopicPartition(topic, 0)

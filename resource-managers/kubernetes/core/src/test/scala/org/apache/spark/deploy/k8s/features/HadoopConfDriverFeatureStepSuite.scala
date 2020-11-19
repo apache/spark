@@ -27,7 +27,6 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
