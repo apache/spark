@@ -34,7 +34,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.{Clock, ManualClock, SystemClock}
+import org.apache.spark.util.{Clock, ManualClock}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}

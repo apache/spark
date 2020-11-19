@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
@@ -25,7 +24,7 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.Cast.{canCast, forceNullable, resolvableNullability}
+import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._

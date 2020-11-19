@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.IntegerType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 

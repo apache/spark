@@ -22,7 +22,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import okhttp3.Response
@@ -32,7 +31,6 @@ import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Utils => SparkUtils}
 
 object Utils extends Logging {
 
