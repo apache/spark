@@ -153,23 +153,23 @@ class FrameLessOffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
   /** Whether null values of input expression are included in or eliminated from the calculation. */
-  val ignoreNulls = expressions.head.ignoreNulls
+  private val ignoreNulls = expressions.head.ignoreNulls
 
   /** The input expression of Lead/Lag. */
-  lazy val inputExpression = expressions.toSeq.map(_.input).head
+  private lazy val inputExpression = expressions.toSeq.map(_.input).head
 
   /** The type of the input expression and its index in the row. */
-  lazy val (dataType, idx) = inputAttrs.zipWithIndex.find(_._1 == inputExpression)
+  private lazy val (dataType, idx) = inputAttrs.zipWithIndex.find(_._1 == inputExpression)
     .map { x => (x._1.dataType, x._2)}.head
 
   /** Cache some UnsafeRow that will be used many times. */
-  var cachedRow: UnsafeRow = null
+  private var cachedRow: UnsafeRow = null
 
   /**
    * If `ignoreNulls` is true, sometimes it takes a few more steps to get a row
    * whose input expression is not null.
    */
-  var step: Int = 0
+  private var step: Int = 0
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
@@ -183,7 +183,7 @@ class FrameLessOffsetWindowFunctionFrame(
     inputIndex = offset
   }
 
-  val doWrite = if (ignoreNulls) {
+  private val doWrite = if (ignoreNulls) {
     // For illustration, here are two examples:
     // Here are six rows of data, and the input values of each row are: 1, 2, null, null, 3, 4.
     // First example: we use Lead(input, 1) and the process is as follows:
