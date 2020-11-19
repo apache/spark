@@ -890,6 +890,11 @@ object SQLConf {
     val INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS = Value
   }
 
+  val PARQUET_CELL_SIZE_LIMIT = buildConf("spark.sql.parquet.cellSizeLimit")
+    .doc(s"Parquet file cell size limit. default 512 * 1024")
+    .longConf
+    .createWithDefault(512 * 1024)
+
   val PARQUET_OUTPUT_TIMESTAMP_TYPE = buildConf("spark.sql.parquet.outputTimestampType")
     .doc("Sets which Parquet timestamp type to use when Spark writes data to Parquet files. " +
       "INT96 is a non-standard but commonly used timestamp type in Parquet. TIMESTAMP_MICROS " +
