@@ -92,7 +92,7 @@ class LogisticRegressionModel(LinearClassificationModel):
 
     Parameters
     ----------
-    weights : :py:class:`pyspark.ml.linalg.Vector`
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
         Weights computed for every feature.
     intercept : float
         Intercept computed for this model. (Only used in Binary Logistic
@@ -267,17 +267,20 @@ class LogisticRegressionModel(LinearClassificationModel):
 
 class LogisticRegressionWithSGD(object):
     """
+    Train a classification model for Binary Logistic Regression using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     .. deprecated:: 2.0.0
         Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS.
     """
     @classmethod
-    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
               validateData=True, convergenceTol=0.001):
         """
         Train a logistic regression model on the given data.
+
+        .. versionadded:: 0.9.0
 
         Parameters
         ----------
@@ -292,7 +295,7 @@ class LogisticRegressionWithSGD(object):
         miniBatchFraction: float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
-        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or equivalent, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         regParam : float, optional
@@ -333,15 +336,19 @@ class LogisticRegressionWithSGD(object):
 
 class LogisticRegressionWithLBFGS(object):
     """
+    Train a classification model for Multinomial/Binary Logistic Regression
+    using Limited-memory BFGS.
+
+    Standard feature scaling and L2 regularization are used by default.
     .. versionadded:: 1.2.0
     """
     @classmethod
-    @since('1.2.0')
     def train(cls, data, iterations=100, initialWeights=None, regParam=0.0, regType="l2",
               intercept=False, corrections=10, tolerance=1e-6, validateData=True, numClasses=2):
         """
         Train a logistic regression model on the given data.
 
+        .. versionadded:: 1.2.0
 
         Parameters
         ----------
@@ -350,7 +357,7 @@ class LogisticRegressionWithLBFGS(object):
         iterations : int, optional
             The number of iterations.
             (default: 100)
-        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or equivalent, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         regParam : float, optional
@@ -518,16 +525,19 @@ class SVMModel(LinearClassificationModel):
 
 class SVMWithSGD(object):
     """
+    Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
     """
 
     @classmethod
-    @since('0.9.0')
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
               intercept=False, validateData=True, convergenceTol=0.001):
         """
         Train a support vector machine on the given data.
+
+        .. versionadded:: 0.9.0
 
         Parameters
         ----------
@@ -545,7 +555,7 @@ class SVMWithSGD(object):
         miniBatchFraction: float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
-        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or equivalent, optional
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
             The initial weights.
             (default: None)
         regType : str, optional
@@ -589,7 +599,7 @@ class NaiveBayesModel(Saveable, Loader):
     ----------
     labels : :py:class:`numpy.ndarray`
         List of labels.
-    pi: :py:class:`numpy.ndarray`
+    pi : :py:class:`numpy.ndarray`
         Log of class priors, whose dimension is C, number of labels.
     theta : :py:class:`numpy.ndarray`
         Log of class conditional probabilities, whose dimension is C-by-D,
@@ -676,6 +686,8 @@ class NaiveBayesModel(Saveable, Loader):
 
 class NaiveBayes(object):
     """
+    Train a Multinomial Naive Bayes model.
+
     .. versionadded:: 0.9.0
     """
 
