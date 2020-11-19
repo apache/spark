@@ -112,7 +112,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
           .withName(pod.getMetadata.getName)
           .getLog
         assert(myLog.contains("Exit code"))
-        execLogs += (pod.getMetadata.getName, myLog)
+        execLogs += ((pod.getMetadata.getName, myLog))
       }
     }
 
