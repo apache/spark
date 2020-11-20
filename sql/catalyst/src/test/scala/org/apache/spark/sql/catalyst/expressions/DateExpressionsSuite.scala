@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, ZoneId}
+import java.text.{ParseException, SimpleDateFormat}
+import java.time.{DateTimeException, Instant, LocalDate, ZoneId}
+import java.time.format.DateTimeParseException
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -1285,5 +1286,48 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test max/min input
     testIntegralFunc(Long.MaxValue)
     testIntegralFunc(Long.MinValue)
+  }
+
+  test("SPARK-33498: GetTimestamp,UnixTimestamp,ToUnixTimestamp with parseError") {
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq("LEGACY", "CORRECTED", "EXCEPTION").foreach { policy =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+
+          val exprSeq = Seq[Expression](
+            GetTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            GetTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            UnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            UnixTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            ToUnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            ToUnixTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS"))
+          )
+
+          if (!ansiEnabled) {
+            exprSeq.foreach(checkEvaluation(_, null))
+          } else if (policy == "LEGACY") {
+            exprSeq.foreach(checkExceptionInExpression[ParseException](_, "Unparseable"))
+          } else {
+            exprSeq.foreach(
+              checkExceptionInExpression[DateTimeParseException](_, "could not be parsed"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33498: TimestampType cast with parseError") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val input = "Unparseable"
+        val castExpr = Cast(Literal(input), TimestampType, UTC_OPT)
+        if (!ansiEnabled) {
+          checkEvaluation(castExpr, null)
+        } else {
+          checkExceptionInExpression[DateTimeException](castExpr,
+            s"Cannot cast $input to TimestampType.")
+        }
+      }
+    }
   }
 }
