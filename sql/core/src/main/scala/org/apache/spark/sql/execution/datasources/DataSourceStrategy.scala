@@ -710,32 +710,93 @@ object DataSourceStrategy
       case AttributeReference(name, _, _, _) => name
       case Cast(child, _, _) => child match {
         case AttributeReference(name, _, _, _) => name
+        case Add(left, right) =>
+          arithmeticExpressionAsString(left, right, "+")
+        case Subtract(left, right) =>
+          arithmeticExpressionAsString(left, right, "-")
+        case Multiply(left, right) =>
+          arithmeticExpressionAsString(left, right, "*")
+        case Divide(left, right) =>
+          arithmeticExpressionAsString(left, right, "/")
+        case _ => ""
+      }
+      case Add(left, right) =>
+        arithmeticExpressionAsString(left, right, "+")
+      case Subtract(left, right) =>
+        arithmeticExpressionAsString(left, right, "-")
+      case Multiply(left, right) =>
+        arithmeticExpressionAsString(left, right, "*")
+      case Divide(left, right) =>
+        arithmeticExpressionAsString(left, right, "/")
+      case CheckOverflow(child, _, _) => child match {
+        case Add(left, right) =>
+          arithmeticExpressionAsString(left, right, "+")
+        case Subtract(left, right) =>
+          arithmeticExpressionAsString(left, right, "-")
+        case Multiply(left, right) =>
+          arithmeticExpressionAsString(left, right, "*")
+        case Divide(left, right) =>
+          arithmeticExpressionAsString(left, right, "/")
         case _ => ""
       }
       case _ => ""
     }
 
-    val filter = if (aggregates.filter.nonEmpty) {
-      translateFilter(aggregates.filter.get, false)
-    } else {
-      Option.empty[Filter]
-    }
-
     aggregates.aggregateFunction match {
       case aggregate.Min(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Min(columnName, aggregates.isDistinct, filter)) else None
+        if (!columnName.isEmpty) Some(Min(columnName)) else None
       case aggregate.Max(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Max(columnName, aggregates.isDistinct, filter)) else None
+        if (!columnName.isEmpty) Some(Max(columnName)) else None
       case aggregate.Average(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Avg(columnName, aggregates.isDistinct, filter)) else None
+        if (!columnName.isEmpty) Some(Avg(columnName)) else None
       case aggregate.Sum(child) =>
         val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Sum(columnName, aggregates.isDistinct, filter)) else None
+        if (!columnName.isEmpty) Some(Sum(columnName)) else None
       case _ => None
     }
+  }
+
+  private def arithmeticExpressionAsString (
+      left: Expression,
+      right: Expression,
+      sign: String): String = {
+
+    val leftName = if (left.isInstanceOf[AttributeReference]) {
+      left.asInstanceOf[AttributeReference].name
+    } else if (left.isInstanceOf[Cast]) {
+      if (left.asInstanceOf[Cast].child.isInstanceOf[AttributeReference]) {
+        left.asInstanceOf[Cast].child.asInstanceOf[AttributeReference].name
+      }
+    } else if (left.isInstanceOf[PromotePrecision]) {
+      if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[AttributeReference]) {
+        left.asInstanceOf[PromotePrecision].child.asInstanceOf[AttributeReference].name
+      } else if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
+        if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
+          left.asInstanceOf[PromotePrecision].child.asInstanceOf[Cast]
+            .child.asInstanceOf[AttributeReference].name
+        }
+      }
+    }
+    val rightName = if (right.isInstanceOf[AttributeReference]) {
+      right.asInstanceOf[AttributeReference].name
+    } else if (right.isInstanceOf[Cast]) {
+      if (right.asInstanceOf[Cast].child.isInstanceOf[AttributeReference]) {
+        right.asInstanceOf[Cast].child.asInstanceOf[AttributeReference].name
+      }
+    } else if (right.isInstanceOf[PromotePrecision]) {
+      if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[AttributeReference]) {
+        right.asInstanceOf[PromotePrecision].child.asInstanceOf[AttributeReference].name
+      } else if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
+        if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
+          right.asInstanceOf[PromotePrecision].child.asInstanceOf[Cast]
+            .child.asInstanceOf[AttributeReference].name
+        }
+      }
+    }
+    s"$leftName $sign $rightName"
   }
 
   /**

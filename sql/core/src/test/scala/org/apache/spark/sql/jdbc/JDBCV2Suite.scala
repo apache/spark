@@ -65,8 +65,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('fred', 1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"people\" VALUES ('mary', 2)").executeUpdate()
       conn.prepareStatement(
-        "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary INTEGER," +
-          " bonus INTEGER)").executeUpdate()
+        "CREATE TABLE \"test\".\"employee\" (dept INTEGER, name TEXT(32), salary NUMERIC(20, 2)," +
+          " bonus NUMERIC(6, 2))").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (1, 'amy', 10000, 1000)")
         .executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (2, 'alex', 12000, 1200)")
@@ -192,7 +192,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     checkAnswer(df3, Seq(Row(1.0)))
 
     val df4 = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
-    df4.explain(true)
+    // df4.explain(true)
     // scalastyle:off line.size.limit
     // == Parsed Logical Plan ==
     // 'Project [unresolvedalias(('MAX('SALARY) + 1), None)]
@@ -235,6 +235,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     //
     // == Physical Plan ==
     // *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#87L])
+    // *(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#87L])
     // +- Exchange SinglePartition, true, [id=#149]
     //    +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#90L])
     //       +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@63262071 [] PushedAggregates: [], PushedFilters: [], PushedGroupby: [], ReadSchema: struct<>
@@ -244,6 +245,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     val df6 = sql("select MIN(SALARY), MIN(BONUS), MIN(SALARY) * MIN(BONUS) FROM h2.test.employee")
     // df6.explain(true)
     checkAnswer(df6, Seq(Row(9000, 1000, 9000000)))
+
+    val df7 = sql("select MIN(SALARY), MIN(BONUS), SUM(SALARY * BONUS) FROM h2.test.employee")
+    // df7.explain(true)
+    checkAnswer(df7, Seq(Row(9000, 1000, 48200000)))
   }
 
   test("read/write with partition info") {

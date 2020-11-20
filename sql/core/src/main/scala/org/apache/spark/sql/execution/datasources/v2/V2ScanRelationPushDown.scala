@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
@@ -78,8 +77,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
             Aggregate(groupingExpressions, resultExpressions, plan)
           } else {
             val aggOutputBuilder = ArrayBuilder.make[AttributeReference]
-            for (a <- aggregates) {
-                aggOutputBuilder += AttributeReference(toPrettySQL(a), a.dataType)()
+            for (i <- 0 until aggregates.length) {
+              aggOutputBuilder += AttributeReference(
+                  aggregation.aggregateExpressions(i).toString, aggregates(i).dataType)()
             }
             val aggOutput = aggOutputBuilder.result
 
@@ -87,13 +87,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
             for (col1 <- output) {
               var found = false
               for (col2 <- aggOutput) {
-                  if (contains(col2.name, col1.name)) {
+                  if (contains(col2.name, col1.name, true)) {
                     newOutputBuilder += col2
                     found = true
                   }
               }
-              if (!found) newOutputBuilder += col1
-
+              if (!found) {
+                for (groupBy <- aggregation.groupByExpressions) {
+                  if (contains(groupBy, col1.name, false)) {
+                    newOutputBuilder += col1
+                  }
+                }
+              }
             }
             val newOutput = newOutputBuilder.result
 
@@ -205,11 +210,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
     withProjection
   }
 
-  private def contains(s1: String, s2: String): Boolean = {
+  private def contains(s1: String, s2: String, checkParathesis: Boolean): Boolean = {
     if (SQLConf.get.caseSensitiveAnalysis) {
-      s1.contains("(" + s2)
+      if (checkParathesis) s1.contains("(" + s2) else s1.contains(s2)
     } else {
-      s1.toLowerCase(Locale.ROOT).contains("(" + s2.toLowerCase(Locale.ROOT))
+      if (checkParathesis) {
+        s1.toLowerCase(Locale.ROOT).contains("(" + s2.toLowerCase(Locale.ROOT))
+      } else {
+        s1.toLowerCase(Locale.ROOT).contains(s2.toLowerCase(Locale.ROOT))
+      }
     }
   }
 }
