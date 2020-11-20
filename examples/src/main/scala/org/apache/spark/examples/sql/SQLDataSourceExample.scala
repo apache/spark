@@ -83,9 +83,9 @@ object SQLDataSourceExample {
     // $example off:load_with_path_glob_filter$
     // $example on:load_with_modified_time_filter$
     val beforeFilterDF = spark.read.format("parquet")
-        // Files modified before 07/01/2020 at 05:30 are allowed
-        .option("modifiedBefore", "2020-07-01T05:30:00")
-        .load("examples/src/main/resources/dir1");
+      // Files modified before 07/01/2020 at 05:30 are allowed
+      .option("modifiedBefore", "2020-07-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
     beforeFilterDF.show();
     // +-------------+
     // |         file|
@@ -93,9 +93,9 @@ object SQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     val afterFilterDF = spark.read.format("parquet")
-         // Files modified after 06/01/2020 at 05:30 are allowed
-        .option("modifiedAfter", "2020-06-01T05:30:00")
-        .load("examples/src/main/resources/dir1");
+       // Files modified after 06/01/2020 at 05:30 are allowed
+      .option("modifiedAfter", "2020-06-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
     afterFilterDF.show();
     // +-------------+
     // |         file|

@@ -38,7 +38,7 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
   private def checkDisallowedOptions(options: Map[String, String]): Unit = {
     Seq(ModifiedBeforeFilter.PARAM_NAME, ModifiedAfterFilter.PARAM_NAME).foreach { param =>
       if (parameters.contains(param)) {
-        throw new IllegalArgumentException(s"option '$param' is not allowed in file stream source")
+        throw new IllegalArgumentException(s"option '$param' is not allowed in file stream sources")
       }
     }
   }

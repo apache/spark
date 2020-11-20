@@ -832,8 +832,7 @@ class DataFrameReader(OptionUtils):
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties",
-                          self._spark._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         if column is not None:
@@ -845,8 +844,7 @@ class DataFrameReader(OptionUtils):
                                                int(numPartitions), jprop))
         if predicates is not None:
             gateway = self._spark._sc._gateway
-            jpredicates = utils.toJArray(
-                gateway, gateway.jvm.java.lang.String, predicates)
+            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
@@ -859,7 +857,6 @@ class DataFrameWriter(OptionUtils):
 
     .. versionadded:: 1.4
     """
-
     def __init__(self, df):
         self._df = df
         self._spark = df.sql_ctx
@@ -1001,21 +998,18 @@ class DataFrameWriter(OptionUtils):
         ...     .saveAsTable('bucketed_table'))
         """
         if not isinstance(numBuckets, int):
-            raise TypeError(
-                "numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
 
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError(
-                    "col is a {0} but cols are not empty".format(type(col)))
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
 
             col, cols = col[0], col[1:]
 
         if not all(isinstance(c, str) for c in cols) or not(isinstance(col, str)):
             raise TypeError("all names should be `str`")
 
-        self._jwrite = self._jwrite.bucketBy(
-            numBuckets, col, _to_seq(self._spark._sc, cols))
+        self._jwrite = self._jwrite.bucketBy(numBuckets, col, _to_seq(self._spark._sc, cols))
         return self
 
     def sortBy(self, col, *cols):
@@ -1040,8 +1034,7 @@ class DataFrameWriter(OptionUtils):
         """
         if isinstance(col, (list, tuple)):
             if cols:
-                raise ValueError(
-                    "col is a {0} but cols are not empty".format(type(col)))
+                raise ValueError("col is a {0} but cols are not empty".format(type(col)))
 
             col, cols = col[0], col[1:]
 
@@ -1423,8 +1416,7 @@ class DataFrameWriter(OptionUtils):
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties",
-                          self._spark._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
@@ -1590,8 +1582,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['spark'] = spark
-    globs['df'] = spark.read.parquet(
-        'python/test_support/sql/parquet_partitioned')
+    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
