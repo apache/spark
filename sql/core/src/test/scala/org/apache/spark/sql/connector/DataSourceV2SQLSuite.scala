@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
@@ -43,7 +42,6 @@ class DataSourceV2SQLSuite
   with AlterTableTests with DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
