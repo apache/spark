@@ -1414,8 +1414,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               ctx.NOT match {
-                case null => LikeAll(e, patterns)
-                case _ => NotLikeAll(e, patterns)
+                case null => LikeAll(e, patterns.toSeq)
+                case _ => NotLikeAll(e, patterns.toSeq)
               }
             } else {
               getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
