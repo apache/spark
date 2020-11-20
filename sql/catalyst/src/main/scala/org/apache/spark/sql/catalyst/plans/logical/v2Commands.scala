@@ -676,11 +676,19 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
  */
 case class CacheTable(
     child: LogicalPlan,
-    plan: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the CACHE TABLE ... AS SELECT command.
+ */
+case class CacheTableAsSelect(
+    tempViewName: String,
+    plan: LogicalPlan,
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
 
 /**
  * The logical plan of the UNCACHE TABLE command.

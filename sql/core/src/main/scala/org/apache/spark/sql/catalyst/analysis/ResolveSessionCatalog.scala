@@ -443,12 +443,11 @@ class ResolveSessionCatalog(
       }
 
     // CACHE TABLE ... AS SELECT creates a temp view with the input query.
-    // Thus, use the identifier in UnresolvedTableOrView directly,
-    case CacheTable(u: UnresolvedTableOrView, plan, isLazy, options) if plan.isDefined =>
-      CacheTableCommand(u.multipartIdentifier.asTableIdentifier, plan, isLazy, options)
+    case CacheTableAsSelect(tempViewName, plan, isLazy, options) =>
+      CacheTableCommand(TableIdentifier(tempViewName), Some(plan), isLazy, options)
 
-    case CacheTable(ResolvedV1TableOrViewIdentifier(ident), plan, isLazy, options) =>
-      CacheTableCommand(ident.asTableIdentifier, plan, isLazy, options)
+    case CacheTable(ResolvedV1TableOrViewIdentifier(ident), isLazy, options) =>
+      CacheTableCommand(ident.asTableIdentifier, None, isLazy, options)
 
     case UncacheTable(ResolvedV1TableOrViewIdentifier(ident), ifExists) =>
       UncacheTableCommand(ident.asTableIdentifier, ifExists)

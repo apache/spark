@@ -1594,17 +1594,24 @@ class DDLParserSuite extends AnalysisTest {
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
-      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), None, false, Map.empty))
+      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), false, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
+      CacheTableAsSelect(
+        "t",
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
+        false,
+        Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), None, true, Map.empty))
+      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
       CacheTable(
         UnresolvedTableOrView(Seq("a", "b", "c")),
-        None,
         true,
         Map("storageLevel" -> "DISK_ONLY")))
 
