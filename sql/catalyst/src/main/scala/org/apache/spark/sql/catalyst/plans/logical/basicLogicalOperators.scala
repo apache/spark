@@ -630,6 +630,7 @@ case class Window(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
+
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
