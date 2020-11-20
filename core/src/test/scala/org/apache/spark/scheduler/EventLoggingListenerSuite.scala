@@ -107,6 +107,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val redactedProperties = eventLogger.redactProperties(properties)
     assert(redactedProperties.getProperty(key) == "*********(redacted)")
   }
+
   test("Executor metrics update") {
     testStageExecutorMetricsEventLogging()
   }
