@@ -101,15 +101,12 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None).set(key, secretPassword)
-
     val properties = new Properties()
     properties.setProperty(key, secretPassword)
-
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
     val redactedProperties = eventLogger.redactProperties(properties)
     assert(redactedProperties.getProperty(key) == "*********(redacted)")
   }
-    
   test("Executor metrics update") {
     testStageExecutorMetricsEventLogging()
   }
