@@ -547,7 +547,7 @@ private[spark] class MapOutputTrackerMaster(
   // requests for map/merge output statuses
   private val outputStatusesRequests = new LinkedBlockingQueue[GetOutputStatusesMessage]
 
-  private val pushBasedShuffleEnabled = Utils.isPushShuffleEnabled(conf)
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
 
   // Thread pool used for handling map output status requests. This is a separate thread pool
   // to ensure we don't block the normal dispatcher threads.
@@ -1018,7 +1018,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
 
-  private val fetchMergeResult = Utils.isPushShuffleEnabled(conf)
+  private val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
