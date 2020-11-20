@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.plans.physical.{RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -97,6 +99,29 @@ abstract class RemoveRedundantSortsSuiteBase
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
       }
+    }
+  }
+
+  test("SPARK-33472: shuffled join with different left and right side partition numbers") {
+    withTempView("t1", "t2") {
+      spark.range(0, 100, 1, 2).select('id as "key").createOrReplaceTempView("t1")
+      (0 to 100).toDF("key").createOrReplaceTempView("t2")
+
+      val query = """
+        |SELECT /*+ MERGE(t1) */ t1.key
+        |FROM t1 JOIN t2 ON t1.key = t2.key
+        |WHERE t1.key > 10 AND t2.key < 50
+        |ORDER BY t1.key ASC
+      """.stripMargin
+
+      val df = sql(query)
+      val sparkPlan = df.queryExecution.sparkPlan
+      val join = sparkPlan.collect { case j: SortMergeJoinExec => j }.head
+      val leftPartitioning = join.left.outputPartitioning
+      assert(leftPartitioning.isInstanceOf[RangePartitioning])
+      assert(leftPartitioning.numPartitions == 2)
+      assert(join.right.outputPartitioning == UnknownPartitioning(0))
+      checkSorts(query, 3, 3)
     }
   }
 }

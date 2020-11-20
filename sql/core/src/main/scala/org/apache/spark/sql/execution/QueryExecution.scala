@@ -297,8 +297,10 @@ object QueryExecution {
     Seq(
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
-      RemoveRedundantSorts(sparkSession.sessionState.conf),
       EnsureRequirements(sparkSession.sessionState.conf),
+      // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+      // number of partitions when instantiating PartitioningCollection.
+      RemoveRedundantSorts(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(sparkSession.sessionState.conf),
