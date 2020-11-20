@@ -1195,24 +1195,26 @@ private[spark] class Client(
    */
   private def getDriverLogsLink(appReport: ApplicationReport): IMap[String, String] = {
     if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)
-        || appReport.getYarnApplicationState == YarnApplicationState.NEW
-        || appReport.getYarnApplicationState == YarnApplicationState.NEW_SAVING
-        || appReport.getYarnApplicationState == YarnApplicationState.SUBMITTED
-        || appReport.getYarnApplicationState == YarnApplicationState.ACCEPTED) {
-      return IMap()
+      || appReport.getYarnApplicationState == YarnApplicationState.NEW
+      || appReport.getYarnApplicationState == YarnApplicationState.NEW_SAVING
+      || appReport.getYarnApplicationState == YarnApplicationState.SUBMITTED
+      || appReport.getYarnApplicationState == YarnApplicationState.ACCEPTED) {
+      return IMap.empty
     }
     try {
-      val amContainerId = yarnClient
-          .getApplicationAttemptReport(appReport.getCurrentApplicationAttemptId)
-          .getAMContainerId
-      val baseUrl = yarnClient.getContainerReport(amContainerId).getLogUrl
-      YarnContainerInfoHelper.getLogUrlsFromBaseUrl(baseUrl)
+      Option(appReport.getCurrentApplicationAttemptId)
+        .flatMap(attemptId => Option(yarnClient.getApplicationAttemptReport(attemptId)))
+        .flatMap(attemptReport => Option(attemptReport.getAMContainerId))
+        .flatMap(amContainerId => Option(yarnClient.getContainerReport(amContainerId)))
+        .flatMap(containerReport => Option(containerReport.getLogUrl))
+        .map(YarnContainerInfoHelper.getLogUrlsFromBaseUrl)
+        .getOrElse(IMap.empty)
     } catch {
       case e: Exception =>
         logWarning(s"Unable to get driver log links for $appId: $e")
         // Include the full stack trace only at DEBUG level to reduce verbosity
         logDebug(s"Unable to get driver log links for $appId", e)
-        IMap()
+        IMap.empty
     }
   }
 
