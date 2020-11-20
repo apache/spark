@@ -36,7 +36,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // Ensure we have somewhere to migrate our data too
       .set("spark.executor.instances", "2")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
-      .set("spark.storage.decommission.replicationReattemptInterval", "1")
+      .set("spark.storage.decommission.replicationReattemptInterval", "10")
 
     var execLogs = scala.collection.mutable.HashMap[String, String]()
 
@@ -47,8 +47,11 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
           .pods()
           .withName(pod.getMetadata.getName)
           .getLog
-        assert(myLog.contains("Exit code"))
         execLogs += ((pod.getMetadata.getName, myLog))
+        assert(
+          myLog.contains("ShutdownHookManager: Shutdown hook called") ||
+          myLog.contains("Executor self-exiting due to")
+        )
       }
     }
 
