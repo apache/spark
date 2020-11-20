@@ -2518,9 +2518,9 @@ class DataSourceV2SQLSuite
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
-        |CREATE TABLE $t (id bigint, name string, data string)
+        |CREATE TABLE $t (id bigint, city string, data string)
         |USING foo
-        |PARTITIONED BY (id, name)""".stripMargin)
+        |PARTITIONED BY (id, city)""".stripMargin)
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
 
       val partTable = catalog("testpart").asTableCatalog
