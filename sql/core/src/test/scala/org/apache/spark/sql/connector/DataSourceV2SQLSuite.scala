@@ -780,6 +780,84 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+          sql(s"REPLACE TABLE $t USING foo AS SELECT id FROM source")
+          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33492: AppendData should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a")).toDF("i", "j").write.saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b")).toDF("i", "j").write.mode(SaveMode.Append).saveAsTable(t)
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Row(2, "b") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwriteByExpression should refresh cache") {
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+        sql(s"INSERT OVERWRITE TABLE $t VALUES (1, 'a')")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwritePartitionsDynamic should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a", 1)).toDF("i", "j", "k").write.partitionBy("k") saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b", 1)).toDF("i", "j", "k").writeTo(t).overwritePartitions()
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
+      }
+    }
+  }
+
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
