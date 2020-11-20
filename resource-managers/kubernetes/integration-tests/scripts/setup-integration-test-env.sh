@@ -78,19 +78,19 @@ fi
 if [[ $IMAGE_TAG == "N/A" ]];
 then
   IMAGE_TAG=$(uuidgen);
-  cd $UNPACKED_SPARK_TGZ
+  cd $SPARK_INPUT_DIR
   if [[ $DEPLOY_MODE == cloud ]] ;
   then
-    $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
+    $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG build
     if  [[ $IMAGE_REPO == gcr.io* ]] ;
     then
       gcloud docker -- push $IMAGE_REPO/spark:$IMAGE_TAG
     else
-      $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
+      $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG push
     fi
   else
     # -m option for minikube.
-    $UNPACKED_SPARK_TGZ/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
+    $SPARK_INPUT_DIR/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG build
   fi
   cd -
 fi
