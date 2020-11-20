@@ -144,7 +144,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       query: StreamingQueryUIData,
       minBatchTime: Long,
       maxBatchTime: Long,
-      jsCollector: JsCollector): NodeBuffer = {
+      jsCollector: JsCollector): Seq[Node] = {
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress != null)
     if (query.lastProgress.eventTime.containsKey("watermark")) {
@@ -172,19 +172,18 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       graphUIDataForWatermark.generateDataJs(jsCollector)
 
       // scalastyle:off
-      new NodeBuffer() &+
-        <tr>
-          <td style="vertical-align: middle;">
-            <div style="width: 160px;">
-              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between timestamp and global watermark for the batch.", "right")}</strong></div>
-            </div>
-          </td>
-          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
-          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
-        </tr>
+      <tr>
+        <td style="vertical-align: middle;">
+          <div style="width: 160px;">
+            <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
+          </div>
+        </td>
+        <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+        <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+      </tr>
       // scalastyle:on
     } else {
-      new NodeBuffer()
+      Seq.empty[Node]
     }
   }
 
