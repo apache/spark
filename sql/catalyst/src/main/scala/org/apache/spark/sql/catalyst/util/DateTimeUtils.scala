@@ -494,6 +494,13 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the number of seconds since 1970-01-01 00:00:00-00 (can be negative).
+   */
+  def getSecondsAfterEpoch(micros: Long, zoneId: ZoneId): Double = {
+    micros.toDouble / MICROS_PER_SECOND
+  }
+
+  /**
    * Returns local seconds, including fractional parts, multiplied by 1000000.
    *
    * @param micros The number of microseconds since the epoch.

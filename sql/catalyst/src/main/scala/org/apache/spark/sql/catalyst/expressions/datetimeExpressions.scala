@@ -353,6 +353,16 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
   override val funcName = "getSecondsWithFraction"
 }
 
+case class SecondsSinceEpoch(child: Expression, timeZoneId: Option[String] = None)
+  extends GetTimeField {
+  def this(child: Expression) = this(child, None)
+  override def dataType: DataType = DoubleType
+  override def withTimeZone(timeZoneId: String): SecondsSinceEpoch =
+    copy(timeZoneId = Option(timeZoneId))
+  override val func = DateTimeUtils.getSecondsAfterEpoch
+  override val funcName = "getSecondsAfterEpoch"
+}
+
 trait GetDateField extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   val func: Int => Any
   val funcName: String
@@ -1968,6 +1978,7 @@ object DatePart {
     case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
     case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
     case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
+    case "EPOCH" => SecondsSinceEpoch(source)
     case _ => errorHandleFunc
   }
 
@@ -2055,6 +2066,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
               - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
               - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
               - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
+              - "EPOCH" - the number of seconds since 1970-01-01 00:00:00-00 (can be negative)
           - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are(case insensitive):
               - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
               - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` % 12

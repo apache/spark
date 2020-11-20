@@ -50,6 +50,8 @@ select extract(sec from c), extract(sec from i) from t;
 select extract(seconds from c), extract(seconds from i) from t;
 select extract(secs from c), extract(secs from i) from t;
 
+select extract(epoch from c) from t;
+
 select extract(not_supported from c) from t;
 select extract(not_supported from i) from t;
 
