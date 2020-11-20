@@ -92,7 +92,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
 
   override def onClose(e: KubernetesClientException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
-    if (e != null && e.getCode==HTTP_GONE) {
+    if (e != null && e.getCode == HTTP_GONE) {
       resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
