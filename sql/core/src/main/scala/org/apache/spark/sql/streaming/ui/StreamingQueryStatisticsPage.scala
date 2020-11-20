@@ -181,7 +181,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             </div>
           </td>
           <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
-          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+          <td class="watermark-gap-histogram">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
         </tr>
         // scalastyle:on
       } else {
