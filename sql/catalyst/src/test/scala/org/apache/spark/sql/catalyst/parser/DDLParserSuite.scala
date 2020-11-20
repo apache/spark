@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1633,32 +1632,6 @@ class DDLParserSuite extends AnalysisTest {
       TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
   }
 
-  test("SHOW PARTITIONS") {
-    val sql1 = "SHOW PARTITIONS t1"
-    val sql2 = "SHOW PARTITIONS db1.t1"
-    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
-    val sql4 = "SHOW PARTITIONS a.b.c"
-    val sql5 = "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 = ShowPartitionsStatement(Seq("t1"),
-      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
-    val parsed5 = parsePlan(sql5)
-    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
-  }
-
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
@@ -1704,15 +1677,15 @@ class DDLParserSuite extends AnalysisTest {
     val parsed1 = parsePlan(sql1)
     val parsed2 = parsePlan(sql2)
 
-    val expected1 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
+    val expected1 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
       Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
-    val expected2 = AlterTableAddPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
+    val expected2 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
     comparePlans(parsed1, expected1)
@@ -1777,11 +1750,11 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql1_view)
     assertUnsupported(sql2_view)
 
-    val expected1_table = AlterTableDropPartitionStatement(
-      Seq("table_name"),
+    val expected1_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("table_name")),
       Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = true,
       purge = false,
       retainData = false)
@@ -1793,9 +1766,9 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed1_purge, expected1_purge)
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
-    val expected3_table = AlterTableDropPartitionStatement(
-      Seq("a", "b", "c"),
-      Seq(Map("ds" -> "2017-06-10")),
+    val expected3_table = AlterTableDropPartition(
+      UnresolvedTable(Seq("a", "b", "c")),
+      Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,
       retainData = false)

@@ -20,7 +20,6 @@ package org.apache.spark.resource
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Trait used to help executor/worker allocate resources.
@@ -40,7 +39,7 @@ trait ResourceAllocator {
    * can be a multiple, such that each address can be allocated up to [[slotsPerAddress]]
    * times.
    *
-   * TODO Use [[OpenHashMap]] instead to gain better performance.
+   * TODO Use [[org.apache.spark.util.collection.OpenHashMap]] instead to gain better performance.
    */
   private lazy val addressAvailabilityMap = {
     mutable.HashMap(resourceAddresses.map(_ -> slotsPerAddress): _*)

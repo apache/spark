@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-object CoalesceShufflePartitions extends Rule[SparkPlan] {
+case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
@@ -63,7 +63,7 @@ object CoalesceShufflePartitions extends Rule[SparkPlan] {
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
         val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-          .getOrElse(SparkSession.active.sparkContext.defaultParallelism)
+          .getOrElse(session.sparkContext.defaultParallelism)
         val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),

@@ -116,6 +116,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertEqual([("数量", 'bigint')], df.dtypes)
         self.assertEqual(1, df.select("数量").first()[0])
         self.assertEqual(1, df.select(df["数量"]).first()[0])
+        self.assertTrue(columnName in repr(df[columnName]))
 
     def test_field_accessor(self):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()

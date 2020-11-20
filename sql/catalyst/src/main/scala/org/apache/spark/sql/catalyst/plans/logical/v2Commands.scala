@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
@@ -96,6 +96,7 @@ case class OverwriteByExpression(
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
+  override def inputSet: AttributeSet = AttributeSet(table.output)
   override def withNewQuery(newQuery: LogicalPlan): OverwriteByExpression = {
     copy(query = newQuery)
   }
@@ -608,6 +609,46 @@ case class AnalyzeColumn(
     allColumns: Boolean) extends Command {
   require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
     "mutually exclusive. Only one of them should be specified.")
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ADD PARTITION command.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     ALTER TABLE table ADD [IF NOT EXISTS]
+ *                 PARTITION spec1 [LOCATION 'loc1'][, PARTITION spec2 [LOCATION 'loc2'], ...];
+ * }}}
+ */
+case class AlterTableAddPartition(
+    child: LogicalPlan,
+    parts: Seq[PartitionSpec],
+    ifNotExists: Boolean) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE DROP PARTITION command.
+ * This may remove the data and metadata for this partition.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ * }}}
+ */
+case class AlterTableDropPartition(
+    child: LogicalPlan,
+    parts: Seq[PartitionSpec],
+    ifExists: Boolean,
+    purge: Boolean,
+    retainData: Boolean) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 

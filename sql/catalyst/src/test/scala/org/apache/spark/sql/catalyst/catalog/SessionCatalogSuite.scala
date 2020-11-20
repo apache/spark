@@ -1618,26 +1618,28 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
-      catalog.setCurrentDatabase("db1")
-      try {
-        val analyzer = new Analyzer(catalog, conf)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry)
+        catalog.setCurrentDatabase("db1")
+        try {
+          val analyzer = new Analyzer(catalog)
 
-        // The analyzer should report the undefined function rather than the undefined table first.
-        val cause = intercept[AnalysisException] {
-          analyzer.execute(
-            UnresolvedRelation(TableIdentifier("undefined_table")).select(
-              UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          // The analyzer should report the undefined function
+          // rather than the undefined table first.
+          val cause = intercept[AnalysisException] {
+            analyzer.execute(
+              UnresolvedRelation(TableIdentifier("undefined_table")).select(
+                UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+              )
             )
-          )
-        }
+          }
 
-        assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
-        // SPARK-21318: the error message should contains the current database name
-        assert(cause.getMessage.contains("db1"))
-      } finally {
-        catalog.reset()
+          assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+          // SPARK-21318: the error message should contains the current database name
+          assert(cause.getMessage.contains("db1"))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
