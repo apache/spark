@@ -105,8 +105,7 @@ private[spark] class EventLoggingListener(
 
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
-    logEvent(SparkListenerStageSubmitted(event.stageInfo, redactProperties(event.properties)),
-      flushLogger = true)
+    logEvent(SparkListenerStageSubmitted(event.stageInfo, redactProperties(event.properties)))
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
@@ -286,10 +285,15 @@ private[spark] class EventLoggingListener(
     if (properties == null) {
       return properties
     }
-    
     val redactedProperties = new Properties
-    Utils.redact(sparkConf, properties.asScala.toSeq).foreach{
-      case(key, value) => redactedProperties.setProperty(key, value)
+    
+    // only properties in sparkConf need to be redacted.
+    val (globalProperties, localProperties) = properties.asScala.toSeq.partition {
+      case (key, _) => sparkConf.contains(key)
+    }
+    
+    (Utils.redact(sparkConf, globalProperties) ++ localProperties).foreach {
+      case (key, value) => redactedProperties.setProperty(key, value)
     }
 
     redactedProperties
