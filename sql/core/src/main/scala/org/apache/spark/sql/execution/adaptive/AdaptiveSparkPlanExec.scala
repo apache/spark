@@ -90,6 +90,7 @@ case class AdaptiveSparkPlanExec(
     RemoveRedundantProjects,
     EnsureRequirements,
     RemoveRedundantSorts,
+    CollapseAggregates,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 

@@ -23,7 +23,7 @@ import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -669,13 +669,11 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(ranges.head.metrics("numOutputRows").value == 1000)
 
       val aggs = collectNodeWithinWholeStage[HashAggregateExec](plan)
-      assert(aggs.length == 2, "The query plan should have two and only two Aggregate")
-      val partialAgg = aggs.filter(_.aggregateExpressions.head.mode == Partial).head
-      // The partial aggregate should output 10 rows, because its input is 10 rows.
-      assert(partialAgg.metrics("numOutputRows").value == 10)
-      val finalAgg = aggs.filter(_.aggregateExpressions.head.mode == Final).head
-      // The final aggregate should only produce 1 row, because the upstream limit only needs 1 row.
-      assert(finalAgg.metrics("numOutputRows").value == 1)
+      assert(aggs.length == 1, "The query plan should have only one Aggregate")
+      val agg = aggs.head
+      assert(agg.aggregateExpressions.head.mode == Complete,
+        "the aggregation mode for aggregate should be complete")
+      assert(agg.metrics("numOutputRows").value == 1)
 
       val filters = collectNodeWithinWholeStage[FilterExec](plan)
       assert(filters.length == 1, "The query plan should have one and only one Filter")

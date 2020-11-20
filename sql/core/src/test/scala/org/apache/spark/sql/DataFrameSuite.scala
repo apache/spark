@@ -33,6 +33,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -1635,16 +1636,16 @@ class DataFrameSuite extends QueryTest
   /**
    * Verifies that there is no Exchange between the Aggregations for `df`
    */
-  private def verifyNonExchangingAgg(df: DataFrame) = {
+  private def verifyCompleteAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
-    df.queryExecution.executedPlan.foreach {
-      case agg: HashAggregateExec =>
-        atFirstAgg = !atFirstAgg
-      case _ =>
-        if (atFirstAgg) {
-          fail("Should not have operators between the two aggregations")
-        }
+    val aggs = df.queryExecution.executedPlan.collect {
+      case agg: HashAggregateExec => agg
     }
+    if (aggs.size != 1) {
+      fail("Should have only 1 physical aggregation operator")
+    }
+    assert(aggs.head.aggregateExpressions.forall(_.mode == Complete),
+      "aggregation mode should be complete")
   }
 
   /**
@@ -1674,11 +1675,11 @@ class DataFrameSuite extends QueryTest
     assert(df2.rdd.partitions.length == 10)
     checkAnswer(original.select(), df2.select())
 
-    // Group by the column we are distributed by. This should generate a plan with no exchange
-    // between the aggregates
+    // Group by the column we are distributed by. This should generate a plan with
+    // single HaPhysical aggregate node
     val df3 = testData.repartition($"key").groupBy("key").count()
-    verifyNonExchangingAgg(df3)
-    verifyNonExchangingAgg(testData.repartition($"key", $"value")
+    verifyCompleteAgg(df3)
+    verifyCompleteAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
