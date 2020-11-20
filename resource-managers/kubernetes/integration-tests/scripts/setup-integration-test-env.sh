@@ -58,14 +58,22 @@ while (( "$#" )); do
   shift
 done
 
-if [[ $SPARK_TGZ == "N/A" ]];
-then
-  echo "Must specify a Spark tarball to build Docker images against with --spark-tgz." && exit 1;
-fi
 
 rm -rf $UNPACKED_SPARK_TGZ
-mkdir -p $UNPACKED_SPARK_TGZ
-tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
+if [[ $SPARK_TGZ == "N/A" && $IMAGE_TAG == "N/A" ]];
+then
+  # If there is no spark image tag to test with and no src dir, build from current
+  SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+  SPARK_INPUT_DIR="$(cd "$SCRIPT_DIR/"../../../../  >/dev/null 2>&1 && pwd )"
+  DOCKER_FILE_BASE_PATH="$SPARK_INPUT_DIR/resource-managers/kubernetes/docker/src/main/dockerfiles/spark"
+elif [[ $IMAGE_TAG == "N/A" ]];
+then
+  # If there is a test src tarball and no image tag we will want to build from that
+  mkdir -p $UNPACKED_SPARK_TGZ
+  tar -xzvf $SPARK_TGZ --strip-components=1 -C $UNPACKED_SPARK_TGZ;
+  SPARK_INPUT_DIR="$UNPACKED_SPARK_TGZ"
+  DOCKER_FILE_BASE_PATH="$SPARK_INPUT_DIR/kubernetes/dockerfiles/spark"
+fi
 
 if [[ $IMAGE_TAG == "N/A" ]];
 then
