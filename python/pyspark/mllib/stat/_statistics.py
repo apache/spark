@@ -208,7 +208,7 @@ class Statistics(object):
 
         Returns
         -------
-        :py:class:`pyspark.mllib.stat.test.ChiSqTestResult`
+        :py:class:`pyspark.mllib.stat.ChiSqTestResult`
             object containing the test statistic, degrees
             of freedom, p-value, the method used, and the null hypothesis.
 
@@ -307,7 +307,7 @@ class Statistics(object):
 
         Returns
         -------
-        :py:class:`pyspark.mllib.stat.test.KolmogorovSmirnovTestResult`
+        :py:class:`pyspark.mllib.stat.KolmogorovSmirnovTestResult`
             object containing the test statistic, degrees of freedom, p-value,
             the method used, and the null hypothesis.
 
