@@ -185,11 +185,11 @@ class FrameLessOffsetWindowFunctionFrame(
     // and the input values of each row are: null, x, null, y, null, z, null.
     // We use Lead(input, 1) with IGNORE NULLS and the process is as follows:
     // 1. current row -> null, row buffer: [x], output: x;
-    // 2. current row -> x, row buffer: [y], output: y;
+    // 2. current row -> x, row buffer: [null, y], output: y;
     // 3. current row -> null, row buffer: [y], output: y;
-    // 4. current row -> y, row buffer: [z], output: z;
+    // 4. current row -> y, row buffer: [null, z], output: z;
     // 5. current row -> null, row buffer: [z], output: z;
-    // 6. current row -> z, row buffer: [], output: null;
+    // 6. current row -> z, row buffer: [null], output: null;
     // 7. current row -> null, row buffer: [], output: null;
     (index: Int, current: InternalRow) =>
       while (inputIndex <= index) {
