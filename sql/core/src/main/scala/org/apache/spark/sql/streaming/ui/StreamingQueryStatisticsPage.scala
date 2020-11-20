@@ -37,9 +37,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
   // State store provider implementation mustn't do any heavyweight initialiation in constructor
   // but in its init method.
-  private val supportedMetrics = StateStoreProvider.create(
+  private val supportedCustomMetrics = StateStoreProvider.create(
     parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
-  logDebug(s"Supported metrics: $supportedMetrics")
+  logDebug(s"Supported custom metrics: $supportedCustomMetrics")
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
@@ -272,7 +272,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
           p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
         val max = data.maxBy(_._2)._2
-        val metric = supportedMetrics.find(_.name == metricName).get
+        val metric = supportedCustomMetrics.find(_.name == metricName).get
 
         val graphUIData =
           new GraphUIData(
@@ -283,7 +283,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             maxBatchTime,
             0,
             max,
-            metric.unit)
+            "")
         graphUIData.generateDataJs(jsCollector)
 
         result ++=
