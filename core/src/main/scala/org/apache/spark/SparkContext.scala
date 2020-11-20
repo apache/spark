@@ -27,7 +27,6 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
