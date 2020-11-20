@@ -721,19 +721,21 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         lead($"value", 2).over(window),
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
+        lead($"value", 3, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
         lag($"value", 1, null, true).over(window),
-        lag($"value", 2, null, true).over(window))
+        lag($"value", 2, null, true).over(window),
+        lag($"value", 3, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", null, 0, "x", null, "x", "y", null, null, null, null),
-        Row("a", "x", 1, null, "y", "y", "y", null, null, null, null),
-        Row("b", null, 1, "y", null, "y", "z", "x", null, "x", null),
-        Row("a", "y", 2, null, "z", "z", "z", null, "x", "x", "x"),
-        Row("b", null, 2, "z", null, "z", null, "y", null, "y", "x"),
-        Row("a", "z", 3, null, null, null, null, null, "y", "y", "y"),
-        Row("a", null, 4, null, null, null, null, "z", null, "z", "y")))
+        Row("a", null, 0, "x", null, "x", "y", "z", null, null, null, null, null),
+        Row("a", "x", 1, null, "y", "y", "z", null, null, null, null, null, null),
+        Row("b", null, 1, "y", null, "y", "z", null, "x", null, "x", null, null),
+        Row("a", "y", 2, null, "z", "z", null, null, null, "x", "x", null, null),
+        Row("b", null, 2, "z", null, "z", null, null, "y", null, "y", "x", null),
+        Row("a", "z", 3, null, null, null, null, null, null, "y", "y", "x", null),
+        Row("a", null, 4, null, null, null, null, null, "z", null, "z", "y", "x")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {

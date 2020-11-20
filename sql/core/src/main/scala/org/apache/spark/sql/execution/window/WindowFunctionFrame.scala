@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.window
 
 import java.util
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -162,77 +164,91 @@ class FrameLessOffsetWindowFunctionFrame(
   private lazy val idx = inputAttrs.zipWithIndex.find(_._1 == inputExpression).map(_._2).head
 
   /** Cache some UnsafeRow that will be used many times. */
-  private var cachedRow: UnsafeRow = null
-
-  /**
-   * If `ignoreNulls` is true, sometimes it takes a few more steps to get a row
-   * whose input expression is not null.
-   */
-  private var step: Int = 0
+  private val rowBuffer = new ArrayBuffer[UnsafeRow]
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
+    if (!ignoreNulls || offset < 0) {
+      while (inputIndex < offset) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      inputIndex = offset
     }
-    inputIndex = offset
   }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
     // For illustration, here is one example: the input data contains six rows,
-    // and the input values of each row are: 1, 2, null, null, 3, 4.
-    // We use Lead(input, 1) and the process is as follows:
-    // 1. current row -> 1, cached row -> 2, step = 0;
-    // 2. current row -> 2, cached row -> 3, step = 2;
-    // 3. current row -> null, cached row -> 3, step = 1;
-    // 4. current row -> null, cached row -> 3, step = 0;
-    // 5. current row -> 3, cached row -> 4, step = 0;
-    // 6. current row -> 4, cached row -> null, step = 0;
-    (current: InternalRow) =>
-      if (inputIndex >= 0 && inputIndex < input.length) {
-        if (step == 0) {
-          cachedRow = null
-          while (cachedRow == null && inputIndex < input.length) {
-            val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-            if (!r.isNullAt(idx)) {
-              cachedRow = r
-            }
-            step += 1
-            inputIndex += 1
-          }
-        }
-        step -= 1
-        if (cachedRow == null) {
-          // Use default values since the offset row whose input value is not null does not exist.
-          fillDefaultValue(current)
+    // and the input values of each row are: null, x, null, y, null, z, null.
+    // We use Lead(input, 1) with IGNORE NULLS and the process is as follows:
+    // 1. current row -> null, row buffer: [x], output: x;
+    // 2. current row -> x, row buffer: [y], output: y;
+    // 3. current row -> null, row buffer: [y], output: y;
+    // 4. current row -> y, row buffer: [z], output: z;
+    // 5. current row -> null, row buffer: [z], output: z;
+    // 6. current row -> z, row buffer: [], output: null;
+    // 7. current row -> null, row buffer: [], output: null;
+    (index: Int, current: InternalRow) =>
+      while (inputIndex <= index) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      while (rowBuffer.filterNot(_ == null).size < offset && inputIndex < input.length) {
+        val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+        if (r.isNullAt(idx)) {
+          rowBuffer += null
         } else {
-          projection(cachedRow)
+          rowBuffer += r
         }
+        inputIndex += 1
+      }
+      if (rowBuffer.filterNot(_ == null).size == offset) {
+        projection(rowBuffer.filterNot(_ == null).last)
+        rowBuffer.remove(0)
+      } else {
+        // Use default values since the offset row whose input value is not null does not exist.
+        fillDefaultValue(current)
       }
   } else if (ignoreNulls && offset < 0) {
-    (current: InternalRow) =>
+    // For illustration, here is one example: the input data contains six rows,
+    // and the input values of each row are: null, x, null, y, null, z, null.
+    // We use Lag(input, 1) with IGNORE NULLS and the process is as follows:
+    // 1. current row -> null, row buffer: [], output: null;
+    // 2. current row -> x, row buffer: [], output: null;
+    // 3. current row -> null, row buffer: [x], output: x;
+    // 4. current row -> y, row buffer: [x], output: x;
+    // 5. current row -> null, row buffer: [y], output: y;
+    // 6. current row -> z, row buffer: [y], output: y;
+    // 7. current row -> null, row buffer: [z], output: z;
+    val maxSize = Math.abs(offset)
+    (index: Int, current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
-        val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-        if (!r.isNullAt(idx)) {
-          cachedRow = r
+        while (inputIndex < index) {
+          val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+          if (!r.isNullAt(idx)) {
+            if (rowBuffer.size == maxSize) {
+              rowBuffer.remove(0)
+            }
+            rowBuffer += r
+          }
+          inputIndex += 1
         }
-        if (cachedRow == null) {
+        if (rowBuffer.size == maxSize) {
+          projection(rowBuffer.head)
+        } else {
           // Use default values since the offset row whose input value is not null does not exist.
           fillDefaultValue(current)
-        } else {
-          projection(cachedRow)
         }
       } else {
         // Use default values since the offset row does not exist.
         fillDefaultValue(current)
+        inputIndex += 1
       }
-      inputIndex += 1
   } else {
-    (current: InternalRow) =>
+    (_: Int, current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
         val r = WindowFunctionFrame.getNextOrNull(inputIterator)
         projection(r)
@@ -244,7 +260,7 @@ class FrameLessOffsetWindowFunctionFrame(
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    doWrite(current)
+    doWrite(index, current)
   }
 }
 
