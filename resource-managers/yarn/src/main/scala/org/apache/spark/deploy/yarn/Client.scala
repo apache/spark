@@ -29,12 +29,8 @@ import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.common.base.Objects
 import com.google.common.io.Files
-import javax.ws.rs.client.ClientBuilder
-import javax.ws.rs.core.MediaType
-import javax.ws.rs.core.Response.Status.Family
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -51,7 +47,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
-import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.api.python.PythonUtils
@@ -1089,9 +1084,9 @@ private[spark] class Client(
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
+          logDebug(formatReportDetails(report, getDriverLogsLink(report)))
         } else if (lastState != state) {
-          logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
+          logInfo(formatReportDetails(report, getDriverLogsLink(report)))
         }
       }
 
@@ -1192,32 +1187,31 @@ private[spark] class Client(
   }
 
   /**
-   * Fetch links to the logs of the driver for the given application ID. This requires hitting the
-   * RM REST API. Returns an empty map if the links could not be fetched. If this feature is
-   * disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], an empty map is returned immediately.
+   * Fetch links to the logs of the driver for the given application report. This requires
+   * query the ResourceManager via RPC. Returns an empty map if the links could not be fetched.
+   * If this feature is disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], or if the application
+   * report indicates that the driver container isn't yet running
+   * (states `NEW`, `NEW_SAVING`, `SUBMITTED`, or `ACCEPTED`), an empty map is returned immediately.
    */
-  private def getDriverLogsLink(appId: ApplicationId): IMap[String, String] = {
-    if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)) {
+  private def getDriverLogsLink(appReport: ApplicationReport): IMap[String, String] = {
+    if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)
+        || appReport.getYarnApplicationState == YarnApplicationState.NEW
+        || appReport.getYarnApplicationState == YarnApplicationState.NEW_SAVING
+        || appReport.getYarnApplicationState == YarnApplicationState.SUBMITTED
+        || appReport.getYarnApplicationState == YarnApplicationState.ACCEPTED) {
       return IMap()
     }
     try {
-      val baseRmUrl = WebAppUtils.getRMWebAppURLWithScheme(hadoopConf)
-      val response = ClientBuilder.newClient()
-          .target(baseRmUrl)
-          .path("ws").path("v1").path("cluster").path("apps")
-          .path(appId.toString).path("appattempts")
-          .request(MediaType.APPLICATION_JSON)
-          .get()
-      response.getStatusInfo.getFamily match {
-        case Family.SUCCESSFUL => parseAppAttemptsJsonResponse(response.readEntity(classOf[String]))
-        case _ =>
-          logWarning(s"Unable to fetch app attempts info from $baseRmUrl, got "
-              + s"status code ${response.getStatus}: ${response.getStatusInfo.getReasonPhrase}")
-          IMap()
-      }
+      val amContainerId = yarnClient
+          .getApplicationAttemptReport(appReport.getCurrentApplicationAttemptId)
+          .getAMContainerId
+      val baseUrl = yarnClient.getContainerReport(amContainerId).getLogUrl
+      YarnContainerInfoHelper.getLogUrlsFromBaseUrl(baseUrl)
     } catch {
       case e: Exception =>
-        logWarning(s"Unable to get driver log links for $appId", e)
+        logWarning(s"Unable to get driver log links for $appId: $e")
+        // Include the full stack trace only at DEBUG level to reduce verbosity
+        logDebug(s"Unable to get driver log links for $appId", e)
         IMap()
     }
   }
@@ -1236,7 +1230,7 @@ private[spark] class Client(
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report, getDriverLogsLink(report.getApplicationId)))
+      logInfo(formatReportDetails(report, getDriverLogsLink(report)))
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         throw new SparkException(s"Application $appId finished with status: $state")
       }
@@ -1626,20 +1620,6 @@ private object Client extends Logging {
     props.store(writer, "Spark configuration.")
     writer.flush()
     out.closeEntry()
-  }
-
-  private[yarn] def parseAppAttemptsJsonResponse(jsonString: String): IMap[String, String] = {
-    val objectMapper = new ObjectMapper()
-    // If JSON response is malformed somewhere along the way, MissingNode will be returned,
-    // which allows for safe continuation of chaining. The `elements()` call will be empty,
-    // and None will get returned.
-    objectMapper.readTree(jsonString)
-      .path("appAttempts").path("appAttempt")
-      .elements().asScala.toList.takeRight(1).headOption
-      .map(_.path("logsLink").asText(""))
-      .filterNot(_ == "")
-      .map(baseUrl => YarnContainerInfoHelper.getLogUrlsFromBaseUrl(baseUrl))
-      .getOrElse(IMap())
   }
 }
 
