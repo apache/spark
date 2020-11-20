@@ -4035,9 +4035,9 @@ case class ArrayContainsArray(left: Expression, right: Expression)
           var alreadySeenNull = false
           var i = 0
           var elementFound = true
-          while (i < array2.numElements()) {
+          while (elementFound && i < array2.numElements()) {
             var found = false
-            val elem1 = array2.get(i, elementType)
+            val elem2 = array2.get(i, elementType)
             if (array2.isNullAt(i)) {
               if (!alreadySeenNull) {
                 var j = 0
@@ -4051,9 +4051,9 @@ case class ArrayContainsArray(left: Expression, right: Expression)
             } else {
               var j = 0
               while (!found && j < array2.numElements()) {
-                if (!array2.isNullAt(j)) {
-                  val elem2 = array2.get(j, elementType)
-                  if (ordering.equiv(elem1, elem2)) {
+                if (!array1.isNullAt(j)) {
+                  val elem1 = array1.get(j, elementType)
+                  if (ordering.equiv(elem2, elem1)) {
                     found = true
                   }
                 }

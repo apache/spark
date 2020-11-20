@@ -459,6 +459,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a6 = Literal.create(Seq[String]("", "abc"), ArrayType(StringType))
     val a7 = Literal.create(Seq[String]("def", "ghi"), ArrayType(StringType))
     val a8 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val a9 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a10 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
+    val a11 = Literal.create(Seq(1, 3), ArrayType(IntegerType))
+    val a12 = Literal.create(Seq(1, 4), ArrayType(IntegerType))
     val emptyIntArray = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
 
     checkEvaluation(ArrayContainsArray(a0, a1), true)
@@ -478,6 +482,49 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(ArrayContainsArray(a5, a6), true)
     checkEvaluation(ArrayContainsArray(a5, a7), false)
+
+    checkEvaluation(ArrayContainsArray(a9, a10), true)
+    checkEvaluation(ArrayContainsArray(a9, a11), true)
+    checkEvaluation(ArrayContainsArray(a9, a12), false)
+
+    // arrays of binaries
+    val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b2 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](5, 6)),
+      ArrayType(BinaryType))
+    val b3 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1)),
+      ArrayType(BinaryType))
+    val b4 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4), null),
+      ArrayType(BinaryType))
+    val b5 = Literal.create(Seq[Array[Byte]](null, Array[Byte](1, 2)),
+      ArrayType(BinaryType))
+    val b6 = Literal.create(Seq[Array[Byte]](null, Array[Byte](2, 1)),
+      ArrayType(BinaryType))
+    val b7 = Literal.create(Seq[Array[Byte]](null), ArrayType(BinaryType))
+
+    checkEvaluation(ArrayContainsArray(b0, b0), true)
+    checkEvaluation(ArrayContainsArray(b0, b1), true)
+    checkEvaluation(ArrayContainsArray(b0, b2), false)
+    checkEvaluation(ArrayContainsArray(b0, b3), false)
+    checkEvaluation(ArrayContainsArray(b4, b5), true)
+    checkEvaluation(ArrayContainsArray(b4, b6), false)
+    checkEvaluation(ArrayContainsArray(b4, b7), true)
+
+    // arrays of complex data types
+    val aa0 = Literal.create(Seq[Array[String]](
+      Array[String]("a", "b"), Array[String]("c", "d"), Array[String](null)),
+      ArrayType(ArrayType(StringType)))
+    val aa1 = Literal.create(Seq[Array[String]](
+      Array[String]("c", "d"), Array[String]("a", "b")),
+      ArrayType(ArrayType(StringType)))
+    val aa2 = Literal.create(Seq[Array[String]](
+      Array[String]("b", "a"), Array[String]("f", "g")),
+      ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(ArrayContainsArray(aa0, aa1), true)
+    checkEvaluation(ArrayContainsArray(aa0, aa2), false)
   }
 
   test("ArraysOverlap") {
