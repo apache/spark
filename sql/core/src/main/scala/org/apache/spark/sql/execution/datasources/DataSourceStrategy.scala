@@ -710,32 +710,32 @@ object DataSourceStrategy
       case AttributeReference(name, _, _, _) => name
       case Cast(child, _, _) => child match {
         case AttributeReference(name, _, _, _) => name
-        case Add(left, right) =>
+        case Add(left, right, _) =>
           arithmeticExpressionAsString(left, right, "+")
-        case Subtract(left, right) =>
+        case Subtract(left, right, _) =>
           arithmeticExpressionAsString(left, right, "-")
-        case Multiply(left, right) =>
+        case Multiply(left, right, _) =>
           arithmeticExpressionAsString(left, right, "*")
-        case Divide(left, right) =>
+        case Divide(left, right, _) =>
           arithmeticExpressionAsString(left, right, "/")
         case _ => ""
       }
-      case Add(left, right) =>
+      case Add(left, right, _) =>
         arithmeticExpressionAsString(left, right, "+")
-      case Subtract(left, right) =>
+      case Subtract(left, right, _) =>
         arithmeticExpressionAsString(left, right, "-")
-      case Multiply(left, right) =>
+      case Multiply(left, right, _) =>
         arithmeticExpressionAsString(left, right, "*")
-      case Divide(left, right) =>
+      case Divide(left, right, _) =>
         arithmeticExpressionAsString(left, right, "/")
       case CheckOverflow(child, _, _) => child match {
-        case Add(left, right) =>
+        case Add(left, right, _) =>
           arithmeticExpressionAsString(left, right, "+")
-        case Subtract(left, right) =>
+        case Subtract(left, right, _) =>
           arithmeticExpressionAsString(left, right, "-")
-        case Multiply(left, right) =>
+        case Multiply(left, right, _) =>
           arithmeticExpressionAsString(left, right, "*")
-        case Divide(left, right) =>
+        case Divide(left, right, _) =>
           arithmeticExpressionAsString(left, right, "/")
         case _ => ""
       }
