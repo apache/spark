@@ -37,14 +37,14 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBacke
 import org.apache.spark.internal.Logging
 
 private[spark] class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite
+  with BeforeAndAfterAll with BeforeAndAfter /* with BasicTestsSuite with SecretsTestsSuite
+  with PythonTestsSuite with ClientModeTestsSuite */ with DecommissionSuite
   with Logging with Eventually with Matchers {
 
   import KubernetesSuite._
 
   private var sparkHomeDir: Path = _
-  private var pyImage: String = _
+  protected var pyImage: String = _
   private var rImage: String = _
 
   protected var image: String = _
@@ -203,7 +203,8 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       executorPodChecker: Pod => Unit,
       appLocator: String,
       isJVM: Boolean,
-      pyFiles: Option[String] = None): Unit = {
+      pyFiles: Option[String] = None,
+      decommissioningTest: Boolean = false): Unit = {
     val appArguments = SparkAppArguments(
       mainAppResource = appResource,
       mainClass = mainClass,
@@ -224,7 +225,25 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
+
+    def checkPodReady(namespace: String, name: String) = {
+      val execPod = kubernetesTestComponents.kubernetesClient
+        .pods()
+        .inNamespace(namespace)
+        .withName(name)
+        .get()
+      val resourceStatus = execPod.getStatus
+      val conditions = resourceStatus.getConditions().asScala
+      val conditionTypes = conditions.map(_.getType())
+      val readyConditions = conditions.filter{cond => cond.getType() == "Ready"}
+      val result = readyConditions
+        .map(cond => cond.getStatus() == "True")
+        .headOption.getOrElse(false)
+      result
+    }
+
     val execPods = scala.collection.mutable.Map[String, Pod]()
+    val podsDeleted = scala.collection.mutable.HashSet[String]()
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
       .withLabel("spark-app-locator", appLocator)
@@ -235,11 +254,50 @@ private[spark] class KubernetesSuite extends SparkFunSuite
           logInfo("Ending watch of executors")
         override def eventReceived(action: Watcher.Action, resource: Pod): Unit = {
           val name = resource.getMetadata.getName
+          val namespace = resource.getMetadata().getNamespace()
           action match {
-            case Action.ADDED | Action.MODIFIED =>
+            case Action.MODIFIED =>
               execPods(name) = resource
+            case Action.ADDED =>
+                          case Action.ADDED =>
+              logDebug(s"Add event received for $name.")
+              execPods(name) = resource
+              // If testing decommissioning start a thread to simulate
+              // decommissioning on the first exec pod.
+              if (decommissioningTest && execPods.size == 1) {
+                // Wait for all the containers in the pod to be running
+                logDebug("Waiting for pod to become OK prior to deletion")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  val result = checkPodReady(namespace, name)
+                  result shouldBe (true)
+                }
+                // Look for the string that indicates we're good to trigger decom on the driver
+                logDebug("Waiting for first collect...")
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(kubernetesTestComponents.kubernetesClient
+                    .pods()
+                    .withName(driverPodName)
+                    .getLog
+                    .contains("Waiting to give nodes time to finish migration, decom exec 1."),
+                    "Decommission test did not complete first collect.")
+                }
+                // Delete the pod to simulate cluster scale down/migration.
+                // This will allow the pod to remain up for the grace period
+                kubernetesTestComponents.kubernetesClient.pods()
+                  .withName(name).delete()
+                logDebug(s"Triggered pod decom/delete: $name deleted")
+                // Make sure this pod is deleted
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(podsDeleted.contains(name))
+                }
+                // Then make sure this pod is replaced
+                Eventually.eventually(TIMEOUT, INTERVAL) {
+                  assert(execPods.size == 2)
+                }
+              }
             case Action.DELETED | Action.ERROR =>
               execPods.remove(name)
+              podsDeleted += name
           }
         }
       })
@@ -256,6 +314,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
       }
     }
   }
+
   protected def doBasicDriverPodCheck(driverPod: Pod): Unit = {
     assert(driverPod.getMetadata.getName === driverPodName)
     assert(driverPod.getSpec.getContainers.get(0).getImage === image)
