@@ -158,30 +158,35 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
           None
         }
       }
-      val maxWatermark = watermarkData.maxBy(_._2)._2
-      val graphUIDataForWatermark =
-        new GraphUIData(
-          "watermark-gap-timeline",
-          "watermark-gap-histogram",
-          watermarkData,
-          minBatchTime,
-          maxBatchTime,
-          0,
-          maxWatermark,
-          "seconds")
-      graphUIDataForWatermark.generateDataJs(jsCollector)
 
-      // scalastyle:off
-      <tr>
-        <td style="vertical-align: middle;">
-          <div style="width: 160px;">
-            <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
-          </div>
-        </td>
-        <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
-        <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
-      </tr>
-      // scalastyle:on
+      if (watermarkData.nonEmpty) {
+        val maxWatermark = watermarkData.maxBy(_._2)._2
+        val graphUIDataForWatermark =
+          new GraphUIData(
+            "watermark-gap-timeline",
+            "watermark-gap-histogram",
+            watermarkData,
+            minBatchTime,
+            maxBatchTime,
+            0,
+            maxWatermark,
+            "seconds")
+        graphUIDataForWatermark.generateDataJs(jsCollector)
+
+        // scalastyle:off
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        // scalastyle:on
+      } else {
+        Seq.empty[Node]
+      }
     } else {
       Seq.empty[Node]
     }
