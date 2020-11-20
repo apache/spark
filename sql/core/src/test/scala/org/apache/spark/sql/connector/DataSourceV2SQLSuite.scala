@@ -2469,11 +2469,15 @@ class DataSourceV2SQLSuite
         |CREATE TABLE $t (id bigint, city string, data string)
         |USING foo
         |PARTITIONED BY (id, city)""".stripMargin)
-      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
-
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))))
+      val expectedPartitionIdent = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
+      assert(!partTable.partitionExists(expectedPartitionIdent))
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
+      // Insert into the existing partition must not fail
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'def'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
     }
   }
 
