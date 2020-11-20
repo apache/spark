@@ -68,7 +68,12 @@ It is recommended to use ``-v`` option in ``pip`` to track the installation and 
 
     HADOOP_VERSION=2.7 pip install pyspark -v
 
-Supported values in ``HADOOP_VERSION`` are ``without``, ``2.7`` and ``3.2`` (default).
+Supported values in ``HADOOP_VERSION`` are:
+
+- ``without``: Spark pre-built with user-provided Apache Hadoop
+- ``2.7``: Spark pre-built for Apache Hadoop 2.7
+- ``3.2``: Spark pre-built for Apache Hadoop 3.2 and later (default)
+
 Note that this installation way of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
