@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -48,8 +49,18 @@ class EliminateSortsSuite extends AnalysisTest {
       Batch("Limit PushDown", FixedPoint(10), LimitPushDown) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelationB = LocalRelation('d.int)
+  val testRelation = LocalRelation.fromExternalRows(
+    Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
+    Seq(
+      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3),
+      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3))
+  )
+  val testRelationB = LocalRelation.fromExternalRows(
+    Seq(Symbol("d").int),
+    Seq(
+      Row(1), Row(1), Row(1), Row(1), Row(1), Row(1),
+      Row(1), Row(1), Row(1), Row(1), Row(1), Row(1))
+  )
 
   test("Empty order by clause") {
     val x = testRelation
