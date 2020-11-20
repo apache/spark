@@ -194,6 +194,14 @@ class CombiningLimitsSuite extends PlanTest {
       testRelation.join(testRelation4, joinType = RightOuter).limit(100),
       testRelation.join(testRelation4, joinType = RightOuter).limit(100)
     )
+
+    // test Window
+    checkPlan(
+      testRelation.window(
+        Seq(count(1).as("c")), Seq(Symbol("a")), Seq(Symbol("b").asc)).limit(20),
+      testRelation.window(
+        Seq(count(1).as("c")), Seq(Symbol("a")), Seq(Symbol("b").asc))
+    )
   }
 }
 
