@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.security
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
 
