@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -39,7 +41,18 @@ class CombiningLimitsSuite extends PlanTest {
         SimplifyConditionals) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation.fromExternalRows(
+    Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
+    Seq(
+      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3),
+      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3))
+  )
+  val testRelation2 = LocalRelation.fromExternalRows(
+    Seq(Symbol("x").int, Symbol("y").int, Symbol("z").int),
+    Seq(Row(1, 2, 3), Row(2, 3, 4))
+  )
+  val testRelation3 = InfiniteRelation(Seq(Symbol("i").int))
+  val testRelation4 = LongMaxRelation(Seq(Symbol("j").int))
 
   test("limits: combines two limits") {
     val originalQuery =
@@ -117,4 +130,77 @@ class CombiningLimitsSuite extends PlanTest {
       testRelation.select().groupBy()(count(1)).orderBy(count(1).asc).analyze)
     comparePlans(optimized4, expected4)
   }
+
+  test("SPARK-33497: Override maxRows in some LogicalPlan") {
+    def checkPlan(p1: LogicalPlan, p2: LogicalPlan): Unit = {
+      comparePlans(Optimize.execute(p1.analyze), p2.analyze)
+    }
+
+    // test LocalRelation
+    checkPlan(
+      testRelation.select().limit(10),
+      testRelation.select()
+    )
+
+    // test Range
+    checkPlan(
+      Range(1, 100, 1, None).select().limit(200),
+      Range(1, 100, 1, None).select()
+    )
+
+    // test Sample
+    val sampleQuery = testRelation.select().sample(upperBound = 0.2).limit(10).analyze
+    val sampleOptimized = Optimize.execute(sampleQuery)
+    assert(sampleOptimized.collect { case l @ Limit(_, _) => l }.isEmpty)
+
+    // test Deduplicate
+    checkPlan(
+      testRelation.deduplicate(Symbol("a")).limit(10),
+      testRelation.deduplicate(Symbol("a"))
+    )
+
+    // test Repartition
+    checkPlan(
+      testRelation.repartition(2).limit(10),
+      testRelation.repartition(2)
+    )
+    checkPlan(
+      testRelation.distribute(Symbol("a"))(2).limit(10),
+      testRelation.distribute(Symbol("a"))(2)
+    )
+
+    // test Join
+    checkPlan(
+      testRelation.join(testRelation2, joinType = Inner).limit(20),
+      testRelation.join(testRelation2, joinType = Inner)
+    )
+    checkPlan(
+      testRelation.join(testRelation2, joinType = FullOuter).limit(10),
+      testRelation.join(testRelation2, joinType = FullOuter).limit(10)
+    )
+    checkPlan(
+      testRelation.join(testRelation2, joinType = LeftSemi).limit(5),
+      testRelation.join(testRelation2.select(), joinType = LeftSemi).limit(5)
+    )
+    checkPlan(
+      testRelation.join(testRelation2, joinType = LeftAnti).limit(10),
+      testRelation.join(testRelation2.select(), joinType = LeftAnti)
+    )
+    checkPlan(
+      testRelation.join(testRelation3, joinType = LeftOuter).limit(100),
+      testRelation.join(testRelation3, joinType = LeftOuter).limit(100)
+    )
+    checkPlan(
+      testRelation.join(testRelation4, joinType = RightOuter).limit(100),
+      testRelation.join(testRelation4, joinType = RightOuter).limit(100)
+    )
+  }
+}
+
+case class InfiniteRelation(output: Seq[Attribute]) extends LeafNode {
+  override def maxRows: Option[Long] = None
+}
+
+case class LongMaxRelation(output: Seq[Attribute]) extends LeafNode {
+  override def maxRows: Option[Long] = Some(Long.MaxValue)
 }
