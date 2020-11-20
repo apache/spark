@@ -286,17 +286,14 @@ private[spark] class EventLoggingListener(
       return properties
     }
     val redactedProperties = new Properties
-    
     // properties may contain some custom local properties such as stage/job description
     // only properties in sparkConf need to be redacted, 
     val (globalProperties, localProperties) = properties.asScala.toSeq.partition {
       case (key, _) => sparkConf.contains(key)
     }
-    
     (Utils.redact(sparkConf, globalProperties) ++ localProperties).foreach {
       case (key, value) => redactedProperties.setProperty(key, value)
     }
-
     redactedProperties
   }
  
