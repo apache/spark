@@ -52,7 +52,6 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   import HiveExternalCatalogVersionsSuite._
-  private val isTestAtLeastJava9 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `spark.test.cache-dir` to a static value like `/tmp/test-spark`, to
@@ -149,7 +148,9 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
   }
 
-  private def prepare(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
     val tempPyFile = File.createTempFile("test", ".py")
     // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
@@ -199,7 +200,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=2.3.7",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
@@ -211,23 +212,14 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     tempPyFile.delete()
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    if (!isTestAtLeastJava9) {
-      prepare()
-    }
-  }
-
   test("backward compatibility") {
-    // TODO SPARK-28704 Test backward compatibility on JDK9+ once we have a version supports JDK9+
-    assume(!isTestAtLeastJava9)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
       "--master", "local[2]",
       "--conf", s"${UI_ENABLED.key}=false",
       "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=2.3.7",
       "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
@@ -252,7 +244,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       // do not throw exception during object initialization.
       case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
     }
-    versions.filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
+    versions
+      .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())
+      .filter(v => v.startsWith("3") || !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9))
   }
 
   protected var spark: SparkSession = _
