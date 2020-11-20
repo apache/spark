@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
@@ -2510,6 +2511,21 @@ class DataSourceV2SQLSuite
       checkAnswer(
         spark.sql(s"SELECT * FROM $t1"),
         Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+    }
+  }
+
+  test("SPARK-33505: insert into partitioned table") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, name string, data string)
+        |USING foo
+        |PARTITIONED BY (id, name)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
+      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))))
     }
   }
 
