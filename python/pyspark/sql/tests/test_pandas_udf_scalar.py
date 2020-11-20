@@ -22,6 +22,7 @@ import time
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from distutils.version import LooseVersion
 
 from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
@@ -379,6 +380,20 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                         'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
 
+    def test_vectorized_udf_map_type(self):
+        data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
+        schema = StructType([StructField("map", MapType(StringType(), LongType()))])
+        df = self.spark.createDataFrame(data, schema=schema)
+        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
+            if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                with QuietTest(self.sc):
+                    with self.assertRaisesRegex(Exception, "MapType.*not supported"):
+                        pandas_udf(lambda x: x, MapType(StringType(), LongType()), udf_type)
+            else:
+                map_f = pandas_udf(lambda x: x, MapType(StringType(), LongType()), udf_type)
+                result = df.select(map_f(col('map')))
+                self.assertEquals(df.collect(), result.collect())
+
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
             col('id').cast('int').alias('a'),
@@ -504,8 +519,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*MapType'):
-                    pandas_udf(lambda x: x, MapType(LongType(), LongType()), udf_type)
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
@@ -577,8 +592,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
                 with self.assertRaisesRegexp(
                         NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*MapType'):
-                    pandas_udf(lambda x: x, MapType(StringType(), IntegerType()), udf_type)
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
                 with self.assertRaisesRegexp(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):

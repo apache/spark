@@ -21,12 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1627,32 +1626,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
       TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
-  }
-
-  test("SHOW PARTITIONS") {
-    val sql1 = "SHOW PARTITIONS t1"
-    val sql2 = "SHOW PARTITIONS db1.t1"
-    val sql3 = "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')"
-    val sql4 = "SHOW PARTITIONS a.b.c"
-    val sql5 = "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')"
-
-    val parsed1 = parsePlan(sql1)
-    val expected1 = ShowPartitionsStatement(Seq("t1"), None)
-    val parsed2 = parsePlan(sql2)
-    val expected2 = ShowPartitionsStatement(Seq("db1", "t1"), None)
-    val parsed3 = parsePlan(sql3)
-    val expected3 = ShowPartitionsStatement(Seq("t1"),
-      Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))
-    val parsed4 = parsePlan(sql4)
-    val expected4 = ShowPartitionsStatement(Seq("a", "b", "c"), None)
-    val parsed5 = parsePlan(sql5)
-    val expected5 = ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-    comparePlans(parsed4, expected4)
-    comparePlans(parsed5, expected5)
   }
 
   test("REFRESH TABLE") {
