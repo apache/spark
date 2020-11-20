@@ -333,14 +333,14 @@ private[spark] object HadoopFSUtils extends Logging {
   }
   // scalastyle:on argcount
 
-  /** A serializable variant of HDFS's BlockLocation. */
+  /** A serializable variant of HDFS's BlockLocation. This is required by Hadoop 2.7. */
   private case class SerializableBlockLocation(
     names: Array[String],
     hosts: Array[String],
     offset: Long,
     length: Long)
 
-  /** A serializable variant of HDFS's FileStatus. */
+  /** A serializable variant of HDFS's FileStatus. This is required by Hadoop 2.7. */
   private case class SerializableFileStatus(
     path: String,
     length: Long,
