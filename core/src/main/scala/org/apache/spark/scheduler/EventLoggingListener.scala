@@ -296,7 +296,7 @@ private[spark] class EventLoggingListener(
     }
     redactedProperties
   }
- 
+      
   private[spark] def redactEvent(
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
     // environmentDetails maps a string descriptor to a set of properties
