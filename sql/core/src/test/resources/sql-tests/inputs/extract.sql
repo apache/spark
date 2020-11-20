@@ -105,6 +105,8 @@ select date_part('sec', c), date_part('sec', i) from t;
 select date_part('seconds', c), date_part('seconds', i) from t;
 select date_part('secs', c), date_part('secs', i) from t;
 
+select date_part('epoch', c) from t;
+
 select date_part('not_supported', c) from t;
 select date_part(c, c) from t;
 select date_part(null, c) from t;
