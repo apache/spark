@@ -232,7 +232,7 @@ object SparkBuild extends PomBuild {
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
           "-Wconf:cat=lint-multiarg-infix:wv",
-          "-Wconf:cat=unused-imports:e",
+          "-Wunused:imports",
           "-Wconf:cat=other-nullary-override:wv",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
