@@ -358,30 +358,6 @@ object PartitioningUtils {
   }
 
   /**
-   * Normalize the column names in partition specification, w.r.t. the real partition column names
-   * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
-   * partition column named `month`, and it's case insensitive, we will normalize `monTh` to
-   * `month`.
-   */
-  def normalizePartitionSpec[T](
-      partitionSpec: Map[String, T],
-      partColNames: Seq[String],
-      tblName: String,
-      resolver: Resolver): Map[String, T] = {
-    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
-        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
-      }
-      normalizedKey -> value
-    }
-
-    SchemaUtils.checkColumnNameDuplication(
-      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
-
-    normalizedPartSpec.toMap
-  }
-
-  /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types using
    * [[findWiderTypeForPartitionColumn]].
    */

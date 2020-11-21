@@ -169,10 +169,20 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         val errMsg = intercept[AnalysisException] {
           spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
         }.getMessage
-        assert(errMsg.contains("Partition key ID not exists"))
+        assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
       }
 
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
+
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+        assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
+        spark.sql(s"ALTER TABLE $t DROP PARTITION (Id=1)")
+        assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
+
         spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
       }
     }
