@@ -106,7 +106,8 @@ package object client {
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm"))
+        "org.pentaho:pentaho-aggdesigner-algorithm",
+        "org.apache.zookeeper:zookeeper"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
