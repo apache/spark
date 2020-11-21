@@ -419,7 +419,7 @@ case class DropTable(
 /**
  * The logical plan for no-op command handling non-existing table.
  */
-case class NoopCommand(command: String, multipartIdentifier: Seq[String]) extends Command
+case class NoopCommand(commandName: String, multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command.
