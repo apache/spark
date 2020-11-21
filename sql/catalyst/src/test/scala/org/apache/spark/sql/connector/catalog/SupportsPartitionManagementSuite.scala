@@ -166,7 +166,9 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       (Array("part0"), InternalRow(0)) -> Set(InternalRow(0, "abc"), InternalRow(0, "def")),
       (Array("part1"), InternalRow("abc")) -> Set(InternalRow(0, "abc"), InternalRow(1, "abc")),
       (Array.empty[String], InternalRow.empty) ->
-        Set(InternalRow(0, "abc"), InternalRow(0, "def"), InternalRow(1, "abc"))
+        Set(InternalRow(0, "abc"), InternalRow(0, "def"), InternalRow(1, "abc")),
+      (Array("part0", "part1"), InternalRow(3, "xyz")) -> Set(),
+      (Array("part1"), InternalRow(3.14f)) -> Set()
     ).foreach { case ((names, idents), expected) =>
       assert(partTable.listPartitionByNames(names, idents).toSet === expected)
     }
