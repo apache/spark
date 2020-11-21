@@ -26,7 +26,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
 
   override protected def wrongPartitionColumnsError(columns: String*): String = {

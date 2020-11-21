@@ -26,7 +26,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSparkSession {
   override def version: String = "V2"
   override def catalog: String = "test_catalog"
-  override def defaultNamespace: Seq[String] = Nil
   override def defaultUsing: String = "USING _"
 
   override def sparkConf: SparkConf = super.sparkConf

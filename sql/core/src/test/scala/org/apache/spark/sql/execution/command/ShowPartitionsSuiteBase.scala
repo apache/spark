@@ -27,7 +27,6 @@ import org.apache.spark.sql.types.{StringType, StructType}
 trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
-  protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
   protected def wrongPartitionColumnsError(columns: String*): String
   // Gets the schema of `SHOW PARTITIONS`
@@ -42,7 +41,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
       (implicit pos: Position): Unit = {
     super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
   }
-
 
   protected def createDateTable(table: String): Unit = {
     sql(s"""
