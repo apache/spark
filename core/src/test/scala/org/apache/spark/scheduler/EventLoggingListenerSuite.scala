@@ -98,14 +98,60 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Spark-33504 password redaction in properties") {
-    val key = "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD"
-    val secretPassword = "secret_password"
-    val conf = getLoggingConf(testDirPath, None).set(key, secretPassword)
+    val (secretKey, secretPassword) = ("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
+      "secret_password")
+    val (customKey, customValue) = ("parse token", "secret_password")
+    
+    val conf = getLoggingConf(testDirPath, None).set(secretKey, secretPassword)
+    
     val properties = new Properties()
-    properties.setProperty(key, secretPassword)
-    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    properties.setProperty(secretKey, secretPassword)
+    properties.setProperty(customKey, customValue)
+    
+    val logName = "properties-reaction-test"
+    val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val redactedProperties = eventLogger.redactProperties(properties)
-    assert(redactedProperties.getProperty(key) == "*********(redacted)")
+    val listenerBus = new LiveListenerBus(conf)
+
+    val stageId = 1
+    val jobId = 1
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details")
+
+    val events = Array(SparkListenerStageSubmitted(stageInfo, properties),
+      SparkListenerJobStart(jobId, 0, Seq(stageInfo), properties))
+
+    eventLogger.start()
+    listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
+    listenerBus.addToEventLogQueue(eventLogger)
+    events.foreach(event => listenerBus.post(event))
+    listenerBus.stop()
+    eventLogger.stop()
+    
+    val logData = EventLogFileReader.openEventLog(new Path(eventLogger.logWriter.logPath),
+      fileSystem)
+    try {
+      val lines = readLines(logData)
+      assert(lines.size === 2)
+      assert(lines(0).contains("SparkListenerStageSubmitted"))
+      assert(lines(1).contains("SparkListenerJobStart"))
+      
+      lines.foreach{
+        line => JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case stageSubmittedEvent: SparkListenerStageSubmitted =>
+            assert(stageSubmittedEvent.properties.getProperty(secretKey) == "*********(redacted)")
+            assert(stageSubmittedEvent.properties.getProperty(customKey) ==  customValue)
+            
+          case jobStartEvent : SparkListenerJobStart =>
+            assert(jobStartEvent.properties.getProperty(secretKey) == "*********(redacted)")
+            assert(jobStartEvent.properties.getProperty(customKey) ==  customValue)
+            
+          case _ => assert(false)
+        }
+      }
+    } finally {
+      logData.close()
+    }
   }
 
   test("Executor metrics update") {
