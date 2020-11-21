@@ -106,10 +106,19 @@ public interface SupportsPartitionManagement extends Table {
         throws UnsupportedOperationException;
 
     /**
-     * List the identifiers of all partitions that contains the ident in a table.
+     * List the identifiers of all partitions that have the ident prefix in a table.
      *
      * @param ident a prefix of partition identifier
      * @return an array of Identifiers for the partitions
      */
     InternalRow[] listPartitionIdentifiers(InternalRow ident);
+
+    /**
+     * List the identifiers of all partitions that match to the ident by names.
+     *
+     * @param names the names of partition values in the identifier.
+     * @param ident a partition identifier values.
+     * @return an array of Identifiers for the partitions
+     */
+    InternalRow[] listPartitionByNames(String[] names, InternalRow ident);
 }
