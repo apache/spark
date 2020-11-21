@@ -136,12 +136,53 @@ private[spark] object HadoopFSUtils extends Logging {
               parallelismMax = 0)
             (path, leafFiles)
           }.iterator
+        }.map { case (path, statuses) =>
+            val serializableStatuses = statuses.map { status =>
+              // Turn FileStatus into SerializableFileStatus so we can send it back to the driver
+              val blockLocations = status match {
+                case f: LocatedFileStatus =>
+                  f.getBlockLocations.map { loc =>
+                    SerializableBlockLocation(
+                      loc.getNames,
+                      loc.getHosts,
+                      loc.getOffset,
+                      loc.getLength)
+                  }
+
+                case _ =>
+                  Array.empty[SerializableBlockLocation]
+              }
+
+              SerializableFileStatus(
+                status.getPath.toString,
+                status.getLen,
+                status.isDirectory,
+                status.getReplication,
+                status.getBlockSize,
+                status.getModificationTime,
+                status.getAccessTime,
+                blockLocations)
+            }
+            (path.toString, serializableStatuses)
         }.collect()
     } finally {
       sc.setJobDescription(previousJobDescription)
     }
 
-    statusMap.toSeq
+    // turn SerializableFileStatus back to Status
+    statusMap.map { case (path, serializableStatuses) =>
+      val statuses = serializableStatuses.map { f =>
+        val blockLocations = f.blockLocations.map { loc =>
+          new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+        }
+        new LocatedFileStatus(
+          new FileStatus(
+            f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime,
+            new Path(f.path)),
+          blockLocations)
+      }
+      (new Path(path), statuses)
+    }
   }
 
   // scalastyle:off argcount
@@ -291,4 +332,22 @@ private[spark] object HadoopFSUtils extends Logging {
     resolvedLeafStatuses
   }
   // scalastyle:on argcount
+
+  /** A serializable variant of HDFS's BlockLocation. This is required by Hadoop 2.7. */
+  private case class SerializableBlockLocation(
+    names: Array[String],
+    hosts: Array[String],
+    offset: Long,
+    length: Long)
+
+  /** A serializable variant of HDFS's FileStatus. This is required by Hadoop 2.7. */
+  private case class SerializableFileStatus(
+    path: String,
+    length: Long,
+    isDir: Boolean,
+    blockReplication: Short,
+    blockSize: Long,
+    modificationTime: Long,
+    accessTime: Long,
+    blockLocations: Array[SerializableBlockLocation])
 }
