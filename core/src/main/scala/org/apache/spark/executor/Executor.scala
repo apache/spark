@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
@@ -110,7 +110,9 @@ private[spark] class Executor(
       .build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
-  private val executorSource = new ExecutorSource(threadPool, executorId)
+  private val schemes = conf.get(EXECUTOR_METRICS_FILESYSTEM_SCHEMES)
+    .toLowerCase(Locale.ROOT).split(",").map(_.trim).filter(_.nonEmpty)
+  private val executorSource = new ExecutorSource(threadPool, executorId, schemes)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
   // For tasks which are in the process of being killed, this map holds the most recently created
@@ -135,6 +137,11 @@ private[spark] class Executor(
     env.metricsSystem.registerSource(new JVMCPUSource())
     executorMetricsSource.foreach(_.register(env.metricsSystem))
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
+  } else {
+    // This enable the registration of the executor source in local mode.
+    // The actual registration happens in SparkContext,
+    // it cannot be done here as the appId is not available yet
+    Executor.executorSourceLocalModeOnly = executorSource
   }
 
   // Whether to load classes in user jars before those in Spark jars
@@ -253,7 +260,7 @@ private[spark] class Executor(
   }
 
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
-    val tr = new TaskRunner(context, taskDescription)
+    val tr = new TaskRunner(context, taskDescription, plugins)
     runningTasks.put(taskDescription.taskId, tr)
     threadPool.execute(tr)
     if (decommissioned) {
@@ -332,7 +339,8 @@ private[spark] class Executor(
 
   class TaskRunner(
       execBackend: ExecutorBackend,
-      private val taskDescription: TaskDescription)
+      private val taskDescription: TaskDescription,
+      private val plugins: Option[PluginContainer])
     extends Runnable {
 
     val taskId = taskDescription.taskId
@@ -479,7 +487,8 @@ private[spark] class Executor(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
-            resources = taskDescription.resources)
+            resources = taskDescription.resources,
+            plugins = plugins)
           threwException = false
           res
         } {
@@ -614,6 +623,7 @@ private[spark] class Executor(
 
         executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
+        plugins.foreach(_.onTaskSucceeded())
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
       } catch {
         case t: TaskKilledException =>
@@ -623,9 +633,9 @@ private[spark] class Executor(
           // Here and below, put task metric peaks in a WrappedArray to expose them as a Seq
           // without requiring a copy.
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(
-            TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq))
-          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+          val reason = TaskKilled(t.reason, accUpdates, accums, metricPeaks.toSeq)
+          plugins.foreach(_.onTaskFailed(reason))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
         case _: InterruptedException | NonFatal(_) if
             task != null && task.reasonIfKilled.isDefined =>
@@ -634,9 +644,9 @@ private[spark] class Executor(
 
           val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
           val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
-          val serializedTK = ser.serialize(
-            TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq))
-          execBackend.statusUpdate(taskId, TaskState.KILLED, serializedTK)
+          val reason = TaskKilled(killReason, accUpdates, accums, metricPeaks.toSeq)
+          plugins.foreach(_.onTaskFailed(reason))
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
         case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
@@ -650,11 +660,13 @@ private[spark] class Executor(
               s"other exception: $t")
           }
           setTaskFinishedAndClearInterruptStatus()
+          plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
         case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskCommitDeniedReason
           setTaskFinishedAndClearInterruptStatus()
+          plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
         case t: Throwable if env.isStopped =>
@@ -677,21 +689,22 @@ private[spark] class Executor(
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
             val metricPeaks = WrappedArray.make(metricsPoller.getTaskMetricPeaks(taskId))
 
-            val serializedTaskEndReason = {
+            val (taskFailureReason, serializedTaskFailureReason) = {
               try {
                 val ef = new ExceptionFailure(t, accUpdates).withAccums(accums)
                   .withMetricPeaks(metricPeaks.toSeq)
-                ser.serialize(ef)
+                (ef, ser.serialize(ef))
               } catch {
                 case _: NotSerializableException =>
                   // t is not serializable so just send the stacktrace
                   val ef = new ExceptionFailure(t, accUpdates, false).withAccums(accums)
                     .withMetricPeaks(metricPeaks.toSeq)
-                  ser.serialize(ef)
+                  (ef, ser.serialize(ef))
               }
             }
             setTaskFinishedAndClearInterruptStatus()
-            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
+            plugins.foreach(_.onTaskFailed(taskFailureReason))
+            execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskFailureReason)
           } else {
             logInfo("Not reporting error to driver during JVM shutdown.")
           }
@@ -981,4 +994,7 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+
+  // Used to store executorSource, for local mode only
+  var executorSourceLocalModeOnly: ExecutorSource = null
 }

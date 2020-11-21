@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -893,10 +892,6 @@ trait ScalaReflection extends Logging {
   def mirror: universe.Mirror
 
   import universe._
-
-  // The Predef.Map is scala.collection.immutable.Map.
-  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-  import scala.collection.Map
 
   /**
    * Any codes calling `scala.reflect.api.Types.TypeApi.<:<` should be wrapped by this method to

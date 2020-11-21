@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Disable unnecessary bucketed table scan based on actual physical query plan.
@@ -75,7 +74,7 @@ import org.apache.spark.sql.internal.SQLConf
  * the paper "Access Path Selection in a Relational Database Management System"
  * (https://dl.acm.org/doi/10.1145/582095.582099).
  */
-case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan] {
+object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
 
   /**
    * Disable bucketed table scan with pre-order traversal of plan.
@@ -101,7 +100,9 @@ case class DisableUnnecessaryBucketedScan(conf: SQLConf) extends Rule[SparkPlan]
       case scan: FileSourceScanExec =>
         if (isBucketedScanWithoutFilter(scan)) {
           if (!withInterestingPartition || (withExchange && withAllowedNode)) {
-            scan.copy(disableBucketedScan = true)
+            val nonBucketedScan = scan.copy(disableBucketedScan = true)
+            scan.logicalLink.foreach(nonBucketedScan.setLogicalLink)
+            nonBucketedScan
           } else {
             scan
           }

@@ -54,7 +54,8 @@ import org.apache.spark.util.Utils
  * @param planner Planner that converts optimized logical plans to physical plans.
  * @param streamingQueryManagerBuilder A function to create a streaming query manager to
  *                                     start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param listenerManager Interface to register custominternal/SessionState.scala
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s.
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.

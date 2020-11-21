@@ -28,7 +28,8 @@ from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase
 
 def check_params(test_self, py_stage, check_params_exist=True):
     """
-    Checks common requirements for Params.params:
+    Checks common requirements for :py:class:`PySpark.ml.Params.params`:
+
       - set of params exist in Java and Python and are ordered by names
       - param parent has the same UID as the object's UID
       - default param value from Java matches value in Python

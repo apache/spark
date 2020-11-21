@@ -116,6 +116,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertEqual([("数量", 'bigint')], df.dtypes)
         self.assertEqual(1, df.select("数量").first()[0])
         self.assertEqual(1, df.select(df["数量"]).first()[0])
+        self.assertTrue(columnName in repr(df[columnName]))
 
     def test_field_accessor(self):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
@@ -155,6 +156,28 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertRaisesRegex(TypeError,
                                'fieldName should be a string',
                                lambda: df['a'].withField(col('b'), lit(3)))
+
+    def test_drop_fields(self):
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2, d=Row(e=3, f=4)))])
+        self.assertIsInstance(df["a"].dropFields("b"), Column)
+        self.assertIsInstance(df["a"].dropFields("b", "c"), Column)
+        self.assertIsInstance(df["a"].dropFields("d.e"), Column)
+
+        result = df.select(
+            df["a"].dropFields("b").alias("a1"),
+            df["a"].dropFields("d.e").alias("a2"),
+        ).first().asDict(True)
+
+        self.assertTrue(
+            "b" not in result["a1"] and
+            "c" in result["a1"] and
+            "d" in result["a1"]
+        )
+
+        self.assertTrue(
+            "e" not in result["a2"]["d"] and
+            "f" in result["a2"]["d"]
+        )
 
 if __name__ == "__main__":
     import unittest

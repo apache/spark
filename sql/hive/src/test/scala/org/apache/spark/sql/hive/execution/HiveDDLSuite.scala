@@ -815,6 +815,11 @@ class HiveDDLSuite
     }
   }
 
+  private def assertAnalysisError(sqlText: String, message: String): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    assert(e.message.contains(message))
+  }
+
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
@@ -892,15 +897,17 @@ class HiveDDLSuite
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
 
-        assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
-
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
 
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
+
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+          s"$oldViewName is a view not table")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
+          s"$oldViewName is a view not table")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))

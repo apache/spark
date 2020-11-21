@@ -21,6 +21,7 @@ import java.sql.{Connection, SQLException}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -70,7 +71,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     checkNamespace(ident.namespace())
     val writeOptions = new JdbcOptionsInWrite(
       options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
-    withConnection(JdbcUtils.tableExists(_, writeOptions))
+    classifyException(s"Failed table existence check: $ident") {
+      withConnection(JdbcUtils.tableExists(_, writeOptions))
+    }
   }
 
   override def dropTable(ident: Identifier): Boolean = {
@@ -88,7 +91,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     checkNamespace(oldIdent.namespace())
     withConnection { conn =>
-      JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+      classifyException(s"Failed table renaming from $oldIdent to $newIdent") {
+        JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+      }
     }
   }
 
@@ -113,17 +118,43 @@ class JDBCTableCatalog extends TableCatalog with Logging {
     if (partitions.nonEmpty) {
       throw new UnsupportedOperationException("Cannot create JDBC table with partition")
     }
-    // TODO (SPARK-32405): Apply table options while creating tables in JDBC Table Catalog
+
+    var tableOptions = options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
+    var tableComment: String = ""
+    var tableProperties: String = ""
     if (!properties.isEmpty) {
-      logWarning("Cannot create JDBC table with properties, these properties will be " +
-        "ignored: " + properties.asScala.map { case (k, v) => s"$k=$v" }.mkString("[", ", ", "]"))
+      properties.asScala.map {
+        case (k, v) => k match {
+          case "comment" => tableComment = v
+          // ToDo: have a follow up to fail provider once unify create table syntax PR is merged
+          case "provider" =>
+          case "owner" => // owner is ignored. It is default to current user name.
+          case "location" =>
+            throw new AnalysisException("CREATE TABLE ... LOCATION ... is not supported in" +
+              " JDBC catalog.")
+          case _ => tableProperties = tableProperties + " " + s"$k $v"
+        }
+      }
     }
 
-    val writeOptions = new JdbcOptionsInWrite(
-      options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
+    if (tableComment != "") {
+      tableOptions = tableOptions + (JDBCOptions.JDBC_TABLE_COMMENT -> tableComment)
+    }
+    if (tableProperties != "") {
+      // table property is set in JDBC_CREATE_TABLE_OPTIONS, which will be appended
+      // to CREATE TABLE statement.
+      // E.g., "CREATE TABLE t (name string) ENGINE InnoDB DEFAULT CHARACTER SET utf8"
+      // Spark doesn't check if these table properties are supported by databases. If
+      // table property is invalid, database will fail the table creation.
+      tableOptions = tableOptions + (JDBCOptions.JDBC_CREATE_TABLE_OPTIONS -> tableProperties)
+    }
+
+    val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
     withConnection { conn =>
-      JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+      classifyException(s"Failed table creation: $ident") {
+        JdbcUtils.createTable(conn, getTableName(ident), schema, caseSensitive, writeOptions)
+      }
     }
 
     JDBCTable(ident, schema, writeOptions)
@@ -132,7 +163,9 @@ class JDBCTableCatalog extends TableCatalog with Logging {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     checkNamespace(ident.namespace())
     withConnection { conn =>
-      JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
+      classifyException(s"Failed table altering: $ident") {
+        JdbcUtils.alterTable(conn, getTableName(ident), changes, options)
+      }
       loadTable(ident)
     }
   }
@@ -155,5 +188,13 @@ class JDBCTableCatalog extends TableCatalog with Logging {
 
   private def getTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(dialect.quoteIdentifier).mkString(".")
+  }
+
+  private def classifyException[T](message: String)(f: => T): T = {
+    try {
+      f
+    } catch {
+      case e: Throwable => throw dialect.classifyException(message, e)
+    }
   }
 }

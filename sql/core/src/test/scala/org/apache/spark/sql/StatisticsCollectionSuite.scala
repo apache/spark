@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -540,10 +539,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
       val globalTempDB = spark.sharedState.globalTempViewManager.database
-      val errMsg1 = intercept[NoSuchTableException] {
+      val errMsg1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      assert(errMsg1.contains(s"Table or view not found: $globalTempDB.gTempView"))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
       val errMsg2 = intercept[AnalysisException] {

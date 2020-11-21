@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -335,7 +334,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
 /**
  * This rule rewrites correlated [[ScalarSubquery]] expressions into LEFT OUTER joins.
  */
-object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
+object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelper {
   /**
    * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
    * the given collector. The expression is rewritten and returned.
@@ -357,7 +356,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
-    if (!CleanupAliases.trimAliases(expr).foldable) {
+    if (!trimAliases(expr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
       // Needs to evaluate them on query runtime.
       expr

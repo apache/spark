@@ -21,6 +21,7 @@ import java.io.File
 import java.util.{Collections, Date, List => JList}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -131,6 +132,8 @@ private[spark] class MesosClusterScheduler(
   private val queuedCapacity = conf.get(config.MAX_DRIVERS)
   private val retainedDrivers = conf.get(config.RETAINED_DRIVERS)
   private val maxRetryWaitTime = conf.get(config.CLUSTER_RETRY_WAIT_MAX_SECONDS)
+  private val queues: immutable.Map[String, Float] =
+    conf.getAllWithPrefix("spark.mesos.dispatcher.queue.").map(t => (t._1, t._2.toFloat)).toMap
   private val schedulerState = engineFactory.createEngine("scheduler")
   private val stateLock = new Object()
   // Keyed by submission id
@@ -144,7 +147,19 @@ private[spark] class MesosClusterScheduler(
   // state of the tasks from Mesos. Keyed by task Id.
   private val pendingRecover = new mutable.HashMap[String, AgentID]()
   // Stores all the submitted drivers that hasn't been launched, keyed by submission id
-  private val queuedDrivers = new ArrayBuffer[MesosDriverDescription]()
+  // and sorted by priority, then by submission date
+  private val driverOrdering = new Ordering[MesosDriverDescription] {
+    override def compare(x: MesosDriverDescription, y: MesosDriverDescription): Int = {
+      val xp = getDriverPriority(x)
+      val yp = getDriverPriority(y)
+      if (xp != yp) {
+        xp compare yp
+      } else {
+        y.submissionDate.compareTo(x.submissionDate)
+      }
+    }
+  }
+  private val queuedDrivers = new mutable.TreeSet[MesosDriverDescription]()(driverOrdering.reverse)
   // All supervised drivers that are waiting to retry after termination, keyed by submission id
   private val pendingRetryDrivers = new ArrayBuffer[MesosDriverDescription]()
   private val queuedDriversState = engineFactory.createEngine("driverQueue")
@@ -372,6 +387,16 @@ private[spark] class MesosClusterScheduler(
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
     val retries = desc.retryState.map { d => s"${RETRY_SEP}${d.retries.toString}" }.getOrElse("")
     s"${frameworkId}-${desc.submissionId}${retries}"
+  }
+
+  private[mesos] def getDriverPriority(desc: MesosDriverDescription): Float = {
+    val defaultQueueName = config.DISPATCHER_QUEUE.defaultValueString
+    val queueName = desc.conf.get("spark.mesos.dispatcher.queue", defaultQueueName)
+    if (queueName != defaultQueueName) {
+      queues.getOrElse(queueName, throw new NoSuchElementException(queueName))
+    } else {
+      0.0f
+    }
   }
 
   private def getDriverTaskId(desc: MesosDriverDescription): String = {
@@ -710,7 +735,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def copyBuffer(
-      buffer: ArrayBuffer[MesosDriverDescription]): ArrayBuffer[MesosDriverDescription] = {
+      buffer: TraversableOnce[MesosDriverDescription]): ArrayBuffer[MesosDriverDescription] = {
     val newBuffer = new ArrayBuffer[MesosDriverDescription](buffer.size)
     buffer.copyToBuffer(newBuffer)
     newBuffer
@@ -827,13 +852,13 @@ private[spark] class MesosClusterScheduler(
       status: Int): Unit = {}
 
   private def removeFromQueuedDrivers(subId: String): Boolean = {
-    val index = queuedDrivers.indexWhere(_.submissionId == subId)
-    if (index != -1) {
-      queuedDrivers.remove(index)
+    val matchOption = queuedDrivers.find(_.submissionId == subId)
+    if (matchOption.isEmpty) {
+      false
+    } else {
+      queuedDrivers.remove(matchOption.get)
       queuedDriversState.expunge(subId)
       true
-    } else {
-      false
     }
   }
 

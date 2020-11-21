@@ -40,7 +40,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
     numPartitions: Int)
   extends CheckpointRDD[T](sc) {
 
-  def this(rdd: RDD[T]) {
+  def this(rdd: RDD[T]) = {
     this(rdd.context, rdd.id, rdd.partitions.length)
   }
 

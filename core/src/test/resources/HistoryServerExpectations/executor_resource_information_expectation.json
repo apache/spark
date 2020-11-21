@@ -29,7 +29,9 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 }, {
   "id" : "2",
   "hostPort" : "tomg-test:46005",
@@ -79,7 +81,9 @@
       "addresses" : [ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" ]
     }
   },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 }, {
   "id" : "1",
   "hostPort" : "tomg-test:44873",
@@ -129,5 +133,7 @@
       "addresses" : [ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12" ]
     }
   },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 } ]

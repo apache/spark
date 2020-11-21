@@ -75,7 +75,22 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         }
         val scale = 20
         val predicate = (1 to scale).map(i => s"(p0 = '$i' AND p1 = '$i')").mkString(" OR ")
-        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale)
+        val expectedStr = {
+          // left
+          "(((((((`p0` = 1) && (`p1` = 1)) || ((`p0` = 2) && (`p1` = 2))) ||" +
+          " ((`p0` = 3) && (`p1` = 3))) || (((`p0` = 4) && (`p1` = 4)) ||" +
+          " ((`p0` = 5) && (`p1` = 5)))) || (((((`p0` = 6) && (`p1` = 6)) ||" +
+          " ((`p0` = 7) && (`p1` = 7))) || ((`p0` = 8) && (`p1` = 8))) ||" +
+          " (((`p0` = 9) && (`p1` = 9)) || ((`p0` = 10) && (`p1` = 10))))) ||" +
+          // right
+          " ((((((`p0` = 11) && (`p1` = 11)) || ((`p0` = 12) && (`p1` = 12))) ||" +
+          " ((`p0` = 13) && (`p1` = 13))) || (((`p0` = 14) && (`p1` = 14)) ||" +
+          " ((`p0` = 15) && (`p1` = 15)))) || (((((`p0` = 16) && (`p1` = 16)) ||" +
+          " ((`p0` = 17) && (`p1` = 17))) || ((`p0` = 18) && (`p1` = 18))) ||" +
+          " (((`p0` = 19) && (`p1` = 19)) || ((`p0` = 20) && (`p1` = 20))))))"
+        }
+        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale,
+          expectedStr)
       }
     }
   }

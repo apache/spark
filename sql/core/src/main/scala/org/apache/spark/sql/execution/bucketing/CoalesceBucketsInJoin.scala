@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This rule coalesces one side of the `SortMergeJoin` and `ShuffledHashJoin`
@@ -38,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - The ratio of the number of buckets is less than the value set in
  *     COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO.
  */
-case class CoalesceBucketsInJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object CoalesceBucketsInJoin extends Rule[SparkPlan] {
   private def updateNumCoalescedBucketsInScan(
       plan: SparkPlan,
       numCoalescedBuckets: Int): SparkPlan = {

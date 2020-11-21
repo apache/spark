@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.viewfs.ViewFileSystem
 import org.apache.hadoop.hdfs.DistributedFileSystem
 
 import org.apache.spark._
-import org.apache.spark.annotation.Private
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 
@@ -45,8 +44,6 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param paths Input paths to list
    * @param hadoopConf Hadoop configuration
    * @param filter Path filter used to exclude leaf files from result
-   * @param isRootLevel Whether the input paths are at the root level, i.e., they are the root
-   *                    paths as opposed to nested paths encountered during recursive calls of this.
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
@@ -57,11 +54,22 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param parallelismMax The maximum parallelism for listing. If the number of input paths is
    *                       larger than this value, parallelism will be throttled to this value
    *                       to avoid generating too many tasks.
-   * @param filterFun Optional predicate on the leaf files. Files who failed the check will be
-   *                  excluded from the results
    * @return for each input path, the set of discovered files for the path
    */
   def parallelListLeafFiles(
+    sc: SparkContext,
+    paths: Seq[Path],
+    hadoopConf: Configuration,
+    filter: PathFilter,
+    ignoreMissingFiles: Boolean,
+    ignoreLocality: Boolean,
+    parallelismThreshold: Int,
+    parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
+    parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
+      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+  }
+
+  private def parallelListLeafFilesInternal(
       sc: SparkContext,
       paths: Seq[Path],
       hadoopConf: Configuration,
@@ -70,8 +78,7 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
-      parallelismMax: Int,
-      filterFun: Option[String => Boolean] = None): Seq[(Path, Seq[FileStatus])] = {
+      parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
 
     // Short-circuits parallel listing when serial listing is likely to be faster.
     if (paths.size <= parallelismThreshold) {
@@ -85,8 +92,7 @@ private[spark] object HadoopFSUtils extends Logging {
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
-          parallelismMax = parallelismMax,
-          filterFun = filterFun)
+          parallelismMax = parallelismMax)
         (path, leafFiles)
       }
     }
@@ -126,7 +132,6 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
-              filterFun = filterFun,
               parallelismThreshold = Int.MaxValue,
               parallelismMax = 0)
             (path, leafFiles)
@@ -197,7 +202,6 @@ private[spark] object HadoopFSUtils extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreLocality: Boolean,
       isRootPath: Boolean,
-      filterFun: Option[String => Boolean],
       parallelismThreshold: Int,
       parallelismMax: Int): Seq[FileStatus] = {
 
@@ -245,19 +249,11 @@ private[spark] object HadoopFSUtils extends Logging {
         Array.empty[FileStatus]
     }
 
-    def doFilter(statuses: Array[FileStatus]) = filterFun match {
-      case Some(shouldFilterOut) =>
-        statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
-      case None =>
-        statuses
-    }
-
-    val filteredStatuses = doFilter(statuses)
     val allLeafStatuses = {
-      val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
+      val (dirs, topLevelFiles) = statuses.partition(_.isDirectory)
       val nestedFiles: Seq[FileStatus] = contextOpt match {
         case Some(context) if dirs.size > parallelismThreshold =>
-          parallelListLeafFiles(
+          parallelListLeafFilesInternal(
             context,
             dirs.map(_.getPath),
             hadoopConf = hadoopConf,
@@ -265,7 +261,6 @@ private[spark] object HadoopFSUtils extends Logging {
             isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
             ignoreLocality = ignoreLocality,
-            filterFun = filterFun,
             parallelismThreshold = parallelismThreshold,
             parallelismMax = parallelismMax
           ).flatMap(_._2)
@@ -279,7 +274,6 @@ private[spark] object HadoopFSUtils extends Logging {
               ignoreMissingFiles = ignoreMissingFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = false,
-              filterFun = filterFun,
               parallelismThreshold = parallelismThreshold,
               parallelismMax = parallelismMax)
           }
@@ -289,8 +283,7 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     val missingFiles = mutable.ArrayBuffer.empty[String]
-    val filteredLeafStatuses = doFilter(allLeafStatuses)
-    val resolvedLeafStatuses = filteredLeafStatuses.flatMap {
+    val resolvedLeafStatuses = allLeafStatuses.flatMap {
       case f: LocatedFileStatus =>
         Some(f)
 
@@ -340,14 +333,14 @@ private[spark] object HadoopFSUtils extends Logging {
   }
   // scalastyle:on argcount
 
-  /** A serializable variant of HDFS's BlockLocation. */
+  /** A serializable variant of HDFS's BlockLocation. This is required by Hadoop 2.7. */
   private case class SerializableBlockLocation(
     names: Array[String],
     hosts: Array[String],
     offset: Long,
     length: Long)
 
-  /** A serializable variant of HDFS's FileStatus. */
+  /** A serializable variant of HDFS's FileStatus. This is required by Hadoop 2.7. */
   private case class SerializableFileStatus(
     path: String,
     length: Long,

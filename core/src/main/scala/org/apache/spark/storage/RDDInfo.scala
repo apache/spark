@@ -38,7 +38,6 @@ class RDDInfo(
   var numCachedPartitions = 0
   var memSize = 0L
   var diskSize = 0L
-  var externalBlockStoreSize = 0L
 
   def isCached: Boolean = (memSize + diskSize > 0) && numCachedPartitions > 0
 

@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, PartialMerge}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExecBase
-import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -35,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * optimization to prune data. During physical planning, redundant project nodes can be removed
  * to simplify the query plan.
  */
-case class RemoveRedundantProjects(conf: SQLConf) extends Rule[SparkPlan] {
+object RemoveRedundantProjects extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED)) {
       plan

@@ -751,7 +751,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         }
 
         assert(exchanges.size === 1)
-        testMetricsInSparkPlanOperator(exchanges.head, Map("numRows" -> 2))
+        testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
       }
     }
   }

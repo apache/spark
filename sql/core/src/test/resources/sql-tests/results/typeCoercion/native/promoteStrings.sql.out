@@ -2526,7 +2526,7 @@ SELECT stddev_samp('1') FROM t
 -- !query schema
 struct<stddev_samp(CAST(1 AS DOUBLE)):double>
 -- !query output
-NaN
+NULL
 
 
 -- !query
@@ -2558,7 +2558,7 @@ SELECT var_samp('1') FROM t
 -- !query schema
 struct<var_samp(CAST(1 AS DOUBLE)):double>
 -- !query output
-NaN
+NULL
 
 
 -- !query
@@ -2566,7 +2566,7 @@ SELECT skewness('1') FROM t
 -- !query schema
 struct<skewness(CAST(1 AS DOUBLE)):double>
 -- !query output
-NaN
+NULL
 
 
 -- !query
@@ -2574,4 +2574,4 @@ SELECT kurtosis('1') FROM t
 -- !query schema
 struct<kurtosis(CAST(1 AS DOUBLE)):double>
 -- !query output
-NaN
+NULL

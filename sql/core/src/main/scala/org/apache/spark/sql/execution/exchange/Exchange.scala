@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expre
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -100,7 +99,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
  * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
  * references.
  */
-case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
+object ReuseExchange extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.exchangeReuseEnabled) {

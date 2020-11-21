@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -108,6 +109,11 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
         u.failAnalysis(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
@@ -166,17 +172,18 @@ trait CheckAnalysis extends PredicateHelper {
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(_: OffsetWindowFunction,
+          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
-            failAnalysis("An offset window function can only be evaluated in an ordered " +
+            failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
           case w @ WindowExpression(e, s) =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             e match {
-              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
+                  _: AggregateWindowFunction =>
                 w
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
                 w
@@ -557,6 +564,12 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
               // no validation needed for set and remove property
             }
+
+          case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
+            checkAlterTablePartition(table, parts)
+
+          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
+            checkAlterTablePartition(table, parts)
 
           case _ => // Fallbacks to the following checks
         }
@@ -969,5 +982,25 @@ trait CheckAnalysis extends PredicateHelper {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
+  }
+
+  // Make sure that table is able to alter partition.
+  private def checkAlterTablePartition(
+      table: Table, parts: Seq[PartitionSpec]): Unit = {
+    (table, parts) match {
+      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
+        failAnalysis("PartitionSpecs are not resolved")
+
+      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
+        failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
+      // Skip atomic partition tables
+      case (_: SupportsAtomicPartitionManagement, _) =>
+      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
+        failAnalysis(
+          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
+
+      case _ =>
+    }
   }
 }

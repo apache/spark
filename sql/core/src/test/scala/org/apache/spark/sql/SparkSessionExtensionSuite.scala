@@ -643,8 +643,11 @@ class ColumnarProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
  * A version of add that supports columnar processing for longs.  This version is broken
  * on purpose so it adds the numbers plus 1 so that the tests can show that it was replaced.
  */
-class BrokenColumnarAdd(left: ColumnarExpression, right: ColumnarExpression)
-  extends Add(left, right) with ColumnarExpression {
+class BrokenColumnarAdd(
+    left: ColumnarExpression,
+    right: ColumnarExpression,
+    failOnError: Boolean = false)
+  extends Add(left, right, failOnError) with ColumnarExpression {
 
   override def supportsColumnar(): Boolean = left.supportsColumnar && right.supportsColumnar
 

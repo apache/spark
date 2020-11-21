@@ -151,6 +151,7 @@ class HiveThriftServer2ListenerSuite extends SparkFunSuite with BeforeAndAfter {
       "stmt", "groupId", 0))
     listener.onOtherEvent(SparkListenerThriftServerOperationParsed(unknownOperation, "query"))
     listener.onOtherEvent(SparkListenerThriftServerOperationCanceled(unknownOperation, 0))
+    listener.onOtherEvent(SparkListenerThriftServerOperationTimeout(unknownOperation, 0))
     listener.onOtherEvent(SparkListenerThriftServerOperationError(unknownOperation,
       "msg", "trace", 0))
     listener.onOtherEvent(SparkListenerThriftServerOperationFinish(unknownOperation, 0))

@@ -18,14 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
-import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -97,7 +94,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper extends Logging {
+trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -117,18 +114,13 @@ trait PredicateHelper extends Logging {
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
-      case Project(projectList, child) =>
-        val aliases = AttributeMap(projectList.collect {
-          case a @ Alias(child, _) => (a.toAttribute, child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case Aggregate(_, aggregateExpressions, child) =>
-        val aliasMap = AttributeMap(aggregateExpressions.collect {
-          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-            (a.toAttribute, a.child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case a: Aggregate =>
+        val aliasMap = getAliasMap(a)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case other =>
@@ -147,18 +139,6 @@ trait PredicateHelper extends Logging {
       case Or(cond1, cond2) =>
         splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
       case other => other :: Nil
-    }
-  }
-
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
     }
   }
 
