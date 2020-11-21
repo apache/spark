@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
+import org.apache.spark.sql.internal.SQLConf
 
 class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
 
@@ -157,6 +158,23 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
       assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    }
+  }
+
+  test("case sensitivity in resolving partition specs") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+        }.getMessage
+        assert(errMsg.contains("Partition key ID not exists"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+      }
     }
   }
 }
