@@ -147,6 +147,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
+            session,
             staging,
             ident,
             parts,
@@ -157,6 +158,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             orCreate = orCreate) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
+            session,
             catalog,
             ident,
             parts,
@@ -170,9 +172,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query, r) :: Nil
         case v2 =>
-          AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
+          AppendDataExec(session, v2, r, writeOptions.asOptions, planLater(query)) :: Nil
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
@@ -184,14 +186,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query, r) :: Nil
         case v2 =>
-          OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
+          OverwriteByExpressionExec(session, v2, r, filters,
+            writeOptions.asOptions, planLater(query)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
       OverwritePartitionsDynamicExec(
-        r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
+        session, r.table.asWritable, r, writeOptions.asOptions, planLater(query)) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {

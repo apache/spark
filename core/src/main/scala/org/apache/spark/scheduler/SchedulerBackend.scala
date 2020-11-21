@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
@@ -91,5 +92,17 @@ private[spark] trait SchedulerBackend {
    * @return The max number of tasks that can be concurrent launched currently.
    */
   def maxNumConcurrentTasks(rp: ResourceProfile): Int
+
+  /**
+   * Get the list of host locations for push based shuffle
+   *
+   * Currently push based shuffle is disabled for both stage retry and stage reuse cases
+   * (for eg: in the case where few partitions are lost due to failure). Hence this method
+   * should be invoked only once for a ShuffleDependency.
+   * @return List of external shuffle services locations
+   */
+  def getShufflePushMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = Nil
 
 }
