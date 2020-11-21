@@ -33,34 +33,6 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
-  override protected def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int, year int, month int)
-      |$defaultUsing
-      |partitioned by (year, month)""".stripMargin)
-    sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 1)")
-    sql(s"ALTER TABLE $table ADD PARTITION(year = 2015, month = 2)")
-    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
-    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
-  }
-
-  override protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (
-      |  price int, qty int,
-      |  year int, month int, hour int, minute int, sec int, extra int)
-      |$defaultUsing
-      |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
-    sql(s"""
-      |ALTER TABLE $table
-      |ADD PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1)
-      """.stripMargin)
-    sql(s"""
-      |ALTER TABLE $table
-      |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
-      """.stripMargin)
-  }
-
   override protected def wrongPartitionColumnsError(columns: String*): String = {
     s"Partition key ${columns.mkString(",")} not exists"
   }

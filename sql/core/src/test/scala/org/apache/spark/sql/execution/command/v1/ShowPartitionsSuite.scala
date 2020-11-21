@@ -29,34 +29,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
 
-  override protected def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int, year int, month int)
-      |$defaultUsing
-      |partitioned by (year, month)""".stripMargin)
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
-  }
-
-  override protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (
-      |  price int, qty int,
-      |  year int, month int, hour int, minute int, sec int, extra int)
-      |$defaultUsing
-      |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-  }
-
   override protected def wrongPartitionColumnsError(columns: String*): String = {
     s"Non-partitioning column(s) ${columns.mkString("[", ", ", "]")} are specified"
   }

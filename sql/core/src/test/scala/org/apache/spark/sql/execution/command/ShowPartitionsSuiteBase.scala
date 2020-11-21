@@ -29,8 +29,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
-  protected def createDateTable(table: String): Unit
-  protected def createWideTable(table: String): Unit
   protected def wrongPartitionColumnsError(columns: String*): String
   // Gets the schema of `SHOW PARTITIONS`
   private val showSchema: StructType = new StructType().add("partition", StringType, false)
@@ -43,6 +41,36 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
+  }
+
+
+  protected def createDateTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (price int, qty int, year int, month int)
+      |$defaultUsing
+      |partitioned by (year, month)""".stripMargin)
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
+
+  protected def createWideTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (
+      |  price int, qty int,
+      |  year int, month int, hour int, minute int, sec int, extra int)
+      |$defaultUsing
+      |PARTITIONED BY (year, month, hour, minute, sec, extra)
+      |""".stripMargin)
+    sql(s"""
+      |INSERT INTO $table
+      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      |""".stripMargin)
+    sql(s"""
+      |ALTER TABLE $table
+      |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
+      |""".stripMargin)
   }
 
   test("show partitions of non-partitioned table") {
