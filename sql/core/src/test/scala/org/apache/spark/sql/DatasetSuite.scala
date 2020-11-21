@@ -1950,8 +1950,10 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-33469: Add current_timezone function") {
     val df = Seq(1).toDF("c")
-    val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
-    assert(timezone == SQLConf.get.sessionLocalTimeZone)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+      assert(timezone == "Asia/Shanghai")
+    }
   }
 }
 

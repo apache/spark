@@ -74,7 +74,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timezone.",
+  usage = "_FUNC_() - Returns the current session local timezone.",
   examples = """
     Examples:
       > SELECT _FUNC_();
