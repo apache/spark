@@ -182,8 +182,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
         spark.sql(s"ALTER TABLE $t DROP PARTITION (Id=1)")
         assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-        spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
       }
     }
   }
