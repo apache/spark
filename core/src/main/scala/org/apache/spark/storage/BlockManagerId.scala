@@ -145,4 +145,6 @@ private[spark] object BlockManagerId {
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
     blockManagerIdCache.get(id)
   }
+
+  private[spark] val SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger"
 }

@@ -160,12 +160,15 @@ class InMemoryTable(
     }
   }
 
+  protected def addPartitionKey(key: Seq[Any]): Unit = {}
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
         .getOrElse(key -> new BufferedRows(key.toArray.mkString("/")).withRow(row))
+      addPartitionKey(key)
     })
     this
   }
