@@ -110,7 +110,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     
     val logName = "properties-reaction-test"
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
-    val redactedProperties = eventLogger.redactProperties(properties)
     val listenerBus = new LiveListenerBus(conf)
 
     val stageId = 1
