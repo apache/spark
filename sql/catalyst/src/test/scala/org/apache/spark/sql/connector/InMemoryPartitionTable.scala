@@ -21,9 +21,11 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -95,5 +97,20 @@ class InMemoryPartitionTable(
 
   override protected def addPartitionKey(key: Seq[Any]): Unit = {
     memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
+  }
+
+  override def listPartitionByNames(
+      names: Array[String],
+      ident: InternalRow): Array[InternalRow] = {
+    val schema = partitionSchema
+    val indexes = names.map(schema.fieldIndex)
+    val dataTypes = names.map(schema(_).dataType)
+    val currentRow = new GenericInternalRow(new Array[Any](names.length))
+    memoryTablePartitions.keySet().asScala.filter { key =>
+      for (i <- 0 until names.length) {
+        currentRow.values(i) = key.get(indexes(i), dataTypes(i))
+      }
+      currentRow == ident
+    }.toArray
   }
 }
