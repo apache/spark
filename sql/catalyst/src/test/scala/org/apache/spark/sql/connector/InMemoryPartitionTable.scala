@@ -21,7 +21,6 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
@@ -102,7 +101,13 @@ class InMemoryPartitionTable(
   override def listPartitionByNames(
       names: Array[String],
       ident: InternalRow): Array[InternalRow] = {
+    assert(names.length == ident.numFields,
+      s"Number of partition names (${names.length}) must be equal to " +
+      s"the number of partition values (${ident.numFields}).")
     val schema = partitionSchema
+    assert(names.forall(fieldName => schema.fieldNames.contains(fieldName)),
+      s"Some partition names ${names.mkString("[", ", ", "]")} don't belong to " +
+      s"the partition schema '${schema.sql}'.")
     val indexes = names.map(schema.fieldIndex)
     val dataTypes = names.map(schema(_).dataType)
     val currentRow = new GenericInternalRow(new Array[Any](names.length))

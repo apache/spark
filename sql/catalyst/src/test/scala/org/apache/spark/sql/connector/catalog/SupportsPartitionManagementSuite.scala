@@ -170,5 +170,13 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     ).foreach { case ((names, idents), expected) =>
       assert(partTable.listPartitionByNames(names, idents).toSet === expected)
     }
+    // Check invalid parameters
+    Seq(
+      (Array("part0", "part1"), InternalRow(0)),
+      (Array("col0", "part1"), InternalRow(0, 1)),
+      (Array("wrong"), InternalRow("invalid"))
+    ).foreach { case (names, idents) =>
+      intercept[AssertionError](partTable.listPartitionByNames(names, idents))
+    }
   }
 }
