@@ -103,11 +103,11 @@ package object client {
     // Since HIVE-14496, Hive materialized view need calcite-core.
     // For spark, only VersionsSuite currently creates a hive materialized view for testing.
     case object v2_3 extends HiveVersion("2.3.7",
+      extraDeps = Seq("org.apache.zookeeper:zookeeper"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
-        "org.pentaho:pentaho-aggdesigner-algorithm",
-        "org.apache.zookeeper:zookeeper"))
+        "org.pentaho:pentaho-aggdesigner-algorithm"))
 
     // Since Hive 3.0, HookUtils uses org.apache.logging.log4j.util.Strings
     // Since HIVE-14496, Hive.java uses calcite-core
