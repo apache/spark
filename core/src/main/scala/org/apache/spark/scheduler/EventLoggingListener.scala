@@ -281,7 +281,7 @@ private[spark] class EventLoggingListener(
     logWriter.stop()
   }
 
-  private[spark] def redactProperties(properties: Properties): Properties = {
+  private def redactProperties(properties: Properties): Properties = {
     if (properties == null) {
       return properties
     }
