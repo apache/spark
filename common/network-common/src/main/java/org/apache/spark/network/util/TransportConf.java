@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
@@ -107,8 +108,9 @@ public class TransportConf {
 
   /** Connect creation timeout in milliseconds. Default 30 secs. */
   public int connectionCreationTimeoutMs() {
+    long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
-      conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  "30s")) * 1000;
+      conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  connectionTimeoutS + "s")) * 1000;
     return (int) defaultTimeoutMs;
   }
 
