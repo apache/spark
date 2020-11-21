@@ -4001,8 +4001,10 @@ case class ArrayContainsArray(left: Expression, right: Expression)
           var foundNullElement = false
           var i = 0
           while (i < array1.numElements()) {
-            if (array1.isNullAt(i) && !foundNullElement) {
-              foundNullElement = true
+            if (array1.isNullAt(i)) {
+              if (!foundNullElement) {
+                foundNullElement = true
+              }
             } else {
               val elem = array1.get(i, elementType)
               hs.add(elem)
@@ -4061,7 +4063,7 @@ case class ArrayContainsArray(left: Expression, right: Expression)
               }
             }
             if (!found) {
-              elementFound = false
+              elementFound = found
             }
             i += 1
           }
@@ -4092,12 +4094,14 @@ case class ArrayContainsArray(left: Expression, right: Expression)
 
         def withArray1NullCheck(body: String): String =
           s"""
-             |if ($array1.isNullAt($i) && !$foundNullElement) {
-             |  $foundNullElement = true;
+             |if ($array1.isNullAt($i)) {
+             |  if (!$foundNullElement) {
+             |    $foundNullElement = true;
+             |  }
              |} else {
              |  $body
              |}
-               """.stripMargin
+           """.stripMargin
 
         val writeArray1ToHashSet = withArray1NullCheck(
           s"""
@@ -4114,7 +4118,7 @@ case class ArrayContainsArray(left: Expression, right: Expression)
              |} else {
              |  $jt $value = ${genGetValue(array2, i)};
              |  if (!$hashSet.contains($hsValueCast$value)) {
-             |   $result = false;
+             |    $result = false;
              |  }
              |}
           """.stripMargin
