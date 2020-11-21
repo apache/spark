@@ -113,8 +113,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val listenerBus = new LiveListenerBus(conf)
     val stageId = 1
     val jobId = 1
-    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0,
-      Seq.empty, Seq.empty, "details")
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, Seq.empty, Seq.empty, "details")
 
     val events = Array(SparkListenerStageSubmitted(stageInfo, properties),
       SparkListenerJobStart(jobId, 0, Seq(stageInfo), properties))
