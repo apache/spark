@@ -189,8 +189,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
       val graphUIDataForNumRowsDroppedByWatermark =
         new GraphUIData(
-          "aggregated-num-state-rows-dropped-by-watermark-timeline",
-          "aggregated-num-state-rows-dropped-by-watermark-histogram",
+          "aggregated-num-rows-dropped-by-watermark-timeline",
+          "aggregated-num-rows-dropped-by-watermark-histogram",
           numRowsDroppedByWatermarkData,
           minBatchTime,
           maxBatchTime,
@@ -230,11 +230,11 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       <tr>
         <td style="vertical-align: middle;">
           <div style="width: 160px;">
-            <div><strong>Aggregated Number Of State Rows Dropped By Watermark {SparkUIUtils.tooltip("Aggregated number of state rows dropped by watermark.", "right")}</strong></div>
+            <div><strong>Aggregated Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all input rows being dropped in stateful operators by watermark. 'Inputs' are relative to operators.", "right")}</strong></div>
           </div>
         </td>
-        <td class={"aggregated-num-state-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
-        <td class={"aggregated-num-state-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
+        <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
+        <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
       </tr>
       // scalastyle:on
     } else {
