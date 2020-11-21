@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.CacheTableUtils
 import org.apache.spark.storage.StorageLevel
 
 case class CacheTableCommand(
@@ -41,17 +39,10 @@ case class CacheTableCommand(
       Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
     }
 
-    val storageLevelKey = "storagelevel"
-    val storageLevelValue =
-      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
-    if (withoutStorageLevel.nonEmpty) {
-      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
-    }
-
-    if (storageLevelValue.nonEmpty) {
+    val optStorageLevel = CacheTableUtils.getStorageLevel(options)
+    if (optStorageLevel.nonEmpty) {
       sparkSession.catalog.cacheTable(
-        tableIdent.quotedString, StorageLevel.fromString(storageLevelValue.get))
+        tableIdent.quotedString, StorageLevel.fromString(optStorageLevel.get))
     } else {
       sparkSession.catalog.cacheTable(tableIdent.quotedString)
     }

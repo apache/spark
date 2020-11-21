@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
-      NoopCommand(u.multipartIdentifier)
+      NoopCommand("DROP TABLE", u.multipartIdentifier)
     case UncacheTable(u: UnresolvedTableOrView, ifExists) if ifExists =>
-      NoopCommand(u.multipartIdentifier)
+      NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
   }
 }

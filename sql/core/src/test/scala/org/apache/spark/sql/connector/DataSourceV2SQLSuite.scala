@@ -27,9 +27,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.NoopCommand
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -710,6 +712,7 @@ class DataSourceV2SQLSuite
 
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
+    sql(s"EXPLAIN EXTENDED DROP TABLE IF EXISTS $tableName").show(false)
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
     assert(catalog("testcat").asTableCatalog.tableExists(ident) === true)
@@ -1940,23 +1943,32 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CACHE TABLE") {
+  test("CACHE/UNCACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
+      def isCached(table: String): Boolean = {
+        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
+      }
+
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testNotSupportedV2Command("CACHE TABLE", t)
-      testNotSupportedV2Command("CACHE LAZY TABLE", t, sqlCommandInMessage = Some("CACHE TABLE"))
-    }
-  }
+      sql(s"CACHE TABLE $t")
+      assert(isCached(t))
 
-  test("UNCACHE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testNotSupportedV2Command("UNCACHE TABLE", t)
-      testNotSupportedV2Command("UNCACHE TABLE", s"IF EXISTS $t")
+      sql(s"UNCACHE TABLE $t")
+      assert(!isCached(t))
     }
+
+    // Test a scenario where a table does not exist.
+    val e = intercept[AnalysisException] {
+      sql(s"UNCACHE TABLE $t")
+    }
+    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+
+    // If "IF EXISTS" is set, UNCACHE TABLE will be a no-op.
+    val noop = sql(s"UNCACHE TABLE IF EXISTS $t").queryExecution.optimizedPlan.collect {
+      case n @ NoopCommand("UNCACHE TABLE", Seq("testcat", "ns1", "ns2", "tbl")) => n
+    }
+    assert(noop.length == 1)
   }
 
   test("SHOW COLUMNS") {
