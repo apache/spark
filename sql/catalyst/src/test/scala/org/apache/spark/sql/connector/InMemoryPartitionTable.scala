@@ -92,4 +92,8 @@ class InMemoryPartitionTable(
 
   override def partitionExists(ident: InternalRow): Boolean =
     memoryTablePartitions.containsKey(ident)
+
+  override protected def addPartitionKey(key: Seq[Any]): Unit = {
+    memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
+  }
 }

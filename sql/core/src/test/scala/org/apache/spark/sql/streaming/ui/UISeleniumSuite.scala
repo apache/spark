@@ -141,7 +141,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             summaryText should contain ("Aggregated Number Of Total State Rows (?)")
             summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
             summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
-            summaryText should contain ("Aggregated Number Of State Rows Dropped By Watermark (?)")
+            summaryText should contain ("Aggregated Number Of Rows Dropped By Watermark (?)")
             summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
               " (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")

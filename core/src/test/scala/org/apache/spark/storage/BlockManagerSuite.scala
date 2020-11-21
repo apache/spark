@@ -100,6 +100,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
       .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
       .set(Network.RPC_ASK_TIMEOUT, "5s")
+      .set(PUSH_BASED_SHUFFLE_ENABLED, true)
   }
 
   private def makeSortShuffleManager(): SortShuffleManager = {
@@ -1974,6 +1975,48 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
+  test("SPARK-32919: Shuffle push merger locations should be bounded with in" +
+    " spark.shuffle.push.retainedMergerLocations") {
+    assert(master.getShufflePushMergerLocations(10, Set.empty).isEmpty)
+    makeBlockManager(100, "execA",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    makeBlockManager(100, "execB",
+      transferService = Some(new MockBlockTransferService(10, "hostB")))
+    makeBlockManager(100, "execC",
+      transferService = Some(new MockBlockTransferService(10, "hostC")))
+    makeBlockManager(100, "execD",
+      transferService = Some(new MockBlockTransferService(10, "hostD")))
+    makeBlockManager(100, "execE",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    assert(master.getShufflePushMergerLocations(10, Set.empty).size == 4)
+    assert(master.getShufflePushMergerLocations(10, Set.empty).map(_.host).sorted ===
+      Seq("hostC", "hostD", "hostA", "hostB").sorted)
+    assert(master.getShufflePushMergerLocations(10, Set("hostB")).size == 3)
+  }
+
+  test("SPARK-32919: Prefer active executor locations for shuffle push mergers") {
+    makeBlockManager(100, "execA",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    makeBlockManager(100, "execB",
+      transferService = Some(new MockBlockTransferService(10, "hostB")))
+    makeBlockManager(100, "execC",
+      transferService = Some(new MockBlockTransferService(10, "hostC")))
+    makeBlockManager(100, "execD",
+      transferService = Some(new MockBlockTransferService(10, "hostD")))
+    makeBlockManager(100, "execE",
+      transferService = Some(new MockBlockTransferService(10, "hostA")))
+    assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
+
+    master.removeExecutor("execA")
+    master.removeExecutor("execE")
+
+    assert(master.getShufflePushMergerLocations(3, Set.empty).size == 3)
+    assert(master.getShufflePushMergerLocations(3, Set.empty).map(_.host).sorted ===
+      Seq("hostC", "hostB", "hostD").sorted)
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostA", "hostC", "hostD").sorted)
+  }
+
   test("SPARK-33387 Support ordered shuffle block migration") {
     val blocks: Seq[ShuffleBlockInfo] = Seq(
       ShuffleBlockInfo(1, 0L),
@@ -1995,7 +2038,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }
 
-  class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
+  class MockBlockTransferService(
+      val maxFailures: Int,
+      override val hostName: String = "MockBlockTransferServiceHost") extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null
 
@@ -2012,8 +2057,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
 
     override def close(): Unit = {}
-
-    override def hostName: String = { "MockBlockTransferServiceHost" }
 
     override def port: Int = { 63332 }
 
