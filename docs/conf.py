@@ -34,7 +34,7 @@
 import glob
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 import yaml
 
@@ -55,10 +55,11 @@ ROOT_DIR = os.path.abspath(os.path.join(CONF_DIR, os.pardir))
 
 # By default (e.g. on RTD), build docs for `airflow` package
 PACKAGE_NAME = os.environ.get('AIRFLOW_PACKAGE_NAME', 'apache-airflow')
+PACKAGE_DIR: Optional[str]
 if PACKAGE_NAME == 'apache-airflow':
     PACKAGE_DIR = os.path.join(ROOT_DIR, 'airflow')
     PACKAGE_VERSION = airflow.__version__
-else:
+elif PACKAGE_NAME.startswith('apache-airflow-providers-'):
     from provider_yaml_utils import load_package_data  # pylint: disable=no-name-in-module
 
     ALL_PROVIDER_YAMLS = load_package_data()
@@ -72,9 +73,13 @@ else:
         raise Exception(f"Could not find provider.yaml file for package: {PACKAGE_NAME}")
     PACKAGE_DIR = CURRENT_PROVIDER['package-dir']
     PACKAGE_VERSION = 'master'
+else:
+    PACKAGE_DIR = None
+    PACKAGE_VERSION = 'master'
 # Adds to environment variables for easy access from other plugins like airflow_internsphinx.
 os.environ['AIRFLOW_PACKAGE_NAME'] = PACKAGE_NAME
-os.environ['AIRFLOW_PACKAGE_DIR'] = PACKAGE_DIR
+if PACKAGE_DIR:
+    os.environ['AIRFLOW_PACKAGE_DIR'] = PACKAGE_DIR
 os.environ['AIRFLOW_PACKAGE_VERSION'] = PACKAGE_VERSION
 
 
@@ -107,7 +112,6 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinxarg.ext',
     'sphinx.ext.intersphinx',
-    'autoapi.extension',
     'exampleinclude',
     'docroles',
     'removemarktransform',
@@ -122,15 +126,21 @@ if PACKAGE_NAME == 'apache-airflow':
             'sphinx.ext.graphviz',
             'sphinxcontrib.httpdomain',
             'sphinxcontrib.httpdomain',
-            'providers_packages_ref',
-            'operators_and_hooks_ref',
             # First, generate redoc
             'sphinxcontrib.redoc',
             # Second, update redoc script
             "sphinx_script_update",
         ]
     )
-
+if PACKAGE_NAME == "apache-airflow-providers":
+    extensions.extend(
+        [
+            'operators_and_hooks_ref',
+            'providers_packages_ref',
+        ]
+    )
+else:
+    extensions.append('autoapi.extension')
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 exclude_patterns: List[str]
@@ -149,12 +159,15 @@ if PACKAGE_NAME == 'apache-airflow':
         'howto/operator/google/_partials',
         'howto/operator/microsoft/_partials',
         'apache-airflow-providers-*/',
+        'apache-airflow-providers',
         'README.rst',
     ] + glob.glob('apache-airflow-providers-*')
-else:
+elif PACKAGE_NAME.startswith('apache-airflow-providers-'):
     exclude_patterns = [
         '/_partials/',
     ]
+else:
+    exclude_patterns = []
 
 
 def _get_rst_filepath_from_path(filepath: str):
@@ -289,7 +302,7 @@ if airflow_theme_is_available:
 # Jinja context
 if PACKAGE_NAME == 'apache-airflow':
     jinja_contexts = {'config_ctx': {"configs": default_config_yaml()}}
-else:
+elif PACKAGE_NAME.startswith('apache-airflow-providers-'):
 
     def _load_config():
         templates_dir = os.path.join(PACKAGE_DIR, 'config_templates')
