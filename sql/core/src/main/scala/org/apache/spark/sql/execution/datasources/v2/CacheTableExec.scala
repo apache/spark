@@ -70,7 +70,6 @@ case class UncacheTableExec(
   override def run(): Seq[InternalRow] = {
     val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
     val df = Dataset.ofRows(session, v2Relation)
-    // Cascade should be true unless a temporary view is uncached.
     session.sharedState.cacheManager.uncacheQuery(df, cascade = true)
     Seq.empty
   }

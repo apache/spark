@@ -3323,7 +3323,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CacheTable]] pr [[CacheTableAsSelect]].
+   * Create a [[CacheTable]] or [[CacheTableAsSelect]].
    *
    * For example:
    * {{{
