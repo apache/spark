@@ -105,7 +105,7 @@ private[spark] class EventLoggingListener(
 
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
-    logEvent(SparkListenerStageSubmitted(event.stageInfo, redactProperties(event.properties)))
+    logEvent(event.copy(properties = redactProperties(event.properties)))
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
@@ -159,8 +159,7 @@ private[spark] class EventLoggingListener(
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
-    logEvent(SparkListenerJobStart(event.jobId, event.time, event.stageInfos,
-      redactProperties(event.properties)), flushLogger = true)
+    logEvent(event.copy(properties = redactProperties(event.properties)), flushLogger = true)
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
