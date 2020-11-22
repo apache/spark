@@ -132,12 +132,17 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       fileSystem)
     try {
       val lines = readLines(logData)
-      assert(lines.size === 2)
-      assert(lines(0).contains("SparkListenerStageSubmitted"))
-      assert(lines(1).contains("SparkListenerJobStart"))
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      assert(lines.size === 3)
+      assert(lines(0).contains("SparkListenerLogStart"))
+      assert(lines(1).contains("SparkListenerStageSubmitted"))
+      assert(lines(2).contains("SparkListenerJobStart"))
 
       lines.foreach{
         line => JsonProtocol.sparkEventFromJson(parse(line)) match {
+          case logStartEvent: SparkListenerLogStart =>
+            assert(logStartEvent == logStart)
+
           case stageSubmittedEvent: SparkListenerStageSubmitted =>
             assert(stageSubmittedEvent.properties.getProperty(secretKey) == "*********(redacted)")
             assert(stageSubmittedEvent.properties.getProperty(customKey) ==  customValue)
