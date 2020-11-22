@@ -18,8 +18,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.IdentityHashMap
 
-import scala.collection.JavaConverters._
-
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
@@ -98,7 +96,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
       proxyExpressionCurrentId += 1
 
-      proxyMap.putAll(e.map(_ -> proxy).toMap.asJava)
+      e.map(proxyMap.put(_, proxy))
     }
 
     // Only adding proxy if we find subexpressions.
