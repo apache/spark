@@ -97,7 +97,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     assert(redactedProps(key) == "*********(redacted)")
   }
 
-  test("Spark-33504 password redaction in properties") {
+  test("Spark-33504 sensitive attributes redaction in properties") {
     val (secretKey, secretPassword) = ("spark.executorEnv.HADOOP_CREDSTORE_PASSWORD",
       "secret_password")
     val (customKey, customValue) = ("parse_token", "secret_password")
