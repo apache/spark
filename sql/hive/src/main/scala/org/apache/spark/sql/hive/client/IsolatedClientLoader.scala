@@ -121,7 +121,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
-      Seq("com.google.guava:guava:14.0.1")
+      Seq("com.google.guava:guava:14.0.1")  ++ hadoopJarNames
 
     val extraExclusions = if (hadoopVersion.startsWith("3")) {
       // this introduced from lower version of Hive could conflict with jars in Hadoop 3.2+, so
@@ -131,7 +131,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       Seq.empty
     }
 
-    val hiveJarsClasspath = quietly {
+    val jarsClasspath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
@@ -139,19 +139,7 @@ private[hive] object IsolatedClientLoader extends Logging {
           ivyPath),
         exclusions = version.exclusions ++ extraExclusions)
     }
-
-    val hadoopJarsClasspath = quietly {
-      SparkSubmitUtils.resolveMavenCoordinates(
-        hadoopJarNames.mkString(","),
-        SparkSubmitUtils.buildIvySettings(
-          Some(remoteRepos),
-          ivyPath),
-        exclusions = version.exclusions ++ extraExclusions)
-    }
-
-    val allFiles =
-      (hiveJarsClasspath.split(",") ++ hadoopJarsClasspath.split(","))
-        .map(new File(_)).toSet
+    val allFiles = jarsClasspath.split(",").map(new File(_)).toSet
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")

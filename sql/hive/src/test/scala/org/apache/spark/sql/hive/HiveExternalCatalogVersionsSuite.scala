@@ -59,6 +59,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val sparkTestingDir = Option(System.getProperty(SPARK_TEST_CACHE_DIR_SYSTEM_PROPERTY))
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+  val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+    "2.3.7"
+  } else {
+    "1.2.1"
+  }
 
   override def afterAll(): Unit = {
     try {
@@ -200,7 +205,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=2.3.7",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
@@ -219,7 +224,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--master", "local[2]",
       "--conf", s"${UI_ENABLED.key}=false",
       "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=2.3.7",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
       "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
