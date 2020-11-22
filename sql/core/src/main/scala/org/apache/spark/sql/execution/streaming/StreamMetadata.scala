@@ -31,14 +31,14 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.sql.streaming.StreamingQuery
 
 /**
- * Contains metadata associated with a [[StreamingQuery]]. This information is written
- * in the checkpoint location the first time a query is started and recovered every time the query
- * is restarted.
+ * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].
+ * This information is written in the checkpoint location the first time a query is started
+ * and recovered every time the query is restarted.
  *
- * @param id  unique id of the [[StreamingQuery]] that needs to be persisted across restarts
+ * @param id  unique id of the [[org.apache.spark.sql.streaming.StreamingQuery]]
+ *            that needs to be persisted across restarts
  */
 case class StreamMetadata(id: String) {
   def json: String = Serialization.write(this)(StreamMetadata.format)

@@ -1406,7 +1406,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
             getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
           case Some(SqlBaseParser.ALL) =>
-            getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            val expressions = ctx.expression.asScala.map(expression)
+            if (expressions.size > SQLConf.get.optimizerLikeAllConversionThreshold &&
+              expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+              // If there are many pattern expressions, will throw StackOverflowError.
+              // So we use LikeAll or NotLikeAll instead.
+              val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              ctx.NOT match {
+                case null => LikeAll(e, patterns.toSeq)
+                case _ => NotLikeAll(e, patterns.toSeq)
+              }
+            } else {
+              getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+            }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
               if (str.length != 1) {

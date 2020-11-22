@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionsAlreadyExistException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class DataSourceV2SQLSuite
@@ -43,7 +44,6 @@ class DataSourceV2SQLSuite
   with AlterTableTests with DatasourceV2SQLBase {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-  import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -138,6 +138,10 @@ class DataSourceV2SQLSuite
       Array("", "", ""),
       Array("# Partitioning", "", ""),
       Array("Part 0", "id", ""),
+      Array("", "", ""),
+      Array("# Metadata Columns", "", ""),
+      Array("index", "string", "Metadata column used to conflict with a data column"),
+      Array("_partition", "string", "Partition key used to store the row"),
       Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
       Array("Name", "testcat.table_name", ""),
@@ -774,6 +778,84 @@ class DataSourceV2SQLSuite
 
         sql(s"DROP TABLE $t")
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+          sql(s"REPLACE TABLE $t USING foo AS SELECT id FROM source")
+          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33492: AppendData should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a")).toDF("i", "j").write.saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b")).toDF("i", "j").write.mode(SaveMode.Append).saveAsTable(t)
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Row(2, "b") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwriteByExpression should refresh cache") {
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+        sql(s"INSERT OVERWRITE TABLE $t VALUES (1, 'a')")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a") :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33492: OverwritePartitionsDynamic should refresh cache") {
+    import testImplicits._
+
+    val t = "testcat.ns.t"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        Seq((1, "a", 1)).toDF("i", "j", "k").write.partitionBy("k") saveAsTable(t)
+        sql(s"CACHE TABLE $view AS SELECT i FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(1, "a", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(1) :: Nil)
+
+        Seq((2, "b", 1)).toDF("i", "j", "k").writeTo(t).overwritePartitions()
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isDefined)
+        checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
+        checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
       }
     }
   }
@@ -1976,57 +2058,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains("ALTER TABLE RECOVER PARTITIONS is only supported with v1 tables"))
-    }
-  }
-
-  test("ALTER TABLE ADD PARTITION") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
-      assert(partMetadata.containsKey("location"))
-      assert(partMetadata.get("location") == "loc")
-    }
-  }
-
-  test("ALTER TABLE RENAME PARTITION") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }
-      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
-    }
-  }
-
-  test("ALTER TABLE DROP PARTITION") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-      spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-    }
-  }
-
   test("ALTER TABLE SerDe properties") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2467,6 +2498,64 @@ class DataSourceV2SQLSuite
 
         verifyTable(t1, expected)
       }
+    }
+  }
+
+  test("SPARK-31255: Project a metadata column") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      checkAnswer(
+        spark.sql(s"SELECT id, data, _partition FROM $t1"),
+        Seq(Row(1, "a", "3/1"), Row(2, "b", "2/2"), Row(3, "c", "2/3")))
+    }
+  }
+
+  test("SPARK-31255: Projects data column when metadata column has the same name") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (index bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, index), index)")
+      sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
+
+      checkAnswer(
+        spark.sql(s"SELECT index, data, _partition FROM $t1"),
+        Seq(Row(3, "c", "2/3"), Row(2, "b", "2/2"), Row(1, "a", "3/1")))
+    }
+  }
+
+  test("SPARK-31255: * expansion does not include metadata columns") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+          "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
+
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $t1"),
+        Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+    }
+  }
+
+  test("SPARK-33505: insert into partitioned table") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
+      val expectedPartitionIdent = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
+      assert(!partTable.partitionExists(expectedPartitionIdent))
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
+      // Insert into the existing partition must not fail
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'def'")
+      assert(partTable.partitionExists(expectedPartitionIdent))
     }
   }
 

@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka010.mocks
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.mutable.PriorityQueue
-
 import kafka.utils.Scheduler
 import org.apache.kafka.common.utils.Time
 import org.jmock.lib.concurrent.DeterministicScheduler

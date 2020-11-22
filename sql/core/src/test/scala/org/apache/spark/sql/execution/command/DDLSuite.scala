@@ -2026,7 +2026,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-30312: truncate table - keep acl/permission") {
-    import testImplicits._
     val ignorePermissionAcl = Seq(true, false)
 
     ignorePermissionAcl.foreach { ignore =>

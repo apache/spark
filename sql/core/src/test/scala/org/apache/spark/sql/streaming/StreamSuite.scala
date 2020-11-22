@@ -1134,7 +1134,7 @@ class StreamSuite extends StreamTest {
     verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
 
     verifyLocalLimit(
-      inputDF.groupBy().count().limit(1),
+      inputDF.groupBy("value").count().limit(1),
       expectStreamingLimit = false,
       outputMode = OutputMode.Complete())
   }
