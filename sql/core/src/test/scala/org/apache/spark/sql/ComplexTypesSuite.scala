@@ -125,9 +125,4 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
       :: Row(Seq(Seq(Seq(1), Seq(2)))) :: Nil)
   }
 
-  test("SPARK-32003: Support ExtractValue from nested ArrayStruct") {
-    val jsonStr1 = """{"a": [{"b": [{"c": [{"d": [1, 2]}]}]}]}"""
-    val df = spark.read.json(Seq(jsonStr1).toDS())
-    checkAnswer(df.select($"a.b.c.d"), Row(Seq(Seq(Seq(Seq(1))))))
-  }
 }
