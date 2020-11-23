@@ -30,7 +30,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.mockito.Mockito.mock
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.api.java.JavaSparkContext
