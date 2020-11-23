@@ -459,7 +459,7 @@ class ALSModel private[ml] (
 
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
-    val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
+    val partialRecs = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
       .as[(Array[Int], Array[Float], Array[Int], Array[Float])]
       .mapPartitions { iter =>
         var buffer: Array[Float] = null
@@ -473,15 +473,16 @@ class ALSModel private[ml] (
             buffer = Array.ofDim[Float](n)
           }
 
-          Iterator.range(0, m).flatMap { i =>
+          Iterator.tabulate(m) { i =>
+            // buffer = i-th vec in srcMat * dstMat
             BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
               srcMat, i * rank, 1, 0.0F, buffer, 0, 1)
 
             pq.clear()
             var j = 0
             while (j < n) { pq += dstIds(j) -> buffer(j); j += 1 }
-            val srcId = srcIds(i)
-            pq.iterator.map { case (dstId, value) => (srcId, dstId, value) }
+            val (kDstIds, kScores) = pq.toArray.sortBy(-_._2).unzip
+            (srcIds(i), kDstIds, kScores)
           }
         } ++ {
           buffer = null
@@ -490,9 +491,9 @@ class ALSModel private[ml] (
         }
       }
 
-    // We'll force the IDs to be Int. Unfortunately this converts IDs to Int in the output.
-    val topKAggregator = new TopByKeyAggregator[Int, Int, Float](num, Ordering.by(_._2))
-    val recs = ratings.as[(Int, Int, Float)].groupByKey(_._1).agg(topKAggregator.toColumn)
+    val aggregator = new TopKArrayAggregator(num)
+    val recs = partialRecs.as[(Int, Array[Int], Array[Float])]
+      .groupByKey(_._1).agg(aggregator.toColumn)
       .toDF("id", "recommendations")
 
     val arrayType = ArrayType(
