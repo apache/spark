@@ -931,7 +931,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.0</version>
+        <version>3.2.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -955,14 +955,14 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>3.1.0</version>
+        <version>3.4.6</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.jmock</groupId>
         <artifactId>jmock-junit4</artifactId>
         <scope>test</scope>
-        <version>2.8.4</version>
+        <version>2.12.0</version>
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
@@ -973,7 +973,7 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.12</version>
+        <version>4.13.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2498,7 +2498,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.3.0</version>
+          <version>4.4.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2573,7 +2573,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M3</version>
+          <version>3.0.0-M5</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
