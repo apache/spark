@@ -326,7 +326,7 @@ class ConstraintSet private(
         s" filters.")
       val duplicateFilters = mutable.ArrayBuffer[Seq[Expression]]()
       canonicalized.foreach(canon => {
-        val tempExprs = updatedFilterExprs.filter(_.canonicalized == canon)
+        val tempExprs = updatedFilterExprs.filter(_.canonicalized == canon).toSeq
         if (tempExprs.size > 1) {
           duplicateFilters += tempExprs
         }
