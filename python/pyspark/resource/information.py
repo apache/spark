@@ -19,17 +19,23 @@
 class ResourceInformation(object):
 
     """
-    .. note:: Evolving
-
     Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
     The array of addresses are resource specific and its up to the user to interpret the address.
 
     One example is GPUs, where the addresses would be the indices of the GPUs
 
-    :param name: the name of the resource
-    :param addresses: an array of strings describing the addresses of the resource
-
     .. versionadded:: 3.0.0
+
+    Parameters
+    ----------
+    name : str
+        the name of the resource
+    addresses : list
+        an array of strings describing the addresses of the resource
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, name, addresses):

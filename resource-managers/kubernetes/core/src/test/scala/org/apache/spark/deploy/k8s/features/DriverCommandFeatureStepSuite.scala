@@ -20,11 +20,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
-import org.apache.spark.internal.config._
-import org.apache.spark.util.Utils
 
 class DriverCommandFeatureStepSuite extends SparkFunSuite {
 

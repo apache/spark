@@ -19,7 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar

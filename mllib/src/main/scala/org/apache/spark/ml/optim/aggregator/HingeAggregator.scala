@@ -162,24 +162,26 @@ private[ml] class BlockHingeAggregator(
 
     // in-place convert dotProducts to gradient scales
     // then, vec represents gradient scales
+    var localLossSum = 0.0
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
       if (weight > 0) {
-        weightSum += weight
         // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
         // Therefore the gradient is -(2y - 1)*x
         val label = block.getLabel(i)
         val labelScaled = label + label - 1.0
         val loss = (1.0 - labelScaled * vec(i)) * weight
         if (loss > 0) {
-          lossSum += loss
+          localLossSum += loss
           val gradScale = -labelScaled * weight
           vec.values(i) = gradScale
         } else { vec.values(i) = 0.0 }
       } else { vec.values(i) = 0.0 }
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += block.weightIter.sum
 
     // predictions are all correct, no gradient signal
     if (vec.values.forall(_ == 0)) return this

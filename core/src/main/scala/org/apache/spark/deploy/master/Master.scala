@@ -22,9 +22,7 @@ import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.collection.mutable
 import scala.util.Random
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}

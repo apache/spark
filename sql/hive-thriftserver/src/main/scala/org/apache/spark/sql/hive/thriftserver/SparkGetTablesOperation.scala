@@ -30,7 +30,6 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
-import org.apache.spark.sql.hive.HiveUtils
 
 /**
  * Spark's own GetTablesOperation

@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.{ConcurrentModificationException, EnumSet, UUID}
+import java.util.ConcurrentModificationException
 
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 

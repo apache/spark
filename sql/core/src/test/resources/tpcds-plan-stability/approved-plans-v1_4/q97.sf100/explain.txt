@@ -1,34 +1,33 @@
 == Physical Plan ==
-CollectLimit (30)
-+- * HashAggregate (29)
-   +- Exchange (28)
-      +- * HashAggregate (27)
-         +- * Project (26)
-            +- SortMergeJoin FullOuter (25)
-               :- * Sort (14)
-               :  +- * HashAggregate (13)
-               :     +- Exchange (12)
-               :        +- * HashAggregate (11)
-               :           +- * Project (10)
-               :              +- * BroadcastHashJoin Inner BuildRight (9)
-               :                 :- * Filter (3)
-               :                 :  +- * ColumnarToRow (2)
-               :                 :     +- Scan parquet default.store_sales (1)
-               :                 +- BroadcastExchange (8)
-               :                    +- * Project (7)
-               :                       +- * Filter (6)
-               :                          +- * ColumnarToRow (5)
-               :                             +- Scan parquet default.date_dim (4)
-               +- * Sort (24)
-                  +- * HashAggregate (23)
-                     +- Exchange (22)
-                        +- * HashAggregate (21)
-                           +- * Project (20)
-                              +- * BroadcastHashJoin Inner BuildRight (19)
-                                 :- * Filter (17)
-                                 :  +- * ColumnarToRow (16)
-                                 :     +- Scan parquet default.catalog_sales (15)
-                                 +- ReusedExchange (18)
+* HashAggregate (29)
++- Exchange (28)
+   +- * HashAggregate (27)
+      +- * Project (26)
+         +- SortMergeJoin FullOuter (25)
+            :- * Sort (14)
+            :  +- * HashAggregate (13)
+            :     +- Exchange (12)
+            :        +- * HashAggregate (11)
+            :           +- * Project (10)
+            :              +- * BroadcastHashJoin Inner BuildRight (9)
+            :                 :- * Filter (3)
+            :                 :  +- * ColumnarToRow (2)
+            :                 :     +- Scan parquet default.store_sales (1)
+            :                 +- BroadcastExchange (8)
+            :                    +- * Project (7)
+            :                       +- * Filter (6)
+            :                          +- * ColumnarToRow (5)
+            :                             +- Scan parquet default.date_dim (4)
+            +- * Sort (24)
+               +- * HashAggregate (23)
+                  +- Exchange (22)
+                     +- * HashAggregate (21)
+                        +- * Project (20)
+                           +- * BroadcastHashJoin Inner BuildRight (19)
+                              :- * Filter (17)
+                              :  +- * ColumnarToRow (16)
+                              :     +- Scan parquet default.catalog_sales (15)
+                              +- ReusedExchange (18)
 
 
 (1) Scan parquet default.store_sales
@@ -172,8 +171,4 @@ Keys: []
 Functions [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))]
 Aggregate Attributes [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#23, sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#24, sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#25]
 Results [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#23 AS store_only#26, sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#24 AS catalog_only#27, sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#25 AS store_and_catalog#28]
-
-(30) CollectLimit
-Input [3]: [store_only#26, catalog_only#27, store_and_catalog#28]
-Arguments: 100
 

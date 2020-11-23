@@ -597,3 +597,21 @@ class HasBlockSize(Params):
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
+
+
+class HasMaxBlockSizeInMB(Params):
+    """
+    Mixin for param maxBlockSizeInMB: maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.
+    """
+
+    maxBlockSizeInMB = Param(Params._dummy(), "maxBlockSizeInMB", "maximum memory in MB for stacking input data into blocks. Data is stacked within partitions. If more than remaining data size in a partition then it is adjusted to the data size. Default 0.0 represents choosing optimal value, depends on specific algorithm. Must be >= 0.", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasMaxBlockSizeInMB, self).__init__()
+        self._setDefault(maxBlockSizeInMB=0.0)
+
+    def getMaxBlockSizeInMB(self):
+        """
+        Gets the value of maxBlockSizeInMB or its default value.
+        """
+        return self.getOrDefault(self.maxBlockSizeInMB)
