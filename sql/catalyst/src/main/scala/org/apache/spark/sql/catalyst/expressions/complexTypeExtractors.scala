@@ -246,12 +246,12 @@ object ExtractNestedArray {
 }
 
 case class ExtractNestedArrayField(
-  child: Expression,
-  ordinal: Int,
-  numFields: Int,
-  field: StructField,
-  containsNullSeq: Seq[Boolean]) extends UnaryExpression
-  with ExtractValue with NullIntolerant with CodegenFallback {
+    child: Expression,
+    ordinal: Int,
+    numFields: Int,
+    field: StructField,
+    containsNullSeq: Seq[Boolean]) extends UnaryExpression
+    with ExtractValue with NullIntolerant with CodegenFallback {
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
