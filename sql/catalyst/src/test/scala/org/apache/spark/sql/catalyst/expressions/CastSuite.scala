@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.DateTimeException
 import java.util.{Calendar, TimeZone}
-
-import scala.collection.parallel.immutable.ParVector
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -100,12 +99,18 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    ALL_TIMEZONES.foreach { zid =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
 
-      checkCastStringToTimestamp("123", null)
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), TimestampType, Option(zid.getId)),
+          s"Cannot cast $str to TimestampType.")
+      }
+
+      checkCastWithParseError("123")
 
       val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
@@ -184,14 +189,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       c.set(Calendar.MILLISECOND, 123)
       checkCastStringToTimestamp("2015-03-18T12:03:17.123+7:3", new Timestamp(c.getTimeInMillis))
 
-      checkCastStringToTimestamp("2015-03-18 123142", null)
-      checkCastStringToTimestamp("2015-03-18T123123", null)
-      checkCastStringToTimestamp("2015-03-18X", null)
-      checkCastStringToTimestamp("2015/03/18", null)
-      checkCastStringToTimestamp("2015.03.18", null)
-      checkCastStringToTimestamp("20150318", null)
-      checkCastStringToTimestamp("2015-031-8", null)
-      checkCastStringToTimestamp("2015-03-18T12:03:17-0:70", null)
+      checkCastWithParseError("2015-03-18 123142")
+      checkCastWithParseError("2015-03-18T123123")
+      checkCastWithParseError("2015-03-18X")
+      checkCastWithParseError("2015/03/18")
+      checkCastWithParseError("2015.03.18")
+      checkCastWithParseError("20150318")
+      checkCastWithParseError("2015-031-8")
+      checkCastWithParseError("2015-03-18T12:03:17-0:70")
     }
   }
 
@@ -301,7 +306,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
+    checkExceptionInExpression[DateTimeException](
+      cast("abdef", TimestampType, UTC_OPT),
+      "Cannot cast abdef to TimestampType.")
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
