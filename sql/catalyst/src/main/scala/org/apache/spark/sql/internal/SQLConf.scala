@@ -216,16 +216,16 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD =
-    buildConf("spark.sql.optimizer.likeAllConversionThreshold")
+  val OPTIMIZER_MULTI_LIKE_CONVERSION_THRESHOLD =
+    buildConf("spark.sql.optimizer.multiLikeConversionThreshold")
       .internal()
-      .doc("Configure the maximum size of the pattern sequence in like all. Spark will convert " +
-        "the logical combination of like to avoid StackOverflowError. 200 is an empirical value " +
-        "that will not cause StackOverflowError.")
+      .doc("Configure the maximum size of the pattern sequence in like [all|any|some]. Spark " +
+        "will convert the logical combination of like to avoid StackOverflowError. 200 is an " +
+        "empirical value that will not cause StackOverflowError.")
       .version("3.1.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The maximum size of pattern sequence " +
-        "in like all must be non-negative")
+        "in like [all|any|some] must be non-negative")
       .createWithDefault(200)
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
@@ -3049,7 +3049,7 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
+  def optimizerMultiLikeConversionThreshold: Int = getConf(OPTIMIZER_MULTI_LIKE_CONVERSION_THRESHOLD)
 
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 

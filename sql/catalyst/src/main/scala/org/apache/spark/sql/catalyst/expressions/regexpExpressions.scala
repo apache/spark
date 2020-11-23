@@ -180,14 +180,12 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-/**
- * Optimized version of LIKE ALL, when all pattern values are literal.
- */
-abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+abstract class MultiLikeBase
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[UTF8String]
 
-  protected def isNotLikeAll: Boolean
+  protected def isNotSpecified: Boolean
 
   override def inputTypes: Seq[DataType] = StringType :: Nil
 
@@ -195,27 +193,39 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
 
   override def nullable: Boolean = true
 
-  private lazy val hasNull: Boolean = patterns.contains(null)
+  protected lazy val hasNull: Boolean = patterns.contains(null)
 
-  private lazy val cache = patterns.filterNot(_ == null)
+  protected lazy val cache = patterns.filterNot(_ == null)
     .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
 
-  private lazy val matchFunc = if (isNotLikeAll) {
+  protected lazy val matchFunc = if (isNotSpecified) {
     (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()
   } else {
     (p: Pattern, inputValue: String) => p.matcher(inputValue).matches()
   }
+
+  protected def matches(exprValue: String): Any
 
   override def eval(input: InternalRow): Any = {
     val exprValue = child.eval(input)
     if (exprValue == null) {
       null
     } else {
-      if (cache.forall(matchFunc(_, exprValue.toString))) {
-        if (hasNull) null else true
-      } else {
-        false
-      }
+      matches(exprValue.toString)
+    }
+  }
+}
+
+/**
+ * Optimized version of LIKE ALL, when all pattern values are literal.
+ */
+abstract class LikeAllBase extends MultiLikeBase {
+
+  override def matches(exprValue: String): Any = {
+    if (cache.forall(matchFunc(_, exprValue))) {
+      if (hasNull) null else true
+    } else {
+      false
     }
   }
 
@@ -227,7 +237,7 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
     val valueArg = ctx.freshName("valueArg")
     val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
 
-    val checkNotMatchCode = if (isNotLikeAll) {
+    val checkNotMatchCode = if (isNotSpecified) {
       s"$pattern.matcher($valueArg.toString()).matches()"
     } else {
       s"!$pattern.matcher($valueArg.toString()).matches()"
@@ -255,11 +265,67 @@ abstract class LikeAllBase extends UnaryExpression with ImplicitCastInputTypes w
 }
 
 case class LikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
-  override def isNotLikeAll: Boolean = false
+  override def isNotSpecified: Boolean = false
 }
 
 case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends LikeAllBase {
-  override def isNotLikeAll: Boolean = true
+  override def isNotSpecified: Boolean = true
+}
+
+/**
+ * Optimized version of LIKE ANY, when all pattern values are literal.
+ */
+abstract class LikeAnyBase extends MultiLikeBase {
+
+  override def matches(exprValue: String): Any = {
+    if (cache.exists(matchFunc(_, exprValue))) {
+      true
+    } else {
+      if (hasNull) null else false
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    val patternClass = classOf[Pattern].getName
+    val javaDataType = CodeGenerator.javaType(child.dataType)
+    val pattern = ctx.freshName("pattern")
+    val valueArg = ctx.freshName("valueArg")
+    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+
+    val checkMatchCode = if (isNotSpecified) {
+      s"!$pattern.matcher($valueArg.toString()).matches()"
+    } else {
+      s"$pattern.matcher($valueArg.toString()).matches()"
+    }
+
+    ev.copy(code =
+      code"""
+            |${eval.code}
+            |boolean ${ev.isNull} = false;
+            |boolean ${ev.value} = false;
+            |if (${eval.isNull}) {
+            |  ${ev.isNull} = true;
+            |} else {
+            |  $javaDataType $valueArg = ${eval.value};
+            |  for ($patternClass $pattern: $patternCache) {
+            |    if ($checkMatchCode) {
+            |      ${ev.value} = true;
+            |      break;
+            |    }
+            |  }
+            |  if (!${ev.value} && $hasNull) ${ev.isNull} = true;
+            |}
+      """.stripMargin)
+  }
+}
+
+case class LikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
+  override def isNotSpecified: Boolean = false
+}
+
+case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends LikeAnyBase {
+  override def isNotSpecified: Boolean = true
 }
 
 // scalastyle:off line.contains.tab
