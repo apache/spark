@@ -375,7 +375,7 @@ private[param] object DoubleParam {
       case JLong(x) =>
         x.toDouble
       case JDecimal(x) =>
-        x.doubleValue()
+        x.doubleValue
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $jValue to Double.")
     }
@@ -467,7 +467,7 @@ private object FloatParam {
       case JLong(x) =>
         x.toFloat
       case JDecimal(x) =>
-        x.floatValue()
+        x.floatValue
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $jValue to Float.")
     }
