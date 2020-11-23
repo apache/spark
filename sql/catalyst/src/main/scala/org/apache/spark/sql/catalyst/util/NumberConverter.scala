@@ -24,7 +24,7 @@ object NumberConverter {
   /**
    * Decode v into value[].
    *
-   * @param v is treated as an unsigned 64-bit integer
+   * @param v is treated as an BigInt
    * @param radix must be between MIN_RADIX and MAX_RADIX
    */
   private def decode(v: BigInt, radix: Int, value: Array[Byte]): Unit = {
@@ -113,7 +113,7 @@ object NumberConverter {
     }
     char2byte(fromBase, temp.length - n.length + first, temp)
 
-    // Do the conversion by going through a 64 bit integer
+    // Do the conversion by going through a BigInt
     val v: BigInt = encode(fromBase, temp.length - n.length + first, temp)
     decode(v, Math.abs(toBase), temp)
 
