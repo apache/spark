@@ -270,6 +270,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON TABLE $table IS '$comment'"
   }
 
+  def getSchemaCommentQuery(schema: String, comment: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+  }
+
+  def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
+  }
+
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param message The error message to be placed to the returned exception.
