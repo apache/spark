@@ -458,6 +458,11 @@ ARG_ERROR_LOGFILE = Arg(
     default=conf.get('webserver', 'ERROR_LOGFILE'),
     help="The logfile to store the webserver error log. Use '-' to print to stderr",
 )
+ARG_ACCESS_LOGFORMAT = Arg(
+    ("-L", "--access-logformat"),
+    default=conf.get('webserver', 'ACCESS_LOGFORMAT'),
+    help="The access log format for gunicorn logs",
+)
 
 # scheduler
 ARG_NUM_RUNS = Arg(
@@ -1343,6 +1348,7 @@ airflow_commands: List[CLICommand] = [
             ARG_STDERR,
             ARG_ACCESS_LOGFILE,
             ARG_ERROR_LOGFILE,
+            ARG_ACCESS_LOGFORMAT,
             ARG_LOG_FILE,
             ARG_SSL_CERT,
             ARG_SSL_KEY,

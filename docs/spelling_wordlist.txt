@@ -916,6 +916,7 @@ localhost
 localstack
 lodash
 logfile
+logformat
 loglevel
 logstash
 lshift
