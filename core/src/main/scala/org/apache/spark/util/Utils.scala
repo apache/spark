@@ -3046,6 +3046,10 @@ private[spark] object Utils extends Logging {
       } else {
         transitive.last._2.toBoolean
       }
+    }
+  }
+
+  /**
    * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
   def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
