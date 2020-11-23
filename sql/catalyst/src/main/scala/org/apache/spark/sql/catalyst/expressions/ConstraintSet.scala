@@ -317,10 +317,7 @@ class ConstraintSet private(
     // is not part of output set, so no point in keeping it in the attribute
     // equivalence list.
     val newAttribBasedEquivalenceList = attribBasedEquivalenceList.filter(_.size > 1)
-    // val canonicalized = updatedFilterExprs.map(_.canonicalized).toMutableSet(mutable.Set)
-
-    // assert(canonicalized.size == updatedFilterExprs.size)
-    val canonicalized = updatedFilterExprs.map(_.canonicalized).to[mutable.Set]
+    val canonicalized = updatedFilterExprs.map(_.canonicalized).toMutableSet(mutable.Set)
     // To debug PRISM-77994, logging error instead of asserting
     // assert(canonicalized.size == updatedFilterExprs.size)
     if (canonicalized.size != updatedFilterExprs.size) {
