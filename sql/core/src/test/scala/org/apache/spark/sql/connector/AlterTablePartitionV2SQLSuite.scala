@@ -198,16 +198,11 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |  part3 bigint,
         |  part4 float,
         |  part5 double,
-        |  part6 string
+        |  part6 string,
+        |  part7 boolean
         |) USING foo
         |PARTITIONED BY (
-        |  part0,
-        |  part1,
-        |  part2,
-        |  part3,
-        |  part4,
-        |  part5,
-        |  part6
+        |  part0, part1, part2, part3, part4, part5, part6, part7
         |)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
@@ -219,7 +214,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         2,     // bigint
         3.14F, // float
         3.14D, // double
-        UTF8String.fromString("abc")  // string
+        UTF8String.fromString("abc"), // string
+        true // boolean
       ))
       assert(!partTable.partitionExists(expectedPartition))
       val partSpec = """
@@ -229,7 +225,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |  part3 = 2,
         |  part4 = 3.14,
         |  part5 = 3.14,
-        |  part6 = 'abc'
+        |  part6 = 'abc',
+        |  part7 = true
         |""".stripMargin
       sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
       assert(partTable.partitionExists(expectedPartition))
