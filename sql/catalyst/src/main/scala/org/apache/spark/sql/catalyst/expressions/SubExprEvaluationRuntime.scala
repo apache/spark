@@ -96,6 +96,11 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
       proxyExpressionCurrentId += 1
 
+      // We leverage `IdentityHashMap` so we compare expression keys by reference here.
+      // So for example if there are one group of common exprs like Seq(common expr 1,
+      // common expr2, ..., common expr n), we will insert into `proxyMap` some key/value
+      // pairs like Map(common expr 1 -> proxy(common expr 1), ...,
+      // common expr n -> proxy(common expr 1)).
       e.map(proxyMap.put(_, proxy))
     }
 
