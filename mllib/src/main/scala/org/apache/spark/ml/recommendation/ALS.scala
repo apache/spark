@@ -469,18 +469,18 @@ class ALSModel private[ml] (
           require(dstMat.length == dstIds.length * rank)
           val m = srcIds.length
           val n = dstIds.length
-          if (buffer == null || buffer.length < m * n) {
-            buffer = Array.ofDim[Float](m * n)
+          if (buffer == null || buffer.length < n) {
+            buffer = Array.ofDim[Float](n)
           }
 
-          BLAS.f2jBLAS.sgemm("T", "N", m, n, rank, 1.0F,
-            srcMat, rank, dstMat, rank, 0.0F, buffer, m)
-
           Iterator.range(0, m).flatMap { i =>
-            val srcId = srcIds(i)
+            BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
+              srcMat, i * rank, 1, 0.0F, buffer, 0, 1)
+
             pq.clear()
             var j = 0
-            while (j < n) { pq += dstIds(j) -> buffer(i + j * m); j += 1 }
+            while (j < n) { pq += dstIds(j) -> buffer(j); j += 1 }
+            val srcId = srcIds(i)
             pq.iterator.map { case (dstId, value) => (srcId, dstId, value) }
           }
         } ++ {
