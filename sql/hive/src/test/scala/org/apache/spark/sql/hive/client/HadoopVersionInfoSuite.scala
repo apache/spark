@@ -49,8 +49,7 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
         sparkConf = new SparkConf(),
         hadoopConf = hadoopConf,
         config = HiveClientBuilder.buildConf(Map.empty),
-        ivyPath = Some(ivyPath.getCanonicalPath),
-        sharesHadoopClasses = true)
+        ivyPath = Some(ivyPath.getCanonicalPath))
       val jars = client.classLoader.getParent.asInstanceOf[URLClassLoader].getURLs
         .map(u => new File(u.toURI))
         // Drop all Hadoop jars to use the existing Hadoop jars on the classpath

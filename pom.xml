@@ -173,6 +173,7 @@
     <snappy.version>1.1.8</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
+    <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.5</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -188,7 +189,7 @@
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
-    <antlr4.version>4.7.1</antlr4.version>
+    <antlr4.version>4.8-1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
     <htmlunit.version>2.40.0</htmlunit.version>
@@ -197,12 +198,12 @@
     -->
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
-    <commons-crypto.version>1.0.0</commons-crypto.version>
+    <commons-crypto.version>1.1.0</commons-crypto.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>1.0.1</arrow.version>
+    <arrow.version>2.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
@@ -548,6 +549,11 @@
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
         <version>${commons-codec.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>${commons-compress.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
@@ -3254,7 +3260,7 @@
         </pluginManagement>
       </build>
     </profile>
-    
+
     <profile>
       <id>scala-2.13</id>
       <properties>

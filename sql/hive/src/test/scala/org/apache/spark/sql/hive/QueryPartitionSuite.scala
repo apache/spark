@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
 import java.sql.Timestamp
-
-import com.google.common.io.Files
-import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.internal.config._
 import org.apache.spark.sql._

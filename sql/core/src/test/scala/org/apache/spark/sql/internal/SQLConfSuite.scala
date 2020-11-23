@@ -19,8 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.util.TimeZone
 
-import scala.language.reflectiveCalls
-
 import org.apache.hadoop.fs.Path
 import org.apache.log4j.Level
 

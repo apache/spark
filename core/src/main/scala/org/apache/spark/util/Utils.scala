@@ -28,7 +28,7 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Arrays, Locale, Properties, Random, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
@@ -2542,6 +2542,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
@@ -2970,6 +2978,27 @@ private[spark] object Utils extends Logging {
     }
     metadata.append("]")
     metadata.toString
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
+    }
   }
 }
 

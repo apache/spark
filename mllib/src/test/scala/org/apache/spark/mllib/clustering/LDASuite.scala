@@ -20,7 +20,6 @@ package org.apache.spark.mllib.clustering
 import java.util.{ArrayList => JArrayList}
 
 import breeze.linalg.{argmax, argtopk, max, DenseMatrix => BDM}
-import org.scalatest.Assertions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.Edge

@@ -44,6 +44,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -58,15 +59,14 @@ import org.apache.spark.util.Utils
  */
 object SimpleAnalyzer extends Analyzer(
   new CatalogManager(
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
     new SessionCatalog(
       new InMemoryCatalog,
-      EmptyFunctionRegistry,
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)) {
+      EmptyFunctionRegistry) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    }),
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    })) {
+  override def resolver: Resolver = caseSensitiveResolution
+}
 
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
@@ -130,10 +130,8 @@ object AnalysisContext {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-class Analyzer(
-    override val catalogManager: CatalogManager,
-    conf: SQLConf)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
+class Analyzer(override val catalogManager: CatalogManager)
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -144,10 +142,8 @@ class Analyzer(
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
 
   // Only for tests.
-  def this(catalog: SessionCatalog, conf: SQLConf) = {
-    this(
-      new CatalogManager(conf, FakeV2SessionCatalog, catalog),
-      conf)
+  def this(catalog: SessionCatalog) = {
+    this(new CatalogManager(FakeV2SessionCatalog, catalog))
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
@@ -225,6 +221,8 @@ class Analyzer(
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
+      ResolvePartitionSpec ::
+      AddMetadataColumns ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -451,9 +449,7 @@ class Analyzer(
               e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
             Alias(gid, toPrettySQL(e))()
           } else {
-            throw new AnalysisException(
-              s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
-                s"grouping columns (${groupByExprs.mkString(",")})")
+            throw QueryCompilationErrors.groupingIDMismatchError(e, groupByExprs)
           }
         case e @ Grouping(col: Expression) =>
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
@@ -461,8 +457,7 @@ class Analyzer(
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
               Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
-            throw new AnalysisException(s"Column of grouping ($col) can't be found " +
-              s"in grouping columns ${groupByExprs.mkString(",")}")
+            throw QueryCompilationErrors.groupingColInvalidError(col, groupByExprs)
           }
       }
     }
@@ -578,8 +573,7 @@ class Analyzer(
       val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
 
       if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
-        throw new AnalysisException(
-          s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
+        throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
       }
 
       // Expand works by setting grouping expressions to null as determined by the
@@ -715,8 +709,7 @@ class Analyzer(
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
-          throw new AnalysisException(
-            s"Invalid pivot column '${pivotColumn}'. Pivot columns must be comparable.")
+          throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
@@ -727,13 +720,10 @@ class Analyzer(
             case _ => value.foldable
           }
           if (!foldable) {
-            throw new AnalysisException(
-              s"Literal expressions required for pivot values, found '$value'")
+            throw QueryCompilationErrors.nonLiteralPivotValError(value)
           }
           if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
-            throw new AnalysisException(s"Invalid pivot value '$value': " +
-              s"value data type ${value.dataType.simpleString} does not match " +
-              s"pivot column data type ${pivotColumn.dataType.catalogString}")
+            throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)
           }
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
@@ -917,6 +907,29 @@ class Analyzer(
       nameParts
     } else {
       AnalysisContext.get.catalogAndNamespace.head +: nameParts
+    }
+  }
+
+  /**
+   * Adds metadata columns to output for child relations when nodes are missing resolved attributes.
+   *
+   * References to metadata columns are resolved using columns from [[LogicalPlan.metadataOutput]],
+   * but the relation's output does not include the metadata columns until the relation is replaced
+   * using [[DataSourceV2Relation.withMetadataColumns()]]. Unless this rule adds metadata to the
+   * relation's output, the analyzer will detect that nothing produces the columns.
+   *
+   * This rule only adds metadata columns when a node is resolved but is missing input from its
+   * children. This ensures that metadata columns are not added to the plan unless they are used. By
+   * checking only resolved nodes, this ensures that * expansion is already done so that metadata
+   * columns are not accidentally selected by *.
+   */
+  object AddMetadataColumns extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+      case node if node.resolved && node.children.nonEmpty && node.missingInput.nonEmpty =>
+        node resolveOperatorsUp {
+          case rel: DataSourceV2Relation =>
+            rel.withMetadataColumns()
+        }
     }
   }
 
@@ -1147,8 +1160,7 @@ class Analyzer(
       case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
-          throw new AnalysisException(
-            s"Cannot write, IF NOT EXISTS is not supported for table: ${r.table.name}")
+          throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
         }
 
         val partCols = partitionColumnNames(r.table)
@@ -1185,8 +1197,7 @@ class Analyzer(
         partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
           case Some(_) =>
           case None =>
-            throw new AnalysisException(
-              s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+            throw QueryCompilationErrors.nonPartitionColError(partitionName)
         }
       }
     }
@@ -1208,8 +1219,7 @@ class Analyzer(
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
-                throw new AnalysisException(
-                  s"Cannot add static value for unknown column: $staticName")
+                throw QueryCompilationErrors.addStaticValToUnknownColError(staticName)
             }).toMap
 
           val queryColumns = query.output.iterator
@@ -1251,7 +1261,7 @@ class Analyzer(
               // an UnresolvedAttribute.
               EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
             case None =>
-              throw new AnalysisException(s"Unknown static partition column: $name")
+              throw QueryCompilationErrors.unknownStaticPartitionColError(name)
           }
         }.reduce(And)
       }
@@ -1548,11 +1558,10 @@ class Analyzer(
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
 
-      case o: OverwriteByExpression
-          if !(o.table.resolved && o.query.resolved && o.outputResolved) =>
-        // do not resolve expression attributes until the query attributes are resolved against the
-        // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
-        o
+      case o: OverwriteByExpression if o.table.resolved =>
+        // The delete condition of `OverwriteByExpression` will be passed to the table
+        // implementation and should be resolved based on the table schema.
+        o.copy(deleteExpr = resolveExpressionBottomUp(o.deleteExpr, o.table))
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -2464,23 +2473,19 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw new AnalysisException("Only one generator allowed per select clause but found " +
-          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
-        throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
-          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
 
       case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
           case AliasedGenerator(_, _, _) => true
@@ -2563,8 +2568,7 @@ class Analyzer(
       case g: Generate => g
 
       case p if p.expressions.exists(hasGenerator) =>
-        throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
-          "got: " + p.simpleString(SQLConf.get.maxToStringFields))
+        throw QueryCompilationErrors.generatorOutsideSelectError(p)
     }
   }
 
@@ -3103,10 +3107,7 @@ class Analyzer(
   private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
-      val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
-      throw new AnalysisException(s"""
-        |"LEGACY" store assignment policy is disallowed in Spark data source V2.
-        |Please set the configuration $configKey to other values.""".stripMargin)
+      throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }
 
@@ -3119,14 +3120,12 @@ class Analyzer(
       hint: JoinHint) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the left " +
-          s"side of the join. The left-side columns: [${left.output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
       }
     }
     val rightKeys = joinNames.map { keyName =>
       right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the right " +
-          s"side of the join. The right-side columns: [${right.output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, right, "right")
       }
     }
     val joinPairs = leftKeys.zip(rightKeys)
@@ -3189,7 +3188,8 @@ class Analyzer(
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw new AnalysisException("need an array field but got " + other.catalogString)
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other,
+                    "array")
               }
             case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
               u.child.dataType match {
@@ -3199,7 +3199,7 @@ class Analyzer(
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw new AnalysisException("need a map field but got " + other.catalogString)
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other, "map")
               }
           }
           validateNestedTupleFields(result)
@@ -3208,8 +3208,7 @@ class Analyzer(
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}" +
-        ", but failed as the number of fields does not line up.")
+      throw QueryCompilationErrors.fieldNumberMismatchForDeserializerError(schema, maxOrdinal)
     }
 
     /**
@@ -3268,10 +3267,7 @@ class Analyzer(
         case n: NewInstance if n.childrenResolved && !n.resolved =>
           val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
-            throw new AnalysisException(
-              s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
-                "access to the scope that this class was defined in.\n" +
-                "Try moving this class out of its parent class.")
+            throw QueryCompilationErrors.outerScopeFailureForNewInstanceError(n.cls.getName)
           }
           n.copy(outerPointer = Some(outer))
       }
@@ -3287,11 +3283,7 @@ class Analyzer(
         case l: LambdaVariable => "array element"
         case e => e.sql
       }
-      throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
-        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
+      throw QueryCompilationErrors.upCastFailureError(fromStr, from, to, walkedTypePath)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -3302,8 +3294,7 @@ class Analyzer(
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw new AnalysisException(
-            s"UpCast only support DecimalType as AbstractDataType yet, but got: $target")
+          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
@@ -3482,8 +3473,8 @@ class Analyzer(
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
-              throw new AnalysisException("Couldn't find the reference column for " +
-                s"$after at $parentName")
+              throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(after,
+                parentName)
           }
         case other => other
       }

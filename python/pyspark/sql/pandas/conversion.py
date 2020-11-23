@@ -22,7 +22,7 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, TimestampType, StructType, DataType
+    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -100,7 +100,8 @@ class PandasConversionMixin(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.pandas.types import _check_series_localize_timestamps
+                    from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
+                        _convert_map_items_to_dict
                     import pyarrow
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
@@ -117,6 +118,9 @@ class PandasConversionMixin(object):
                             if isinstance(field.dataType, TimestampType):
                                 pdf[field.name] = \
                                     _check_series_localize_timestamps(pdf[field.name], timezone)
+                            elif isinstance(field.dataType, MapType):
+                                pdf[field.name] = \
+                                    _convert_map_items_to_dict(pdf[field.name])
                         return pdf
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)

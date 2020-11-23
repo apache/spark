@@ -267,9 +267,6 @@ private[ml] class BlockLeastSquaresAggregator(
     val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
     (Vectors.dense(coefficientsArray), offset)
   }
-  // do not use tuple assignment above because it will circumvent the @transient tag
-  @transient private lazy val effectiveCoefficientsVec = effectiveCoefAndOffset._1
-  @transient private lazy val offset = effectiveCoefAndOffset._2
 
   /**
    * Add a new training instance block to this BlockLeastSquaresAggregator, and update the loss
@@ -286,7 +283,9 @@ private[ml] class BlockLeastSquaresAggregator(
       s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
 
     if (block.weightIter.forall(_ == 0)) return this
+
     val size = block.size
+    val (effectiveCoefficientsVec, offset) = effectiveCoefAndOffset
 
     // vec here represents diffs
     val vec = new DenseVector(Array.tabulate(size)(i => offset - block.getLabel(i) / labelStd))
@@ -294,16 +293,18 @@ private[ml] class BlockLeastSquaresAggregator(
 
     // in-place convert diffs to multipliers
     // then, vec represents multipliers
+    var localLossSum = 0.0
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
       val diff = vec(i)
-      lossSum += weight * diff * diff / 2
-      weightSum += weight
+      localLossSum += weight * diff * diff / 2
       val multiplier = weight * diff
       vec.values(i) = multiplier
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += block.weightIter.sum
 
     val gradSumVec = new DenseVector(gradientSumArray)
     BLAS.gemv(1.0, block.matrix.transpose, vec, 1.0, gradSumVec)
