@@ -185,4 +185,32 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("ALTER TABLE ADD/DROP PARTITIONS: all types") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (
+        |  part0 bigint
+        |) USING foo
+        |PARTITIONED BY (
+        |  part0
+        |)""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      val expectedPartition = InternalRow.fromSeq(Seq(123))
+      assert(!partTable.partitionExists(expectedPartition))
+      sql(s"""
+        |ALTER TABLE $t ADD PARTITION (
+        |  part0 = 123
+        |) LOCATION 'loc1'""".stripMargin)
+      assert(partTable.partitionExists(expectedPartition))
+      sql(s"""
+        |ALTER TABLE $t DROP PARTITION (
+        |  part0 = 123
+        |)""".stripMargin)
+      assert(!partTable.partitionExists(expectedPartition))
+    }
+  }
 }
