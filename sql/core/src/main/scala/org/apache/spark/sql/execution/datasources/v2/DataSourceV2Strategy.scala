@@ -232,7 +232,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(session, r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
+      DropTableExec(r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
@@ -303,10 +303,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
     case CacheTable(r: ResolvedTable, isLazy, options) =>
-      CacheTableExec(session, r.catalog, r.table, r.identifier, isLazy, options) :: Nil
+      CacheTableExec(r.catalog, r.table, r.identifier, isLazy, options) :: Nil
 
     case UncacheTable(r: ResolvedTable, _) =>
-      UncacheTableExec(session, r.catalog, r.table, r.identifier) :: Nil
+      UncacheTableExec(r.catalog, r.table, r.identifier) :: Nil
 
     case _ => Nil
   }

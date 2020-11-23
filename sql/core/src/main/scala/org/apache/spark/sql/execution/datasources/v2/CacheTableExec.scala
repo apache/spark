@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
@@ -28,7 +28,6 @@ import org.apache.spark.storage.StorageLevel
  * Physical plan node for caching a table.
  */
 case class CacheTableExec(
-    session: SparkSession,
     catalog: TableCatalog,
     table: Table,
     ident: Identifier,
@@ -37,6 +36,7 @@ case class CacheTableExec(
   override def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
+    val session = sqlContext.sparkSession
     val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
     val df = Dataset.ofRows(session, v2Relation)
     val tableName = Some(ident.quoted)
@@ -63,14 +63,13 @@ case class CacheTableExec(
  * Physical plan node for uncaching a table.
  */
 case class UncacheTableExec(
-    session: SparkSession,
     catalog: TableCatalog,
     table: Table,
     ident: Identifier) extends V2CommandExec {
   override def run(): Seq[InternalRow] = {
+    val session = sqlContext.sparkSession
     val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-    val df = Dataset.ofRows(session, v2Relation)
-    session.sharedState.cacheManager.uncacheQuery(df, cascade = true)
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     Seq.empty
   }
 
