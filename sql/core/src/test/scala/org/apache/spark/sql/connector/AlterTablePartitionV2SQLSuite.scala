@@ -190,7 +190,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("universal type conversions of partition values") {
+  test("SPARK-33521: universal type conversions of partition values") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
