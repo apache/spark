@@ -3363,7 +3363,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
     TruncateTable(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "TRUNCATE TABLE"),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 

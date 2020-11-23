@@ -1621,11 +1621,13 @@ class DDLParserSuite extends AnalysisTest {
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c")), None))
+      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"), None))
 
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c")), Some(Map("ds" -> "2017-06-10"))))
+      TruncateTable(
+        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"),
+        Some(Map("ds" -> "2017-06-10"))))
   }
 
   test("REFRESH TABLE") {

@@ -2172,12 +2172,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val e1 = intercept[AnalysisException] {
           sql("TRUNCATE TABLE my_temp_tab")
         }.getMessage
-        assert(e1.contains("my_temp_tab is a temp view not table"))
+        assert(e1.contains("my_temp_tab is a temp view. 'TRUNCATE TABLE' expects a table"))
         assertUnsupported("TRUNCATE TABLE my_ext_tab")
         val e2 = intercept[AnalysisException] {
           sql("TRUNCATE TABLE my_view")
         }.getMessage
-        assert(e2.contains("default.my_view is a view not table"))
+        assert(e2.contains("default.my_view is a view. 'TRUNCATE TABLE' expects a table"))
       }
     }
   }

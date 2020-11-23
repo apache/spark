@@ -179,7 +179,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e3 = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e3.contains(s"$viewName is a temp view not table"))
+      assert(e3.contains(s"$viewName is a temp view. 'TRUNCATE TABLE' expects a table"))
       val e4 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
@@ -222,7 +222,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains("default.testView is a view not table"))
+      assert(e.contains("default.testView is a view. 'TRUNCATE TABLE' expects a table"))
     }
   }
 
