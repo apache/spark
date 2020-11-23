@@ -47,8 +47,8 @@ class Broadcast(object):
     A broadcast variable created with :meth:`SparkContext.broadcast`.
     Access its value through :attr:`value`.
 
-    Examples:
-
+    Examples
+    --------
     >>> from pyspark.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> b = sc.broadcast([1, 2, 3, 4, 5])
@@ -148,7 +148,10 @@ class Broadcast(object):
         broadcast is used after this is called, it will need to be
         re-sent to each executor.
 
-        :param blocking: Whether to block until unpersisting has completed
+        Parameters
+        ----------
+        blocking : bool, optional
+            Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be unpersisted in driver")
@@ -163,6 +166,11 @@ class Broadcast(object):
         .. versionchanged:: 3.0.0
            Added optional argument `blocking` to specify whether to block until all
            blocks are deleted.
+
+        Parameters
+        ----------
+        blocking : bool, optional
+            Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be destroyed in driver")

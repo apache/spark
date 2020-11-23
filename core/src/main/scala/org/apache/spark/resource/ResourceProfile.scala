@@ -29,6 +29,7 @@ import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
+import org.apache.spark.util.Utils
 
 /**
  * Resource profile to associate with an RDD. A ResourceProfile allows the user to
@@ -256,6 +257,8 @@ object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
+  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
+
   private lazy val nextProfileId = new AtomicInteger(0)
   private val DEFAULT_PROFILE_LOCK = new Object()
 
@@ -263,6 +266,7 @@ object ResourceProfile extends Logging {
   // var so that it can be reset for testing purposes.
   @GuardedBy("DEFAULT_PROFILE_LOCK")
   private var defaultProfile: Option[ResourceProfile] = None
+  private var defaultProfileExecutorResources: Option[DefaultProfileExecutorResources] = None
 
   private[spark] def getNextProfileId: Int = nextProfileId.getAndIncrement()
 
@@ -284,6 +288,14 @@ object ResourceProfile extends Logging {
     }
   }
 
+  private[spark] def getDefaultProfileExecutorResources(
+      conf: SparkConf): DefaultProfileExecutorResources = {
+    defaultProfileExecutorResources.getOrElse {
+      getOrCreateDefaultProfile(conf)
+      defaultProfileExecutorResources.get
+    }
+  }
+
   private def getDefaultTaskResources(conf: SparkConf): Map[String, TaskResourceRequest] = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
     val treqs = new TaskResourceRequests().cpus(cpusPerTask)
@@ -293,20 +305,26 @@ object ResourceProfile extends Logging {
 
   private def getDefaultExecutorResources(conf: SparkConf): Map[String, ExecutorResourceRequest] = {
     val ereqs = new ExecutorResourceRequests()
-    ereqs.cores(conf.get(EXECUTOR_CORES))
-    ereqs.memory(conf.get(EXECUTOR_MEMORY).toString)
-    conf.get(EXECUTOR_MEMORY_OVERHEAD).map(mem => ereqs.memoryOverhead(mem.toString))
-    conf.get(PYSPARK_EXECUTOR_MEMORY).map(mem => ereqs.pysparkMemory(mem.toString))
-    if (conf.get(MEMORY_OFFHEAP_ENABLED)) {
-      // Explicitly add suffix b as default unit of offHeapMemory is Mib
-      ereqs.offHeapMemory(conf.get(MEMORY_OFFHEAP_SIZE).toString + "b")
-    }
+    val cores = conf.get(EXECUTOR_CORES)
+    ereqs.cores(cores)
+    val memory = conf.get(EXECUTOR_MEMORY)
+    ereqs.memory(memory.toString)
+    val overheadMem = conf.get(EXECUTOR_MEMORY_OVERHEAD)
+    overheadMem.map(mem => ereqs.memoryOverhead(mem.toString))
+    val pysparkMem = conf.get(PYSPARK_EXECUTOR_MEMORY)
+    pysparkMem.map(mem => ereqs.pysparkMemory(mem.toString))
+    val offheapMem = Utils.executorOffHeapMemorySizeAsMb(conf)
+    ereqs.offHeapMemory(offheapMem.toString)
     val execReq = ResourceUtils.parseAllResourceRequests(conf, SPARK_EXECUTOR_PREFIX)
     execReq.foreach { req =>
-      val name = req.id.resourceName
-      ereqs.resource(name, req.amount, req.discoveryScript.orElse(""),
+      ereqs.resource(req.id.resourceName, req.amount, req.discoveryScript.orElse(""),
         req.vendor.orElse(""))
     }
+    val customResourceNames = execReq.map(_.id.resourceName).toSet
+    val customResources = ereqs.requests.filter(v => customResourceNames.contains(v._1))
+    defaultProfileExecutorResources =
+      Some(DefaultProfileExecutorResources(cores, memory, offheapMem, pysparkMem,
+        overheadMem, customResources))
     ereqs.requests
   }
 
@@ -320,6 +338,7 @@ object ResourceProfile extends Logging {
   private[spark] def clearDefaultProfile(): Unit = {
     DEFAULT_PROFILE_LOCK.synchronized {
       defaultProfile = None
+      defaultProfileExecutorResources = None
     }
   }
 
@@ -340,6 +359,100 @@ object ResourceProfile extends Logging {
    */
   private[spark] def getTaskCpusOrDefaultForProfile(rp: ResourceProfile, conf: SparkConf): Int = {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
+  }
+
+  /**
+   * Get offHeap memory size from [[ExecutorResourceRequest]]
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  private[spark] def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
+      execRequest: ExecutorResourceRequest): Long = {
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
+  }
+
+  private[spark] case class ExecutorResourcesOrDefaults(
+      cores: Int,
+      executorMemoryMiB: Long,
+      memoryOffHeapMiB: Long,
+      pysparkMemoryMiB: Long,
+      memoryOverheadMiB: Long,
+      totalMemMiB: Long,
+      customResources: Map[String, ExecutorResourceRequest])
+
+  private[spark] case class DefaultProfileExecutorResources(
+      cores: Int,
+      executorMemoryMiB: Long,
+      memoryOffHeapMiB: Long,
+      pysparkMemoryMiB: Option[Long],
+      memoryOverheadMiB: Option[Long],
+      customResources: Map[String, ExecutorResourceRequest])
+
+  private[spark] def calculateOverHeadMemory(
+      overHeadMemFromConf: Option[Long],
+      executorMemoryMiB: Long,
+      overheadFactor: Double): Long = {
+    overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+  }
+
+  /**
+   * Gets the full list of resources to allow a cluster manager to request the appropriate
+   * container. If the resource profile is not the default one we either get the resources
+   * specified in the profile or fall back to the default profile resource size for everything
+   * except for custom resources.
+   */
+  private[spark] def getResourcesForClusterManager(
+      rpId: Int,
+      execResources: Map[String, ExecutorResourceRequest],
+      overheadFactor: Double,
+      conf: SparkConf,
+      isPythonApp: Boolean,
+      resourceMappings: Map[String, String]): ExecutorResourcesOrDefaults = {
+    val defaultResources = getDefaultProfileExecutorResources(conf)
+    // set all the default values, which may change for custom ResourceProfiles
+    var cores = defaultResources.cores
+    var executorMemoryMiB = defaultResources.executorMemoryMiB
+    var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
+    var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
+    var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
+      executorMemoryMiB, overheadFactor)
+
+    val finalCustomResources = if (rpId != DEFAULT_RESOURCE_PROFILE_ID) {
+      val customResources = new mutable.HashMap[String, ExecutorResourceRequest]
+      execResources.foreach { case (r, execReq) =>
+        r match {
+          case ResourceProfile.MEMORY =>
+            executorMemoryMiB = execReq.amount
+          case ResourceProfile.OVERHEAD_MEM =>
+            memoryOverheadMiB = execReq.amount
+          case ResourceProfile.PYSPARK_MEM =>
+            pysparkMemoryMiB = execReq.amount
+          case ResourceProfile.OFFHEAP_MEM =>
+            memoryOffHeapMiB = executorOffHeapMemorySizeAsMb(conf, execReq)
+          case ResourceProfile.CORES =>
+            cores = execReq.amount.toInt
+          case rName =>
+            val nameToUse = resourceMappings.get(rName).getOrElse(rName)
+            customResources(nameToUse) = execReq
+        }
+      }
+      customResources.toMap
+    } else {
+      defaultResources.customResources.map { case (rName, execReq) =>
+        val nameToUse = resourceMappings.get(rName).getOrElse(rName)
+        (nameToUse, execReq)
+      }
+    }
+    // only add in pyspark memory if actually a python application
+    val pysparkMemToUseMiB = if (isPythonApp) {
+      pysparkMemoryMiB
+    } else {
+      0L
+    }
+    val totalMemMiB =
+      (executorMemoryMiB + memoryOverheadMiB + memoryOffHeapMiB + pysparkMemToUseMiB)
+    ExecutorResourcesOrDefaults(cores, executorMemoryMiB, memoryOffHeapMiB,
+      pysparkMemToUseMiB, memoryOverheadMiB, totalMemMiB, finalCustomResources)
   }
 
   private[spark] val PYSPARK_MEMORY_LOCAL_PROPERTY = "resource.pyspark.memory"

@@ -153,7 +153,7 @@ class HiveSparkSubmitSuite
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     // TODO: revisit for Scala 2.13 support
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.12") => v.substring(0, 4)
+      case v if v.startsWith("2.12") || v.startsWith("2.13") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
@@ -769,8 +769,6 @@ object SPARK_14244 extends QueryTest {
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
-
-    import hiveContext.implicits._
 
     try {
       val window = Window.orderBy("id")

@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, LogicalPlan, NO_BROADCAST_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This optimization rule detects a join child that has a high ratio of empty partitions and
  * adds a no-broadcast-hash-join hint to avoid it being broadcast.
  */
-case class DemoteBroadcastHashJoin(conf: SQLConf) extends Rule[LogicalPlan] {
+object DemoteBroadcastHashJoin extends Rule[LogicalPlan] {
 
   private def shouldDemote(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined

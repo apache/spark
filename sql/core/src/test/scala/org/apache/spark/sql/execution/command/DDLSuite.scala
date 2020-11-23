@@ -1863,6 +1863,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             "Returns the concatenation of col1, col2, ..., colN.") :: Nil
     )
     // extended mode
+    // scalastyle:off whitespace.end.of.line
     checkAnswer(
       sql("DESCRIBE FUNCTION EXTENDED ^"),
       Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
@@ -1871,11 +1872,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             |    Examples:
             |      > SELECT 3 ^ 5;
             |       6
-            |  """.stripMargin) ::
+            |  
+            |    Since: 1.4.0
+            |""".stripMargin) ::
         Row("Function: ^") ::
         Row("Usage: expr1 ^ expr2 - Returns the result of " +
           "bitwise exclusive OR of `expr1` and `expr2`.") :: Nil
     )
+    // scalastyle:on whitespace.end.of.line
   }
 
   test("create a data source table without schema") {
@@ -2022,7 +2026,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-30312: truncate table - keep acl/permission") {
-    import testImplicits._
     val ignorePermissionAcl = Seq(true, false)
 
     ignorePermissionAcl.foreach { ignore =>
@@ -3118,6 +3121,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val fs = tablePath.getFileSystem(hadoopConf)
         val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
         val trashPath = Path.mergePaths(trashCurrent, tablePath)
+        assume(
+          fs.mkdirs(trashPath) && fs.delete(trashPath, false),
+          "Trash directory could not be created, skipping.")
         assert(!fs.exists(trashPath))
         try {
           hadoopConf.set(trashIntervalKey, "5")

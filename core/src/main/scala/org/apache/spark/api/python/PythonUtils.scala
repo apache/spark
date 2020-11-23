@@ -85,4 +85,8 @@ private[spark] object PythonUtils {
   def getBroadcastThreshold(sc: JavaSparkContext): Long = {
     sc.conf.get(org.apache.spark.internal.config.BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD)
   }
+
+  def getPythonAuthSocketTimeout(sc: JavaSparkContext): Long = {
+    sc.conf.get(org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT)
+  }
 }

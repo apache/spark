@@ -52,7 +52,7 @@ private[kafka010] class KafkaOffsetReader(
     readerOptions: CaseInsensitiveMap[String]) extends Logging {
 
   /**
-   * [[UninterruptibleThreadRunner]] ensures that all Kafka communication called in an
+   * [[UninterruptibleThreadRunner]] ensures that all [[KafkaConsumer]] communication called in an
    * [[UninterruptibleThread]]. In the case of streaming queries, we are already running in an
    * [[UninterruptibleThread]], however for batch mode this is not the case.
    */

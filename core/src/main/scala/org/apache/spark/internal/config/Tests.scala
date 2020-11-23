@@ -26,11 +26,11 @@ private[spark] object Tests {
     .longConf
     .createWithDefault(Runtime.getRuntime.maxMemory)
 
-  val TEST_SCHEDULE_INTERVAL =
-    ConfigBuilder("spark.testing.dynamicAllocation.scheduleInterval")
-      .version("2.3.0")
-      .longConf
-      .createWithDefault(100)
+  val TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED =
+    ConfigBuilder("spark.testing.dynamicAllocation.schedule.enabled")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val IS_TESTING = ConfigBuilder("spark.testing")
     .version("1.0.1")

@@ -32,8 +32,8 @@ require_minimum_pyarrow_version()
 
 
 def dataframe_with_arrow_example(spark):
-    import numpy as np
-    import pandas as pd
+    import numpy as np  # type: ignore[import]
+    import pandas as pd  # type: ignore[import]
 
     # Enable Arrow-based columnar data transfers
     spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
@@ -60,7 +60,7 @@ def ser_to_frame_pandas_udf_example(spark):
         s3['col2'] = s1 + s2.str.len()
         return s3
 
-    # Create a Spark DataFrame that has three columns including a sturct column.
+    # Create a Spark DataFrame that has three columns including a struct column.
     df = spark.createDataFrame(
         [[1, "a string", ("a nested string",)]],
         "long_col long, string_col string, struct_col struct<col1:string>")
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     ser_to_frame_pandas_udf_example(spark)
     print("Running pandas_udf example: Series to Series")
     ser_to_ser_pandas_udf_example(spark)
-    print("Running pandas_udf example: Iterator of Series to Iterator of Seires")
+    print("Running pandas_udf example: Iterator of Series to Iterator of Series")
     iter_ser_to_iter_ser_pandas_udf_example(spark)
     print("Running pandas_udf example: Iterator of Multiple Series to Iterator of Series")
     iter_sers_to_iter_ser_pandas_udf_example(spark)

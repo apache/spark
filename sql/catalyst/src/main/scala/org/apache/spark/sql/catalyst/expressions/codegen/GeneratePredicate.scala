@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
@@ -30,9 +29,17 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
   protected def bind(in: Expression, inputSchema: Seq[Attribute]): Expression =
     BindReferences.bindReference(in, inputSchema)
 
-  protected def create(predicate: Expression): BasePredicate = {
+  def generate(expressions: Expression, useSubexprElimination: Boolean): BasePredicate =
+    create(canonicalize(expressions), useSubexprElimination)
+
+  protected def create(predicate: Expression): BasePredicate = create(predicate, false)
+
+  protected def create(predicate: Expression, useSubexprElimination: Boolean): BasePredicate = {
     val ctx = newCodeGenContext()
-    val eval = predicate.genCode(ctx)
+
+    // Do sub-expression elimination for predicates.
+    val eval = ctx.generateExpressions(Seq(predicate), useSubexprElimination).head
+    val evalSubexpr = ctx.subexprFunctionsCode
 
     val codeBody = s"""
       public SpecificPredicate generate(Object[] references) {
@@ -53,6 +60,7 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] {
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
+          $evalSubexpr
           ${eval.code}
           return !${eval.isNull} && ${eval.value};
         }

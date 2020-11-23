@@ -27,7 +27,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -42,10 +42,10 @@ import org.apache.spark.sql.types.StructType
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
-  val astBuilder = new SparkSqlAstBuilder(conf)
+class SparkSqlParser extends AbstractSqlParser {
+  val astBuilder = new SparkSqlAstBuilder()
 
-  private val substitutor = new VariableSubstitution(conf)
+  private val substitutor = new VariableSubstitution()
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
@@ -55,11 +55,12 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
+class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
-  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=(.*)""".r
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
   private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configValueDef = """([^;]*);*""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -79,18 +80,34 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case s if s.isEmpty =>
         SetCommand(None)
       case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
-        "'SET key=value'. If you want to include special characters in key, " +
-        "please use quotes, e.g., SET `ke y`=value.", ctx)
+        "'SET key=value'. If you want to include special characters in key, or include semicolon " +
+        "in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
     }
   }
 
-  override def visitSetQuotedConfiguration(ctx: SetQuotedConfigurationContext)
-    : LogicalPlan = withOrigin(ctx) {
-    val keyStr = ctx.configKey().getText
-    if (ctx.EQ() != null) {
-      SetCommand(Some(keyStr -> Option(remainder(ctx.EQ().getSymbol).trim)))
+  override def visitSetQuotedConfiguration(
+      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.configValue() != null && ctx.configKey() != null) {
+      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+    } else if (ctx.configValue() != null) {
+      val valueStr = ctx.configValue().getText
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      keyCandidate match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
+        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property key, please " +
+          s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+      }
     } else {
-      SetCommand(Some(keyStr -> None))
+      val keyStr = ctx.configKey().getText
+      if (ctx.EQ() != null) {
+        remainder(ctx.EQ().getSymbol).trim match {
+          case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
+          case other => throw new ParseException(s"'$other' is an invalid property value, please " +
+            s"use quotes, e.g. SET `$keyStr`=`$other`", ctx)
+        }
+      } else {
+        SetCommand(Some(keyStr -> None))
+      }
     }
   }
 
@@ -262,7 +279,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      val (_, _, _, options, _, _) = visitCreateTableClauses(ctx.createTableClauses())
+      val (_, _, _, options, location, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx))
       val schema = Option(ctx.colTypeList()).map(createSchema)
@@ -271,7 +288,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
       val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
+      val optionsWithLocation = location.map(l => options + ("path" -> l)).getOrElse(options)
+      CreateTempViewUsing(table, schema, replace = false, global = false, provider,
+        optionsWithLocation)
     }
   }
 
@@ -783,7 +802,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // Use default (serde) format.
         val name = conf.getConfString("hive.script.serde",
           "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq("field.delim" -> "\t")
+        val props = Seq(
+          "field.delim" -> "\t",
+          "serialization.last.column.takes.rest" -> "true")
         val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
         (Nil, Option(name), props, recordHandler)
     }

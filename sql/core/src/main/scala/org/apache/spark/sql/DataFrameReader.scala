@@ -260,25 +260,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
 
-    val updatedPaths = if (!legacyPathOptionBehavior && paths.length == 1) {
-      option("path", paths.head)
-      Seq.empty
-    } else {
-      paths
-    }
-
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (updatedPaths.isEmpty) {
-        None
+
+      val optionsWithPath = if (paths.isEmpty) {
+        extraOptions
+      } else if (paths.length == 1) {
+        extraOptions + ("path" -> paths.head)
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(updatedPaths.toArray))
+        extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val finalOptions = sessionOptions ++ extraOptions.originalMap ++ pathsOption
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
@@ -303,20 +300,27 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
             sparkSession,
             DataSourceV2Relation.create(table, catalog, ident, dsOptions))
 
-        case _ => loadV1Source(updatedPaths: _*)
+        case _ => loadV1Source(paths: _*)
       }
-    }.getOrElse(loadV1Source(updatedPaths: _*))
+    }.getOrElse(loadV1Source(paths: _*))
   }
 
   private def loadV1Source(paths: String*) = {
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    val (finalPaths, finalOptions) = if (!legacyPathOptionBehavior && paths.length == 1) {
+      (Nil, extraOptions + ("path" -> paths.head))
+    } else {
+      (paths, extraOptions)
+    }
+
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
-        paths = paths,
+        paths = finalPaths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.originalMap).resolveRelation())
+        options = finalOptions.originalMap).resolveRelation())
   }
 
   /**
@@ -489,6 +493,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
@@ -595,6 +605,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
    * to conform specified or inferred schema.
+   *
+   * @note if `header` option is set to `true` when calling this API, all lines same with
+   * the header will be removed if exists.
    *
    * @param csvDataset input Dataset with one CSV row per record
    * @since 2.2.0
@@ -743,6 +756,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -774,6 +793,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -807,6 +832,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -818,8 +849,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
 
   /**
-   * Returns the specified table as a `DataFrame`.
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
+   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
+   * streaming query plan.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table or view.
+   *                  If a database is specified, it identifies the table/view from the database.
+   *                  Otherwise, it first attempts to find a temporary view with the given name
+   *                  and then match the table/view from the current database.
+   *                  Note that, the global temporary view database is also valid here.
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
@@ -865,6 +904,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>

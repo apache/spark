@@ -377,6 +377,23 @@ object ScalaReflection extends ScalaReflection {
           expressions.Literal.create(null, ObjectType(cls)),
           newInstance
         )
+
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        // package example
+        // object Foo extends Enumeration {
+        //  type Foo = Value
+        //  val E1, E2 = Value
+        // }
+        // the fullName of tpe is example.Foo.Foo, but we need example.Foo so that
+        // we can call example.Foo.withName to deserialize string to enumeration.
+        val parent = t.asInstanceOf[TypeRef].pre.typeSymbol.asClass
+        val cls = mirror.runtimeClass(parent)
+        StaticInvoke(
+          cls,
+          ObjectType(getClassFromType(t)),
+          "withName",
+          createDeserializerForString(path, false) :: Nil,
+          returnNullable = false)
     }
   }
 
@@ -561,6 +578,14 @@ object ScalaReflection extends ScalaReflection {
         }
         createSerializerForObject(inputObject, fields)
 
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        createSerializerForString(
+          Invoke(
+            inputObject,
+            "toString",
+            ObjectType(classOf[java.lang.String]),
+            returnNullable = false))
+
       case _ =>
         throw new UnsupportedOperationException(
           s"No Encoder found for $tpe\n" + walkedTypePath)
@@ -738,6 +763,8 @@ object ScalaReflection extends ScalaReflection {
             val Schema(dataType, nullable) = schemaFor(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
+      case t if isSubtype(t, localTypeOf[Enumeration#Value]) =>
+        Schema(StringType, nullable = true)
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
@@ -865,10 +892,6 @@ trait ScalaReflection extends Logging {
   def mirror: universe.Mirror
 
   import universe._
-
-  // The Predef.Map is scala.collection.immutable.Map.
-  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-  import scala.collection.Map
 
   /**
    * Any codes calling `scala.reflect.api.Types.TypeApi.<:<` should be wrapped by this method to

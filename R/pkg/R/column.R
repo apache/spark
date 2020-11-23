@@ -67,7 +67,11 @@ operators <- list(
   # we can not override `&&` and `||`, so use `&` and `|` instead
   "&" = "and", "|" = "or", "^" = "pow"
 )
-column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
+column_functions1 <- c(
+  "asc", "asc_nulls_first", "asc_nulls_last",
+  "desc", "desc_nulls_first", "desc_nulls_last",
+  "isNaN", "isNull", "isNotNull"
+)
 column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
@@ -356,3 +360,103 @@ setMethod("%<=>%",
 #' }
 #' @note ! since 2.3.0
 setMethod("!", signature(x = "Column"), function(x) not(x))
+
+#' withField
+#'
+#' Adds/replaces field in a struct \code{Column} by name.
+#'
+#' @param x a Column
+#' @param fieldName a character
+#' @param col a Column expression
+#'
+#' @rdname withField
+#' @aliases withField withField,Column-method
+#' @examples
+#' \dontrun{
+#' df <- withColumn(
+#'   createDataFrame(iris),
+#'   "sepal",
+#'    struct(column("Sepal_Width"), column("Sepal_Length"))
+#' )
+#'
+#' head(select(
+#'   df,
+#'   withField(df$sepal, "product", df$Sepal_Length * df$Sepal_Width)
+#' ))
+#' }
+#' @note withField since 3.1.0
+setMethod("withField",
+          signature(x = "Column", fieldName = "character", col = "Column"),
+          function(x, fieldName, col) {
+            jc <- callJMethod(x@jc, "withField", fieldName, col@jc)
+            column(jc)
+          })
+
+#' dropFields
+#'
+#' Drops fields in a struct \code{Column} by name.
+#'
+#' @param x a Column
+#' @param ... names of the fields to be dropped.
+#'
+#' @rdname dropFields
+#' @aliases dropFields dropFields,Column-method
+#' @examples
+#' \dontrun{
+#' df <- select(
+#'   createDataFrame(iris),
+#'   alias(
+#'     struct(
+#'       column("Sepal_Width"), column("Sepal_Length"),
+#'       alias(
+#'         struct(
+#'           column("Petal_Width"), column("Petal_Length"),
+#'           alias(
+#'             column("Petal_Width") * column("Petal_Length"),
+#'             "Petal_Product"
+#'           )
+#'         ),
+#'         "Petal"
+#'       )
+#'     ),
+#'     "dimensions"
+#'   )
+#' )
+#' head(withColumn(df, "dimensions", dropFields(df$dimensions, "Petal")))
+#'
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     dropFields(df$dimensions, "Sepal_Width", "Sepal_Length")
+#'   )
+#' )
+#'
+#' # This method supports dropping multiple nested fields directly e.g.
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     dropFields(df$dimensions, "Petal.Petal_Width", "Petal.Petal_Length")
+#'   )
+#' )
+#'
+#' # However, if you are going to add/replace multiple nested fields,
+#' # it is preffered to extract out the nested struct before
+#' # adding/replacing multiple fields e.g.
+#' head(
+#'   withColumn(
+#'     df, "dimensions",
+#'     withField(
+#'       column("dimensions"),
+#'       "Petal",
+#'       dropFields(column("dimensions.Petal"), "Petal_Width", "Petal_Length")
+#'     )
+#'   )
+#' )
+#' }
+#' @note dropFields since 3.1.0
+setMethod("dropFields",
+          signature(x = "Column"),
+          function(x, ...) {
+            jc <- callJMethod(x@jc, "dropFields", list(...))
+            column(jc)
+          })

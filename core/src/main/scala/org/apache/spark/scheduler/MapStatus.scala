@@ -123,7 +123,7 @@ private[spark] class CompressedMapStatus(
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1)
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) {
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) = {
     this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
   }
 

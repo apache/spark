@@ -27,7 +27,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.Decimal.{maxPrecisionForBytes, minBytesForPrecision}
+import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
 /**
  * This object contains method that are used to convert sparkSQL schemas to avro schemas and vice
@@ -118,7 +118,7 @@ object SchemaConverters {
             toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava), existingRecordNames)
               .copy(nullable = true)
           }
-        } else avroSchema.getTypes.asScala.map(_.getType) match {
+        } else avroSchema.getTypes.asScala.map(_.getType).toSeq match {
           case Seq(t1) =>
             toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
@@ -208,3 +208,5 @@ object SchemaConverters {
 
 private[avro] class IncompatibleSchemaException(
   msg: String, ex: Throwable = null) extends Exception(msg, ex)
+
+private[avro] class UnsupportedAvroTypeException(msg: String) extends Exception(msg)

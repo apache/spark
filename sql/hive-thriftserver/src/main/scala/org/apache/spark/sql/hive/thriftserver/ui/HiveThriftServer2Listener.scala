@@ -119,6 +119,7 @@ private[thriftserver] class HiveThriftServer2Listener(
       case e: SparkListenerThriftServerOperationStart => onOperationStart(e)
       case e: SparkListenerThriftServerOperationParsed => onOperationParsed(e)
       case e: SparkListenerThriftServerOperationCanceled => onOperationCanceled(e)
+      case e: SparkListenerThriftServerOperationTimeout => onOperationTimeout(e)
       case e: SparkListenerThriftServerOperationError => onOperationError(e)
       case e: SparkListenerThriftServerOperationFinish => onOperationFinished(e)
       case e: SparkListenerThriftServerOperationClosed => onOperationClosed(e)
@@ -177,6 +178,15 @@ private[thriftserver] class HiveThriftServer2Listener(
       case Some(executionData) =>
         executionData.finishTimestamp = e.finishTime
         executionData.state = ExecutionState.CANCELED
+        updateLiveStore(executionData)
+      case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
+    }
+
+  private def onOperationTimeout(e: SparkListenerThriftServerOperationTimeout): Unit =
+    Option(executionList.get(e.id)) match {
+      case Some(executionData) =>
+        executionData.finishTimestamp = e.finishTime
+        executionData.state = ExecutionState.TIMEDOUT
         updateLiveStore(executionData)
       case None => logWarning(s"onOperationCanceled called with unknown operation id: ${e.id}")
     }

@@ -61,8 +61,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
    * </ul>
    * <p>
-   * When writing to data source v1, the default option is `ErrorIfExists`. When writing to data
-   * source v2, the default option is `Append`.
+   * The default option is `ErrorIfExists`.
    *
    * @since 1.4.0
    */
@@ -291,8 +290,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         "parameter. Either remove the path option, or call save() without the parameter. " +
         s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
     }
-    this.extraOptions = this.extraOptions + ("path" -> path)
-    save()
+    saveInternal(Some(path))
   }
 
   /**
@@ -300,7 +298,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 1.4.0
    */
-  def save(): Unit = {
+  def save(): Unit = saveInternal(None)
+
+  private def saveInternal(path: Option[String]): Unit = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
@@ -313,15 +313,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
-      val options = sessionOptions.filterKeys(!extraOptions.contains(_)) ++ extraOptions.toMap
-      val dsOptions = new CaseInsensitiveStringMap(options.toMap.asJava)
+
+      val optionsWithPath = if (path.isEmpty) {
+        extraOptions
+      } else {
+        extraOptions + ("path" -> path.get)
+      }
+
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
       def getTable: Table = {
-        // For file source, it's expensive to infer schema/partition at each write. Here we pass
-        // the schema of input query and the user-specified partitioning to `getTable`. If the
-        // query schema is not compatible with the existing data, the write can still success but
-        // following reads would fail.
-        if (provider.isInstanceOf[FileDataSourceV2]) {
+        // If the source accepts external table metadata, here we pass the schema of input query
+        // and the user-specified partitioning to `getTable`. This is for avoiding
+        // schema/partitioning inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        // For example, writing file source will success but the following reads will fail.
+        if (provider.supportsExternalMetadata()) {
           provider.getTable(
             df.schema.asNullable,
             partitioningAsV2.toArray,
@@ -350,7 +359,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fall back to saving as though it's a V1 source.
-                return saveToV1Source()
+                return saveToV1Source(path)
               }
           }
 
@@ -358,14 +367,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
+              AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
             runCommand(df.sparkSession, "save") {
               OverwriteByExpression.byName(
-                relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+                relation, df.logicalPlan, Literal(true), finalOptions)
             }
           }
 
@@ -385,7 +394,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
-                  extraOptions.toMap,
+                  finalOptions,
                   ignoreIfExists = createMode == SaveMode.Ignore)
               }
             case _: TableProvider =>
@@ -397,21 +406,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fallback to saving as though it's a V1 source.
-                saveToV1Source()
+                saveToV1Source(path)
               }
           }
       }
 
     } else {
-      saveToV1Source()
+      saveToV1Source(path)
     }
   }
 
-  private def saveToV1Source(): Unit = {
+  private def saveToV1Source(path: Option[String]): Unit = {
     partitioningColumns.foreach { columns =>
       extraOptions = extraOptions + (
         DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     // Code path for data source v1.
@@ -420,7 +435,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = optionsWithPath.originalMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -455,7 +470,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 

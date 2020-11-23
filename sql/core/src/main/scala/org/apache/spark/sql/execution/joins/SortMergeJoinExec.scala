@@ -288,7 +288,8 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
-              cleanupResources
+              cleanupResources,
+              condition.isEmpty
             )
             private[this] val joinRow = new JoinedRow
 

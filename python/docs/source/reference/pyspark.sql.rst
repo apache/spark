@@ -217,6 +217,45 @@ DataFrame APIs
     DataFrameStatFunctions.freqItems
     DataFrameStatFunctions.sampleBy
 
+Column APIs
+-----------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Column.alias
+    Column.asc
+    Column.asc_nulls_first
+    Column.asc_nulls_last
+    Column.astype
+    Column.between
+    Column.bitwiseAND
+    Column.bitwiseOR
+    Column.bitwiseXOR
+    Column.cast
+    Column.contains
+    Column.desc
+    Column.desc_nulls_first
+    Column.desc_nulls_last
+    Column.dropFields
+    Column.endswith
+    Column.eqNullSafe
+    Column.getField
+    Column.getItem
+    Column.isNotNull
+    Column.isNull
+    Column.isin
+    Column.like
+    Column.name
+    Column.otherwise
+    Column.over
+    Column.rlike
+    Column.startswith
+    Column.substr
+    Column.when
+    Column.withField
 
 Data Types
 ----------
@@ -224,7 +263,7 @@ Data Types
 .. currentmodule:: pyspark.sql.types
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ArrayType
@@ -292,6 +331,7 @@ Functions
     asc_nulls_last
     ascii
     asin
+    assert_true
     atan
     atan2
     avg
@@ -409,6 +449,7 @@ Functions
     months_between
     nanvl
     next_day
+    nth_value
     ntile
     overlay
     pandas_udf
@@ -419,6 +460,7 @@ Functions
     pow
     quarter
     radians
+    raise_error
     rand
     randn
     rank

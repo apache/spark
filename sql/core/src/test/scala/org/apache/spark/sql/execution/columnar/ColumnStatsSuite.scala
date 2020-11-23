@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnStatsSuite extends SparkFunSuite {
   testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))

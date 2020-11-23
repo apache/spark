@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.LocalDate
-
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -77,15 +76,17 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timeExpr = CurrentTimestamp()
     val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
     val currentTime = Literal.create(timestamp, timeExpr.dataType)
+    val timezone = Literal.create(SQLConf.get.sessionLocalTimeZone, StringType)
 
     plan transformAllExpressions {
-      case CurrentDate(Some(timeZoneId)) =>
+      case currentDate @ CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            LocalDate.now(DateTimeUtils.getZoneId(timeZoneId)),
+            DateTimeUtils.microsToDays(timestamp, currentDate.zoneId),
             DateType)
         })
       case CurrentTimestamp() | Now() => currentTime
+      case CurrentTimeZone() => timezone
     }
   }
 }

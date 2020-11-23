@@ -30,7 +30,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
   extends Table with SupportsRead with SupportsWrite {
-  assert(ident.namespace().length == 1)
 
   override def name(): String = ident.toString
 

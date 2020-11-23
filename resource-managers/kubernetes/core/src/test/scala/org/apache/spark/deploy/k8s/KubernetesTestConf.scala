@@ -21,7 +21,6 @@ import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
 
 /**
@@ -114,9 +113,12 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
             Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
 
-        case KubernetesPVCVolumeConf(claimName) =>
+        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit) =>
+          val sconf = storageClass
+            .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
+          val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
           (KUBERNETES_VOLUMES_PVC_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName))
+            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++ sconf ++ lconf)
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap

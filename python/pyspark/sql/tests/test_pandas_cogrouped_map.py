@@ -33,7 +33,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -176,9 +176,9 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid return type.*MapType'):
+                    'Invalid return type.*ArrayType.*TimestampType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
-                    lambda l, r: l, 'id long, v map<int, int>')
+                    lambda l, r: l, 'id long, v array<timestamp>')
 
     def test_wrong_args(self):
         left = self.data1
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_cogrouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

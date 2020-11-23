@@ -48,7 +48,7 @@ private[sql] class AvroDeserializer(
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
-  def this(rootAvroType: Schema, rootCatalystType: DataType) {
+  def this(rootAvroType: Schema, rootCatalystType: DataType) = {
     this(
       rootAvroType,
       rootCatalystType,
@@ -256,7 +256,7 @@ private[sql] class AvroDeserializer(
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
           } else {
-            nonNullTypes.map(_.getType) match {
+            nonNullTypes.map(_.getType).toSeq match {
               case Seq(a, b) if Set(a, b) == Set(INT, LONG) && catalystType == LongType =>
                 (updater, ordinal, value) => value match {
                   case null => updater.setNullAt(ordinal)

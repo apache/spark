@@ -341,7 +341,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.physicalPlanDescription = physicalPlanDescription
-    exec.metrics = sqlPlanMetrics
+    exec.metrics ++= sqlPlanMetrics
     update(exec)
   }
 
@@ -349,7 +349,7 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveSQLMetricUpdates(executionId, sqlPlanMetrics) = event
 
     val exec = getOrCreateExecution(executionId)
-    exec.metrics = exec.metrics ++ sqlPlanMetrics
+    exec.metrics ++= sqlPlanMetrics
     update(exec)
   }
 
