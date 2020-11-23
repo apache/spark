@@ -62,6 +62,26 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
   }
 
+  test("range with positive step where end minus start not divisible by step") {
+    val range = Range(-4, 5, 2, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 5 * 8,
+      rowCount = Some(5),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(5),
+                min = Some(-4),
+                max = Some(4),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
   test("range with negative step") {
     val range = Range(-10, -20, -2, None)
     val rangeStats = Statistics(
@@ -79,6 +99,34 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
                 nullCount = Some(0),
                 maxLen = Some(LongType.defaultSize),
                 avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with negative step where end minus start not divisible by step") {
+    val range = Range(-10, -20, -3, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 4 * 8,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+        range.output.map(
+          attr =>
+            (
+              attr,
+              ColumnStat(
+                distinctCount = Some(4),
+                min = Some(-19),
+                max = Some(-10),
+                nullCount = Some(0),
+                maxLen = Some(LongType.defaultSize),
+                avgLen = Some(LongType.defaultSize))))))
+    checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
+  }
+
+  test("range with empty output") {
+    val range = Range(-10, -10, -1, None)
+    val rangeStats = Statistics(
+      sizeInBytes = 0,
+      rowCount = Some(0))
     checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
   }
 

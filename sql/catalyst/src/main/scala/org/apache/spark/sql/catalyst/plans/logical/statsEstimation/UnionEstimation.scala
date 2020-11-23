@@ -21,18 +21,22 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
+import org.apache.spark.sql.types.{ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, TimestampType}
 
 object UnionEstimation {
   import EstimationUtils._
 
-  def compare(a: Any, b: Any): Boolean = {
-    a match {
-      case _: Int => a.asInstanceOf[Int] < b.asInstanceOf[Int]
-      case _: Long => a.asInstanceOf[Long] < b.asInstanceOf[Long]
-      case _: Float => a.asInstanceOf[Float] < b.asInstanceOf[Float]
-      case _: Double => a.asInstanceOf[Double] < b.asInstanceOf[Double]
-      case _: Short => a.asInstanceOf[Short] < b.asInstanceOf[Short]
-      case _: Byte => a.asInstanceOf[Byte] < b.asInstanceOf[Byte]
+  def compare(a: Any, b: Any, dataType: DataType): Boolean = {
+    dataType match {
+      case dt: IntegerType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: LongType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: FloatType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: DoubleType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: ShortType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: ByteType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: DateType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: TimestampType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
+      case dt: DecimalType => dt.ordering.asInstanceOf[Ordering[Any]].lt(a, b)
       case _ => false
     }
   }
@@ -56,24 +60,25 @@ object UnionEstimation {
             attrStats.get(attr).isDefined && attrStats(attr).hasMinMaxStats
         }
         if (validStat) {
-          var min: Option[Any] = None
-          var max: Option[Any] = None
-          attrs.zipWithIndex.foreach {
-            case (attr, childIndex) =>
+          val dataType = output(outputIndex).dataType
+          val minStart : Option[Any] = None
+          val maxStart : Option[Any] = None
+          val result = attrs.zipWithIndex.foldLeft((minStart, maxStart)) {
+            case((minVal, maxVal), (attr, childIndex)) =>
               val colStat = union.children(childIndex).stats.attributeStats(attr)
-              min = if (min.isEmpty || compare(colStat.min.get, min.get)) {
+              val min = if (minVal.isEmpty || compare(colStat.min.get, minVal.get, dataType)) {
                 colStat.min
               } else {
-                min
+                minVal
               }
-
-              max = if (max.isEmpty || compare(max.get, colStat.max.get)) {
+              val max = if (maxVal.isEmpty || compare(maxVal.get, colStat.max.get, dataType)) {
                 colStat.max
               } else {
-                max
+                maxVal
               }
+              (min, max)
           }
-          val newStat = ColumnStat(min = min, max = max)
+          val newStat = ColumnStat(min = result._1, max = result._2)
           outputAttrStats += output(outputIndex) -> newStat
         }
     }
