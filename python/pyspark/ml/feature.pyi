@@ -1602,7 +1602,10 @@ class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
     def getVarianceThreshold(self) -> float: ...
 
 class VarianceThresholdSelector(
-    JavaEstimator, _VarianceThresholdSelectorParams, JavaMLReadable, JavaMLWritable
+    JavaEstimator[VarianceThresholdSelectorModel],
+    _VarianceThresholdSelectorParams,
+    JavaMLReadable[VarianceThresholdSelector],
+    JavaMLWritable,
 ):
     def __init__(
         self,
@@ -1621,7 +1624,10 @@ class VarianceThresholdSelector(
     def setOutputCol(self, value: str) -> VarianceThresholdSelector: ...
 
 class VarianceThresholdSelectorModel(
-    JavaModel, _VarianceThresholdSelectorParams, JavaMLReadable, JavaMLWritable
+    JavaModel,
+    _VarianceThresholdSelectorParams,
+    JavaMLReadable[VarianceThresholdSelectorModel],
+    JavaMLWritable,
 ):
     def setFeaturesCol(self, value: str) -> VarianceThresholdSelectorModel: ...
     def setOutputCol(self, value: str) -> VarianceThresholdSelectorModel: ...

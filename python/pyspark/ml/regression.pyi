@@ -414,7 +414,7 @@ class RandomForestRegressionModel(
     _TreeEnsembleModel,
     _RandomForestRegressorParams,
     JavaMLWritable,
-    JavaMLReadable,
+    JavaMLReadable[RandomForestRegressionModel],
 ):
     @property
     def trees(self) -> List[DecisionTreeRegressionModel]: ...
