@@ -137,9 +137,9 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     val start: Char = 'a'
     for (i <- 2 to 10) {
       val end: Char = (start + i).toChar
-      val jsonAToZ = genJson(start, end, "1,2,3")
-      val dfAToZ = spark.read.json(Seq(jsonAToZ).toDS())
-      checkAnswer(dfAToZ.select((start to end).mkString(".")),
+      val json = genJson(start, end, "1,2,3")
+      val df = spark.read.json(Seq(json).toDS())
+      checkAnswer(df.select((start to end).mkString(".")),
         Row(genResult(start, end, Seq(1, 2, 3))))
     }
 
