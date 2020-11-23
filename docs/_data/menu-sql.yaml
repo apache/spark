@@ -58,6 +58,8 @@
       url: sql-distributed-sql-engine.html#running-the-thrift-jdbcodbc-server
     - text: Running the Spark SQL CLI
       url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
+- text: PySpark Usage Guide for Pandas with Apache Arrow
+  url: sql-pyspark-pandas-with-arrow.html
 - text: Migration Guide
   url: sql-migration-old.html
 - text: SQL Reference
