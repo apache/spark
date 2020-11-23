@@ -861,9 +861,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-      case u @ UnresolvedTable(ident) =>
+      case u @ UnresolvedTable(ident, cmd) =>
         lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+          u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
       case u @ UnresolvedTableOrView(ident, allowTempView) =>
@@ -950,7 +950,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             SubqueryAlias(catalog.get.name +: ident.namespace :+ ident.name, relation)
           }.getOrElse(u)
 
-      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1077,11 +1077,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
           .map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier) =>
+      case u @ UnresolvedTable(identifier, cmd) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
             val viewStr = if (v.isTemp) "temp view" else "view"
-            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr not table.")
+            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.'")
           case table => table
         }.getOrElse(u)
 

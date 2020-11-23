@@ -2421,7 +2421,8 @@ class DataSourceV2SQLSuite
     withTempView("v") {
       sql("create global temp view v as select 1")
       val e = intercept[AnalysisException](sql("COMMENT ON TABLE global_temp.v IS NULL"))
-      assert(e.getMessage.contains("global_temp.v is a temp view not table."))
+      assert(e.getMessage.contains(
+        "global_temp.v is a temp view. 'COMMENT ON TABLE' expects a table"))
     }
   }
 
