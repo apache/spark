@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, Partit
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
 
@@ -211,14 +212,14 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
         .asPartitionable
-      val expectedPartition = InternalRow.fromSeq(Seq(
+      val expectedPartition = InternalRow.fromSeq(Seq[Any](
         -1,    // tinyint
         0,     // smallint
         1,     // int
         2,     // bigint
         3.14F, // float
         3.14D, // double
-        "abc"  // string
+        UTF8String.fromString("abc")  // string
       ))
       assert(!partTable.partitionExists(expectedPartition))
       val partSpec = """
