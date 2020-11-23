@@ -190,7 +190,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("ALTER TABLE ADD/DROP PARTITIONS: all types") {
+  test("universal type conversions of partition values") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
@@ -206,10 +206,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |  part8 date,
         |  part9 timestamp
         |) USING foo
-        |PARTITIONED BY (
-        |  part0, part1, part2, part3, part4, part5, part6, part7,
-        |  part8, part9
-        |)""".stripMargin)
+        |PARTITIONED BY (part0, part1, part2, part3, part4, part5, part6, part7, part8, part9)
+        |""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
         .asPartitionable
