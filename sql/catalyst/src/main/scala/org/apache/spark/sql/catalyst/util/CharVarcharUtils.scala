@@ -93,16 +93,6 @@ object CharVarcharUtils {
   }
 
   /**
-   * Re-construct the original StructType from the type strings in the metadata of StructFields.
-   * This is needed when dealing with char/varchar columns/fields.
-   */
-  def getRawSchema(schema: StructType): StructType = {
-    StructType(schema.map { field =>
-      getRawType(field.metadata).map(rawType => field.copy(dataType = rawType)).getOrElse(field)
-    })
-  }
-
-  /**
    * Returns expressions to apply read-side char type padding for the given attributes. String
    * values should be right-padded to N characters if it's from a CHAR(N) column/field.
    */

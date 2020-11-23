@@ -35,13 +35,10 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("char type values should be padded: partitioned columns") {
-    // DS V2 doesn't support partitioned table.
-    if (!conf.contains(SQLConf.DEFAULT_CATALOG.key)) {
-      withTable("t") {
-        sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
-        sql("INSERT INTO t VALUES ('1', 'a')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-      }
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
+      sql("INSERT INTO t VALUES ('1', 'a')")
+      checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
     }
   }
 
