@@ -39,8 +39,6 @@ import org.apache.spark.util.Utils
 
 class PythonRDDSuite extends SparkFunSuite with LocalSparkContext {
 
-  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
-
   var tempDir: File = _
 
   override def beforeAll(): Unit = {
