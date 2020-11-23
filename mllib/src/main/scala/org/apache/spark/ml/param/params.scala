@@ -370,6 +370,12 @@ private[param] object DoubleParam {
         Double.PositiveInfinity
       case JDouble(x) =>
         x
+      case JInt(x) =>
+        x.toDouble
+      case JLong(x) =>
+        x.toDouble
+      case JDecimal(x) =>
+        x.doubleValue()
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $jValue to Double.")
     }
@@ -456,6 +462,12 @@ private object FloatParam {
         Float.PositiveInfinity
       case JDouble(x) =>
         x.toFloat
+      case JInt(x) =>
+        x.toFloat
+      case JLong(x) =>
+        x.toFloat
+      case JDecimal(x) =>
+        x.floatValue()
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $jValue to Float.")
     }

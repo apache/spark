@@ -19,6 +19,8 @@ package org.apache.spark.ml.param
 
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
+import org.json4s.JsonAST.{JDecimal, JInt, JLong}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -323,6 +325,13 @@ class ParamsSuite extends SparkFunSuite {
     assert(copied.uid === solver.uid)
     assert(copied.getInputCol === solver.getInputCol)
     assert(copied.getMaxIter === 50)
+  }
+
+  test("DoubleParam/FloatParam parse JSON support type conversion") {
+    for (jvalue <- Seq(JInt(10), JLong(10L), JDecimal(BigDecimal("10")))) {
+      assert(DoubleParam.jValueDecode(jvalue) == 10.0d)
+      assert(FloatParam.jValueDecode(jvalue) == 10.0f)
+    }
   }
 
   test("ParamValidate") {
