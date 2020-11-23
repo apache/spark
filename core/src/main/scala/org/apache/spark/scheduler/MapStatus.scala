@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A common trait between [[MapStatus]] and [[MergeStatus]]. This allows us to reuse existing
- * code to handle MergeStatus.
+ * code to handle MergeStatus inside [[MapOutputTracker]].
  */
 private[spark] trait OutputStatus
 

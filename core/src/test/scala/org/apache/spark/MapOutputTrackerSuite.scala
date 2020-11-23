@@ -32,7 +32,7 @@ import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
-class MapOutputTrackerSuite extends SparkFunSuite {
+class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
 
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
@@ -333,7 +333,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("master register and unregister merge result") {
+  test("SPARK-32921: master register and unregister merge result") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
@@ -355,9 +355,51 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("get map statuses from merged shuffle") {
-    conf.set("spark.shuffle.push.based.enabled", "true")
-    conf.set("spark.shuffle.service.enabled", "true")
+  test("SPARK-32921: get map sizes with merged shuffle") {
+    conf.set("spark.shuffle.push.enabled", "true")
+    conf.set("spark.testing", "true")
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
+
+    val masterTracker = newTrackerMaster()
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+
+    val slaveRpcEnv = createRpcEnv("spark-slave", hostname, 0, new SecurityManager(conf))
+    val slaveTracker = new MapOutputTrackerWorker(conf)
+    slaveTracker.trackerEndpoint =
+      slaveRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    masterTracker.registerShuffle(10, 4, 1)
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    val bitmap = new RoaringBitmap()
+    bitmap.add(0)
+    bitmap.add(1)
+    bitmap.add(3)
+
+    val blockMgrId = BlockManagerId("a", "hostA", 1000)
+    masterTracker.registerMapOutput(10, 0, MapStatus(blockMgrId, Array(1000L), 0))
+    masterTracker.registerMapOutput(10, 1, MapStatus(blockMgrId, Array(1000L), 1))
+    masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
+    masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
+
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId,
+      bitmap, 3000L))
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
+    assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
+      Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, -1, 0), 3000, -1),
+        (ShuffleBlockId(10, 2, 0), size1000, 2)))))
+
+    masterTracker.stop()
+    slaveTracker.stop()
+    rpcEnv.shutdown()
+    slaveRpcEnv.shutdown()
+  }
+
+  test("SPARK-32921: get map statuses from merged shuffle") {
+    conf.set("spark.shuffle.push.enabled", "true")
+    conf.set("spark.testing", "true")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -381,14 +423,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     bitmap.add(3)
 
     val blockMgrId = BlockManagerId("a", "hostA", 1000)
-    masterTracker.registerMapOutput(
-      10, 0, MapStatus(blockMgrId, Array(1000L), 0))
-    masterTracker.registerMapOutput(
-      10, 1, MapStatus(blockMgrId, Array(1000L), 1))
-    masterTracker.registerMapOutput(
-      10, 2, MapStatus(blockMgrId, Array(1000L), 2))
-    masterTracker.registerMapOutput(
-      10, 3, MapStatus(blockMgrId, Array(1000L), 3))
+    masterTracker.registerMapOutput(10, 0, MapStatus(blockMgrId, Array(1000L), 0))
+    masterTracker.registerMapOutput(10, 1, MapStatus(blockMgrId, Array(1000L), 1))
+    masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
+    masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
 
     masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId,
       bitmap, 4000L))
@@ -404,9 +442,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     slaveRpcEnv.shutdown()
   }
 
-  test("get map statuses for merged shuffle block chunks") {
-    conf.set("spark.shuffle.push.based.enabled", "true")
-    conf.set("spark.shuffle.service.enabled", "true")
+  test("SPARK-32921: get map statuses for merged shuffle block chunks") {
+    conf.set("spark.shuffle.push.enabled", "true")
+    conf.set("spark.testing", "true")
     val hostname = "localhost"
     val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(conf))
 
@@ -440,5 +478,69 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     slaveTracker.stop()
     rpcEnv.shutdown()
     slaveRpcEnv.shutdown()
+  }
+
+  test("SPARK-32921: getPreferredLocationsForShuffle with MergeStatus") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    sc = new SparkContext("local", "test", conf.clone())
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    // Setup 5 map tasks
+    // on hostA with output size 2
+    // on hostA with output size 2
+    // on hostB with output size 3
+    // on hostB with output size 3
+    // on hostC with output size 1
+    // on hostC with output size 1
+    tracker.registerShuffle(10, 6, 1)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(2L), 5))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(2L), 6))
+    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(3L), 7))
+    tracker.registerMapOutput(10, 3, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(3L), 8))
+    tracker.registerMapOutput(10, 4, MapStatus(BlockManagerId("c", "hostC", 1000),
+      Array(1L), 9))
+    tracker.registerMapOutput(10, 5, MapStatus(BlockManagerId("c", "hostC", 1000),
+      Array(1L), 10))
+
+    val rdd = sc.parallelize(1 to 6, 6).map(num => (num, num).asInstanceOf[Product2[Int, Int]])
+    val mockShuffleDep = mock(classOf[ShuffleDependency[Int, Int, _]])
+    when(mockShuffleDep.shuffleId).thenReturn(10)
+    when(mockShuffleDep.partitioner).thenReturn(new HashPartitioner(1))
+    when(mockShuffleDep.rdd).thenReturn(rdd)
+
+    // Prepare a MergeStatus that merges 4 out of 5 blocks
+    val bitmap80 = new RoaringBitmap()
+    bitmap80.add(0)
+    bitmap80.add(1)
+    bitmap80.add(2)
+    bitmap80.add(3)
+    bitmap80.add(4)
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+      bitmap80, 11))
+
+    val preferredLocs1 = tracker.getPreferredLocationsForShuffle(mockShuffleDep, 0)
+    assert(preferredLocs1.nonEmpty)
+    assert(preferredLocs1.length === 1)
+    assert(preferredLocs1.head === "hostA")
+
+    tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000))
+    // Prepare another MergeStatus that merges only 1 out of 5 blocks
+    val bitmap20 = new RoaringBitmap()
+    bitmap20.add(0)
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+      bitmap20, 2))
+
+    val preferredLocs2 = tracker.getPreferredLocationsForShuffle(mockShuffleDep, 0)
+    assert(preferredLocs2.nonEmpty)
+    assert(preferredLocs2.length === 2)
+    assert(preferredLocs2 === Seq("hostA", "hostB"))
+
+    tracker.stop()
+    rpcEnv.shutdown()
   }
 }

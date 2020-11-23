@@ -26,10 +26,19 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
 /**
- * The status for the result of shuffle partition merge for each individual reducer partition
- * maintained by the scheduler. The scheduler would separate the MergeStatuses received from
- * ExternalShuffleService into individual MergeStatus which is maintained inside MapOutputTracker
- * to be served to the reducers when they start fetching shuffle partition blocks.
+ * The status for the result of merging shuffle partition blocks per individual shuffle partition
+ * maintained by the scheduler. The scheduler would separate the [[MergeStatuses]] received from
+ * ExternalShuffleService into individual [[MergeStatus]] which is maintained inside
+ * [[MapOutputTracker]] to be served to the reducers when they start fetching shuffle partition
+ * blocks. Note that, the reducers are ultimately fetching individual chunks inside a merged
+ * shuffle file, as explained in [[org.apache.spark.network.shuffle.RemoteBlockPushResolver]].
+ * Between the scheduler maintained MergeStatus and the shuffle service maintained per shuffle
+ * partition meta file, we are effectively dividing the metadata for a push-based shuffle into
+ * 2 layers. The scheduler would track the top-level metadata at the shuffle partition level
+ * with MergeStatus, and the shuffle service would maintain the partition level metadata about
+ * how to further divide a merged shuffle partition into multiple chunks with the per-partition
+ * meta file. This helps to reduce the amount of data the scheduler needs to maintain for
+ * push-based shuffle.
  */
 private[spark] class MergeStatus(
     private[this] var loc: BlockManagerId,
@@ -78,7 +87,9 @@ private[spark] object MergeStatus {
   def convertMergeStatusesToMergeStatusArr(
       mergeStatuses: MergeStatuses,
       loc: BlockManagerId): Seq[(Int, MergeStatus)] = {
-    val mergerLoc = BlockManagerId("", loc.host, loc.port)
+    assert(mergeStatuses.bitmaps.length == mergeStatuses.reduceIds.length &&
+      mergeStatuses.bitmaps.length == mergeStatuses.sizes.length)
+    val mergerLoc = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, loc.host, loc.port)
     mergeStatuses.bitmaps.zipWithIndex.map {
       case (bitmap, index) =>
         val mergeStatus = new MergeStatus(mergerLoc, bitmap, mergeStatuses.sizes(index))
