@@ -191,25 +191,48 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     withTable(t) {
       sql(s"""
         |CREATE TABLE $t (
-        |  part0 bigint
+        |  part0 tinyint,
+        |  part1 smallint,
+        |  part2 int,
+        |  part3 bigint,
+        |  part4 float,
+        |  part5 double,
+        |  part6 string
         |) USING foo
         |PARTITIONED BY (
-        |  part0
+        |  part0,
+        |  part1,
+        |  part2,
+        |  part3,
+        |  part4,
+        |  part5,
+        |  part6
         |)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
         .asPartitionable
-      val expectedPartition = InternalRow.fromSeq(Seq(123))
+      val expectedPartition = InternalRow.fromSeq(Seq(
+        -1,    // tinyint
+        0,     // smallint
+        1,     // int
+        2,     // bigint
+        3.14F, // float
+        3.14D, // double
+        "abc"  // string
+      ))
       assert(!partTable.partitionExists(expectedPartition))
-      sql(s"""
-        |ALTER TABLE $t ADD PARTITION (
-        |  part0 = 123
-        |) LOCATION 'loc1'""".stripMargin)
+      val partSpec = """
+        |  part0 = -1,
+        |  part1 = 0,
+        |  part2 = 1,
+        |  part3 = 2,
+        |  part4 = 3.14,
+        |  part5 = 3.14,
+        |  part6 = 'abc'
+        |""".stripMargin
+      sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
       assert(partTable.partitionExists(expectedPartition))
-      sql(s"""
-        |ALTER TABLE $t DROP PARTITION (
-        |  part0 = 123
-        |)""".stripMargin)
+      sql(s" ALTER TABLE $t DROP PARTITION ($partSpec)")
       assert(!partTable.partitionExists(expectedPartition))
     }
   }
