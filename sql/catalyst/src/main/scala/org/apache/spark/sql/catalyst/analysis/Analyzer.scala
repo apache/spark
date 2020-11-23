@@ -866,11 +866,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
-      case u @ UnresolvedTableOrView(ident, allowTempView) =>
+      case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
         lookupTempView(ident)
           .map { _ =>
             if (!allowTempView) {
-              u.failAnalysis(s"${ident.quoted} is a temp view not table or permanent view.")
+              u.failAnalysis(
+                s"${ident.quoted} is a temp view. '$cmd' expects a table or permanent view.")
             }
             ResolvedView(ident.asIdentifier, isTemp = true)
           }
@@ -955,7 +956,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
@@ -1085,7 +1086,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, _) =>
+      case u @ UnresolvedTableOrView(identifier, _, _) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 

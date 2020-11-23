@@ -101,7 +101,9 @@ trait CheckAnalysis extends PredicateHelper {
         u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        val viewStr = if (u.allowTempView) "view" else "permanent view"
+        u.failAnalysis(
+          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")

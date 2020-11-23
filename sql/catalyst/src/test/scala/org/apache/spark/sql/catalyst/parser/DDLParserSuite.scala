@@ -381,27 +381,27 @@ class DDLParserSuite extends AnalysisTest {
   test("drop table") {
     parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
       DropTable(
-        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl")),
+        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl"), "DROP TABLE"),
         ifExists = false,
         purge = false))
     parseCompare(s"DROP TABLE db.tab",
       DropTable(
-        UnresolvedTableOrView(Seq("db", "tab")), ifExists = false, purge = false))
+        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS db.tab",
       DropTable(
-        UnresolvedTableOrView(Seq("db", "tab")), ifExists = true, purge = false))
+        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = false))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS tab",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = false))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab PURGE",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = true))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = true))
     parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = true))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = true))
   }
 
   test("drop view") {
@@ -796,26 +796,26 @@ class DDLParserSuite extends AnalysisTest {
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("abc.xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc.xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("abc", "xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc", "xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("a.b", "x.y"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("a.b", "x.y"), isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
@@ -834,13 +834,17 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -1453,57 +1457,57 @@ class DDLParserSuite extends AnalysisTest {
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map.empty, noScan = false))
     comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map.empty, noScan = true))
     comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("a" -> None), noScan = true))
 
     // Partitions specified
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = true))
 
     intercept("analyze table a.b.c compute statistics xxxx",
@@ -1518,7 +1522,9 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        Option(Seq("key", "value")),
+        allColumns = false))
 
     // Partition specified - should be ignored
     comparePlans(
@@ -1528,7 +1534,9 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR COLUMNS key, value
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        Option(Seq("key", "value")),
+        allColumns = false))
 
     // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
     comparePlans(
@@ -1538,7 +1546,9 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR ALL COLUMNS
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), None, allColumns = true))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR ALL COLUMNS"),
+        None,
+        allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
       "mismatched input 'key' expecting {<EOF>, ';'}")
@@ -1582,12 +1592,13 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTable(UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false)))
+      ShowCreateTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false)))
 
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
       ShowCreateTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false),
         asSerde = true))
   }
 
@@ -1631,7 +1642,7 @@ class DDLParserSuite extends AnalysisTest {
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"))))
+      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE")))
   }
 
   test("show columns") {
@@ -1982,11 +1993,12 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), None))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), Some("propKey1")))
+      ShowTableProperties(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {
