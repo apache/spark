@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.connector
 
+import java.time.{LocalDate, LocalDateTime}
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
@@ -199,10 +202,13 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |  part4 float,
         |  part5 double,
         |  part6 string,
-        |  part7 boolean
+        |  part7 boolean,
+        |  part8 date,
+        |  part9 timestamp
         |) USING foo
         |PARTITIONED BY (
-        |  part0, part1, part2, part3, part4, part5, part6, part7
+        |  part0, part1, part2, part3, part4, part5, part6, part7,
+        |  part8, part9
         |)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
@@ -215,7 +221,10 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         3.14F, // float
         3.14D, // double
         UTF8String.fromString("abc"), // string
-        true // boolean
+        true, // boolean
+        LocalDate.parse("2020-11-23").toEpochDay,
+        DateTimeUtils.instantToMicros(
+          LocalDateTime.parse("2020-11-23T22:13:10.123456").atZone(DateTimeTestUtils.LA).toInstant)
       ))
       assert(!partTable.partitionExists(expectedPartition))
       val partSpec = """
@@ -226,7 +235,9 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |  part4 = 3.14,
         |  part5 = 3.14,
         |  part6 = 'abc',
-        |  part7 = true
+        |  part7 = true,
+        |  part8 = '2020-11-23',
+        |  part9 = '2020-11-23T22:13:10.123456'
         |""".stripMargin
       sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
       assert(partTable.partitionExists(expectedPartition))
