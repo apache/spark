@@ -585,6 +585,16 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   }
 }
 
+class KafkaRelationSuiteWithAdminV1 extends KafkaRelationSuiteV1 {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+}
+
+class KafkaRelationSuiteWithAdminV2 extends KafkaRelationSuiteV2 {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+}
+
 class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   override protected def sparkConf: SparkConf =
     super

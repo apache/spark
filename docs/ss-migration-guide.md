@@ -30,7 +30,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 - In Spark 3.0 and before, for the queries that have stateful operation which can emit rows older than the current watermark plus allowed late record delay, which are "late rows" in downstream stateful operations and these rows can be discarded, Spark only prints a warning message. Since Spark 3.1, Spark will check for such queries with possible correctness issue and throw AnalysisException for it by default. For the users who understand the possible risk of correctness issue and still decide to run the query, please disable this check by setting the config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false.
 
-- In Spark 3.0 and below, secure Kafka processing needed the following ACLs from driver perspective:
+- In Spark 3.0 and before Spark uses `KafkaConsumer` for offset fetching which could cause infinite wait in the driver.
+  In Spark 3.1 a new configuration option added `spark.sql.streaming.kafka.useDeprecatedOffsetFetching` (default: true)
+  which could be set to `false` allowing Spark to use new offset fetching mechanism using `AdminClient`.
+  When the new mechanism used the following applies.
+  
+  First of all the new approach supports Kafka brokers `0.11.0.0+`.
+  
+  In Spark 3.0 and below, secure Kafka processing needed the following ACLs from driver perspective:
   * Topic resource describe operation
   * Topic resource read operation
   * Group resource read operation

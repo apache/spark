@@ -1415,6 +1415,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val USE_DEPRECATED_KAFKA_OFFSET_FETCHING =
+    buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
+      .internal()
+      .doc("When true, the deprecated Consumer based offset fetching used which could cause " +
+        "infinite wait in Spark queries. Such cases query restart is the only workaround.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
     buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
       .internal()
@@ -3076,6 +3085,8 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)

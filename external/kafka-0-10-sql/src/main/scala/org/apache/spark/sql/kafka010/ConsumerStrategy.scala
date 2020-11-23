@@ -23,6 +23,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.kafka.clients.admin.Admin
+import org.apache.kafka.clients.consumer.{Consumer, KafkaConsumer}
+import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -38,17 +40,27 @@ import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
  * the starting offset for a particular partition.
  */
 private[kafka010] sealed trait ConsumerStrategy extends Logging {
+  /** Create a [[KafkaConsumer]] and subscribe to topics according to a desired strategy */
+  def createConsumer(kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]]
+
   /** Creates an [[org.apache.kafka.clients.admin.AdminClient]] */
   def createAdmin(kafkaParams: ju.Map[String, Object]): Admin = {
-    val updatedKafkaParams = KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
-      .setAuthenticationConfigIfNeeded()
-      .build()
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
     logDebug(s"Admin params: ${KafkaRedactionUtil.redactParams(updatedKafkaParams.asScala.toSeq)}")
     Admin.create(updatedKafkaParams)
   }
 
   /** Returns the assigned or subscribed [[TopicPartition]] */
   def assignedTopicPartitions(admin: Admin): Set[TopicPartition]
+
+  /**
+   * Updates the parameters with security if needed.
+   * Added a function to hide internals and reduce code duplications because all strategy uses it.
+   */
+  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
+    KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
 
   protected def retrieveAllPartitions(admin: Admin, topics: Set[String]): Set[TopicPartition] = {
     admin.describeTopics(topics.asJava).all().get().asScala.filterNot(_._2.isInternal).flatMap {
@@ -67,6 +79,14 @@ private[kafka010] sealed trait ConsumerStrategy extends Logging {
  */
 private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
     extends ConsumerStrategy with Logging {
+  override def createConsumer(
+      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
+    consumer.assign(ju.Arrays.asList(partitions: _*))
+    consumer
+  }
+
   override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
     val topics = partitions.map(_.topic()).toSet
     logDebug(s"Topics for assignment: $topics")
@@ -81,6 +101,14 @@ private[kafka010] case class AssignStrategy(partitions: Array[TopicPartition])
  */
 private[kafka010] case class SubscribeStrategy(topics: Seq[String])
     extends ConsumerStrategy with Logging {
+  override def createConsumer(
+      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
+    consumer.subscribe(topics.asJava)
+    consumer
+  }
+
   override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
     retrieveAllPartitions(admin, topics.toSet)
   }
@@ -94,6 +122,14 @@ private[kafka010] case class SubscribeStrategy(topics: Seq[String])
 private[kafka010] case class SubscribePatternStrategy(topicPattern: String)
     extends ConsumerStrategy with Logging {
   private val topicRegex = topicPattern.r
+
+  override def createConsumer(
+      kafkaParams: ju.Map[String, Object]): Consumer[Array[Byte], Array[Byte]] = {
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
+    consumer.subscribe(ju.regex.Pattern.compile(topicPattern), new NoOpConsumerRebalanceListener())
+    consumer
+  }
 
   override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
     logDebug(s"Topic pattern: $topicPattern")

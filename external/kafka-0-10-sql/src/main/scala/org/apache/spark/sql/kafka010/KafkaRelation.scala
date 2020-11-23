@@ -59,7 +59,8 @@ private[kafka010] class KafkaRelation(
     val kafkaOffsetReader = new KafkaOffsetReader(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
-      sourceOptions)
+      sourceOptions,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Seq[KafkaOffsetRange] = try {

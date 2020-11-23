@@ -1072,6 +1072,20 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 }
 
 
+class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
+
+class KafkaMicroBatchV2SourceWithAdminSuite extends KafkaMicroBatchV2SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
+
 class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
