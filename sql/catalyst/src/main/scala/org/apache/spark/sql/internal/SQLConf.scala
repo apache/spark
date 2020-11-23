@@ -3049,7 +3049,8 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerMultiLikeConversionThreshold: Int = getConf(OPTIMIZER_MULTI_LIKE_CONVERSION_THRESHOLD)
+  def optimizerMultiLikeConversionThreshold: Int =
+    getConf(OPTIMIZER_MULTI_LIKE_CONVERSION_THRESHOLD)
 
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
