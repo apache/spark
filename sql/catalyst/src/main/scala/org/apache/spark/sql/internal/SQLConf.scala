@@ -2913,18 +2913,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val TRUNCATE_TRASH_ENABLED =
-    buildConf("spark.sql.truncate.trash.enabled")
-      .doc("This configuration decides when truncating table, whether data files will be moved " +
-        "to trash directory or deleted permanently. The trash retention time is controlled by " +
-        "'fs.trash.interval', and in default, the server side configuration value takes " +
-        "precedence over the client-side one. Note that if 'fs.trash.interval' is non-positive, " +
-        "this will be a no-op and log a warning message. If the data fails to be moved to "  +
-        "trash, Spark will turn to delete it permanently.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DISABLED_JDBC_CONN_PROVIDER_LIST =
     buildConf("spark.sql.sources.disabledJdbcConnProviderList")
     .internal()
@@ -3577,10 +3565,16 @@ class SQLConf extends Serializable with Logging {
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
+<<<<<<< HEAD
   def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
+||||||| 065f17386d... [SPARK-32481][CORE][SQL] Support truncate table to move data to trash
+  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
+
+=======
+>>>>>>> parent of 065f17386d... [SPARK-32481][CORE][SQL] Support truncate table to move data to trash
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
