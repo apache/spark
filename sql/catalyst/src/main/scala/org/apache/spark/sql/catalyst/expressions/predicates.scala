@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.immutable.{HashSet, TreeSet}
-import scala.collection.mutable
+import scala.collection.immutable.TreeSet
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
