@@ -325,26 +325,30 @@ private[sql] object CatalogV2Util {
       options ++ // to make the transition to the "option." prefix easier, add both
       options.map { case (key, value) => TableCatalog.OPTION_PREFIX + key -> value } ++
       convertToProperties(serdeInfo) ++
-      (if (external) Map(TableCatalog.PROP_EXTERNAL -> "true") else Map.empty) ++
+      (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
   }
 
+  /**
+   * Converts Hive Serde info to table properties. The mapped property keys are:
+   *  - INPUTFORMAT/OUTPUTFORMAT: hive.input/output-format
+   *  - STORED AS: hive.stored-as
+   *  - ROW FORMAT SERDE: hive.serde
+   *  - SERDEPROPERTIES: add "option." prefix
+   */
   private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
     serdeInfo match {
       case Some(s) =>
-        ((s.formatClasses match {
-          case Some((inputFormat, outputFormat)) =>
-            Map("hive.input-format" -> inputFormat, "hive.output-format" -> outputFormat)
-          case _ =>
-            Map.empty
-        }) ++
+        s.formatClasses.map { f =>
+          Map("hive.input-format" -> f.input, "hive.output-format" -> f.output)
+        }.getOrElse(Map.empty) ++
         s.storedAs.map("hive.stored-as" -> _) ++
         s.serde.map("hive.serde" -> _) ++
         s.serdeProperties.map {
           case (key, value) => TableCatalog.OPTION_PREFIX + key -> value
-        }).toMap
+        }
       case None =>
         Map.empty
     }

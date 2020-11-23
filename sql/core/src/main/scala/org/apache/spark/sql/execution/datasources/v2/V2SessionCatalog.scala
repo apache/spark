@@ -112,11 +112,9 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
-    properties
-        .filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX))
-        .map {
-          case (key, value) => key.replaceFirst(TableCatalog.OPTION_PREFIX, "") -> value
-        }.toMap
+    properties.filterKeys(_.startsWith(TableCatalog.OPTION_PREFIX)).map {
+      case (key, value) => key.drop(TableCatalog.OPTION_PREFIX.length) -> value
+    }
   }
 
   override def alterTable(

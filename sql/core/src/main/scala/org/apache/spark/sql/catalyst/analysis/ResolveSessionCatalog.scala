@@ -268,21 +268,27 @@ class ResolveSessionCatalog(
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      buildV1Table(tbl.asTableIdentifier, c) match {
-        case Some(tableDesc) =>
-          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTable(tableDesc, mode, None)
-
-        case None =>
+      val (storageFormat, provider) = getStorageFormatAndProvider(
+        c.provider, c.options, c.location, c.serde, ctas = false)
+      if (!isV2Provider(provider)) {
+        if (!DDLUtils.isHiveTable(Some(provider))) {
           assertNoCharTypeInSchema(c.tableSchema)
-          CreateV2Table(
-            catalog.asTableCatalog,
-            tbl.asIdentifier,
-            c.tableSchema,
-            // convert the bucket spec and add it as a transform
-            c.partitioning ++ c.bucketSpec.map(_.asTransform),
-            convertTableProperties(c),
-            ignoreIfExists = c.ifNotExists)
+        }
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
+          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
+          c.comment, storageFormat, c.external)
+        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTable(tableDesc, mode, None)
+      } else {
+        assertNoCharTypeInSchema(c.tableSchema)
+        CreateV2Table(
+          catalog.asTableCatalog,
+          tbl.asIdentifier,
+          c.tableSchema,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          convertTableProperties(c),
+          ignoreIfExists = c.ifNotExists)
       }
 
     case c @ CreateTableAsSelectStatement(
@@ -290,22 +296,25 @@ class ResolveSessionCatalog(
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
-      buildV1Table(tbl.asTableIdentifier, c) match {
-        case Some(tableDesc) =>
-          val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTable(tableDesc, mode, Some(c.asSelect))
-
-        case None =>
-          assertNoCharTypeInSchema(c.schema)
-          CreateTableAsSelect(
-            catalog.asTableCatalog,
-            tbl.asIdentifier,
-            // convert the bucket spec and add it as a transform
-            c.partitioning ++ c.bucketSpec.map(_.asTransform),
-            c.asSelect,
-            convertTableProperties(c),
-            writeOptions = c.writeOptions,
-            ignoreIfExists = c.ifNotExists)
+      val (storageFormat, provider) = getStorageFormatAndProvider(
+        c.provider, c.options, c.location, c.serde, ctas = false)
+      if (!isV2Provider(provider)) {
+        val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
+          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
+          c.comment, storageFormat, c.external)
+        val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+        CreateTable(tableDesc, mode, Some(c.asSelect))
+      } else {
+        assertNoCharTypeInSchema(c.schema)
+        CreateTableAsSelect(
+          catalog.asTableCatalog,
+          tbl.asIdentifier,
+          // convert the bucket spec and add it as a transform
+          c.partitioning ++ c.bucketSpec.map(_.asTransform),
+          c.asSelect,
+          convertTableProperties(c),
+          writeOptions = c.writeOptions,
+          ignoreIfExists = c.ifNotExists)
       }
 
     case RefreshTable(ResolvedV1TableIdentifier(ident)) =>
@@ -629,66 +638,61 @@ class ResolveSessionCatalog(
     case _ => throw new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
   }
 
-  private def buildV1Table(
-      ident: TableIdentifier,
-      c: CreateTableAsSelectStatement): Option[CatalogTable] = {
-    val schema = new StructType
-    (c.provider, c.serde) match {
-      case (Some(provider), Some(serde)) =>
+  private def getStorageFormatAndProvider(
+      provider: Option[String],
+      options: Map[String, String],
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo],
+      ctas: Boolean): (CatalogStorageFormat, String) = {
+    val nonHiveStorageFormat = CatalogStorageFormat.empty.copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
+    val defaultHiveStorage = HiveSerDe.getDefaultStorage(conf).copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
+
+    if (provider.isDefined) {
+      // The parser guarantees that USING and STORED AS/ROW FORMAT won't co-exist.
+      if (maybeSerdeInfo.isDefined) {
         throw new AnalysisException(
-          s"Cannot create table with both USING $provider and ${serde.describe}")
-
-      case (None, Some(serde)) =>
-        Some(buildHiveCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, serde, c.options, c.location,
-          c.comment, c.external))
-
-      case (None, None) if !conf.convertCTAS =>
-        Some(buildHiveCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, SerdeInfo.empty, c.options,
-          c.location, c.comment, c.external))
-
-      case (Some(provider), None) if !isV2Provider(provider) =>
-        Some(buildCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, provider, c.options,
-          c.location, c.comment, c.external))
-
-      case (None, None) if !isV2Provider(conf.defaultDataSourceName) =>
-        Some(buildCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, conf.defaultDataSourceName,
-          c.options, c.location, c.comment, c.external))
-
-      case _ =>
-        None
-    }
-  }
-
-  private def buildV1Table(
-      ident: TableIdentifier,
-      c: CreateTableStatement): Option[CatalogTable] = {
-    val schema = c.tableSchema
-    (c.provider, c.serde) match {
-      case (Some(provider), Some(serde)) =>
-        throw new AnalysisException(
-          s"Cannot create table with both USING $provider and ${serde.describe}")
-
-      case (None, Some(serde)) =>
-        Some(buildHiveCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, serde, c.options, c.location,
-          c.comment, c.external))
-
-      case (None, None) =>
-        Some(buildHiveCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, SerdeInfo.empty, c.options,
-          c.location, c.comment, c.external))
-
-      case (Some(provider), None) if !isV2Provider(provider) =>
-        Some(buildCatalogTable(
-          ident, schema, c.partitioning, c.bucketSpec, c.properties, provider, c.options,
-          c.location, c.comment, c.external))
-
-      case _ =>
-        None
+          s"Cannot create table with both USING $provider and ${maybeSerdeInfo.get.describe}")
+      }
+      (nonHiveStorageFormat, provider.get)
+    } else if (maybeSerdeInfo.isDefined) {
+      val serdeInfo = maybeSerdeInfo.get
+      SerdeInfo.checkSerdePropMerging(serdeInfo.serdeProperties, defaultHiveStorage.properties)
+      val storageFormat = if (serdeInfo.storedAs.isDefined) {
+        // If `STORED AS fileFormat` is used, infer inputFormat, outputFormat and serde from it.
+        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
+          case Some(hiveSerde) =>
+            defaultHiveStorage.copy(
+              inputFormat = hiveSerde.inputFormat.orElse(defaultHiveStorage.inputFormat),
+              outputFormat = hiveSerde.outputFormat.orElse(defaultHiveStorage.outputFormat),
+              // User specified serde takes precedence over the one inferred from file format.
+              serde = serdeInfo.serde.orElse(hiveSerde.serde).orElse(defaultHiveStorage.serde),
+              properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
+          case _ => throw new AnalysisException(
+            s"STORED AS with file format '${serdeInfo.storedAs.get}' is invalid.")
+        }
+      } else {
+        defaultHiveStorage.copy(
+          inputFormat =
+            serdeInfo.formatClasses.map(_.input).orElse(defaultHiveStorage.inputFormat),
+          outputFormat =
+            serdeInfo.formatClasses.map(_.output).orElse(defaultHiveStorage.outputFormat),
+          serde = serdeInfo.serde.orElse(defaultHiveStorage.serde),
+          properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
+      }
+      (storageFormat, DDLUtils.HIVE_PROVIDER)
+    } else {
+      // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
+      // tables if it's a CTAS and `conf.convertCTAS` is true.
+      // TODO: create native data source table by default for non-CTAS.
+      if (ctas && conf.convertCTAS) {
+        (nonHiveStorageFormat, conf.defaultDataSourceName)
+      } else {
+        (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
+      }
     }
   }
 
@@ -699,22 +703,19 @@ class ResolveSessionCatalog(
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: String,
-      options: Map[String, String],
       location: Option[String],
       comment: Option[String],
+      storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
-    // Hive types are allowed if the provider is "hive"
-    if (!DDLUtils.isHiveTable(Some(provider))) {
-      assertNoCharTypeInSchema(schema)
-    }
-
     if (external) {
-      throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
+      if (DDLUtils.isHiveTable(Some(provider))) {
+        if (location.isEmpty) {
+          throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+        }
+      } else {
+        throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
+      }
     }
-
-    val storage = CatalogStorageFormat.empty.copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      properties = options)
 
     val tableType = if (location.isDefined) {
       CatalogTableType.EXTERNAL
@@ -725,68 +726,9 @@ class ResolveSessionCatalog(
     CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage,
+      storage = storageFormat,
       schema = schema,
       provider = Some(provider),
-      partitionColumnNames = partitioning.asPartitionColumns,
-      bucketSpec = bucketSpec,
-      properties = properties,
-      comment = comment)
-  }
-
-  private def buildHiveCatalogTable(
-      table: TableIdentifier,
-      schema: StructType,
-      partitioning: Seq[Transform],
-      bucketSpec: Option[BucketSpec],
-      properties: Map[String, String],
-      serdeInfo: SerdeInfo,
-      options: Map[String, String],
-      location: Option[String],
-      comment: Option[String],
-      external: Boolean): CatalogTable = {
-    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    val baseStorage = defaultStorage.copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      serde = serdeInfo.serde.orElse(defaultStorage.serde),
-      properties = options ++ serdeInfo.serdeProperties)
-
-    val storage = (serdeInfo.storedAs, serdeInfo.formatClasses) match {
-      case (Some(format), None) =>
-        HiveSerDe.sourceToSerDe(format) match {
-          case Some(hiveSerDe) =>
-            baseStorage.copy(
-              inputFormat = hiveSerDe.inputFormat,
-              outputFormat = hiveSerDe.outputFormat,
-              serde = serdeInfo.serde.orElse(hiveSerDe.serde))
-          case _ =>
-            baseStorage
-        }
-      case (None, Some((inFormat, outFormat))) =>
-        baseStorage.copy(
-          inputFormat = Some(inFormat),
-          outputFormat = Some(outFormat))
-
-      case _ =>
-        baseStorage
-    }
-
-    if (external && location.isEmpty) {
-      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
-    }
-
-    val tableType = if (location.isDefined) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
-
-    CatalogTable(
-      identifier = table,
-      tableType = tableType,
-      storage = storage,
-      schema = schema,
-      provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitioning.asPartitionColumns,
       bucketSpec = bucketSpec,
       properties = properties,
@@ -856,6 +798,9 @@ class ResolveSessionCatalog(
   }
 
   private def isV2Provider(provider: String): Boolean = {
+    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
+    // `HiveFileFormat`, when running tests in sql/core.
+    if (DDLUtils.isHiveTable(Some(provider))) return false
     DataSource.lookupDataSourceV2(provider, conf) match {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(_: FileDataSourceV2) => false

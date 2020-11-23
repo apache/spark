@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -58,25 +59,25 @@ abstract class ParsedStatement extends LogicalPlan {
  */
 case class SerdeInfo(
     storedAs: Option[String] = None,
-    formatClasses: Option[(String, String)] = None,
+    formatClasses: Option[FormatClasses] = None,
     serde: Option[String] = None,
     serdeProperties: Map[String, String] = Map.empty) {
   // this uses assertions because validation is done in validateRowFormatFileFormat etc.
   assert(storedAs.isEmpty || formatClasses.isEmpty,
-    s"Conflicting STORED AS $storedAs and INPUTFORMAT/OUTPUTFORMAT $formatClasses values")
+    "Cannot specify both STORED AS and INPUTFORMAT/OUTPUTFORMAT")
 
   def describe: String = {
     val serdeString = if (serde.isDefined || serdeProperties.nonEmpty) {
-      "ROW FORMAT" + serde.map(sd => s" SERDE $sd").getOrElse(" DELIMITED")
+      "ROW FORMAT " + serde.map(sd => s"SERDE $sd").getOrElse("DELIMITED")
     } else {
       ""
     }
 
     this match {
-      case SerdeInfo(Some(format), _, _, _) =>
-        s"STORED AS $format $serdeString"
-      case SerdeInfo(_, Some((inFormat, outFormat)), _, _) =>
-        s"INPUTFORMAT $inFormat OUTPUTFORMAT $outFormat $serdeString"
+      case SerdeInfo(Some(storedAs), _, _, _) =>
+        s"STORED AS $storedAs $serdeString"
+      case SerdeInfo(_, Some(formatClasses), _, _) =>
+        s"STORED AS $formatClasses $serdeString"
       case _ =>
         serdeString
     }
@@ -85,7 +86,7 @@ case class SerdeInfo(
   def merge(other: SerdeInfo): SerdeInfo = {
     def getOnly[T](desc: String, left: Option[T], right: Option[T]): Option[T] = {
       (left, right) match {
-        case (Some(l), Some(r)) if l != r =>
+        case (Some(l), Some(r)) =>
           assert(l == r, s"Conflicting $desc values: $l != $r")
           left
         case (Some(_), _) =>
@@ -97,6 +98,7 @@ case class SerdeInfo(
       }
     }
 
+    SerdeInfo.checkSerdePropMerging(serdeProperties, other.serdeProperties)
     SerdeInfo(
       getOnly("STORED AS", storedAs, other.storedAs),
       getOnly("INPUTFORMAT/OUTPUTFORMAT", formatClasses, other.formatClasses),
@@ -105,9 +107,25 @@ case class SerdeInfo(
   }
 }
 
+case class FormatClasses(input: String, output: String) {
+  override def toString: String = s"INPUTFORMAT $input OUTPUTFORMAT $output"
+}
+
 object SerdeInfo {
-  val empty: SerdeInfo = {
-    SerdeInfo(None, None, None, Map.empty)
+  val empty: SerdeInfo = SerdeInfo(None, None, None, Map.empty)
+
+  def checkSerdePropMerging(
+      props1: Map[String, String], props2: Map[String, String]): Unit = {
+    val conflictKeys = props1.keySet.intersect(props2.keySet)
+    if (conflictKeys.nonEmpty) {
+      throw new UnsupportedOperationException(
+        s"""
+          |Cannot safely merge SERDEPROPERTIES:
+          |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+          |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
+          |The conflict keys: ${conflictKeys.mkString(", ")}
+          |""".stripMargin)
+    }
   }
 }
 

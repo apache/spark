@@ -2457,7 +2457,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   /**
    * Type to keep track of table clauses:
-   * (partTransforms, partCols, bucketSpec, properties, options, location, comment, serde).
+   * - partition transforms
+   * - partition columns
+   * - bucketSpec
+   * - properties
+   * - options
+   * - location
+   * - comment
+   * - serde
+   *
+   * Note: Partition transforms are based on existing table schema definition. It can be simple
+   * column names, or functions like `year(date_col)`. Partition columns are column names with data
+   * types like `i INT`, which should be appended to the existing table schema.
    */
   type TableClauses = (
       Seq[Transform], Seq[StructField], Option[BucketSpec], Map[String, String],
@@ -2784,7 +2795,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     (ctx.fileFormat, ctx.storageHandler) match {
       // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
       case (c: TableFileFormatContext, null) =>
-        SerdeInfo(formatClasses = Some((string(c.inFmt), string(c.outFmt))))
+        SerdeInfo(formatClasses = Some(FormatClasses(string(c.inFmt), string(c.outFmt))))
       // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
       case (c: GenericFileFormatContext, null) =>
         SerdeInfo(storedAs = Some(c.identifier.getText))
@@ -2813,8 +2824,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *   [NULL DEFINED AS char]
    * }}}
    */
-  def visitRowFormat(
-      ctx: RowFormatContext): SerdeInfo = withOrigin(ctx) {
+  def visitRowFormat(ctx: RowFormatContext): SerdeInfo = withOrigin(ctx) {
     ctx match {
       case serde: RowFormatSerdeContext => visitRowFormatSerde(serde)
       case delimited: RowFormatDelimitedContext => visitRowFormatDelimited(delimited)
@@ -2934,16 +2944,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val location = visitLocationSpecList(ctx.locationSpec())
     val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
-
-    validateRowFormatFileFormat(
-      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
-    val fileFormatSerdeInfo = ctx.createFileFormat.asScala.map(visitCreateFileFormat)
-    val rowFormatSerdeInfo = ctx.rowFormat.asScala.map(visitRowFormat)
-    val serdeInfo =
-      (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((x, y) => x.merge(y))
-
+    val serdeInfo = getSerdeInfo(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
     (partTransforms, partCols, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment,
-        serdeInfo)
+      serdeInfo)
+  }
+
+  protected def getSerdeInfo(
+      rowFormatCtx: Seq[RowFormatContext],
+      createFileFormatCtx: Seq[CreateFileFormatContext],
+      ctx: ParserRuleContext): Option[SerdeInfo] = {
+    validateRowFormatFileFormat(rowFormatCtx, createFileFormatCtx, ctx)
+    val rowFormatSerdeInfo = rowFormatCtx.map(visitRowFormat)
+    val fileFormatSerdeInfo = createFileFormatCtx.map(visitCreateFileFormat)
+    (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((l, r) => l.merge(r))
   }
 
   private def partitionExpressions(
@@ -2954,8 +2967,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       if (partCols.nonEmpty) {
         val references = partTransforms.map(_.describe()).mkString(", ")
         val columns = partCols
-            .map(field => s"${field.name} ${field.dataType.simpleString}")
-            .mkString(", ")
+          .map(field => s"${field.name} ${field.dataType.simpleString}")
+          .mkString(", ")
         operationNotAllowed(
           s"""PARTITION BY: Cannot mix partition expressions and partition columns:
              |Expressions: $references
@@ -2977,12 +2990,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Expected format:
    * {{{
    *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   USING table_provider
+   *   [USING table_provider]
    *   create_table_clauses
    *   [[AS] select_statement];
    *
    *   create_table_clauses (order insensitive):
-   *     partition_clauses
+   *     [PARTITIONED BY (partition_fields)]
    *     [OPTIONS table_property_list]
    *     [ROW FORMAT row_format]
    *     [STORED AS file_format]
@@ -2993,15 +3006,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *     [LOCATION path]
    *     [COMMENT table_comment]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
-   *   partition_clauses:
-   *     [PARTITIONED BY (col_name, transform(col_name), transform(constant, col_name), ...)] |
-   *     [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
+   *
+   *   partition_fields:
+   *     col_name, transform(col_name), transform(constant, col_name), ... |
+   *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList)
+    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
@@ -3010,18 +3024,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val schema = columns
-        .map(dataCols => StructType(dataCols ++ partCols))
-        .getOrElse(StructType(partCols))
+    if (temp) {
+      val asSelect = if (ctx.query == null) "" else " AS ..."
+      operationNotAllowed(
+        s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
+    }
+
     val partitioning = partitionExpressions(partTransforms, partCols, ctx)
 
     Option(ctx.query).map(plan) match {
-      case Some(_) if temp =>
-        operationNotAllowed(
-          "CREATE TEMPORARY TABLE ... AS ..., use CREATE TEMPORARY VIEW instead",
-          ctx)
-
-      case Some(_) if columns.isDefined =>
+      case Some(_) if columns.nonEmpty =>
         operationNotAllowed(
           "Schema may not be specified in a Create Table As Select (CTAS) statement",
           ctx)
@@ -3037,10 +3049,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           table, query, partitioning, bucketSpec, properties, provider, options, location, comment,
           writeOptions = Map.empty, serdeInfo, external = external, ifNotExists = ifNotExists)
 
-      case None if temp =>
-        operationNotAllowed("CREATE TEMPORARY TABLE", ctx)
-
       case _ =>
+        // Note: table schema includes both the table columns list and the partition columns
+        // with data type.
+        val schema = StructType(columns ++ partCols)
         CreateTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
           options, location, comment, serdeInfo, external = external, ifNotExists = ifNotExists)
     }
@@ -3052,13 +3064,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Expected format:
    * {{{
    *   [CREATE OR] REPLACE TABLE [db_name.]table_name
-   *   USING table_provider
+   *   [USING table_provider]
    *   replace_table_clauses
    *   [[AS] select_statement];
    *
    *   replace_table_clauses (order insensitive):
    *     [OPTIONS table_property_list]
-   *     [PARTITIONED BY (col_name, transform(col_name), transform(constant, col_name), ...)]
+   *     [PARTITIONED BY (partition_fields)]
    *     [CLUSTERED BY (col_name, col_name, ...)
    *       [SORTED BY (col_name [ASC|DESC], ...)]
    *       INTO num_buckets BUCKETS
@@ -3066,14 +3078,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *     [LOCATION path]
    *     [COMMENT table_comment]
    *     [TBLPROPERTIES (property_name=property_value, ...)]
+   *
+   *   partition_fields:
+   *     col_name, transform(col_name), transform(constant, col_name), ... |
+   *     col_name data_type [NOT NULL] [COMMENT col_comment], ...
    * }}}
    */
   override def visitReplaceTable(ctx: ReplaceTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitReplaceTableHeader(ctx.replaceTableHeader)
+    val orCreate = ctx.replaceTableHeader().CREATE() != null
+
     if (temp) {
-      operationNotAllowed(
-        "CREATE OR REPLACE TEMPORARY TABLE ..., use CREATE TEMPORARY VIEW instead",
-        ctx)
+      val action = if (orCreate) "CREATE OR REPLACE" else "REPLACE"
+      operationNotAllowed(s"$action TEMPORARY TABLE ..., use $action TEMPORARY VIEW instead.", ctx)
     }
 
     if (external) {
@@ -3086,24 +3103,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList)
+    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val schema = columns.map(dataCols => StructType(dataCols ++ partCols))
     val partitioning = partitionExpressions(partTransforms, partCols, ctx)
-    val orCreate = ctx.replaceTableHeader().CREATE() != null
 
     Option(ctx.query).map(plan) match {
-      case Some(_) if schema.isDefined =>
+      case Some(_) if columns.nonEmpty =>
         operationNotAllowed(
           "Schema may not be specified in a Replace Table As Select (RTAS) statement",
           ctx)
 
       case Some(_) if partCols.nonEmpty =>
+        // non-reference partition columns are not allowed because schema can't be specified
         operationNotAllowed(
           "Partition column types may not be specified in Replace Table As Select (RTAS)",
           ctx)
@@ -3114,9 +3130,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           orCreate = orCreate)
 
       case _ =>
-        ReplaceTableStatement(table, schema.getOrElse(new StructType), partitioning,
-          bucketSpec, properties, provider, options, location, comment, serdeInfo,
-          orCreate = orCreate)
+        // Note: table schema includes both the table columns list and the partition columns
+        // with data type.
+        val schema = StructType(columns ++ partCols)
+        ReplaceTableStatement(table, schema, partitioning, bucketSpec, properties, provider,
+          options, location, comment, serdeInfo, orCreate = orCreate)
     }
   }
 

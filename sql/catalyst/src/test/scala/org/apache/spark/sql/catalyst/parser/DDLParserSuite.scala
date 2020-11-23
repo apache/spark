@@ -290,6 +290,25 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("create/replace table - empty columns list") {
+    val createSql = "CREATE TABLE my_tab PARTITIONED BY (part string)"
+    val replaceSql = "REPLACE TABLE my_tab PARTITIONED BY (part string)"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
   test("create/replace table - using with partition column definitions") {
     val createSql = "CREATE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
     val replaceSql = "REPLACE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
@@ -455,7 +474,7 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       None,
       None,
-      Some(SerdeInfo(formatClasses = Some(("inFormat", "outFormat")))))
+      Some(SerdeInfo(formatClasses = Some(FormatClasses("inFormat", "outFormat")))))
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
@@ -479,7 +498,9 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       None,
       None,
-      Some(SerdeInfo(formatClasses = Some(("inFormat", "outFormat")), serde = Some("customSerde"))))
+      Some(SerdeInfo(
+        formatClasses = Some(FormatClasses("inFormat", "outFormat")),
+        serde = Some("customSerde"))))
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }

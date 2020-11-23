@@ -380,6 +380,37 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  private def toStorageFormat(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo],
+      ctx: ParserRuleContext): CatalogStorageFormat = {
+    if (maybeSerdeInfo.isEmpty) {
+      CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
+    } else {
+      val serdeInfo = maybeSerdeInfo.get
+      if (serdeInfo.storedAs.isEmpty) {
+        CatalogStorageFormat.empty.copy(
+          locationUri = location.map(CatalogUtils.stringToURI),
+          inputFormat = serdeInfo.formatClasses.map(_.input),
+          outputFormat = serdeInfo.formatClasses.map(_.output),
+          serde = serdeInfo.serde,
+          properties = serdeInfo.serdeProperties)
+      } else {
+        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
+          case Some(hiveSerde) =>
+            CatalogStorageFormat.empty.copy(
+              locationUri = location.map(CatalogUtils.stringToURI),
+              inputFormat = hiveSerde.inputFormat,
+              outputFormat = hiveSerde.outputFormat,
+              serde = serdeInfo.serde.orElse(hiveSerde.serde),
+              properties = serdeInfo.serdeProperties)
+          case _ =>
+            operationNotAllowed(s"STORED AS with file format '${serdeInfo.storedAs.get}'", ctx)
+        }
+      }
+    }
+  }
+
   /**
    * Create a [[CreateTableLikeCommand]] command.
    *
@@ -409,53 +440,12 @@ class SparkSqlAstBuilder extends AstBuilder {
     val location = visitLocationSpecList(ctx.locationSpec())
     // rowStorage used to determine CatalogStorageFormat.serde and
     // CatalogStorageFormat.properties in STORED AS clause.
-    val rowFormatSerdeInfo = ctx.rowFormat.asScala.map(visitRowFormat)
-    val fileFormatSerdeInfo = ctx.createFileFormat.asScala.map(visitCreateFileFormat)
-    val serdeInfo =
-      (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((x, y) => x.merge(y))
+    val serdeInfo = getSerdeInfo(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
     if (provider.isDefined && serdeInfo.isDefined) {
-      val sd = serdeInfo.get
-      if (sd.storedAs.isDefined) {
-        throw new ParseException("'STORED AS hiveFormats' and 'USING provider' " +
-            "should not be specified both", ctx)
-      } else if (sd.formatClasses.isDefined) {
-        throw new ParseException("'INPUTFORMAT hiveFormat' and 'USING provider' " +
-            "should not be specified both", ctx)
-      } else if (sd.serde.isDefined) {
-        throw new ParseException("'ROW FORMAT' must be used with 'STORED AS' not 'USING'", ctx)
-      }
+      operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    val (inputFormat, outputFormat, serde, serdeProperties) = serdeInfo match {
-      case Some(SerdeInfo(Some(storedAs), None, serde, props)) =>
-        HiveSerDe.sourceToSerDe(storedAs) match {
-          case Some(hiveSerde) =>
-            (hiveSerde.inputFormat, hiveSerde.outputFormat, serde.orElse(hiveSerde.serde), props)
-          case _ =>
-            (None, None, None, Map.empty[String, String])
-        }
-
-      case Some(SerdeInfo(None, Some((inputFormat, outputFormat)), serde, props)) =>
-        (Some(inputFormat), Some(outputFormat), serde, props)
-
-      case Some(SerdeInfo(None, None, serde, props)) =>
-        if (serde.isDefined) {
-          throw new ParseException("'ROW FORMAT' must be used with 'STORED AS'", ctx)
-        }
-        (None, None, serde, props)
-
-      case _ =>
-        (None, None, None, Map.empty[String, String])
-    }
-
-    val storage = CatalogStorageFormat(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      inputFormat = inputFormat,
-      outputFormat = outputFormat,
-      serde = serde,
-      compressed = false,
-      properties = serdeProperties)
-
+    val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(
       targetTable, sourceTable, storage, provider, properties, ctx.EXISTS != null)
@@ -613,12 +603,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
-    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
-    val rowFormatSerdeInfo = Option(ctx.rowFormat).map(visitRowFormat)
-    val fileFormatSerdeInfo = Option(ctx.createFileFormat).map(visitCreateFileFormat)
-    val serdeInfo =
-      (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((x, y) => x.merge(y))
-
+    val serdeInfo = getSerdeInfo(Seq(ctx.rowFormat), Seq(ctx.createFileFormat), ctx)
     val path = string(ctx.path)
     // The path field is required
     if (path.isEmpty) {
@@ -626,34 +611,12 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
 
     val default = HiveSerDe.getDefaultStorage(conf)
+    val storage = toStorageFormat(Some(path), serdeInfo, ctx)
+    val finalStorage = storage.copy(
+      inputFormat = storage.inputFormat.orElse(default.inputFormat),
+      outputFormat = storage.outputFormat.orElse(default.outputFormat),
+      serde = storage.serde.orElse(default.serde))
 
-    val (inputFormat, outputFormat, serde, serdeProperties) = serdeInfo match {
-      case Some(SerdeInfo(Some(storedAs), None, None, properties)) =>
-        HiveSerDe.sourceToSerDe(storedAs) match {
-          case Some(hiveSerde) =>
-            (hiveSerde.inputFormat, hiveSerde.outputFormat, hiveSerde.serde, properties)
-          case _ =>
-            (default.inputFormat, default.outputFormat, default.serde, Map.empty[String, String])
-        }
-
-      case Some(SerdeInfo(None, Some((inputFormat, outputFormat)), serde, properties)) =>
-        (Some(inputFormat), Some(outputFormat), serde.orElse(default.serde), properties)
-
-      case Some(SerdeInfo(None, None, serde, properties)) =>
-        (default.inputFormat, default.outputFormat, serde.orElse(default.serde), properties)
-
-      case _ =>
-        (default.inputFormat, default.outputFormat, default.serde, Map.empty[String, String])
-    }
-
-    val storage = CatalogStorageFormat(
-      locationUri = Some(CatalogUtils.stringToURI(path)),
-      inputFormat = inputFormat,
-      outputFormat = outputFormat,
-      serde = serde,
-      compressed = false,
-      properties = serdeProperties)
-
-    (ctx.LOCAL != null, storage, Some(DDLUtils.HIVE_PROVIDER))
+    (ctx.LOCAL != null, finalStorage, Some(DDLUtils.HIVE_PROVIDER))
   }
 }
