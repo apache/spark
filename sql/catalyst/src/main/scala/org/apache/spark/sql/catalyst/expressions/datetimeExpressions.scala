@@ -73,6 +73,21 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current session local timezone.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       Asia/Shanghai
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class CurrentTimeZone() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_timezone"
+}
+
 /**
  * Returns the current date at the start of query evaluation.
  * There is no code generation since this expression should get constant folded by the optimizer.

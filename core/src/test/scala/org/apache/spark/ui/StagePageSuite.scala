@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui
 
-import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node

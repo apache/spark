@@ -30,7 +30,6 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.

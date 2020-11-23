@@ -22,9 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, MetadataColumn, SupportsMetadataColumns, Table, TableCapability}
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
-import org.apache.spark.sql.connector.write.WriteBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -36,8 +35,9 @@ import org.apache.spark.util.Utils
  * @param output the output attributes of this relation.
  * @param catalog catalogPlugin for the table. None if no catalog is specified.
  * @param identifier the identifier for the table. None if no identifier is defined.
- * @param options The options for this table operation. It's used to create fresh [[ScanBuilder]]
- *                and [[WriteBuilder]].
+ * @param options The options for this table operation. It's used to create fresh
+ *                [[org.apache.spark.sql.connector.read.ScanBuilder]] and
+ *                [[org.apache.spark.sql.connector.write.WriteBuilder]].
  */
 case class DataSourceV2Relation(
     table: Table,

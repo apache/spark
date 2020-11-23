@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.IntegerType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
@@ -95,5 +94,27 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
       case p: ExpressionProxy => p
     })
     assert(proxys.isEmpty)
+  }
+
+  test("SubExprEvaluationRuntime should wrap semantically equal exprs") {
+    val runtime = new SubExprEvaluationRuntime(1)
+
+    val one = Literal(1)
+    val two = Literal(2)
+    def mul: (Literal, Literal) => Expression =
+      (left: Literal, right: Literal) => Multiply(left, right)
+
+    val mul2_1 = Multiply(mul(one, two), mul(one, two))
+    val mul2_2 = Multiply(mul(one, two), mul(one, two))
+
+    val sqrt = Sqrt(mul2_1)
+    val sum = Add(mul2_2, sqrt)
+    val proxyExpressions = runtime.proxyExpressions(Seq(sum))
+    val proxys = proxyExpressions.flatMap(_.collect {
+      case p: ExpressionProxy => p
+    })
+    // ( (one * two) * (one * two) )
+    assert(proxys.size == 2)
+    assert(proxys.forall(_.child.semanticEquals(mul2_1)))
   }
 }

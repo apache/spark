@@ -19,6 +19,8 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.time.{LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -40,7 +42,6 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{StructType, _}
 import org.apache.spark.util.Utils
 
@@ -2051,6 +2052,47 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
           .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
       }
+    }
+  }
+
+  test("SPARK-31962: file stream source shouldn't allow modifiedBefore/modifiedAfter") {
+    def formatTime(time: LocalDateTime): String = {
+      time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+    }
+
+    def assertOptionIsNotSupported(options: Map[String, String], path: String): Unit = {
+      val schema = StructType(Seq(StructField("a", StringType)))
+      var dsReader = spark.readStream
+        .format("csv")
+        .option("timeZone", "UTC")
+        .schema(schema)
+
+      options.foreach { case (k, v) => dsReader = dsReader.option(k, v) }
+
+      val df = dsReader.load(path)
+
+      testStream(df)(
+        ExpectFailure[IllegalArgumentException](
+          t => assert(t.getMessage.contains("is not allowed in file stream source")),
+          isFatalError = false)
+      )
+    }
+
+    withTempDir { dir =>
+      // "modifiedBefore"
+      val futureTime = LocalDateTime.now(ZoneOffset.UTC).plusYears(1)
+      val formattedFutureTime = formatTime(futureTime)
+      assertOptionIsNotSupported(Map("modifiedBefore" -> formattedFutureTime), dir.getCanonicalPath)
+
+      // "modifiedAfter"
+      val prevTime = LocalDateTime.now(ZoneOffset.UTC).minusYears(1)
+      val formattedPrevTime = formatTime(prevTime)
+      assertOptionIsNotSupported(Map("modifiedAfter" -> formattedPrevTime), dir.getCanonicalPath)
+
+      // both
+      assertOptionIsNotSupported(
+        Map("modifiedBefore" -> formattedFutureTime, "modifiedAfter" -> formattedPrevTime),
+        dir.getCanonicalPath)
     }
   }
 
