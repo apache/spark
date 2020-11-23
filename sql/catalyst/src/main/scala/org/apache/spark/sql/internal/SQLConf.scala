@@ -3565,16 +3565,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
-<<<<<<< HEAD
-  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
-
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
-||||||| 065f17386d... [SPARK-32481][CORE][SQL] Support truncate table to move data to trash
-  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
-
-=======
->>>>>>> parent of 065f17386d... [SPARK-32481][CORE][SQL] Support truncate table to move data to trash
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
