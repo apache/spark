@@ -66,7 +66,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
     val partValues = partSchema.map { part =>
       val raw = normalizedSpec.get(part.name).orNull
-      Cast(Literal(raw), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
+      Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }
