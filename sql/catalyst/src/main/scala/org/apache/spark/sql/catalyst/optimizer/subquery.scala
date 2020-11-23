@@ -328,6 +328,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q, q.children)
+    case s: SupportsSubquery =>
+      rewriteSubQueries(s, s.children)
   }
 }
 
