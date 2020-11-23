@@ -27,6 +27,7 @@ import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -47,7 +48,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -456,6 +457,7 @@ class ALSModel private[ml] (
       num: Int,
       blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
+    import ALSModel.TopSelector
 
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
@@ -463,7 +465,7 @@ class ALSModel private[ml] (
       .as[(Array[Int], Array[Float], Array[Int], Array[Float])]
       .mapPartitions { iter =>
         var buffer: Array[Float] = null
-        val pq = new BoundedPriorityQueue[(Int, Float)](num)(Ordering.by(_._2))
+        var selector: TopSelector = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
           require(srcMat.length == srcIds.length * rank)
           require(dstMat.length == dstIds.length * rank)
@@ -471,22 +473,19 @@ class ALSModel private[ml] (
           val n = dstIds.length
           if (buffer == null || buffer.length < n) {
             buffer = Array.ofDim[Float](n)
+            selector = new TopSelector(buffer)
           }
 
           Iterator.tabulate(m) { i =>
             // buffer = i-th vec in srcMat * dstMat
             BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
               srcMat, i * rank, 1, 0.0F, buffer, 0, 1)
-
-            pq.clear()
-            var j = 0
-            while (j < n) { pq += dstIds(j) -> buffer(j); j += 1 }
-            val (kDstIds, kScores) = pq.toArray.sortBy(-_._2).unzip
-            (srcIds(i), kDstIds, kScores)
+            val indices = selector.selectTopKIndices(Iterator.range(0, n), num)
+            (srcIds(i), indices.map(dstIds), indices.map(buffer))
           }
         } ++ {
           buffer = null
-          pq.clear()
+          selector = null
           Iterator.empty
         }
       }
@@ -562,6 +561,21 @@ object ALSModel extends MLReadable[ALSModel] {
 
       metadata.getAndSetParams(model)
       model
+    }
+  }
+
+  /** select top indices based on values. */
+  private[recommendation] class TopSelector(val values: Array[Float]) {
+    import scala.collection.JavaConverters._
+
+    private val indexOrdering = new GuavaOrdering[Int] {
+      override def compare(left: Int, right: Int): Int = {
+        Ordering[Float].compare(values(left), values(right))
+      }
+    }
+
+    def selectTopKIndices(iterator: Iterator[Int], k: Int): Array[Int] = {
+      indexOrdering.greatestOf(iterator.asJava, k).asScala.toArray
     }
   }
 }
