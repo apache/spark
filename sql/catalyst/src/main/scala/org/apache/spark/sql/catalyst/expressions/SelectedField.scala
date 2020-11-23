@@ -65,7 +65,8 @@ object SelectedField {
   /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
-  private def selectField(expr: Expression, dataTypeOpt: Option[DataType]): Option[StructField] = {
+  private def selectField(expr: Expression, dataTypeOpt: Option[DataType],
+    nestArray: Boolean = false): Option[StructField] = {
     expr match {
       case a: Attribute =>
         dataTypeOpt.map { dt =>
@@ -81,16 +82,37 @@ object SelectedField {
             // GetArrayStructFields is the top level extractor. This means its result is
             // not pruned and we need to use the element type of the array its producing.
             field.dataType
-          case Some(ArrayType(dataType, _)) =>
+          case Some(ArrayType(dataType, nullable)) =>
             // GetArrayStructFields is part of a chain of extractors and its result is pruned
             // by a parent expression. In this case need to use the parent element type.
-            dataType
+            if (nestArray) ArrayType(dataType, nullable) else dataType
           case Some(x) =>
             // This should not happen.
             throw new AnalysisException(s"DataType '$x' is not supported by GetArrayStructFields.")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
+      case ExtractNestedArrayField(child, _, _, field @ StructField(_, _, _, _), _) =>
+        val newFieldDataType = dataTypeOpt match {
+          case None =>
+            // ExtractNestedArrayField is the top level extractor. This means its result is
+            // not pruned and we need to use the element type of the array its producing.
+            field.dataType
+          case Some(dataType) =>
+            dataType
+        }
+        val structType = struct(StructField(field.name, newFieldDataType, field.nullable))
+
+        val newDataType = child match {
+          case ExtractNestedArrayField(_, _, _, childField, _) =>
+            childField.dataType match {
+              case _: ArrayType => ArrayType(structType)
+              case _ => structType
+            }
+          case _: GetArrayStructFields => ArrayType(structType)
+          case _ => structType
+        }
+        selectField(child, Some(newDataType), nestArray = true)
       case GetMapValue(child, _, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.

@@ -18,11 +18,10 @@
 package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.catalyst.expressions.CreateNamedStruct
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StructType}
 
 class ComplexTypesSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -116,5 +115,19 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     val schema = new StructType().add("arr", ArrayType(innerStruct, containsNull = false))
     val df = spark.createDataFrame(List(Row(Seq(Row(1), Row(null)))).asJava, schema)
     checkAnswer(df.select($"arr".getField("i")), Row(Seq(1, null)))
+  }
+
+  test("SPARK-32002: Support ExtractValue from nested ArrayStruct") {
+    val jsonStr1 = """{"a": [{"b": [{"c": [1,2]}]}]}"""
+    val jsonStr2 = """{"a": [{"b": [{"c": [1]}, {"c": [2]}]}]}"""
+    val df = spark.read.json(Seq(jsonStr1, jsonStr2).toDS())
+    checkAnswer(df.select($"a.b.c"), Row(Seq(Seq(Seq(1, 2))))
+      :: Row(Seq(Seq(Seq(1), Seq(2)))) :: Nil)
+  }
+
+  test("SPARK-32003: Support ExtractValue from nested ArrayStruct") {
+    val jsonStr1 = """{"a": [{"b": [{"c": [{"d": [1, 2]}]}]}]}"""
+    val df = spark.read.json(Seq(jsonStr1).toDS())
+    checkAnswer(df.select($"a.b.c.d"), Row(Seq(Seq(Seq(Seq(1))))))
   }
 }

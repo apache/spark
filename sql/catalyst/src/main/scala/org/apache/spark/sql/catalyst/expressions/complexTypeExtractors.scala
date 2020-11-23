@@ -20,8 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator,
+  CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -59,6 +60,13 @@ object ExtractValue {
         val ordinal = findField(fields, fieldName, resolver)
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
           ordinal, fields.length, containsNull || fields(ordinal).nullable)
+
+      case (ExtractNestedArray(StructType(fields), _, containsNullSeq),
+      NonNullLiteral(v, StringType)) if containsNullSeq.nonEmpty =>
+        val fieldName = v.toString
+        val ordinal = findField(fields, fieldName, resolver)
+        ExtractNestedArrayField(child, ordinal, fields.length,
+          fields(ordinal).copy(name = fieldName), containsNullSeq)
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
@@ -215,6 +223,77 @@ case class GetArrayStructFields(
         ${ev.value} = new $arrayClass($values);
       """
     })
+  }
+}
+
+object ExtractNestedArray {
+  type ReturnType = Option[(DataType, Boolean, Seq[Boolean])]
+
+  def unapply(dataType: DataType): ReturnType = {
+    extractArrayType(dataType)
+  }
+
+  def extractArrayType(dataType: DataType): ReturnType = {
+    dataType match {
+      case ArrayType(dt, containsNull) =>
+        extractArrayType(dt) match {
+          case Some((d, cn, seq)) => Some((d, cn, containsNull +: seq))
+          case None => Some((dt, containsNull, Seq.empty[Boolean]))
+        }
+      case _ => None
+    }
+  }
+}
+
+case class ExtractNestedArrayField(
+  child: Expression,
+  ordinal: Int,
+  numFields: Int,
+  field: StructField,
+  containsNullSeq: Seq[Boolean]) extends UnaryExpression
+  with ExtractValue with NullIntolerant with CodegenFallback {
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val array = input.asInstanceOf[ArrayData]
+    new GenericArrayData(
+      (0 until array.numElements()).map(n => evalArrayItem(n, array, containsNullSeq.size)))
+  }
+
+  private def evalArrayItem(original: Int, array: ArrayData, num: Int): ArrayData = {
+    if (array.isNullAt(original)) {
+      null
+    }
+    else {
+      val innerArray = array.get(original, nestedArrayType(num)).asInstanceOf[ArrayData]
+      new GenericArrayData((0 until innerArray.numElements()).map(n => {
+        if (num == 1) {
+          extractStruct(n, innerArray)
+        }
+        else {
+          evalArrayItem(n, innerArray, num - 1)
+        }
+      }))
+    }
+  }
+
+  private def extractStruct(n: Int, array: ArrayData): Any = {
+    if (array.isNullAt(n)) {
+      null
+    } else {
+      val row = array.getStruct(n, numFields)
+      if (row.isNullAt(ordinal)) {
+        null
+      } else {
+        row.get(ordinal, field.dataType)
+      }
+    }
+  }
+
+  override def dataType: DataType = ArrayType(nestedArrayType(0))
+
+  def nestedArrayType(num: Int): DataType = {
+    (num until containsNullSeq.size).reverse
+      .foldLeft(field.dataType) { (e, i) => ArrayType(e, containsNullSeq(i))}
   }
 }
 
