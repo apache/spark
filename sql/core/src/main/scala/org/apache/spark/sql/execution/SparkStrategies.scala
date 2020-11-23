@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRe
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{PartitioningFlexibility, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleOrigin}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -670,7 +670,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), PartitioningFlexibility.STRICT) :: Nil
+            planLater(child), ShuffleOrigin.REPARTITION_WITH_NUM) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -703,15 +703,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val partitionFlexibility = if (r.optNumPartitions.isEmpty) {
-          PartitioningFlexibility.PRESERVE_CLUSTERING
+        val shuffleOrigin = if (r.optNumPartitions.isEmpty) {
+          ShuffleOrigin.REPARTITION
         } else {
-          PartitioningFlexibility.STRICT
+          ShuffleOrigin.REPARTITION_WITH_NUM
         }
-        exchange.ShuffleExchangeExec(
-          r.partitioning,
-          planLater(r.child),
-          partitionFlexibility) :: Nil
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil

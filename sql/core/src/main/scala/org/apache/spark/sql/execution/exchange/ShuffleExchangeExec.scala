@@ -56,7 +56,7 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def numPartitions: Int
 
-  def partitioningFlexibility: PartitioningFlexibility.Value
+  def shuffleOrigin: ShuffleOrigin.Value
 
   /**
    * Returns whether the shuffle partition number can be changed.
@@ -64,18 +64,16 @@ trait ShuffleExchangeLike extends Exchange {
   final def canChangeNumPartitions: Boolean = {
     // If users specify the num partitions via APIs like `repartition(5, col)`, we shouldn't change
     // it. For `SinglePartition`, it requires exactly one partition and we can't change it either.
-    partitioningFlexibility != PartitioningFlexibility.STRICT &&
-      outputPartitioning != SinglePartition
+    shuffleOrigin != ShuffleOrigin.REPARTITION_WITH_NUM && outputPartitioning != SinglePartition
   }
 
   /**
-   * Returns whether the shuffle output clustering can be changed.
+   * Returns whether the shuffle output data partitioning can be changed.
    */
-  final def canChangeClustering: Boolean = {
+  final def canChangePartitioning: Boolean = {
     // If users specify the partitioning via APIs like `repartition(col)`, we shouldn't change it.
     // For `SinglePartition`, itself is a special partitioning and we can't change it either.
-    partitioningFlexibility == PartitioningFlexibility.UNSPECIFIED &&
-      outputPartitioning != SinglePartition
+    shuffleOrigin == ShuffleOrigin.ENSURE_REQUIREMENTS && outputPartitioning != SinglePartition
   }
 
   /**
@@ -94,16 +92,19 @@ trait ShuffleExchangeLike extends Exchange {
   def runtimeStatistics: Statistics
 }
 
-object PartitioningFlexibility extends Enumeration {
-  type PartitioningFlexibility = Value
-  // STRICT means we can't change the partitioning at all, including the partition number, even if
-  // we lose performance improvement opportunity.
-  val STRICT = Value
-  // PRESERVE_CLUSTERING means we must preserve the data clustering even if it's useless to the
-  // downstream operators. Shuffle partition number can be changed.
-  val PRESERVE_CLUSTERING = Value
-  // UNSPECIFIED means the partitioning can be changed as long as it doesn't break query semantic.
-  val UNSPECIFIED = Value
+// Describes where the shuffle operator comes from.
+object ShuffleOrigin extends Enumeration {
+  type ShuffleOrigin = Value
+  // Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
+  // means that the shuffle operator is used to ensure internal data partitioning requirements and
+  // Spark is free to optimize it as long as the requirements are still ensured.
+  val ENSURE_REQUIREMENTS = Value
+  // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
+  // can still optimize it via changing shuffle partition number, as data partitioning won't change.
+  val REPARTITION = Value
+  // Indicates that the shuffle operator was added by the user-specified repartition operator with
+  // a certain partition number. Spark can't optimize it.
+  val REPARTITION_WITH_NUM = Value
 }
 
 /**
@@ -112,7 +113,7 @@ object PartitioningFlexibility extends Enumeration {
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    partitioningFlexibility: PartitioningFlexibility.Value = PartitioningFlexibility.UNSPECIFIED)
+    shuffleOrigin: ShuffleOrigin.Value = ShuffleOrigin.ENSURE_REQUIREMENTS)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
