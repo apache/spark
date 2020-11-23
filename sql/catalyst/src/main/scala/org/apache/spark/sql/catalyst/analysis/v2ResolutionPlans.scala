@@ -37,7 +37,9 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedTable]] during analysis.
  */
-case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTable(
+    multipartIdentifier: Seq[String],
+    commandName: String) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
