@@ -1414,8 +1414,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               ctx.NOT match {
-                case null => LikeAll(e, patterns)
-                case _ => NotLikeAll(e, patterns)
+                case null => LikeAll(e, patterns.toSeq)
+                case _ => NotLikeAll(e, patterns.toSeq)
               }
             } else {
               getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
@@ -3303,7 +3303,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
     LoadData(
-      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "LOAD DATA"),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3449,7 +3449,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(spec, location)
     }
     AlterTableAddPartition(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3491,7 +3493,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
@@ -3720,6 +3724,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ => string(ctx.STRING)
     }
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CommentOnTable(UnresolvedTable(nameParts), comment)
+    CommentOnTable(UnresolvedTable(nameParts, "COMMENT ON TABLE"), comment)
   }
 }

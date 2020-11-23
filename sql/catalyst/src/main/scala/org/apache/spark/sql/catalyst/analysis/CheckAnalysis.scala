@@ -98,7 +98,7 @@ trait CheckAnalysis extends PredicateHelper {
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
