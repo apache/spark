@@ -124,6 +124,25 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     val df = spark.read.json(Seq(jsonStr1, jsonStr2).toDS())
     checkAnswer(df.select($"a.b.c"), Row(Seq(Seq(Seq(1, 2))))
       :: Row(Seq(Seq(Seq(1), Seq(2)))) :: Nil)
+
+    def genJson(start: Char, end: Char, vStr: String): String = {
+      (start to end).map(c => s"""{"$c": [""").mkString +
+        vStr + (start to end).map(_ => "]}").mkString
+    }
+
+    def genResult(start: Char, end: Char, r: Seq[Int]): Any = {
+      (start until end).fold(r) { (z, _) => Seq(z)}
+    }
+
+    val start: Char = 'a'
+    for (i <- 2 to 10) {
+      val end: Char = (start + i).toChar
+      val jsonAToZ = genJson(start, end, "1,2,3")
+      val dfAToZ = spark.read.json(Seq(jsonAToZ).toDS())
+      checkAnswer(dfAToZ.select((start to end).mkString(".")),
+        Row(genResult(start, end, Seq(1, 2, 3))))
+    }
+
   }
 
 }
