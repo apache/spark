@@ -63,20 +63,20 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
    * a constant Long.MaxValue timestamp.
    */
   private def validateDecommissionTimestamps(conf: SparkConf, bm: BlockManager,
-      fail: Boolean = false) = {
+      fail: Boolean = false, assertDone: Boolean = true) = {
     // Verify the decommissioning manager timestamps and status
     val bmDecomManager = new BlockManagerDecommissioner(conf, bm)
-    validateDecommissionTimestampsOnManager(bmDecomManager, fail)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail, assertDone)
   }
 
   private def validateDecommissionTimestampsOnManager(bmDecomManager: BlockManagerDecommissioner,
-      fail: Boolean = false, numShuffles: Option[Int] = None) = {
+      fail: Boolean = false, assertDone: Boolean = true, numShuffles: Option[Int] = None) = {
     var previousTime: Option[Long] = None
     try {
       bmDecomManager.start()
       eventually(timeout(100.second), interval(10.milliseconds)) {
         val (currentTime, done) = bmDecomManager.lastMigrationInfo()
-        assert(done)
+        assert(!assertDone || done)
         // Make sure the time stamp starts moving forward.
         if (!fail) {
           previousTime match {
@@ -98,7 +98,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
         // Wait 5 seconds and assert times keep moving forward.
         Thread.sleep(5000)
         val (currentTime, done) = bmDecomManager.lastMigrationInfo()
-        assert(done && currentTime > previousTime.get)
+        assert((!assertDone || done) && currentTime > previousTime.get)
       }
     } finally {
       bmDecomManager.stop()
@@ -183,7 +183,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     val bmDecomManager = new BlockManagerDecommissioner(sparkConf, bm)
     bmDecomManager.migratingShuffles += ShuffleBlockInfo(10, 10)
 
-    validateDecommissionTimestampsOnManager(bmDecomManager)
+    validateDecommissionTimestampsOnManager(bmDecomManager, fail = false, assertDone = false)
   }
 
   test("block decom manager handles IO failures") {

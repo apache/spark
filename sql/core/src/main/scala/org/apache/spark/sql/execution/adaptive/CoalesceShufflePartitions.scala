@@ -27,8 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
  * avoid many small reduce tasks that hurt performance.
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
-  private def conf = session.sessionState.conf
-
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan

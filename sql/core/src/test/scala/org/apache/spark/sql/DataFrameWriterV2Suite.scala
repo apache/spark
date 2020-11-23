@@ -23,15 +23,16 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamedRelation, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, V2WriteCommand}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.sources.FakeSourceOne
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -57,6 +58,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   after {
+    spark.sessionState.catalog.reset()
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
   }
@@ -100,86 +102,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
-  case class FakeV2WriteCommand(table: NamedRelation, query: LogicalPlan) extends V2WriteCommand
-
-  test("SPARK-33136 output resolved on complex types for V2 write commands") {
-    val tableCatalog = catalog("testcat")
-
-    def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
-      val fromTableName = s"from_table_$name"
-      tableCatalog.createTable(
-        Identifier.of(Array(), fromTableName),
-        StructType(Array(StructField("col", fromType))),
-        Array.empty,
-        new java.util.HashMap[String, String]())
-
-      val toTable = tableCatalog.createTable(
-        Identifier.of(Array(), s"to_table_$name"),
-        StructType(Array(StructField("col", toType))),
-        Array.empty,
-        new java.util.HashMap[String, String]())
-
-      val df = spark.table(s"testcat.$fromTableName")
-
-      val relation = DataSourceV2Relation.create(toTable, Some(tableCatalog), None)
-      val writeCommand = FakeV2WriteCommand(relation, df.queryExecution.analyzed)
-
-      assert(writeCommand.outputResolved, s"Unable to write from type $fromType to type $toType.")
-    }
-
-    // The major difference between `from` and `to` is that `from` is a complex type
-    // with non-nullable, whereas `to` is same data type with flipping nullable.
-
-    // nested struct type
-    val fromStructType = StructType(Array(
-      StructField("s", StringType),
-      StructField("i_nonnull", IntegerType, nullable = false),
-      StructField("st", StructType(Array(
-        StructField("l", LongType),
-        StructField("s_nonnull", StringType, nullable = false))))))
-
-    val toStructType = StructType(Array(
-      StructField("s", StringType),
-      StructField("i_nonnull", IntegerType),
-      StructField("st", StructType(Array(
-        StructField("l", LongType),
-        StructField("s_nonnull", StringType))))))
-
-    assertTypeCompatibility("struct", fromStructType, toStructType)
-
-    // array type
-    assertTypeCompatibility("array", ArrayType(LongType, containsNull = false),
-      ArrayType(LongType, containsNull = true))
-
-    // array type with struct type
-    val fromArrayWithStructType = ArrayType(
-      StructType(Array(StructField("s", StringType, nullable = false))),
-      containsNull = false)
-
-    val toArrayWithStructType = ArrayType(
-      StructType(Array(StructField("s", StringType))),
-      containsNull = true)
-
-    assertTypeCompatibility("array_struct", fromArrayWithStructType, toArrayWithStructType)
-
-    // map type
-    assertTypeCompatibility("map", MapType(IntegerType, StringType, valueContainsNull = false),
-      MapType(IntegerType, StringType, valueContainsNull = true))
-
-    // map type with struct type
-    val fromMapWithStructType = MapType(
-      IntegerType,
-      StructType(Array(StructField("s", StringType, nullable = false))),
-      valueContainsNull = false)
-
-    val toMapWithStructType = MapType(
-      IntegerType,
-      StructType(Array(StructField("s", StringType))),
-      valueContainsNull = true)
-
-    assertTypeCompatibility("map_struct", fromMapWithStructType, toMapWithStructType)
-  }
-
   test("Append: basic append") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -196,6 +118,18 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     checkAnswer(
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
+  test("Append: write to a temp view of v2 relation") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+    spark.table("source").writeTo("temp_view").append()
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
   }
 
   test("Append: by name not position") {
@@ -216,11 +150,36 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Append: fail if table does not exist") {
-    val exc = intercept[NoSuchTableException] {
+    val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("testcat.table_name").append()
     }
 
-    assert(exc.getMessage.contains("table_name"))
+    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
+  }
+
+  test("Append: fail if it writes to a temp view that is not v2 relation") {
+    spark.range(10).createOrReplaceTempView("temp_view")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").append()
+    }
+    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
+      "data source v2 relation"))
+  }
+
+  test("Append: fail if it writes to a view") {
+    spark.sql("CREATE VIEW v AS SELECT 1")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("v").append()
+    }
+    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+  }
+
+  test("Append: fail if it writes to a v1 table") {
+    sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_name").append()
+    }
+    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
   }
 
   test("Overwrite: overwrite by expression: true") {
@@ -261,6 +220,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
+  test("Overwrite: write to a temp view of v2 relation") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("source").writeTo("testcat.table_name").append()
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+
+    spark.table("source2").writeTo("testcat.table_name").overwrite(lit(true))
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
   test("Overwrite: by name not position") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -280,11 +253,36 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("Overwrite: fail if table does not exist") {
-    val exc = intercept[NoSuchTableException] {
+    val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("testcat.table_name").overwrite(lit(true))
     }
 
-    assert(exc.getMessage.contains("table_name"))
+    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
+  }
+
+  test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
+    spark.range(10).createOrReplaceTempView("temp_view")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").overwrite(lit(true))
+    }
+    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
+      "data source v2 relation"))
+  }
+
+  test("Overwrite: fail if it writes to a view") {
+    spark.sql("CREATE VIEW v AS SELECT 1")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("v").overwrite(lit(true))
+    }
+    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+  }
+
+  test("Overwrite: fail if it writes to a v1 table") {
+    sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_name").overwrite(lit(true))
+    }
+    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
   }
 
   test("OverwritePartitions: overwrite conflicting partitions") {
@@ -325,6 +323,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
   }
 
+  test("OverwritePartitions: write to a temp view of v2 relation") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.table("source").writeTo("testcat.table_name").append()
+    spark.table("testcat.table_name").createOrReplaceTempView("temp_view")
+
+    spark.table("source2").writeTo("testcat.table_name").overwritePartitions()
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    checkAnswer(
+      spark.table("temp_view"),
+      Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
   test("OverwritePartitions: by name not position") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
@@ -344,11 +356,36 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
   }
 
   test("OverwritePartitions: fail if table does not exist") {
-    val exc = intercept[NoSuchTableException] {
+    val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("testcat.table_name").overwritePartitions()
     }
 
-    assert(exc.getMessage.contains("table_name"))
+    assert(exc.getMessage.contains("Table or view not found: testcat.table_name"))
+  }
+
+  test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
+    spark.range(10).createOrReplaceTempView("temp_view")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("temp_view").overwritePartitions()
+    }
+    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
+      "data source v2 relation"))
+  }
+
+  test("OverwritePartitions: fail if it writes to a view") {
+    spark.sql("CREATE VIEW v AS SELECT 1")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("v").overwritePartitions()
+    }
+    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+  }
+
+  test("OverwritePartitions: fail if it writes to a v1 table") {
+    sql(s"CREATE TABLE table_name USING ${classOf[FakeSourceOne].getName}")
+    val exc = intercept[AnalysisException] {
+      spark.table("source").writeTo("table_name").overwritePartitions()
+    }
+    assert(exc.getMessage.contains("Cannot write into v1 table: `default`.`table_name`"))
   }
 
   test("Create: basic behavior") {

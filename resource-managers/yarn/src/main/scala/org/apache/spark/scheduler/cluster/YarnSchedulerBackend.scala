@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
-import java.util.concurrent.atomic.{AtomicBoolean}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -29,14 +29,14 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
+import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
+import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -79,6 +79,18 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
+
+  private val blockManagerMaster: BlockManagerMaster = sc.env.blockManager.master
+
+  private val minMergersThresholdRatio =
+    conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO)
+
+  private val minMergersStaticThreshold =
+    conf.get(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD)
+
+  private val maxNumExecutors = conf.get(config.DYN_ALLOCATION_MAX_EXECUTORS)
+
+  private val numExecutors = conf.get(config.EXECUTOR_INSTANCES).getOrElse(0)
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -132,13 +144,13 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private[cluster] def prepareRequestExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): RequestExecutors = {
-    val nodeBlacklist: Set[String] = scheduler.nodeBlacklist()
-    // For locality preferences, ignore preferences for nodes that are blacklisted
+    val excludedNodes: Set[String] = scheduler.excludedNodes()
+    // For locality preferences, ignore preferences for nodes that are excluded
     val filteredRPHostToLocalTaskCount = rpHostToLocalTaskCount.map { case (rpid, v) =>
-      (rpid, v.filter { case (host, count) => !nodeBlacklist.contains(host) })
+      (rpid, v.filter { case (host, count) => !excludedNodes.contains(host) })
     }
     RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
-      filteredRPHostToLocalTaskCount, nodeBlacklist)
+      filteredRPHostToLocalTaskCount, excludedNodes)
   }
 
   /**
@@ -159,6 +171,36 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
+  }
+
+  override def getShufflePushMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = {
+    // TODO (SPARK-33481) This is a naive way of calculating numMergersDesired for a stage,
+    // TODO we can use better heuristics to calculate numMergersDesired for a stage.
+    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
+      maxNumExecutors
+    } else {
+      numExecutors
+    }
+    val tasksPerExecutor = sc.resourceProfileManager
+      .resourceProfileFromId(resourceProfileId).maxTasksPerExecutor(sc.conf)
+    val numMergersDesired = math.min(
+      math.max(1, math.ceil(numPartitions / tasksPerExecutor).toInt), maxExecutors)
+    val minMergersNeeded = math.max(minMergersStaticThreshold,
+      math.floor(numMergersDesired * minMergersThresholdRatio).toInt)
+
+    // Request for numMergersDesired shuffle mergers to BlockManagerMasterEndpoint
+    // and if it's less than minMergersNeeded, we disable push based shuffle.
+    val mergerLocations = blockManagerMaster
+      .getShufflePushMergerLocations(numMergersDesired, scheduler.excludedNodes())
+    if (mergerLocations.size < numMergersDesired && mergerLocations.size < minMergersNeeded) {
+      Seq.empty[BlockManagerId]
+    } else {
+      logDebug(s"The number of shuffle mergers desired ${numMergersDesired}" +
+        s" and available locations are ${mergerLocations.length}")
+      mergerLocations
+    }
   }
 
   /**

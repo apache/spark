@@ -28,7 +28,6 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -137,10 +136,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
-
+  test("SPARK-32388: TRANSFORM should handle schema less correctly (no serde)") {
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
@@ -157,7 +153,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("c").expr,
             df.col("d").expr,
             df.col("e").expr),
-          script = s"python $scriptFilePath",
+          script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
@@ -167,6 +163,39 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         df.select(
           'a.cast("string").as("key"),
           'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          lit(null)).collect())
     }
   }
 

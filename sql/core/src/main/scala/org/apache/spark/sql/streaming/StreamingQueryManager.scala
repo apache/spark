@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}

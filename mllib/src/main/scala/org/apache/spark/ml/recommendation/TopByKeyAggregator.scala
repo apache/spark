@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.recommendation
 
-import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.{Encoder, Encoders}

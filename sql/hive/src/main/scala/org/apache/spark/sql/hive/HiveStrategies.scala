@@ -50,7 +50,7 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
         throw new AnalysisException("Creating bucketed Hive serde table is not supported yet.")
       }
 
-      val defaultStorage = HiveSerDe.getDefaultStorage(session.sessionState.conf)
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
       val options = new HiveOptions(table.storage.properties)
 
       val fileStorage = if (options.fileFormat.isDefined) {
@@ -117,7 +117,6 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
-    val conf = session.sessionState.conf
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
@@ -191,7 +190,6 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
-    conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
     isConvertible(relation.tableMeta)
@@ -223,8 +221,9 @@ case class RelationConversions(
 
       // CTAS
       case CreateTable(tableDesc, mode, Some(query))
-          if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
-            isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+          if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
+            tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
+            SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         // This is for CREATE TABLE .. STORED AS PARQUET/ORC AS SELECT null

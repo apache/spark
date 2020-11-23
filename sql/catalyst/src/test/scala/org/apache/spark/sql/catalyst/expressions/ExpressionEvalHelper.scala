@@ -74,7 +74,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
   private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
+    val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
     serializer.deserialize(serializer.serialize(expr))
@@ -346,6 +346,21 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       dataType: DataType): Unit = {
     forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
       cmpInterpretWithCodegen(EmptyRow, c(l))
+    }
+  }
+
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against unary expressions by feeding them arbitrary literals of `dataType`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      c: Expression => Expression,
+      dataType: DataType): Unit = {
+    forAll (LiteralGenerator.randomGen(dataType)) { (l: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l), true)
     }
   }
 

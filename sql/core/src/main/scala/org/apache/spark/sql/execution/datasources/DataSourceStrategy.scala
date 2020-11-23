@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -27,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -42,9 +41,7 @@ import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.FileSourceStrategy.{extractPredicatesWithinOutputSet, logInfo}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -58,7 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
   def resolver: Resolver = conf.resolver
 
@@ -163,8 +160,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
-      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
-
+      if query.resolved && provider.isDefined &&
+        provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
 
@@ -270,7 +267,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
-      sparkSession,
+      SparkSession.active,
       className = table.provider.get,
       userSpecifiedSchema = Some(table.schema),
       options = dsOptions)
@@ -314,8 +311,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with CastSupport {
-  import DataSourceStrategy._
+object DataSourceStrategy
+  extends Strategy with Logging with CastSupport with PredicateHelper with SQLConfHelper {
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case ScanOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
@@ -466,9 +463,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   private[this] def toCatalystRDD(relation: LogicalRelation, rdd: RDD[Row]): RDD[InternalRow] = {
     toCatalystRDD(relation, relation.output, rdd)
   }
-}
 
-object DataSourceStrategy extends PredicateHelper {
   /**
    * The attribute name may differ from the one in the schema if the query analyzer
    * is case insensitive. We should change attribute names to match the ones in the schema,

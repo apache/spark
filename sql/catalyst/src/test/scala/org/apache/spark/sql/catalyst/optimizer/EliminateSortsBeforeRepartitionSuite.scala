@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class EliminateSortsBeforeRepartitionSuite extends PlanTest {
 
-  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  val analyzer = new Analyzer(catalog, conf)
+  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
+  val analyzer = new Analyzer(catalog)
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val anotherTestRelation = LocalRelation('d.int, 'e.int)

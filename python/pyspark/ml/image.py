@@ -55,8 +55,11 @@ class _ImageSchema(object):
         """
         Returns the image schema.
 
-        :return: a :class:`StructType` with a single column of images
-               named "image" (nullable) and having the same type returned by :meth:`columnSchema`.
+        Returns
+        -------
+        :class:`StructType`
+            with a single column of images named "image" (nullable)
+            and having the same type returned by :meth:`columnSchema`.
 
         .. versionadded:: 2.3.0
         """
@@ -72,7 +75,10 @@ class _ImageSchema(object):
         """
         Returns the OpenCV type mapping supported.
 
-        :return: a dictionary containing the OpenCV type mapping supported.
+        Returns
+        -------
+        dict
+            a dictionary containing the OpenCV type mapping supported.
 
         .. versionadded:: 2.3.0
         """
@@ -87,7 +93,10 @@ class _ImageSchema(object):
         """
         Returns the schema for the image column.
 
-        :return: a :class:`StructType` for image column,
+        Returns
+        -------
+        :class:`StructType`
+            a schema for image column,
             ``struct<origin:string, height:int, width:int, nChannels:int, mode:int, data:binary>``.
 
         .. versionadded:: 2.4.0
@@ -104,7 +113,10 @@ class _ImageSchema(object):
         """
         Returns field names of image columns.
 
-        :return: a list of field names.
+        Returns
+        -------
+        list
+            a list of field names.
 
         .. versionadded:: 2.3.0
         """
@@ -132,9 +144,16 @@ class _ImageSchema(object):
         """
         Converts an image to an array with metadata.
 
-        :param `Row` image: A row that contains the image to be converted. It should
+        Parameters
+        ----------
+        image : :class:`Row`
+            image: A row that contains the image to be converted. It should
             have the attributes specified in `ImageSchema.imageSchema`.
-        :return: a `numpy.ndarray` that is an image.
+
+        Returns
+        -------
+        :class:`numpy.ndarray`
+            that is an image.
 
         .. versionadded:: 2.3.0
         """
@@ -162,9 +181,17 @@ class _ImageSchema(object):
         """
         Converts an array with metadata to a two-dimensional image.
 
-        :param `numpy.ndarray` array: The array to convert to image.
-        :param str origin: Path to the image, optional.
-        :return: a :class:`Row` that is a two dimensional image.
+        Parameters
+        ----------
+        array : :class:`numpy.ndarray`
+            The array to convert to image.
+        origin : str
+            Path to the image, optional.
+
+        Returns
+        -------
+        :class:`Row`
+            that is a two dimensional image.
 
         .. versionadded:: 2.3.0
         """

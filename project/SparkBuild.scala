@@ -221,6 +221,7 @@ object SparkBuild extends PomBuild {
         Seq(
           "-Xfatal-warnings",
           "-deprecation",
+          "-Ywarn-unused-import",
           "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and supress them
         )
       } else {
@@ -230,6 +231,8 @@ object SparkBuild extends PomBuild {
           // see `scalac -Wconf:help` for details
           "-Wconf:cat=deprecation:wv,any:e",
           // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
+          // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
+          // "-Wunused:imports",
           "-Wconf:cat=lint-multiarg-infix:wv",
           "-Wconf:cat=other-nullary-override:wv",
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
@@ -322,7 +325,11 @@ object SparkBuild extends PomBuild {
 
     // disable Mima check for all modules,
     // to be enabled in specific ones that have previous artifacts
-    MimaKeys.mimaFailOnNoPrevious := false
+    MimaKeys.mimaFailOnNoPrevious := false,
+
+    // To prevent intermittent compliation failures, see also SPARK-33297
+    // Apparently we can remove this when we use JDK 11.
+    Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
