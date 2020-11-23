@@ -61,7 +61,7 @@ trait ShuffleExchangeLike extends Exchange {
   /**
    * Returns whether the shuffle partition number can be changed.
    */
-  def canChangeNumPartitions: Boolean = {
+  final def canChangeNumPartitions: Boolean = {
     // If users specify the num partitions via APIs like `repartition(5, col)`, we shouldn't change
     // it. For `SinglePartition`, it requires exactly one partition and we can't change it either.
     partitioningFlexibility != PartitioningFlexibility.STRICT &&
@@ -71,7 +71,7 @@ trait ShuffleExchangeLike extends Exchange {
   /**
    * Returns whether the shuffle output clustering can be changed.
    */
-  def canChangeClustering: Boolean = {
+  final def canChangeClustering: Boolean = {
     // If users specify the partitioning via APIs like `repartition(col)`, we shouldn't change it.
     // For `SinglePartition`, itself is a special partitioning and we can't change it either.
     partitioningFlexibility == PartitioningFlexibility.UNSPECIFIED &&
