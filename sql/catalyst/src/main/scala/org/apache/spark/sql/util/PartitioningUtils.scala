@@ -58,10 +58,10 @@ object PartitioningUtils {
       spec: TablePartitionSpec,
       partitionSchema: StructType,
       properties: Map[String, String],
-      defaultTimeZondId: String): InternalRow = {
+      defaultTimeZoneId: String): InternalRow = {
     val caseInsensitiveProperties = CaseInsensitiveMap(properties)
     val timeZoneId = caseInsensitiveProperties.getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId)
     InternalRow.fromSeq(partitionSchema.map { field =>
       val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
         null
