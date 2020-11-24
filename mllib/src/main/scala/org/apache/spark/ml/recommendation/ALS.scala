@@ -457,33 +457,37 @@ class ALSModel private[ml] (
       num: Int,
       blockSize: Int): DataFrame = {
     import srcFactors.sparkSession.implicits._
-    import ALSModel.TopSelector
+    import scala.collection.JavaConverters._
 
     val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
     val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
       .as[(Array[Int], Array[Float], Array[Int], Array[Float])]
       .mapPartitions { iter =>
-        var buffer: Array[Float] = null
-        var selector: TopSelector = null
+        var scores: Array[Float] = null
+        var idxOrd: GuavaOrdering[Int] = null
         iter.flatMap { case (srcIds, srcMat, dstIds, dstMat) =>
           require(srcMat.length == srcIds.length * rank)
           require(dstMat.length == dstIds.length * rank)
           val m = srcIds.length
           val n = dstIds.length
-          if (buffer == null || buffer.length < n) {
-            buffer = Array.ofDim[Float](n)
-            selector = new TopSelector(buffer)
+          if (scores == null || scores.length < n) {
+            scores = Array.ofDim[Float](n)
+            idxOrd = new GuavaOrdering[Int] {
+              override def compare(left: Int, right: Int): Int = {
+                Ordering[Float].compare(scores(left), scores(right))
+              }
+            }
           }
 
           Iterator.range(0, m).flatMap { i =>
             // buffer = i-th vec in srcMat * dstMat
             BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
-              srcMat, i * rank, 1, 0.0F, buffer, 0, 1)
+              srcMat, i * rank, 1, 0.0F, scores, 0, 1)
 
             val srcId = srcIds(i)
-            selector.selectTopKIndices(Iterator.range(0, n), num)
-              .iterator.map { j => (srcId, dstIds(j), buffer(j)) }
+            idxOrd.greatestOf(Iterator.range(0, n).asJava, num).asScala
+              .iterator.map { j => (srcId, dstIds(j), scores(j)) }
           }
         }
       }
@@ -558,21 +562,6 @@ object ALSModel extends MLReadable[ALSModel] {
 
       metadata.getAndSetParams(model)
       model
-    }
-  }
-
-  /** select top indices based on values. */
-  private[recommendation] class TopSelector(val values: Array[Float]) {
-    import scala.collection.JavaConverters._
-
-    private val indexOrdering = new GuavaOrdering[Int] {
-      override def compare(left: Int, right: Int): Int = {
-        Ordering[Float].compare(values(left), values(right))
-      }
-    }
-
-    def selectTopKIndices(iterator: Iterator[Int], k: Int): Array[Int] = {
-      indexOrdering.greatestOf(iterator.asJava, k).asScala.toArray
     }
   }
 }
