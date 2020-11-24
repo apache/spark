@@ -31,4 +31,5 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
+export LANG="en_US.UTF-8"
 exec python -u ./dev/run-tests-jenkins.py "$@"
