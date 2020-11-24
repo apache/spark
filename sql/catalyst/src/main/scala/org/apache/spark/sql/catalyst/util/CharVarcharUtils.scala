@@ -222,8 +222,6 @@ object CharVarcharUtils {
         })
       case (ArrayType(et1, _), ArrayType(et2, _)) =>
         ArrayType(typeWithWiderCharLength(et1, et2))
-      case (MapType(kt1, vt1, _), MapType(kt2, vt2, _)) =>
-        MapType(typeWithWiderCharLength(kt1, kt2), typeWithWiderCharLength(vt1, vt2))
       case _ => NullType
     }
   }
