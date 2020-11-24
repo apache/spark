@@ -765,6 +765,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARQUET_META_CACHE_ENABLED = buildConf("spark.sql.parquet.metadataCache.enabled")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
@@ -3302,6 +3307,8 @@ class SQLConf extends Serializable with Logging {
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
+
+  def parquetMetaCacheEnabled: Boolean = getConf(PARQUET_META_CACHE_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 

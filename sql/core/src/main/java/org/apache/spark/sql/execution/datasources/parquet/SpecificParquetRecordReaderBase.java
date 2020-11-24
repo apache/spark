@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Lists;
 import scala.Option;
 
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
@@ -88,6 +89,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected ParquetFileReader reader;
 
+  protected ParquetMetadata cachedFooter;
+
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
       throws IOException, InterruptedException {
@@ -102,13 +105,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     // if task.side.metadata is set, rowGroupOffsets is null
     if (rowGroupOffsets == null) {
       // then we need to apply the predicate push down filter
-      footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
+      footer = getFooterByRange(configuration, split.getStart(), split.getEnd());
       MessageType fileSchema = footer.getFileMetaData().getSchema();
       FilterCompat.Filter filter = getFilter(configuration);
       blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
     } else {
       // otherwise we find the row groups that were selected on the client
-      footer = readFooter(configuration, file, NO_FILTER);
+      footer = getFooter(configuration);
       Set<Long> offsets = new HashSet<>();
       for (long offset : rowGroupOffsets) {
         offsets.add(offset);
@@ -241,6 +244,34 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (reader != null) {
       reader.close();
       reader = null;
+    }
+  }
+
+  public void setCachedFooter(ParquetMetadata cachedFooter) {
+    this.cachedFooter = cachedFooter;
+  }
+
+  private ParquetMetadata getFooterByRange(Configuration configuration, long start, long end) throws IOException {
+    if (cachedFooter != null) {
+      List<BlockMetaData> filteredBlocks = Lists.newArrayList();
+      List<BlockMetaData> blocks = cachedFooter.getBlocks();
+      for (BlockMetaData block : blocks) {
+        long offset = block.getStartingPos();
+        if (offset >= start && offset < end) {
+          filteredBlocks.add(block);
+        }
+      }
+      return new ParquetMetadata(cachedFooter.getFileMetaData(), filteredBlocks);
+    } else {
+      return readFooter(configuration, file, range(start, end));
+    }
+  }
+
+  private ParquetMetadata getFooter(Configuration configuration) throws IOException {
+    if (cachedFooter != null) {
+      return cachedFooter;
+    } else {
+      return readFooter(configuration, file, NO_FILTER);
     }
   }
 

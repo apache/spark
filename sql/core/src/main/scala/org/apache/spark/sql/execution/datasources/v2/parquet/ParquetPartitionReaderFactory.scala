@@ -26,14 +26,13 @@ import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetInputSplit, ParquetRecordReader}
-
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{DataFileMetaCacheManager, DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -74,6 +73,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+  private val parquetMetaCacheEnabled = sqlConf.parquetMetaCacheEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -225,6 +225,14 @@ case class ParquetPartitionReaderFactory(
   private def createVectorizedReader(file: PartitionedFile): VectorizedParquetRecordReader = {
     val vectorizedReader = buildReaderBase(file, createParquetVectorizedReader)
       .asInstanceOf[VectorizedParquetRecordReader]
+    // Set footer before initialize.
+    if (parquetMetaCacheEnabled) {
+      val filePath = new Path(new URI(file.filePath))
+      val fileMeta = DataFileMetaCacheManager
+        .get(ParquetFileMetaKey(filePath, broadcastedConf.value.value))
+        .asInstanceOf[ParquetFileMeta]
+      vectorizedReader.setCachedFooter(fileMeta.footer)
+    }
     vectorizedReader.initBatch(partitionSchema, file.partitionValues)
     vectorizedReader
   }
