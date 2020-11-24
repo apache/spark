@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import com.google.common.collect.Lists
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -31,10 +30,7 @@ private[sql] case class ParquetFileMetaKey(path: Path, configuration: Configurat
   override def getFileMeta: ParquetFileMeta = ParquetFileMeta(path, configuration)
 }
 
-class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta {
-  def copyFileMeta: ParquetMetadata =
-    new ParquetMetadata(footer.getFileMetaData, Lists.newArrayList(footer.getBlocks))
-}
+class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta
 
 object ParquetFileMeta {
   def apply(path: Path, conf: Configuration): ParquetFileMeta = {
