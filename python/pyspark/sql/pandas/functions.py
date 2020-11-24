@@ -284,7 +284,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     should be checked for accuracy by users.
 
     Currently,
-    :class:`pyspark.sql.types.MapType`,
     :class:`pyspark.sql.types.ArrayType` of :class:`pyspark.sql.types.TimestampType` and
     nested :class:`pyspark.sql.types.StructType`
     are currently not supported as output types.

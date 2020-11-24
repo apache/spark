@@ -178,7 +178,7 @@ class MesosFineGrainedSchedulerBackendSuite
     val (execInfo, _) = backend.createExecutorInfo(
       Arrays.asList(backend.createResource("cpus", 4)), "mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
-    assert(execInfo.getContainer.getDocker.getForcePullImage.equals(true))
+    assert(execInfo.getContainer.getDocker.getForcePullImage)
     val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
     assert(portmaps.get(0).getHostPort.equals(80))
     assert(portmaps.get(0).getContainerPort.equals(8080))

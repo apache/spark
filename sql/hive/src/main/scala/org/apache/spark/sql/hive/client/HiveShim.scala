@@ -41,11 +41,11 @@ import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -724,12 +724,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
+    val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
     object ExtractAttribute {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ AtomicType(), dt: AtomicType, _)
+          case Cast(child @ IntegralType(), dt: IntegralType, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -740,6 +741,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
+
+      case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
+        val dataType = child.dataType
+        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
+        convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
+          LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
           if useAdvanced =>

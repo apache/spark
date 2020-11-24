@@ -50,4 +50,10 @@ private[spark] object Python {
     .version("2.4.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
+    .internal()
+    .version("3.1.0")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefaultString("15s")
 }

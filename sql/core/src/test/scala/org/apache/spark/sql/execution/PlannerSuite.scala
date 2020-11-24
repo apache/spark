@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -1053,6 +1053,37 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
           HashPartitioning(Seq(k2: AttributeReference), _))) =>
             k1.name == "t1id" && k2.name == "t2id"
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33400: Normalization of sortOrder should take care of sameOrderExprs") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t2id, t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t2id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputOrdering match {
+          case Seq(SortOrder(_, Ascending, NullsFirst, sameOrderExprs)) =>
+            sameOrderExprs.size == 1 && sameOrderExprs.head.isInstanceOf[AttributeReference] &&
+              sameOrderExprs.head.asInstanceOf[AttributeReference].name == "t2id"
           case _ => false
         }))
       }
