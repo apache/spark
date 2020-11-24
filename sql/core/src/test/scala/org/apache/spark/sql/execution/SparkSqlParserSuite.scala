@@ -20,16 +20,14 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.{HiveSerDe, StaticSQLConf}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
+import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.types.StringType
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
