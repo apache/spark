@@ -37,12 +37,13 @@ object ExtractValue {
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
    *
-   *   `child`      |    `extraction`    |    concrete `ExtractValue`
-   * ----------------------------------------------------------------
-   *    Struct      |   Literal String   |        GetStructField
-   * Array[Struct]  |   Literal String   |     GetArrayStructFields
-   *    Array       |   Integral type    |         GetArrayItem
-   *     Map        |   map key type     |         GetMapValue
+   *            `child`            |    `extraction`    |    concrete `ExtractValue`
+   * --------------------------------------------------------------------------------
+   *            Struct             |   Literal String   |        GetStructField
+   *         Array[Struct]         |   Literal String   |     GetArrayStructFields
+   *  Array[ ...Array[struct] ]    |   Literal String   |    ExtractNestedArrayField
+   *            Array              |   Integral type    |         GetArrayItem
+   *             Map               |   map key type     |         GetMapValue
    */
   def apply(
       child: Expression,
@@ -226,6 +227,13 @@ case class GetArrayStructFields(
   }
 }
 
+/**
+ * ExtractNestedArrayType is used to match consecutive nested array types.
+ *
+ * ReturnType: (DataType: the innermost dataType, Boolean: the outermost array contains null
+ * , Seq[Boolean]: the second outer layer to the innermost layer contains null)
+ *
+ */
 object ExtractNestedArrayType {
   type ReturnType = Option[(DataType, Boolean, Seq[Boolean])]
 
@@ -241,6 +249,10 @@ object ExtractNestedArrayType {
   }
 }
 
+/**
+ * For a child whose data type is a nested array containing struct at the innermost level, extracts
+ * the `ordinal`-th fields of multi-level nested array, and returns them as a new nested array.
+ */
 case class ExtractNestedArrayField(
     child: Expression,
     ordinal: Int,
