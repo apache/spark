@@ -897,7 +897,7 @@ class TrainValidationSplitWriter(MLWriter):
 class TrainValidationSplitModelReader(MLReader):
 
     def __init__(self, cls):
-        super(CrossValidatorModelReader, self).__init__()
+        super(TrainValidationSplitModelReader, self).__init__()
         self.cls = cls
 
     def load(self, path):
@@ -935,7 +935,7 @@ class TrainValidationSplitModelReader(MLReader):
 class TrainValidationSplitModelWriter(MLWriter):
 
     def __init__(self, instance):
-        super(CrossValidatorModelWriter, self).__init__()
+        super(TrainValidationSplitModelWriter, self).__init__()
         self.instance = instance
 
     def saveImpl(self, path):
