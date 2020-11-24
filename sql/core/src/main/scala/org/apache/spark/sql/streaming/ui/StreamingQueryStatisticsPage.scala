@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.util.UUID
+import java.util.{Locale, UUID}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
@@ -41,7 +41,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
   logDebug(s"Supported custom metrics: $supportedCustomMetrics")
 
-  private val enabledCustomMetrics = parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
+  private val enabledCustomMetrics =
+    parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST).map(_.toLowerCase(Locale.ROOT))
   logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
@@ -271,11 +272,11 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress.stateOperators.nonEmpty)
     query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
-      .filter(enabledCustomMetrics.contains(_)).map { metricName =>
+      .filter(m => enabledCustomMetrics.contains(m.toLowerCase(Locale.ROOT))).map { metricName =>
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
           p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
         val max = data.maxBy(_._2)._2
-        val metric = supportedCustomMetrics.find(_.name == metricName).get
+        val metric = supportedCustomMetrics.find(_.name.equalsIgnoreCase(metricName)).get
 
         val graphUIData =
           new GraphUIData(
