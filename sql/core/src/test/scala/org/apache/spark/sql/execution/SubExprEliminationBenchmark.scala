@@ -52,57 +52,26 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
         from_json('value, schema).getField(s"col$idx")
       }
 
-      // We only benchmark subexpression performance under codegen/non-codegen, so disabling
-      // json optimization.
-      benchmark.addCase("subexpressionElimination off, codegen on", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .select(cols: _*)
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination off, codegen off", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .select(cols: _*)
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination on, codegen on", numIters) { _ =>
-        withSQLConf(
-            SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-            SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+      Seq(
+        ("false", "true", "CODEGEN_ONLY"),
+        ("false", "false", "NO_CODEGEN"),
+        ("true", "true", "CODEGEN_ONLY"),
+        ("true", "false", "NO_CODEGEN")
+      ).foreach { case (subExprEliminationEnabled, codegenEnabled, codegenFactory) =>
+        // We only benchmark subexpression performance under codegen/non-codegen, so disabling
+        // json optimization.
+        val caseName = s"subExprElimination $subExprEliminationEnabled, codegen: $codegenEnabled"
+        benchmark.addCase(caseName, numIters) { _ =>
+          withSQLConf(
+            SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprEliminationEnabled,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactory,
             SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .select(cols: _*)
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination on, codegen off", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .select(cols: _*)
-          df.write.mode("overwrite").format("noop").save()
+            val df = spark.read
+              .text(path.getAbsolutePath)
+              .select(cols: _*)
+            df.write.mode("overwrite").format("noop").save()
+          }
         }
       }
 
@@ -122,57 +91,26 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
         (from_json('value, schema).getField(s"col$idx") >= Literal(100000)).expr
       }.asInstanceOf[Seq[Expression]].reduce(Or)
 
-      // We only benchmark subexpression performance under codegen/non-codegen, so disabling
-      // json optimization.
-      benchmark.addCase("subexpressionElimination off, codegen on", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .where(Column(predicate))
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination off, codegen off", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .where(Column(predicate))
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination on, codegen on", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .where(Column(predicate))
-          df.write.mode("overwrite").format("noop").save()
-        }
-      }
-
-      benchmark.addCase("subexpressionElimination on, codegen off", numIters) { _ =>
-        withSQLConf(
-          SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
-          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
-          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
-          val df = spark.read
-            .text(path.getAbsolutePath)
-            .where(Column(predicate))
-          df.write.mode("overwrite").format("noop").save()
+      Seq(
+        ("false", "true", "CODEGEN_ONLY"),
+        ("false", "false", "NO_CODEGEN"),
+        ("true", "true", "CODEGEN_ONLY"),
+        ("true", "false", "NO_CODEGEN")
+      ).foreach { case (subExprEliminationEnabled, codegenEnabled, codegenFactory) =>
+        // We only benchmark subexpression performance under codegen/non-codegen, so disabling
+        // json optimization.
+        val caseName = s"subExprElimination $subExprEliminationEnabled, codegen: $codegenEnabled"
+        benchmark.addCase("subexpressionElimination off, codegen on", numIters) { _ =>
+          withSQLConf(
+            SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprEliminationEnabled,
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codegenFactory,
+            SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
+            val df = spark.read
+              .text(path.getAbsolutePath)
+              .where(Column(predicate))
+            df.write.mode("overwrite").format("noop").save()
+          }
         }
       }
 

@@ -5,21 +5,21 @@ Benchmark for performance of subexpression elimination
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_265-b01 on Mac OS X 10.15.6
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-from_json as subExpr in Project:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
--------------------------------------------------------------------------------------------------------------------------
-subexpressionElimination off, codegen on           25887          26105         326          0.0   258868246.6       1.0X
-subexpressionElimination off, codegen off          25131          25454         522          0.0   251309329.7       1.0X
-subexpressionElimination on, codegen on             2230           2340         106          0.0    22302959.3      11.6X
-subexpressionElimination on, codegen off            2185           2254          64          0.0    21852694.0      11.8X
+from_json as subExpr in Project:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+subExprElimination false, codegen: true           22767          23240         424          0.0   227665316.7       1.0X
+subExprElimination false, codegen: false          22869          23351         465          0.0   228693464.1       1.0X
+subExprElimination true, codegen: true             1328           1340          10          0.0    13280056.2      17.1X
+subExprElimination true, codegen: false            1248           1276          31          0.0    12476135.1      18.2X
 
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_265-b01 on Mac OS X 10.15.6
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
-from_json as subExpr in Filter:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
--------------------------------------------------------------------------------------------------------------------------
-subexpressionElimination off, codegen on           42687          42805         111          0.0   426873372.5       1.0X
-subexpressionElimination off, codegen off          43606          45108        1613          0.0   436055236.3       1.0X
-subexpressionElimination on, codegen on            29761          30563         704          0.0   297614324.4       1.4X
-subexpressionElimination on, codegen off           41676          42598         955          0.0   416758112.3       1.0X
+from_json as subExpr in Filter:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+subexpressionElimination off, codegen on          37691          38846        1004          0.0   376913767.9       1.0X
+subexpressionElimination off, codegen on          37852          39124        1103          0.0   378517745.5       1.0X
+subexpressionElimination off, codegen on          22900          23085         202          0.0   229000242.5       1.6X
+subexpressionElimination off, codegen on          38298          38598         374          0.0   382978731.3       1.0X
 
 
