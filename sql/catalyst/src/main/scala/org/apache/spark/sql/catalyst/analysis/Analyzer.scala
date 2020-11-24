@@ -27,7 +27,6 @@ import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.checkField
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -3136,18 +3135,21 @@ class Analyzer(override val catalogManager: CatalogManager)
         query: LogicalPlan): LogicalPlan = {
       val errors = new mutable.ArrayBuffer[String]()
 
-      def failAdd(): Unit = failAnalysis(s"""
-        |Cannot write to table due to mismatched user specified columns and data columns
-        |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
-        |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
-        |${errors.mkString("- ", "\n- ", "")}""".stripMargin)
+      def failAdd(): Unit = {
+        val errMsg = if (errors.nonEmpty) errors.mkString("\n- ", "\n- ", "") else ""
+        failAnalysis(
+          s"""Cannot write to table due to mismatched user specified columns and data columns:
+             |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
+             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}$errMsg"""
+            .stripMargin)
+      }
 
       if (cols.size != query.output.size) failAdd()
 
       val nameToQueryExpr = cols.zip(query.output).toMap
       val resolved = tableOutput.flatMap { tableAttr =>
         if (nameToQueryExpr.contains(tableAttr)) {
-          checkField(
+          TableOutputResolver.checkField(
             tableAttr, nameToQueryExpr(tableAttr), byName = false, conf, err => errors += err)
         } else {
           None
