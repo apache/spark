@@ -269,7 +269,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   private ParquetMetadata getFooter(Configuration configuration) throws IOException {
     if (cachedFooter != null) {
-      return cachedFooter;
+      return new ParquetMetadata(cachedFooter.getFileMetaData(), cachedFooter.getBlocks());
     } else {
       return readFooter(configuration, file, NO_FILTER);
     }
