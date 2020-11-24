@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A set of tests for the filter conversion logic used when pushing partition pruning into the
@@ -81,6 +82,10 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   filterTest("date filter with null",
     (a("datecol", DateType) ===  Literal(null)) :: Nil,
     "")
+
+  filterTest("string filter with InSet predicate",
+    InSet(a("strcol", StringType), Set("1", "2").map(s => UTF8String.fromString(s))) :: Nil,
+    "(strcol = \"1\" or strcol = \"2\")")
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,

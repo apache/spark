@@ -333,18 +333,20 @@ class HivePartitionFilteringSuite(version: String)
       assert(filteredPartitions.map(_.spec.toSet).toSet == expectedPartitions.toSet)
     }
 
+    val dateAttr: Attribute = AttributeReference("part", DateType)()
+
     testDataTypeFiltering(
-      Seq(AttributeReference("part", DateType)() === Date.valueOf("2019-01-01")),
+      Seq(dateAttr === Date.valueOf("2019-01-01")),
       Seq("2019-01-01").map(Date.valueOf) :: Nil)
     testDataTypeFiltering(
-      Seq(AttributeReference("part", DateType)() > Date.valueOf("2019-01-02")),
+      Seq(dateAttr > Date.valueOf("2019-01-02")),
       Seq("2019-01-03", "2019-01-04").map(Date.valueOf) :: Nil)
     testDataTypeFiltering(
-      Seq(In(AttributeReference("part", DateType)(),
+      Seq(In(dateAttr,
         Seq("2019-01-01", "2019-01-02").map(d => Literal(Date.valueOf(d))))),
       Seq("2019-01-01", "2019-01-02").map(Date.valueOf) :: Nil)
     testDataTypeFiltering(
-      Seq(InSet(AttributeReference("part", DateType)(),
+      Seq(InSet(dateAttr,
         Set("2019-01-01", "2019-01-02").map(d => Literal(Date.valueOf(d)).eval(EmptyRow)))),
       Seq("2019-01-01", "2019-01-02").map(Date.valueOf) :: Nil)
   }
