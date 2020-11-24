@@ -61,7 +61,7 @@ object ExtractValue {
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
           ordinal, fields.length, containsNull || fields(ordinal).nullable)
 
-      case (ExtractNestedArray(StructType(fields), _, containsNullSeq),
+      case (ExtractNestedArrayType(StructType(fields), _, containsNullSeq),
       NonNullLiteral(v, StringType)) if containsNullSeq.nonEmpty =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
@@ -226,7 +226,7 @@ case class GetArrayStructFields(
   }
 }
 
-object ExtractNestedArray {
+object ExtractNestedArrayType {
   type ReturnType = Option[(DataType, Boolean, Seq[Boolean])]
 
   def unapply(dataType: DataType): ReturnType = {

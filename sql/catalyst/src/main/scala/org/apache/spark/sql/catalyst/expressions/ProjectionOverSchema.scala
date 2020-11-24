@@ -53,7 +53,7 @@ case class ProjectionOverSchema(schema: StructType) {
         }
       case ExtractNestedArrayField(child, _, _, field, containsNullSeq) =>
         getProjection(child).map(p => (p, p.dataType)).map {
-          case (projection, ExtractNestedArray(projSchema @ StructType(_), _, _)) =>
+          case (projection, ExtractNestedArrayType(projSchema @ StructType(_), _, _)) =>
             ExtractNestedArrayField(projection,
               projSchema.fieldIndex(field.name),
               projSchema.fields.length,
