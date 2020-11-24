@@ -255,7 +255,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val expectedPartition = InternalRow.fromSeq(Seq[Any](null))
       assert(!partTable.partitionExists(expectedPartition))
       val partSpec = "PARTITION (part0 = '__HIVE_DEFAULT_PARTITION__')"
-      sql(s"ALTER TABLE $t ADD $partSpec LOCATION 'loc'")
+      sql(s"ALTER TABLE $t ADD $partSpec")
       assert(partTable.partitionExists(expectedPartition))
       spark.sql(s"ALTER TABLE $t DROP $partSpec")
       assert(!partTable.partitionExists(expectedPartition))
