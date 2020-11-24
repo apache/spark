@@ -31,6 +31,7 @@ import org.apache.spark.internal.config.UI.{UI_ENABLED, UI_PORT}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.ui.SparkUICssErrorHandler
 
@@ -53,6 +54,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .setAppName("ui-test")
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
+      .set(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST, Seq("stateOnCurrentVersionSizeBytes"))
     additionalConfs.foreach { case (k, v) => conf.set(k, v) }
     val spark = SparkSession.builder().master(master).config(conf).getOrCreate()
     assert(spark.sparkContext.ui.isDefined)
@@ -140,6 +142,10 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
             summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
             summaryText should contain ("Aggregated Number Of Rows Dropped By Watermark (?)")
+            summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
+              " (?)")
+            summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")
+            summaryText should not contain ("Aggregated Custom Metric loadedMapCacheMissCount (?)")
           }
         } finally {
           spark.streams.active.foreach(_.stop())
