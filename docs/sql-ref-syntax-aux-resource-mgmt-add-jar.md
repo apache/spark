@@ -45,7 +45,6 @@ ADD JAR file_name
       2. ivy://group:module:version?transitive=true
       3. ivy://group:module:version?exclude=group:module,group:module
       4. ivy://group:module:version?exclude=group:module,group:module&transitive=false
-
         
 ### Examples
 
