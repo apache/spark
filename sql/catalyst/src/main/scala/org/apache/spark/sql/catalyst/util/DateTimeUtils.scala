@@ -364,7 +364,10 @@ object DateTimeUtils {
     }
   }
 
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId, ansiEnabled: Boolean): Option[Long] = {
+  def stringToTimestampAnsi(
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      ansiEnabled: Boolean): Option[Long] = {
     val timestamp = stringToTimestamp(s, timeZoneId)
     if (ansiEnabled && timestamp.isEmpty) {
       throw new DateTimeException(s"Cannot cast $s to TimestampType.")

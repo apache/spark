@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{DateTimeException, Instant, LocalDate, ZoneId}
+import java.time.{Instant, LocalDate, ZoneId}
 import java.time.format.DateTimeParseException
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -1311,23 +1311,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             exprSeq.foreach(
               checkExceptionInExpression[DateTimeParseException](_, "could not be parsed"))
           }
-        }
-      }
-    }
-  }
 
-  test("SPARK-33498: TimestampType cast with parseError") {
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
-        val input = "Unparseable"
-        val castExpr = Cast(Literal(input), TimestampType, UTC_OPT)
-        if (!ansiEnabled) {
-          checkEvaluation(castExpr, null)
-        } else {
-          checkExceptionInExpression[DateTimeException](castExpr,
-            s"Cannot cast $input to TimestampType.")
+          // LEGACY works, CORRECTED failed, EXCEPTION with SparkUpgradeException
+          val exprSeq2 = Seq[(Expression, Long)](
+            (GetTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371847000L),
+            (UnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371L),
+            (ToUnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371L)
+          )
+
+          if (policy == "LEGACY") {
+            exprSeq2.foreach(pair => checkEvaluation(pair._1, pair._2))
+          } else if (policy == "EXCEPTION") {
+            exprSeq2.foreach(pair =>
+              checkExceptionInExpression[SparkUpgradeException](
+                pair._1,
+                  "You may get a different result due to the upgrading of Spark 3.0"))
+          } else {
+            if (ansiEnabled) {
+              exprSeq2.foreach(pair =>
+                checkExceptionInExpression[DateTimeParseException](pair._1, "could not be parsed"))
+            } else {
+              exprSeq2.foreach(pair => checkEvaluation(pair._1, null))
+            }
+          }
         }
       }
     }
   }
-}
+ }

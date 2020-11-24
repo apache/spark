@@ -146,7 +146,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
-  - `cast to timestamp`: This operator should fail with an exception if the input string can't be parsed.
+  - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
 
 ### SQL Keywords
 
