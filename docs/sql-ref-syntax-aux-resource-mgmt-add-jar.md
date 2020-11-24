@@ -34,7 +34,19 @@ ADD JAR file_name
 * **file_name**
 
     The name of the JAR file to be added. It could be either on a local file system or a distributed file system or an ivy URL.
+    Apache Ivy is a popular dependency manager focusing on flexibility and simplicity. Now we support two parameter in URL query  string:
 
+      1. transitive: whether to download dependent jars related to your ivy URL.
+      2. exclude: exclusion list when download ivy URL jar and dependent jars.
+
+    User can write ivy URL such as:
+
+      1. ivy://group:module:version
+      2. ivy://group:module:version?transitive=true
+      3. ivy://group:module:version?exclude=group:module,group:module
+      4. ivy://group:module:version?exclude=group:module,group:module&transitive=false
+
+        
 ### Examples
 
 ```sql
@@ -42,10 +54,10 @@ ADD JAR /tmp/test.jar;
 ADD JAR "/path/to/some.jar";
 ADD JAR '/some/other.jar';
 ADD JAR "/path with space/abc.jar";
-ADD JAR "ivy://group:module:version";
-ADD JAR "ivy://group:module:version?transitive=true";
-ADD JAR "ivy://group:module:version?exclusion=group:module,group:module";
-ADD JAR "ivy://group:module:version?exclusion=group:module,group:module&transitive=false";
+ADD JAR "ivy://org.apache.hive:hive-contrib:2.3.7";
+ADD JAR "ivy://org.apache.hive:hive-contrib:2.3.7?transitive=false"
+ADD JAR "ivy://org.apache.hive:hive-contrib:2.3.7?transitive=true"
+ADD JAR "ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true"
 ```
 
 ### Related Statements

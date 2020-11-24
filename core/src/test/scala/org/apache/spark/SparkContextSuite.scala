@@ -970,10 +970,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
     sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7" +
-      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=false")
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
-    // when transitive=true, `org.apache.hive_hive-exec-2.3.7.jar` will be downloaded too
-    assert(!sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
   }
 }
