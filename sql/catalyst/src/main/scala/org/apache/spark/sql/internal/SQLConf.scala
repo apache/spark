@@ -216,6 +216,18 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD =
+    buildConf("spark.sql.optimizer.likeAllConversionThreshold")
+      .internal()
+      .doc("Configure the maximum size of the pattern sequence in like all. Spark will convert " +
+        "the logical combination of like to avoid StackOverflowError. 200 is an empirical value " +
+        "that will not cause StackOverflowError.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(threshold => threshold >= 0, "The maximum size of pattern sequence " +
+        "in like all must be non-negative")
+      .createWithDefault(200)
+
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -1277,7 +1289,7 @@ object SQLConf {
   val REMOVE_REDUNDANT_SORTS_ENABLED = buildConf("spark.sql.execution.removeRedundantSorts")
     .internal()
     .doc("Whether to remove redundant physical sort node")
-    .version("3.1.0")
+    .version("2.4.8")
     .booleanConf
     .createWithDefault(true)
 
@@ -2901,18 +2913,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val TRUNCATE_TRASH_ENABLED =
-    buildConf("spark.sql.truncate.trash.enabled")
-      .doc("This configuration decides when truncating table, whether data files will be moved " +
-        "to trash directory or deleted permanently. The trash retention time is controlled by " +
-        "'fs.trash.interval', and in default, the server side configuration value takes " +
-        "precedence over the client-side one. Note that if 'fs.trash.interval' is non-positive, " +
-        "this will be a no-op and log a warning message. If the data fails to be moved to "  +
-        "trash, Spark will turn to delete it permanently.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DISABLED_JDBC_CONN_PROVIDER_LIST =
     buildConf("spark.sql.sources.disabledJdbcConnProviderList")
     .internal()
@@ -3036,6 +3036,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
 
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
@@ -3562,8 +3564,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
-
-  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 

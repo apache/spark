@@ -22,7 +22,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
-import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 
@@ -208,7 +207,8 @@ private[deploy] object JsonProtocol {
    *         master
    *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
    *         of the master
-   *         `status` status of the master, see [[MasterState]]
+   *         `status` status of the master,
+   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]]
    */
   def writeMasterState(obj: MasterStateResponse): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())

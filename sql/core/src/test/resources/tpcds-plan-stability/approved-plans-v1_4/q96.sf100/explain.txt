@@ -1,5 +1,5 @@
 == Physical Plan ==
-TakeOrderedAndProject (28)
+* Sort (28)
 +- * HashAggregate (27)
    +- Exchange (26)
       +- * HashAggregate (25)
@@ -154,7 +154,7 @@ Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]
 Results [1]: [count(1)#17 AS count(1)#18]
 
-(28) TakeOrderedAndProject
+(28) Sort [codegen id : 5]
 Input [1]: [count(1)#18]
-Arguments: 100, [count(1)#18 ASC NULLS FIRST], [count(1)#18]
+Arguments: [count(1)#18 ASC NULLS FIRST], true, 0
 

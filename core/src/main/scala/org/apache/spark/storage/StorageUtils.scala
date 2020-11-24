@@ -169,7 +169,7 @@ private[spark] class StorageStatus(
           .getOrElse((0L, 0L))
       case _ if !level.useOffHeap =>
         (_nonRddStorageInfo.onHeapUsage, _nonRddStorageInfo.diskUsage)
-      case _ if level.useOffHeap =>
+      case _ =>
         (_nonRddStorageInfo.offHeapUsage, _nonRddStorageInfo.diskUsage)
     }
     val newMem = math.max(oldMem + changeInMem, 0L)

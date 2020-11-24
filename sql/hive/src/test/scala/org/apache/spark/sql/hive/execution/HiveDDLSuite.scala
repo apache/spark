@@ -904,10 +904,10 @@ class HiveDDLSuite
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-          s"$oldViewName is a view not table")
+          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
         assertAnalysisError(
           s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
-          s"$oldViewName is a view not table")
+          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))

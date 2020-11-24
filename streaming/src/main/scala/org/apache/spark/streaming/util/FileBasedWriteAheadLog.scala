@@ -293,7 +293,7 @@ private[streaming] object FileBasedWriteAheadLog {
           val startTime = startTimeStr.toLong
           val stopTime = stopTimeStr.toLong
           Some(LogInfo(startTime, stopTime, file.toString))
-        case None =>
+        case None | Some(_) =>
           None
       }
     }.sortBy { _.startTime }

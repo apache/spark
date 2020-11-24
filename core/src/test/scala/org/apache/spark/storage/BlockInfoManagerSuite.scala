@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.util.Properties
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 

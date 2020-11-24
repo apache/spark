@@ -29,10 +29,9 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSc
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -388,7 +387,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       partColNames: Seq[String],
       catalogTable: Option[CatalogTable]): InsertIntoStatement = {
 
-    val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
+    val normalizedPartSpec = normalizePartitionSpec(
       insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet

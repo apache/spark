@@ -167,6 +167,8 @@ class StandardScalerModel @Since("1.3.0") (
             val newValues = NewStandardScalerModel
               .transformSparseWithScale(localScale, indices, values.clone())
             Vectors.sparse(size, indices, newValues)
+          case v =>
+            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
 
       case _ => vector
