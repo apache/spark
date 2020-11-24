@@ -2438,7 +2438,7 @@ object functions {
    * @since 1.5.0
    */
   def decode(value: Column, charset: String): Column = withExpr {
-    Decode(value.expr, lit(charset).expr)
+    StringDecode(value.expr, lit(charset).expr)
   }
 
   /**
