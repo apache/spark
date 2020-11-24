@@ -503,7 +503,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  def convertTypeConstructedLiteralToString(literal: Literal): String = literal match {
+  private def convertTypeConstructedLiteralToString(literal: Literal): String = literal match {
     case Literal(data: Int, dataType: DateType) =>
       UTF8String.fromString(
         DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
