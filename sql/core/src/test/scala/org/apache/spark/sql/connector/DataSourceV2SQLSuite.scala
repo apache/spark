@@ -1986,8 +1986,8 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      testV1Command("TRUNCATE TABLE", t)
-      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
+      testNotSupportedV2Command("TRUNCATE TABLE", t)
+      testNotSupportedV2Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
     }
   }
 
