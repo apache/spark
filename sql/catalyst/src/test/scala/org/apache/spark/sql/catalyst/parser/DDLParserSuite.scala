@@ -20,15 +20,15 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
-import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, FunctionResourceType, JarResource}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedInlineTable, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -2193,5 +2193,27 @@ class DDLParserSuite extends AnalysisTest {
       None)
 
     testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+  }
+
+  test("SPARK-33474: Support TypeConstructed partition spec value") {
+    def insertPartitionPlan(part: String): InsertIntoStatement = {
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("t")),
+        Map("part" -> Some(part)),
+        UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
+        overwrite = false, ifPartitionNotExists = false)
+    }
+
+    val dateTypeSql = "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')"
+    val interval = new CalendarInterval(7, 1, 1000).toString
+    val intervalTypeSql = s"INSERT INTO t PARTITION(part = interval'$interval') VALUES('a')"
+    val timestamp = "2019-01-02 11:11:11"
+    val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
+    val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'537061726B2053514C') VALUES('a')"
+
+    comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
+    comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
+    comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan("Spark SQL"))
   }
 }
