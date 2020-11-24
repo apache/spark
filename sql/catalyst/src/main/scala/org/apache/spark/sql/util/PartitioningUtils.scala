@@ -18,7 +18,13 @@
 package org.apache.spark.sql.util
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.types.StructType
 
 object PartitioningUtils {
   /**
@@ -43,5 +49,26 @@ object PartitioningUtils {
       normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
+  }
+
+  /**
+   * Given the partition schema, returns a row with that schema holding the partition values.
+   */
+  def castPartitionValues(
+      spec: TablePartitionSpec,
+      partitionSchema: StructType,
+      properties: Map[String, String],
+      defaultTimeZondId: String): InternalRow = {
+    val caseInsensitiveProperties = CaseInsensitiveMap(properties)
+    val timeZoneId = caseInsensitiveProperties.getOrElse(
+      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
+    InternalRow.fromSeq(partitionSchema.map { field =>
+      val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+        null
+      } else {
+        spec(field.name)
+      }
+      Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
+    })
   }
 }
