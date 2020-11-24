@@ -24,7 +24,7 @@ import org.apache.spark.resource.TestResourceIDs._
 
 class ResourceProfileSuite extends SparkFunSuite {
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {
@@ -32,7 +32,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     }
   }
 
-  override def afterEach() {
+  override def afterEach(): Unit = {
     try {
       ResourceProfile.clearDefaultProfile()
     } finally {
@@ -43,8 +43,8 @@ class ResourceProfileSuite extends SparkFunSuite {
   test("Default ResourceProfile") {
     val rprof = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
     assert(rprof.id === ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    assert(rprof.executorResources.size === 2,
-      "Executor resources should contain cores and memory by default")
+    assert(rprof.executorResources.size === 3,
+      "Executor resources should contain cores, heap and offheap memory by default")
     assert(rprof.executorResources(ResourceProfile.CORES).amount === 1,
       "Executor resources should have 1 core")
     assert(rprof.getExecutorCores.get === 1,
@@ -55,8 +55,8 @@ class ResourceProfileSuite extends SparkFunSuite {
       "pyspark memory empty if not specified")
     assert(rprof.executorResources.get(ResourceProfile.OVERHEAD_MEM) == None,
       "overhead memory empty if not specified")
-    assert(rprof.executorResources.get(ResourceProfile.OFFHEAP_MEM) == None,
-      "offHeap memory empty if not specified")
+    assert(rprof.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 0,
+      "Executor resources should have 0 offheap memory")
     assert(rprof.taskResources.size === 1,
       "Task resources should just contain cpus by default")
     assert(rprof.taskResources(ResourceProfile.CPUS).amount === 1,

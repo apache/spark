@@ -770,8 +770,6 @@ object SPARK_14244 extends QueryTest {
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
 
-    import hiveContext.implicits._
-
     try {
       val window = Window.orderBy("id")
       val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")

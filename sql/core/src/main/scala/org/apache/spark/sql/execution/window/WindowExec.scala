@@ -17,17 +17,11 @@
 
 package org.apache.spark.sql.execution.window
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
+import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -57,12 +51,10 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  *     3. CURRENT ROW AND 1 FOLLOWING
  *     4. 1 PRECEDING AND 1 FOLLOWING
  *     5. 1 FOLLOWING AND 2 FOLLOWING
- * - Offset frame: The frame consist of one row, which is an offset number of rows. There are three
- * implement of offset frame.
- *     1. [[FrameLessOffsetWindowFunction]] returns the value of the input column offset by a number
- *        of rows according to the current row.
- *     2. [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]]
- *       returns the value of the input column offset by a number of rows within the frame.
+ * - Offset frame: The frame consist of one row, which is an offset number of rows away from the
+ *   current row. Only [[OffsetWindowFunction]]s can be processed in an offset frame. There are
+ *   three implements of offset frame: [[FrameLessOffsetWindowFunctionFrame]],
+ *   [[UnboundedOffsetWindowFunctionFrame]] and [[UnboundedPrecedingOffsetWindowFunctionFrame]].
  *
  * Different frame boundaries can be used in Growing, Shrinking and Moving frames. A frame
  * boundary can be either Row or Range based:

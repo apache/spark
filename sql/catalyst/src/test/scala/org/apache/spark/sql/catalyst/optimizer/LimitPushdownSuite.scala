@@ -33,7 +33,7 @@ class LimitPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Limit pushdown", FixedPoint(100),
         LimitPushDown,
-        CombineLimits,
+        EliminateLimits,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
@@ -74,7 +74,7 @@ class LimitPushdownSuite extends PlanTest {
       Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1)).limit(2)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Limit(2, Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1))).analyze
+      Union(testRelation.limit(1), testRelation2.select('d, 'e, 'f).limit(1)).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
@@ -170,5 +170,23 @@ class LimitPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     // No pushdown for FULL OUTER JOINS.
     comparePlans(optimized, originalQuery)
+  }
+
+  test("SPARK-33433: Change Aggregate max rows to 1 if grouping is empty") {
+    val analyzed1 = Limit(1, Union(
+      x.groupBy()(count(1)),
+      y.groupBy()(count(1)))).analyze
+    val optimized1 = Optimize.execute(analyzed1)
+    comparePlans(analyzed1, optimized1)
+
+    // test push down
+    val analyzed2 = Limit(1, Union(
+      x.groupBy(Symbol("a"))(count(1)),
+      y.groupBy(Symbol("b"))(count(1)))).analyze
+    val optimized2 = Optimize.execute(analyzed2)
+    val expected2 = Limit(1, Union(
+      LocalLimit(1, x.groupBy(Symbol("a"))(count(1))),
+      LocalLimit(1, y.groupBy(Symbol("b"))(count(1))))).analyze
+    comparePlans(expected2, optimized2)
   }
 }
