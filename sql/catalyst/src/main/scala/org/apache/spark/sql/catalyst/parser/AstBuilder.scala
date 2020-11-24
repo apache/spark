@@ -516,6 +516,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UTF8String.fromString(data.toString).toString
     case Literal(data: Array[Byte], dataType: BinaryType) =>
       UTF8String.fromBytes(data).toString
+    case Literal(data, dataType) =>
+      UTF8String.fromString(data.toString).toString
   }
 
   /**
