@@ -297,7 +297,7 @@ class ResolveSessionCatalog(
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
       val (storageFormat, provider) = getStorageFormatAndProvider(
-        c.provider, c.options, c.location, c.serde, ctas = false)
+        c.provider, c.options, c.location, c.serde, ctas = true)
       if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
           c.partitioning, c.bucketSpec, c.properties, provider, c.location,

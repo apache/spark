@@ -438,13 +438,23 @@ class SparkSqlAstBuilder extends AstBuilder {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
     val location = visitLocationSpecList(ctx.locationSpec())
-    // rowStorage used to determine CatalogStorageFormat.serde and
-    // CatalogStorageFormat.properties in STORED AS clause.
-    val serdeInfo = getSerdeInfo(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    // TODO: Do not skip serde check for CREATE TABLE LIKE.
+    val serdeInfo = getSerdeInfo(
+      ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx, skipCheck = true)
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
+    // TODO: remove this restriction as it seems unnecessary.
+    serdeInfo match {
+      case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
+        if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
+          throw new ParseException("'ROW FORMAT' must be used with 'STORED AS'", ctx)
+        }
+      case _ =>
+    }
+
+    // TODO: also look at `HiveSerDe.getDefaultStorage`.
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(
@@ -603,7 +613,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
-    val serdeInfo = getSerdeInfo(Seq(ctx.rowFormat), Seq(ctx.createFileFormat), ctx)
+    val serdeInfo = getSerdeInfo(
+      Option(ctx.rowFormat).toSeq, Option(ctx.createFileFormat).toSeq, ctx)
     val path = string(ctx.path)
     // The path field is required
     if (path.isEmpty) {

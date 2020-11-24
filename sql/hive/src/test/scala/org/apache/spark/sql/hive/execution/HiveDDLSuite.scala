@@ -2780,7 +2780,7 @@ class HiveDDLSuite
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work with provider hive
       e = intercept[AnalysisException] {
@@ -2791,7 +2791,7 @@ class HiveDDLSuite
             |WITH SERDEPROPERTIES ('test' = 'test')
           """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work without 'STORED AS'
       e = intercept[AnalysisException] {
@@ -2813,8 +2813,7 @@ class HiveDDLSuite
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             """.stripMargin)
       }.getMessage
-      assert(e.contains(
-        "'INPUTFORMAT hiveFormat' and 'USING provider' should not be specified both"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS"))
 
       // row format works with STORED AS hive format (from hive table)
       spark.sql(
