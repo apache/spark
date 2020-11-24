@@ -937,6 +937,16 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
 
+  val THRIFTSERVER_FORCE_CANCEL =
+    buildConf("spark.sql.thriftServer.forceCancel")
+      .doc("When true, all the job of query will be cancelled and running tasks will be" +
+        "interrupted. When false, all the job of query will be cancelled but running task" +
+        "will be remained until finished. Note that, this config must be set before query" +
+        "otherwise it doesn't help.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
       .doc("The number of SQL statements kept in the JDBC/ODBC web UI history.")
