@@ -41,6 +41,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
   logDebug(s"Supported custom metrics: $supportedCustomMetrics")
 
+  private val enabledCustomMetrics = parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
+  logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
+
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
@@ -249,7 +252,9 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         </tr>
         // scalastyle:on
 
-      result ++= generateAggregatedCustomMetrics(query, minBatchTime, maxBatchTime, jsCollector)
+      if (enabledCustomMetrics.nonEmpty) {
+        result ++= generateAggregatedCustomMetrics(query, minBatchTime, maxBatchTime, jsCollector)
+      }
       result
     } else {
       new NodeBuffer()
@@ -265,8 +270,6 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
 
     // This is made sure on caller side but put it here to be defensive
     require(query.lastProgress.stateOperators.nonEmpty)
-    val enabledCustomMetrics = parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST)
-    logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
     query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
       .filter(enabledCustomMetrics.contains(_)).map { metricName =>
         val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
