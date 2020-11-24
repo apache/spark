@@ -190,6 +190,9 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
+
+      case _ =>
+        throw new SparkException("Malformed JSON")
     }
   }
 
