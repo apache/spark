@@ -85,7 +85,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
     }
   }
 
-  test("SPARK-33526: Add config to control if interrupt task on thriftserver") {
+  test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
     withJdbcStatement { statement =>
       val forceCancel = new AtomicBoolean(false)
       val listener = new SparkListener {
