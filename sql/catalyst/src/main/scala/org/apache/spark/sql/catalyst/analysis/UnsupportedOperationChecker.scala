@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSetsV2, MonotonicallyIncreasingID, Now}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -192,14 +192,21 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(_, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
+
+          val haveGroupingSets = groupingExpressions.find(_.isInstanceOf[GroupingSetsV2]).isDefined
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
               "using approx_count_distinct() instead.")
+
+          throwErrorIf(
+            child.isStreaming && haveGroupingSets,
+            "Grouping Sets is not supported on streaming DataFrames/Datasets"
+          )
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -358,9 +365,6 @@ object UnsupportedOperationChecker extends Logging {
 
         case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
-
-        case GroupingSets(_, _, child, _) if child.isStreaming =>
-          throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
         case GlobalLimit(_, _) | LocalLimit(_, _)
             if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
