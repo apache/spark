@@ -2169,11 +2169,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
         sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
         sql(s"CREATE VIEW my_view AS SELECT 1")
-        intercept[NoSuchTableException] {
+        val e1 = intercept[AnalysisException] {
           sql("TRUNCATE TABLE my_temp_tab")
-        }
+        }.getMessage
+        assert(e1.contains("my_temp_tab is a temp view. 'TRUNCATE TABLE' expects a table"))
         assertUnsupported("TRUNCATE TABLE my_ext_tab")
-        assertUnsupported("TRUNCATE TABLE my_view")
+        val e2 = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE my_view")
+        }.getMessage
+        assert(e2.contains("default.my_view is a view. 'TRUNCATE TABLE' expects a table"))
       }
     }
   }

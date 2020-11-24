@@ -3264,7 +3264,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.3</scala.version>
+        <scala.version>2.13.4</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>
