@@ -685,6 +685,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           case LeftOuter => newJoin.right.output
           case RightOuter => newJoin.left.output
           case FullOuter => newJoin.left.output ++ newJoin.right.output
+          case _ => Nil
         })
         val newFoldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
           case (attr, _) => missDerivedAttrsSet.contains(attr)

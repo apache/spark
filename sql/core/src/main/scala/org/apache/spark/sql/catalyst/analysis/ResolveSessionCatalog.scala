@@ -456,10 +456,9 @@ class ResolveSessionCatalog(
       val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
       UncacheTableCommand(name.asTableIdentifier, ifExists)
 
-    case TruncateTableStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "TRUNCATE TABLE")
+    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         partitionSpec)
 
     case ShowPartitionsStatement(tbl, partitionSpec) =>

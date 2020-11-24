@@ -322,7 +322,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
         case (a: ArrayBasedMapData, b: ArrayBasedMapData) =>
           a.keyArray == b.keyArray && a.valueArray == b.valueArray
-        case (a, b) => a != null && a.equals(b)
+        case (a: Double, b: Double) if a.isNaN && b.isNaN => true
+        case (a: Float, b: Float) if a.isNaN && b.isNaN => true
+        case (a, b) => a != null && a == b
       }
     case _ => false
   }

@@ -362,7 +362,7 @@ case class Join(
         left.constraints
       case RightOuter =>
         right.constraints
-      case FullOuter =>
+      case _ =>
         ExpressionSet()
     }
   }
