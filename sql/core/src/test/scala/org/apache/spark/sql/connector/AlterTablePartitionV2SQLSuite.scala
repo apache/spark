@@ -243,4 +243,22 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       assert(!partTable.partitionExists(expectedPartition))
     }
   }
+
+  test("handle __HIVE_DEFAULT_PARTITION__") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (part0 string) USING foo PARTITIONED BY (part0)")
+      val partTable = catalog("testpart")
+        .asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      val expectedPartition = InternalRow.fromSeq(Seq[Any](null))
+      assert(!partTable.partitionExists(expectedPartition))
+      val partSpec = "PARTITION (part0 = '__HIVE_DEFAULT_PARTITION__')"
+      sql(s"ALTER TABLE $t ADD $partSpec LOCATION 'loc'")
+      assert(partTable.partitionExists(expectedPartition))
+      spark.sql(s"ALTER TABLE $t DROP $partSpec")
+      assert(!partTable.partitionExists(expectedPartition))
+    }
+  }
 }
