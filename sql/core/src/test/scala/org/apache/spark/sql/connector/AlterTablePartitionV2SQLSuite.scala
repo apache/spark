@@ -244,7 +244,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("handle __HIVE_DEFAULT_PARTITION__") {
+  test("SPARK-33529: handle __HIVE_DEFAULT_PARTITION__") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (part0 string) USING foo PARTITIONED BY (part0)")
