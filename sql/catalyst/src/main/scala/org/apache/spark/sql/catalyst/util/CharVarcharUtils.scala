@@ -248,7 +248,7 @@ object CharVarcharUtils {
           createStructExprs += padded.getOrElse(fieldExpr)
           i += 1
         }
-        if (needPadding) Some(CreateNamedStruct(createStructExprs)) else None
+        if (needPadding) Some(CreateNamedStruct(createStructExprs.toSeq)) else None
 
       case (ArrayType(et, containsNull), ArrayType(target, _)) =>
         val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
