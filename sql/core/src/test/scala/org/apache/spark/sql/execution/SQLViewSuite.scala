@@ -176,16 +176,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
       assert(e2.contains(s"$viewName is a temp view. 'LOAD DATA' expects a table"))
-      assertNoSuchTable(s"TRUNCATE TABLE $viewName")
       val e3 = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $viewName")
+      }.getMessage
+      assert(e3.contains(s"$viewName is a temp view. 'TRUNCATE TABLE' expects a table"))
+      val e4 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e3.contains(
+      assert(e4.contains(
         s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
-      val e4 = intercept[AnalysisException] {
+      val e5 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       }.getMessage
-      assert(e4.contains(
+      assert(e5.contains(
         s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
       assertNoSuchTable(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
@@ -221,7 +224,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql(s"TRUNCATE TABLE $viewName")
       }.getMessage
-      assert(e.contains(s"Operation not allowed: TRUNCATE TABLE on views: `default`.`testview`"))
+      assert(e.contains("default.testView is a view. 'TRUNCATE TABLE' expects a table"))
     }
   }
 
