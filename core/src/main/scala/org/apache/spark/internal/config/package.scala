@@ -471,6 +471,15 @@ package object config {
         "cache block replication should be positive.")
       .createWithDefaultString("30s")
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.path")
+      .doc("The location for fallback storage during block manager decommissioning." +
+        "In case of empty, fallback storage is disabled.")
+      .version("3.1.0")
+      .stringConf
+      .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
+      .createOptional
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")

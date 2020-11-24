@@ -91,7 +91,7 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-  private def getIndexFile(
+  def getIndexFile(
       shuffleId: Int,
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
