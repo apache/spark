@@ -30,22 +30,11 @@ object TableOutputResolver {
   def resolveOutputColumns(
       tableName: String,
       expected: Seq[Attribute],
-      specified: Seq[Attribute],
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf): LogicalPlan = {
 
-    val expectedSize = if (specified.nonEmpty && expected.size != specified.size) {
-      throw new AnalysisException(
-        s"$tableName requires that the data to be inserted have the same number" +
-          s" of columns as the target table that has ${expected.size} column(s) but the" +
-          s" specified part has only ${specified.length} column(s)"
-      )
-    } else {
-      expected.size
-    }
-
-    if (expectedSize < query.output.size) {
+    if (expected.size < query.output.size) {
       throw new AnalysisException(
         s"""Cannot write to '$tableName', too many data columns:
            |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
@@ -65,7 +54,7 @@ object TableOutputResolver {
       }
 
     } else {
-      if (expectedSize > query.output.size) {
+      if (expected.size > query.output.size) {
         throw new AnalysisException(
           s"""Cannot write to '$tableName', not enough data columns:
              |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
@@ -73,16 +62,9 @@ object TableOutputResolver {
             .stripMargin)
       }
 
-      if (specified.nonEmpty) {
-        val nameToQueryExpr = specified.zip(query.output).toMap
-        expected.flatMap { tblAttr =>
-          checkField(tblAttr, nameToQueryExpr(tblAttr), byName, conf, err => errors += err)
-        }
-      } else {
-        query.output.zip(expected).flatMap {
-          case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
-        }
+      query.output.zip(expected).flatMap {
+        case (queryExpr, tableAttr) =>
+          checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
       }
     }
 

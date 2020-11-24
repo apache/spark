@@ -3098,7 +3098,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
         validateStoreAssignmentPolicy()
         val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, Nil, v2Write.query, v2Write.isByName, conf)
+          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
         if (projection != v2Write.query) {
           v2Write.withNewQuery(projection)
         } else {
@@ -3109,15 +3109,11 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveUserSpecifiedColumns extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved &&
+      case i: InsertIntoStatement if i.table.resolved && i.query.resolved &&
           i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
-        val projection = addColumnListOnQuery(r.output, resolved, i.query)
+        val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
         i.copy(userSpecifiedCols = Nil, query = projection)
-
-      case i: InsertIntoStatement if i.table.resolved && i.userSpecifiedCols.exists(!_.resolved) =>
-        val resolved = resolveUserSpecifiedColumns(i)
-        i.copy(userSpecifiedCols = resolved)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[Attribute] = {

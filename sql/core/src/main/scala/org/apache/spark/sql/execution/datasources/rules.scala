@@ -191,7 +191,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, existingTable.schema.toAttributes, Nil, newQuery,
+          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
@@ -392,20 +392,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
 
-    val expectedColumns = if (insert.userSpecifiedCols.nonEmpty) {
-      val expected = insert.userSpecifiedCols.filterNot(a => staticPartCols.contains(a.name))
-      if (expected.length !=
-        insert.table.output.filterNot(a => staticPartCols.contains(a.name)).length) {
-        throw new AnalysisException(
-          s"$tblName requires that the data to be inserted have the same number of columns as" +
-            s" the target table: target table has ${insert.table.output.size} column(s) but the " +
-            s"specified part has only ${expected.length} column(s), " +
-            s"and ${staticPartCols.size} partition column(s) having constant value(s).")
-      }
-      expected
-    } else {
-      insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-    }
+    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
@@ -428,7 +415,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, Nil, insert.query, byName = false, conf)
+      tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
