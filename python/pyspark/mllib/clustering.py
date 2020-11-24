@@ -567,7 +567,7 @@ class GaussianMixture(object):
         rdd : ::py:class:`pyspark.RDD`
             Training points as an `RDD` of :py:class:`pyspark.mllib.linalg.Vector`
             or convertible sequence types.
-        param k : int
+        k : int
             Number of independent Gaussians in the mixture model.
         convergenceTol : float, optional
             Maximum change in log-likelihood at which convergence is

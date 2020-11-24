@@ -237,7 +237,7 @@ class LinearRegressionWithSGD(object):
     Train a linear regression model with no regularization using Stochastic Gradient Descent.
 
     .. versionadded:: 0.9.0
-    .. deprecated:: 2.0.0.
+    .. deprecated:: 2.0.0
         Use :py:class:`pyspark.ml.regression.LinearRegression`.
     """
     @classmethod
