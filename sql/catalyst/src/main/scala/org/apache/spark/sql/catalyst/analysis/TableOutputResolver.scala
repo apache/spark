@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.util.SchemaUtils
 
 object TableOutputResolver {
   def resolveOutputColumns(
@@ -35,9 +34,6 @@ object TableOutputResolver {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf): LogicalPlan = {
-
-    SchemaUtils.checkColumnNameDuplication(
-      specified.map(_.name), "in the column list", conf.resolver)
 
     val expectedSize = if (specified.nonEmpty && expected.size != specified.size) {
       throw new AnalysisException(
@@ -102,7 +98,7 @@ object TableOutputResolver {
     }
   }
 
-  private def checkField(
+  def checkField(
       tableAttr: Attribute,
       queryExpr: NamedExpression,
       byName: Boolean,

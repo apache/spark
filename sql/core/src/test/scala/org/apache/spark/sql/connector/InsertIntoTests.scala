@@ -505,7 +505,7 @@ trait InsertIntoSQLOnlyTests
           processInsert(t1, df, Seq("id", "data"), mode = mode)
           verifyTable(t1, df)
           val e1 = intercept[AnalysisException](processInsert(t1, df, Seq("id"), mode = mode))
-          assert(e1.getMessage.contains("the specified part has only 1 column(s)"))
+          assert(e1.getMessage.contains("Specified columns: 'id'"))
 
           val e2 = intercept[AnalysisException](processInsert(t1, df, Seq("id", "da"), mode = mode))
           assert(e2.getMessage.contains("Cannot resolve column name da"))
@@ -527,14 +527,8 @@ trait InsertIntoSQLOnlyTests
             s"USING $v2Format PARTITIONED BY (id, p)")
           val partExprs = Seq("id='1'", "p=1")
           val df2 = df.selectExpr("d")
-          processInsert(t1, df2, Seq("id", "data", "p"), partExprs, mode)
+          processInsert(t1, df2, Seq("data"), partExprs, mode)
           verifyTable(t1, Seq(("1", "a", 1), ("1", "b", 1), ("1", "c", 1)).toDF())
-
-
-          val e1 = intercept[AnalysisException]{
-            processInsert(t1, df2, Seq("id"), partExprs, mode = mode)
-          }
-          assert(e1.getMessage.contains("the specified part has only 1 column(s)"))
 
           val e2 = intercept[AnalysisException] {
             processInsert(
@@ -551,14 +545,14 @@ trait InsertIntoSQLOnlyTests
         withTable(t1) {
           sql(s"CREATE TABLE $t1 (id string, data string, p int) " +
             s"USING $v2Format PARTITIONED BY (id, p)")
-          processInsert(t1, df, Seq("id", "data", "p"), Seq("id", "p=1"), mode)
+          processInsert(t1, df, Seq("id", "data"), Seq("id", "p=1"), mode)
           verifyTable(t1, Seq(("1", "a", 1), ("2", "b", 1), ("3", "c", 1)).toDF())
         }
 
         withTable(t1) {
           sql(s"CREATE TABLE $t1 (id string, data string, p int) " +
             s"USING $v2Format PARTITIONED BY (id, p)")
-          processInsert(t1, df, Seq("data", "id", "p"), Seq("id", "p=1"), mode)
+          processInsert(t1, df, Seq("data", "id"), Seq("id", "p=1"), mode)
           verifyTable(t1, Seq(("a", "1", 1), ("b", "2", 1), ("c", "3", 1)).toDF())
         }
       }

@@ -27,6 +27,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.checkField
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
@@ -49,7 +50,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 /**
@@ -3111,8 +3112,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) if i.query.resolved &&
           i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
-        val projection = TableOutputResolver.resolveOutputColumns(
-          r.name, r.output, resolved, i.query, byName = false, conf)
+        val projection = addColumnListOnQuery(r.output, resolved, i.query)
         i.copy(userSpecifiedCols = Nil, query = projection)
 
       case i: InsertIntoStatement if i.table.resolved && i.userSpecifiedCols.exists(!_.resolved) =>
@@ -3121,12 +3121,49 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[Attribute] = {
-      i.userSpecifiedCols.map {
+      val resolved = i.userSpecifiedCols.map {
         case u: UnresolvedAttribute => withPosition(u) {
           i.table.resolve(u.nameParts, resolver).map(_.toAttribute)
             .getOrElse(failAnalysis(s"Cannot resolve column name ${u.name}"))
         }
         case other => other
+      }
+
+      SchemaUtils.checkColumnNameDuplication(
+        resolved.map(_.name), "in the column list", conf.resolver)
+      resolved
+    }
+
+    private def addColumnListOnQuery(
+        tableOutput: Seq[Attribute],
+        cols: Seq[Attribute],
+        query: LogicalPlan): LogicalPlan = {
+      val errors = new mutable.ArrayBuffer[String]()
+
+      def failAdd(): Unit = failAnalysis(s"""
+        |Cannot write to table due to mismatched user specified columns and data columns
+        |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
+        |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}
+        |${errors.mkString("- ", "\n- ", "")}""".stripMargin)
+
+      if (cols.size != query.output.size) failAdd()
+
+      val nameToQueryExpr = cols.zip(query.output).toMap
+      val resolved = tableOutput.flatMap { tableAttr =>
+        if (nameToQueryExpr.contains(tableAttr)) {
+          checkField(
+            tableAttr, nameToQueryExpr(tableAttr), byName = false, conf, err => errors += err)
+        } else {
+          None
+        }
+      }
+
+      if (errors.nonEmpty) failAdd()
+
+      if (resolved == query.output) {
+        query
+      } else {
+        Project(resolved, query)
       }
     }
   }
