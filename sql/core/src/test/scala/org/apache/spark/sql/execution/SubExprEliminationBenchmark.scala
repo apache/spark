@@ -63,7 +63,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .select(cols: _*)
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -76,7 +76,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .select(cols: _*)
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -89,7 +89,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .select(cols: _*)
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -102,7 +102,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .select(cols: _*)
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -133,7 +133,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .where(Column(predicate))
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -146,7 +146,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .where(Column(predicate))
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -159,7 +159,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .where(Column(predicate))
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
@@ -172,7 +172,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
           val df = spark.read
             .text(path.getAbsolutePath)
             .where(Column(predicate))
-          df.collect()
+          df.write.mode("overwrite").format("noop").save()
         }
       }
 
