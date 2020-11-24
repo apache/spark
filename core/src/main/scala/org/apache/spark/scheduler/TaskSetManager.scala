@@ -1035,7 +1035,7 @@ private[spark] class TaskSetManager(
    * by the TaskScheduler.
    *
    */
-  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
+  override def checkSpeculatableTasks(minTimeToSpeculation: Long): Boolean = {
     // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
     // one task we don't speculate since we don't have metrics to decide whether it's taking too
     // long or not, unless a task duration threshold is explicitly provided.
