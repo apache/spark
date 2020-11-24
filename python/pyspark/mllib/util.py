@@ -236,13 +236,8 @@ class MLUtils(object):
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
             input dataset
-        \\*cols : columns (variable number and type)
-
-            * str:  multiple str values
-
-            * list: a list of str
-
-            listing vector columns to be converted.
+        \\*cols : str
+            Vector columns to be converted.
 
             New vector columns will be ignored. If unspecified, all old
             vector columns will be converted excepted nested ones.
@@ -290,13 +285,8 @@ class MLUtils(object):
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
             input dataset
-        \\*cols : columns (variable number and type)
-
-            * str:  multiple str values
-
-            * list: a list of str
-
-            listing vector columns to be converted.
+        \\*cols : str
+            Vector columns to be converted.
 
             Old vector columns will be ignored. If unspecified, all new
             vector columns will be converted except nested ones.
@@ -344,13 +334,8 @@ class MLUtils(object):
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
             input dataset
-        \\*cols : columns (variable number and type)
-
-            * str:  multiple str values
-
-            * list: a list of str
-
-            listing matrix columns to be converted.
+        \\*cols : str
+            Matrix columns to be converted.
 
             New matrix columns will be ignored. If unspecified, all old
             matrix columns will be converted excepted nested ones.
@@ -398,13 +383,8 @@ class MLUtils(object):
         ----------
         dataset : :py:class:`pyspark.sql.DataFrame`
             input dataset
-        \\*cols : columns (variable number and type)
-
-            * str:  multiple str values
-
-            * list: a list of str
-
-            listing matrix columns to be converted.
+        \\*cols : str
+            Matrix columns to be converted.
 
             Old matrix columns will be ignored. If unspecified, all new
             matrix columns will be converted except nested ones.
