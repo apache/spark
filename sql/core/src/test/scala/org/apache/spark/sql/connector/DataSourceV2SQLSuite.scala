@@ -2049,7 +2049,7 @@ class DataSourceV2SQLSuite
 
       testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
       testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
-      testNotSupportedV2Command("SHOW COLUMNS", s"FROM tbl IN testcat.ns1.ns2")
+      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
     }
   }
 
