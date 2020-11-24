@@ -97,7 +97,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     intercept : float
         Intercept computed for this model. (Only used in Binary Logistic
         Regression. In Multinomial Logistic Regression, the intercepts will
-        not bea single value, so the intercepts will be part of the
+        not be a single value, so the intercepts will be part of the
         weights.)
     numFeatures : int
         The dimension of the features.
@@ -292,7 +292,7 @@ class LogisticRegressionWithSGD(object):
         step : float, optional
             The step parameter used in SGD.
             (default: 1.0)
-        miniBatchFraction: float, optional
+        miniBatchFraction : float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
         initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
@@ -552,7 +552,7 @@ class SVMWithSGD(object):
         regParam : float, optional
             The regularizer parameter.
             (default: 0.01)
-        miniBatchFraction: float, optional
+        miniBatchFraction : float, optional
             Fraction of data to be used for each SGD iteration.
             (default: 1.0)
         initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
