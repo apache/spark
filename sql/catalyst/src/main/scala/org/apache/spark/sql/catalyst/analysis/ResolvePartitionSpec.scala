@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -65,31 +65,8 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       conf.resolver)
 
     val partValues = partSchema.map { part =>
-      val partValue = normalizedSpec.get(part.name).orNull
-      if (partValue == null) {
-        null
-      } else {
-        // TODO: Support other datatypes, such as DateType
-        part.dataType match {
-          case _: ByteType =>
-            partValue.toByte
-          case _: ShortType =>
-            partValue.toShort
-          case _: IntegerType =>
-            partValue.toInt
-          case _: LongType =>
-            partValue.toLong
-          case _: FloatType =>
-            partValue.toFloat
-          case _: DoubleType =>
-            partValue.toDouble
-          case _: StringType =>
-            partValue
-          case _ =>
-            throw new AnalysisException(
-              s"Type ${part.dataType.typeName} is not supported for partition.")
-        }
-      }
+      val raw = normalizedSpec.get(part.name).orNull
+      Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }
