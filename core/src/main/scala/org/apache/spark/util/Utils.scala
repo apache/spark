@@ -3005,47 +3005,49 @@ private[spark] object Utils extends Logging {
       parseExcludeList(uri.getQuery), parseTransitive(uri.getQuery))
   }
 
+  private def parseURLQueryParameter(queryString: String, queryTag: String): Array[String] = {
+    if (queryString == null || queryString.isEmpty) {
+      Array.empty[String]
+    } else {
+      val mapTokens = queryString.split("&")
+      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
+      mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1))).filter(_._1 == queryTag).map(_._2)
+    }
+  }
+
   /**
+   * Parse excluded list in ivy URL. When download ivy URL jar, Spark won't download transitive jar
+   * in excluded list.
+   *
    * @param queryString Ivy URI query part string.
    * @return Exclude list which contains grape parameters of exclude.
    *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
    *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
    */
   private def parseExcludeList(queryString: String): Array[String] = {
-    if (queryString == null || queryString.isEmpty) {
-      Array.empty[String]
-    } else {
-      val mapTokens = queryString.split("&")
-      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
-      mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1))).filter(_._1 == "exclude")
-        .flatMap { case (_, excludeString) =>
-          val excludes: Array[String] = excludeString.split(",")
-          assert(excludes.forall(_.split(":").length == 2),
-            "Invalid exclude string: expected 'org:module,org:module,..', found " + excludeString)
-          excludes
-        }
-    }
+    parseURLQueryParameter(queryString, "exclude")
+      .flatMap { excludeString =>
+        val excludes: Array[String] = excludeString.split(",")
+        assert(excludes.forall(_.split(":").length == 2),
+          "Invalid exclude string: expected 'org:module,org:module,..', found " + excludeString)
+        excludes
+      }
   }
 
   /**
+   * Parse transitive parameter in ivy URL, default value is false.
+   *
    * @param queryString Ivy URI query part string.
    * @return Exclude list which contains grape parameters of transitive.
    *         Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
    *         Output:  true
    */
   private def parseTransitive(queryString: String): Boolean = {
-    if (queryString == null || queryString.isEmpty) {
+    val transitive = parseURLQueryParameter(queryString, "transitive")
+    if (transitive.isEmpty) {
       false
     } else {
-      val mapTokens: Array[String] = queryString.split("&")
-      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
-      val transitive = mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1)))
-        .filter(_._1 == "transitive")
-      if (transitive.isEmpty) {
-        false
-      } else {
-        transitive.last._2.toBoolean
-      }
+      transitive.last.toBoolean
     }
   }
 
