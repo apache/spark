@@ -712,7 +712,6 @@ class DataSourceV2SQLSuite
 
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
-    sql(s"EXPLAIN EXTENDED DROP TABLE IF EXISTS $tableName").show(false)
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
     assert(catalog("testcat").asTableCatalog.tableExists(ident) === true)
