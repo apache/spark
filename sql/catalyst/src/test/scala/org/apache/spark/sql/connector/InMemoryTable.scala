@@ -156,7 +156,9 @@ class InMemoryTable(
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case BucketTransform(numBuckets, ref) =>
-        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+        val (value, dataType) = extractor(ref.fieldNames, schema, row)
+        val valueHashCode = if (value == null) 0 else value.hashCode
+        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
     }
   }
 
