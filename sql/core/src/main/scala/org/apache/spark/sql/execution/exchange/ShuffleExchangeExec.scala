@@ -56,25 +56,10 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def numPartitions: Int
 
-  def shuffleOrigin: ShuffleOrigin.Value
-
   /**
-   * Returns whether the shuffle partition number can be changed.
+   * The origin of this shuffle operator.
    */
-  final def canChangeNumPartitions: Boolean = {
-    // If users specify the num partitions via APIs like `repartition(5, col)`, we shouldn't change
-    // it. For `SinglePartition`, it requires exactly one partition and we can't change it either.
-    shuffleOrigin != ShuffleOrigin.REPARTITION_WITH_NUM && outputPartitioning != SinglePartition
-  }
-
-  /**
-   * Returns whether the shuffle output data partitioning can be changed.
-   */
-  final def canChangePartitioning: Boolean = {
-    // If users specify the partitioning via APIs like `repartition(col)`, we shouldn't change it.
-    // For `SinglePartition`, itself is a special partitioning and we can't change it either.
-    shuffleOrigin == ShuffleOrigin.ENSURE_REQUIREMENTS && outputPartitioning != SinglePartition
-  }
+  def shuffleOrigin: ShuffleOrigin
 
   /**
    * The asynchronous job that materializes the shuffle.
@@ -93,19 +78,20 @@ trait ShuffleExchangeLike extends Exchange {
 }
 
 // Describes where the shuffle operator comes from.
-object ShuffleOrigin extends Enumeration {
-  type ShuffleOrigin = Value
-  // Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
-  // means that the shuffle operator is used to ensure internal data partitioning requirements and
-  // Spark is free to optimize it as long as the requirements are still ensured.
-  val ENSURE_REQUIREMENTS = Value
-  // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
-  // can still optimize it via changing shuffle partition number, as data partitioning won't change.
-  val REPARTITION = Value
-  // Indicates that the shuffle operator was added by the user-specified repartition operator with
-  // a certain partition number. Spark can't optimize it.
-  val REPARTITION_WITH_NUM = Value
-}
+sealed trait ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
+// means that the shuffle operator is used to ensure internal data partitioning requirements and
+// Spark is free to optimize it as long as the requirements are still ensured.
+case object ENSURE_REQUIREMENTS extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
+// can still optimize it via changing shuffle partition number, as data partitioning won't change.
+case object REPARTITION extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator with
+// a certain partition number. Spark can't optimize it.
+case object REPARTITION_WITH_NUM extends ShuffleOrigin
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
@@ -113,7 +99,7 @@ object ShuffleOrigin extends Enumeration {
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    shuffleOrigin: ShuffleOrigin.Value = ShuffleOrigin.ENSURE_REQUIREMENTS)
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
