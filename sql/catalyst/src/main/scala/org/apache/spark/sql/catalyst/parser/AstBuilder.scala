@@ -1382,14 +1382,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case other => Seq(other)
     }
 
-    def getLikeQuantifierExprs(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
-      if (expressions.isEmpty) {
-        throw new ParseException("Expected something between '(' and ')'.", ctx)
-      } else {
-        expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p))).toSeq
-      }
-    }
-
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1416,7 +1408,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 case _ => NotLikeAny(e, patterns.toSeq)
               }
             } else {
-              getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
+              ctx.expression.asScala.map(expression)
+                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(Or)
             }
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
@@ -1431,7 +1424,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 case _ => NotLikeAll(e, patterns.toSeq)
               }
             } else {
-              getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+              ctx.expression.asScala.map(expression)
+                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(And)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
