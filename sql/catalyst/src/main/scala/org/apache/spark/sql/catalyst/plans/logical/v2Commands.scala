@@ -672,6 +672,15 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
 }
 
 /**
+ * The logical plan of the TRUNCATE TABLE command.
+ */
+case class TruncateTable(
+    child: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(
@@ -696,3 +705,4 @@ case class CacheTableAsSelect(
 case class UncacheTable(child: LogicalPlan, ifExists: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+

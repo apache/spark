@@ -1988,8 +1988,8 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      testV1Command("TRUNCATE TABLE", t)
-      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
+      testNotSupportedV2Command("TRUNCATE TABLE", t)
+      testNotSupportedV2Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
     }
   }
 
@@ -2517,7 +2517,7 @@ class DataSourceV2SQLSuite
 
       checkAnswer(
         spark.sql(s"SELECT id, data, _partition FROM $t1"),
-        Seq(Row(1, "a", "3/1"), Row(2, "b", "2/2"), Row(3, "c", "2/3")))
+        Seq(Row(1, "a", "3/1"), Row(2, "b", "0/2"), Row(3, "c", "1/3")))
     }
   }
 
@@ -2530,7 +2530,7 @@ class DataSourceV2SQLSuite
 
       checkAnswer(
         spark.sql(s"SELECT index, data, _partition FROM $t1"),
-        Seq(Row(3, "c", "2/3"), Row(2, "b", "2/2"), Row(1, "a", "3/1")))
+        Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
     }
   }
 
