@@ -25,7 +25,6 @@ import io.fabric8.kubernetes.client.Config
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.{SystemClock, ThreadUtils}
@@ -95,10 +94,13 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val schedulerExecutorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
       "kubernetes-executor-maintenance")
 
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(
+      sc.conf.get(KUBERNETES_EXECUTOR_CHECK_ALL_CONTAINERS))
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(
         "kubernetes-executor-snapshots-subscribers", 2)
     val snapshotsStore = new ExecutorPodsSnapshotsStoreImpl(subscribersExecutor)
+
     val removedExecutorsCache = CacheBuilder.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()

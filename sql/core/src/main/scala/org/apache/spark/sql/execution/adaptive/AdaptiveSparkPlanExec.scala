@@ -36,6 +36,9 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -80,39 +83,50 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
-  @transient private val removeRedundantProjects = RemoveRedundantProjects(conf)
-  @transient private val ensureRequirements = EnsureRequirements(conf)
-
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    removeRedundantProjects,
-    ensureRequirements
+    RemoveRedundantProjects,
+    EnsureRequirements,
+    RemoveRedundantSorts,
+    DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
-    ReuseAdaptiveSubquery(conf, context.subqueryCache),
+    ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
-    OptimizeSkewedJoin(conf),
-    OptimizeLocalShuffleReader(conf)
+    OptimizeSkewedJoin,
+    OptimizeLocalShuffleReader
   )
+
+  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
+    context.qe.sparkPlan match {
+      case _: DataWritingCommandExec | _: V2TableWriteExec =>
+        // SPARK-32932: Local shuffle reader could break partitioning that works best
+        // for the following writing command
+        queryStageOptimizerRules.filterNot(_ == OptimizeLocalShuffleReader)
+      case _ =>
+        queryStageOptimizerRules
+    }
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
   @transient private val postStageCreationRules = Seq(
-    ApplyColumnarRulesAndInsertTransitions(conf, context.session.sessionState.columnarRules),
-    CollapseCodegenStages(conf)
+    ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
+    CollapseCodegenStages()
   )
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(
-    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -235,7 +249,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         result.newPlan,
-        queryStageOptimizerRules ++ postStageCreationRules,
+        finalStageOptimizerRules ++ postStageCreationRules,
         Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
@@ -300,25 +314,39 @@ case class AdaptiveSparkPlanExec(
       maxFields,
       printNodeId,
       indent)
-    generateTreeStringWithHeader(
-      if (isFinalPlan) "Final Plan" else "Current Plan",
-      currentPhysicalPlan,
-      depth,
-      lastChildren,
-      append,
-      verbose,
-      maxFields,
-      printNodeId)
-    generateTreeStringWithHeader(
-      "Initial Plan",
-      initialPlan,
-      depth,
-      lastChildren,
-      append,
-      verbose,
-      maxFields,
-      printNodeId)
+    if (currentPhysicalPlan.fastEquals(initialPlan)) {
+      currentPhysicalPlan.generateTreeString(
+        depth + 1,
+        lastChildren :+ true,
+        append,
+        verbose,
+        prefix = "",
+        addSuffix = false,
+        maxFields,
+        printNodeId,
+        indent)
+    } else {
+      generateTreeStringWithHeader(
+        if (isFinalPlan) "Final Plan" else "Current Plan",
+        currentPhysicalPlan,
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        maxFields,
+        printNodeId)
+      generateTreeStringWithHeader(
+        "Initial Plan",
+        initialPlan,
+        depth,
+        lastChildren,
+        append,
+        verbose,
+        maxFields,
+        printNodeId)
+    }
   }
+
 
   private def generateTreeStringWithHeader(
       header: String,

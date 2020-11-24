@@ -131,7 +131,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` field.
    */
   protected lazy val sqlParser: ParserInterface = {
-    extensions.buildParser(session, new SparkSqlParser(conf))
+    extensions.buildParser(session, new SparkSqlParser())
   }
 
   /**
@@ -150,7 +150,6 @@ abstract class BaseSessionStateBuilder(
       () => session.sharedState.externalCatalog,
       () => session.sharedState.globalTempViewManager,
       functionRegistry,
-      conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -158,9 +157,9 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
-  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
-  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+  protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -175,21 +174,21 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
-          catalogManager, conf, catalog.isTempView, catalog.isTempFunction) +:
+          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
-      new DetectAmbiguousSelfJoin(conf) +:
+      DetectAmbiguousSelfJoin +:
         PreprocessTableCreation(session) +:
-        PreprocessTableInsertion(conf) +:
-        DataSourceAnalysis(conf) +:
+        PreprocessTableInsertion +:
+        DataSourceAnalysis +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
@@ -197,7 +196,7 @@ abstract class BaseSessionStateBuilder(
         PreReadCheck +:
         HiveOnlyCheck +:
         TableCapabilityCheck +:
-        CommandCheck(conf) +:
+        CommandCheck +:
         customCheckRules
   }
 
@@ -270,7 +269,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `experimentalMethods` fields.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session, conf, experimentalMethods) {
+    new SparkPlanner(session, experimentalMethods) {
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
     }

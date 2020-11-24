@@ -61,10 +61,11 @@ class SessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
-    functionResourceLoader: FunctionResourceLoader) extends Logging {
+    functionResourceLoader: FunctionResourceLoader,
+    cacheSize: Int = SQLConf.get.tableRelationCacheSize,
+    cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -72,23 +73,26 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: SQLConf) {
+      conf: SQLConf) = {
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
       functionRegistry,
-      conf,
       new Configuration(),
-      new CatalystSqlParser(conf),
-      DummyFunctionResourceLoader)
+      new CatalystSqlParser(),
+      DummyFunctionResourceLoader,
+      conf.tableRelationCacheSize,
+      conf.metadataCacheTTL)
   }
 
   // For testing only.
-  def this(externalCatalog: ExternalCatalog) {
-    this(
-      externalCatalog,
-      new SimpleFunctionRegistry,
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+  def this(externalCatalog: ExternalCatalog, functionRegistry: FunctionRegistry) = {
+    this(externalCatalog, functionRegistry, SQLConf.get)
+  }
+
+  // For testing only.
+  def this(externalCatalog: ExternalCatalog) = {
+    this(externalCatalog, new SimpleFunctionRegistry)
   }
 
   lazy val externalCatalog = externalCatalogBuilder()
@@ -136,9 +140,6 @@ class SessionCatalog(
   }
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    val cacheSize = conf.tableRelationCacheSize
-    val cacheTTL = conf.metadataCacheTTL
-
     var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
 
@@ -1335,7 +1336,7 @@ class SessionCatalog(
       }
       e
     } else {
-      throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
+      throw new InvalidUDFClassException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
         s"Use sparkSession.udf.register(...) instead.")
     }
   }

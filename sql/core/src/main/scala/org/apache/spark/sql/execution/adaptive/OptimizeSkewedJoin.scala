@@ -53,9 +53,9 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that, when this rule is enabled, it also coalesces non-skewed partitions like
  * `CoalesceShufflePartitions` does.
  */
-case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object OptimizeSkewedJoin extends Rule[SparkPlan] {
 
-  private val ensureRequirements = EnsureRequirements(conf)
+  private val ensureRequirements = EnsureRequirements
 
   private val supportedJoinTypes =
     Inner :: Cross :: LeftSemi :: LeftAnti :: LeftOuter :: RightOuter :: Nil

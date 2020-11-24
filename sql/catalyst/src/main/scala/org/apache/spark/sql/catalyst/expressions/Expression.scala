@@ -24,9 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -63,7 +61,8 @@ import org.apache.spark.sql.types._
  *                            functions.
  * - [[NamedExpression]]: An [[Expression]] that is named.
  * - [[TimeZoneAwareExpression]]: A common base trait for time zone aware expressions.
- * - [[SubqueryExpression]]: A base interface for expressions that contain a [[LogicalPlan]].
+ * - [[SubqueryExpression]]: A base interface for expressions that contain a
+ *                           [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  *
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
@@ -1060,10 +1059,12 @@ trait ComplexTypeMergingExpression extends Expression {
         s" The input types found are\n\t${inputTypesForMerging.mkString("\n\t")}")
   }
 
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     dataTypeCheck
     inputTypesForMerging.reduceLeft(TypeCoercion.findCommonTypeDifferentOnlyInNullFlags(_, _).get)
   }
+
+  override def dataType: DataType = internalDataType
 }
 
 /**

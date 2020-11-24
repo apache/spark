@@ -26,7 +26,7 @@ from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf
     window
 from pyspark.sql.types import IntegerType, DoubleType, ArrayType, BinaryType, ByteType, \
     LongType, DecimalType, ShortType, FloatType, StringType, BooleanType, StructType, \
-    StructField, NullType, MapType, TimestampType
+    StructField, NullType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -246,10 +246,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid return type.*grouped map Pandas UDF.*MapType'):
+                    'Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
                 pandas_udf(
                     lambda pdf: pdf,
-                    'id long, v map<int, int>',
+                    'id long, v array<timestamp>',
                     PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
@@ -276,7 +276,6 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_unsupported_types(self):
         common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
-            StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
             StructField('null', NullType()),
             StructField('struct', StructType([StructField('l', LongType())])),
@@ -446,15 +445,16 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         def column_name_typo(pdf):
             return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
 
-        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        @pandas_udf('id long, v decimal', PandasUDFType.GROUPED_MAP)
         def invalid_positional_types(pdf):
-            return pd.DataFrame([(u'a', 1.2)])
+            return pd.DataFrame([(1, datetime.date(2020, 10, 5))])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
-                grouped_df.apply(column_name_typo).collect()
-            with self.assertRaisesRegexp(Exception, "an integer is required"):
-                grouped_df.apply(invalid_positional_types).collect()
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                    grouped_df.apply(column_name_typo).collect()
+                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                    grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         with self.sql_conf({

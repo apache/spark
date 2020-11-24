@@ -26,10 +26,18 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., postgres:13.0):
+ * {{{
+ *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:12.0-alpine"
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:13.0-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -109,14 +117,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[java.lang.Boolean].isAssignableFrom(types(7)))
     assert(classOf[String].isAssignableFrom(types(8)))
     assert(classOf[String].isAssignableFrom(types(9)))
-    assert(classOf[Seq[Int]].isAssignableFrom(types(10)))
-    assert(classOf[Seq[String]].isAssignableFrom(types(11)))
-    assert(classOf[Seq[Double]].isAssignableFrom(types(12)))
-    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(13)))
+    assert(classOf[scala.collection.Seq[Int]].isAssignableFrom(types(10)))
+    assert(classOf[scala.collection.Seq[String]].isAssignableFrom(types(11)))
+    assert(classOf[scala.collection.Seq[Double]].isAssignableFrom(types(12)))
+    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(13)))
     assert(classOf[String].isAssignableFrom(types(14)))
     assert(classOf[java.lang.Float].isAssignableFrom(types(15)))
     assert(classOf[java.lang.Short].isAssignableFrom(types(16)))
-    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(17)))
+    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(17)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)

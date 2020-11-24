@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, U
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, TypedImperativeAggregate}
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 /**
  * An aggregation map that supports using safe `SpecificInternalRow`s aggregation buffers, so that

@@ -315,6 +315,21 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
+  test("Unary: LeftSemi join push down through Expand") {
+    val expand = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation)
+    val originalQuery = expand
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation
+        .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1)))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
     Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
       Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>

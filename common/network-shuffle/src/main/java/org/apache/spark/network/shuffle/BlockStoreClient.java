@@ -29,6 +29,7 @@ import com.codahale.metrics.MetricSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -134,5 +135,47 @@ public abstract class BlockStoreClient implements Closeable {
     } catch (IOException | InterruptedException e) {
       hostLocalDirsCompletable.completeExceptionally(e);
     }
+  }
+
+  /**
+   * Push a sequence of shuffle blocks in a best-effort manner to a remote node asynchronously.
+   * These shuffle blocks, along with blocks pushed by other clients, will be merged into
+   * per-shuffle partition merged shuffle files on the destination node.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param blockIds block ids to be pushed
+   * @param buffers buffers to be pushed
+   * @param listener the listener to receive block push status.
+   *
+   * @since 3.1.0
+   */
+  public void pushBlocks(
+      String host,
+      int port,
+      String[] blockIds,
+      ManagedBuffer[] buffers,
+      BlockFetchingListener listener) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Invoked by Spark driver to notify external shuffle services to finalize the shuffle merge
+   * for a given shuffle. This allows the driver to start the shuffle reducer stage after properly
+   * finishing the shuffle merge process associated with the shuffle mapper stage.
+   *
+   * @param host host of shuffle server
+   * @param port port of shuffle server.
+   * @param shuffleId shuffle ID of the shuffle to be finalized
+   * @param listener the listener to receive MergeStatuses
+   *
+   * @since 3.1.0
+   */
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
+    throw new UnsupportedOperationException();
   }
 }

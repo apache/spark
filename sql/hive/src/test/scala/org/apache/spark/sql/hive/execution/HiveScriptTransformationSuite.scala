@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
 import java.sql.Timestamp
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
@@ -28,7 +26,6 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -37,8 +34,6 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
   import testImplicits._
 
   import ScriptTransformationIOSchema._
-
-  override def isHive23OrSpark: Boolean = HiveUtils.isHive23
 
   override def createScriptTransformationExec(
       input: Seq[Expression],
@@ -158,10 +153,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (hive serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsolutePath
-
+  test("SPARK-32388: TRANSFORM should handle schema less correctly (hive serde)") {
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
@@ -170,21 +162,157 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      val query = sql(
-        s"""
-           |SELECT TRANSFORM(a, b, c, d, e)
-           |USING 'python ${scriptFilePath}'
-           |FROM v
-        """.stripMargin)
-
-      // In hive default serde mode, if we don't define output schema, it will choose first
-      // two column as output schema (key: String, value: String)
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size > 2 and don't specify serde,
+      // it will choose take rest columns in second column as output schema
+      // (key: String, value: String)
       checkAnswer(
-        query,
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  USING 'cat'
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          concat_ws("\t",
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string")).as("value")).collect())
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size > 2 and just specify serde,
+      // it will choose take rest columns in second column as output schema
+      // (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t'
+             |  )
+             |FROM v
+        """.stripMargin),
         identity,
         df.select(
           'a.cast("string").as("key"),
           'b.cast("string").as("value")).collect())
+
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size > 2 and specify serde with
+      // 'serialization.last.column.takes.rest=true',
+      // it will choose take rest columns in second column as output schema
+      // (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          concat_ws("\t",
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string")).as("value")).collect())
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size > 2 and specify serde
+      // with 'serialization.last.column.takes.rest=false',
+      // it will choose first two column as output schema (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'false'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'false'
+             |  )
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size = 2 and specify serde, it will these two column as
+      // output schema (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      // In hive default serde mode, if we don't define output schema,
+      // when output column size < 2 and specify serde, it will return null for deficiency
+      // output schema (key: String, value: String)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a)
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |  USING 'cat'
+             |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+             |  WITH SERDEPROPERTIES (
+             |    'field.delim' = '\t',
+             |    'serialization.last.column.takes.rest' = 'true'
+             |  )
+             |FROM v
+        """.stripMargin),
+        identity,
+        df.select(
+          'a.cast("string").as("key"),
+          lit(null)).collect())
     }
   }
 

@@ -43,7 +43,7 @@ private[sql] object AvroUtils extends Logging {
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sessionState.newHadoopConf()
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(ignoreExtensionKey)) {
@@ -174,7 +174,7 @@ private[sql] object AvroUtils extends Logging {
     private[this] var currentRow: Option[InternalRow] = None
 
     def hasNextRow: Boolean = {
-      do {
+      while (!completed && currentRow.isEmpty) {
         val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
         if (!r) {
           fileReader.close()
@@ -182,15 +182,21 @@ private[sql] object AvroUtils extends Logging {
           currentRow = None
         } else {
           val record = fileReader.next()
+          // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
+          // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
         }
-      } while (!completed && currentRow.isEmpty)
-
+      }
       currentRow.isDefined
     }
 
     def nextRow: InternalRow = {
-      currentRow.getOrElse {
+      if (currentRow.isEmpty) {
+        hasNextRow
+      }
+      val returnRow = currentRow
+      currentRow = None // free up hasNextRow to consume more Avro records, if not exhausted
+      returnRow.getOrElse {
         throw new NoSuchElementException("next on empty iterator")
       }
     }

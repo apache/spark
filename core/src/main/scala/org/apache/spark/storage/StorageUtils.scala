@@ -61,7 +61,7 @@ private[spark] class StorageStatus(
       maxMemory: Long,
       maxOnHeapMem: Option[Long],
       maxOffHeapMem: Option[Long],
-      initialBlocks: Map[BlockId, BlockStatus]) {
+      initialBlocks: Map[BlockId, BlockStatus]) = {
     this(bmid, maxMemory, maxOnHeapMem, maxOffHeapMem)
     initialBlocks.foreach { case (bid, bstatus) => addBlock(bid, bstatus) }
   }
@@ -169,7 +169,7 @@ private[spark] class StorageStatus(
           .getOrElse((0L, 0L))
       case _ if !level.useOffHeap =>
         (_nonRddStorageInfo.onHeapUsage, _nonRddStorageInfo.diskUsage)
-      case _ if level.useOffHeap =>
+      case _ =>
         (_nonRddStorageInfo.offHeapUsage, _nonRddStorageInfo.diskUsage)
     }
     val newMem = math.max(oldMem + changeInMem, 0L)

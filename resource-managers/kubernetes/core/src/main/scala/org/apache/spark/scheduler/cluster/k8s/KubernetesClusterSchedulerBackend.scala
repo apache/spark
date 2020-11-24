@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
@@ -65,6 +66,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
+  private def setUpExecutorConfigMap(): Unit = {
+    val configMapName = KubernetesClientUtils.configMapNameExecutor
+    val confFilesMap = KubernetesClientUtils
+      .buildSparkConfDirFilesMap(configMapName, conf, Map.empty)
+    val labels =
+      Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
+    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
+    kubernetesClient.configMaps().create(configMap)
+  }
+
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
@@ -78,11 +89,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
-    podAllocator.setTotalExpectedExecutors(initialExecutors)
+    val initExecs = Map(defaultProfile -> initialExecutors)
+    podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleEventHandler.start(this)
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
+    setUpExecutorConfigMap()
   }
 
   override def stop(): Unit = {
@@ -108,6 +121,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
       }
+      Utils.tryLogNonFatalError {
+        kubernetesClient
+          .configMaps()
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+          .delete()
+      }
     }
 
     Utils.tryLogNonFatalError {
@@ -121,7 +141,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs(defaultProfile))
+    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
     Future.successful(true)
   }
 
@@ -185,7 +205,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
-  override protected def isBlacklisted(executorId: String, hostname: String): Boolean = {
+  override protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = {
     podAllocator.isDeleted(executorId)
   }
 

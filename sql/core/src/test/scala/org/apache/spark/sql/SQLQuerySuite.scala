@@ -3692,52 +3692,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("Support column list specification in insert into statement") {
-    val table = "t1"
+  test("SPARK-33306: Timezone is needed when cast Date to String") {
+    withTempView("t1", "t2") {
+      spark.sql("select to_date(concat('2000-01-0', id)) as d from range(1, 2)")
+        .createOrReplaceTempView("t1")
+      spark.sql("select concat('2000-01-0', id) as d from range(1, 2)")
+        .createOrReplaceTempView("t2")
+      val result = Date.valueOf("2000-01-01")
 
-    def testInsert(sqlStr: String, expectedAnswer: Row): Unit = {
-      sql(sqlStr)
-      checkAnswer(spark.table(table), expectedAnswer)
-      sql(s"TRUNCATE TABLE $table")
-    }
-
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 INT) USING parquet")
-      testInsert(s"INSERT INTO $table (c1, c2, c3) values(1, 2, 3)", Row(1, 2, 3))
-      testInsert(s"INSERT INTO $table (c1, c3, c2) values(1, 3, 2)", Row(1, 2, 3))
-
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1) values(1)"))
-      assert(e1.getMessage.contains("has 3 column(s) but the specified part has only 1"))
-
-      val e2 = intercept[AnalysisException](sql(s"INSERT INTO $table (c4) values(1)"))
-      assert(e2.getMessage.contains("Cannot resolve column name c4"))
-
-      val e3 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1, c2, c2) values(1,3,4)"))
-      assert(e3.getMessage.contains("Found duplicate column(s) when inserting into"))
-
-      val e4 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1, c2, c3) values(1,2,3,4)"))
-      assert(e4.getMessage.contains("has 3 column(s) but the inserted data has 4"))
-    }
-
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 STRING, c4 STRING) " +
-        "USING parquet PARTITIONED BY (c3, c4)")
-      testInsert(s"INSERT INTO $table (c1, c2, c3, c4) values(1,2,3,4)", Row(1, 2, "3", "4"))
-      testInsert(s"INSERT INTO $table (c1, c3, c2, c4) values(1,2,3,4)", Row(1, 3, "2", "4"))
-      testInsert(s"INSERT INTO $table partition(c3='3',c4='4') (c1, c2, c3, c4)" +
-        s" values(1,2)", Row(1, 2, "3", "4"))
-      testInsert(s"INSERT INTO $table partition(c3='3',c4='4')  (c1, c2, c4)" +
-        s" values(1,2)", Row(1, 2, "3", "4"))
-      testInsert(s"INSERT INTO $table partition(c3='3',c4='4') (c4, c1, c2)" +
-        s" values(1,2)", Row(1, 2, "3", "4"))
-      testInsert(s"INSERT INTO $table partition(c3='3',c4='4') (c1, c2)" +
-        s" values(1,2)", Row(1, 2, "3", "4"))
-
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO $table partition(c3='3',c4='4') (c1) values(1)")
+      checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
       }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the specified part has" +
-        " only 1 column(s), and 2 partition column(s)"))
+    }
+  }
+
+  test("SPARK-33338: GROUP BY using literal map should not fail") {
+    withTempDir { dir =>
+      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+      Seq(
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+        checkAnswer(sql(statement), Row("v1"))
+      }
     }
   }
 }

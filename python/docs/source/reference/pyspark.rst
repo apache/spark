@@ -32,6 +32,7 @@ Public Classes
     RDD
     Broadcast
     Accumulator
+    AccumulatorParam
     SparkConf
     SparkFiles
     StorageLevel
@@ -64,6 +65,7 @@ Spark Context APIs
     SparkContext.defaultParallelism
     SparkContext.dump_profiles
     SparkContext.emptyRDD
+    SparkContext.getCheckpointDir
     SparkContext.getConf
     SparkContext.getLocalProperty
     SparkContext.getOrCreate
@@ -225,6 +227,8 @@ Broadcast and Accumulator
     Broadcast.value
     Accumulator.add
     Accumulator.value
+    AccumulatorParam.addInPlace
+    AccumulatorParam.zero
 
 
 Management

@@ -73,15 +73,29 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current session local timezone.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       Asia/Shanghai
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class CurrentTimeZone() extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def prettyName: String = "current_timezone"
+}
+
 /**
  * Returns the current date at the start of query evaluation.
- * All calls of current_date within the same query return the same value.
- *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns the current date at the start of query evaluation.
+    _FUNC_() - Returns the current date at the start of query evaluation. All calls of current_date within the same query return the same value.
 
     _FUNC_ - Returns the current date at the start of query evaluation.
   """,
@@ -97,6 +111,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   """,
   group = "datetime_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
@@ -124,13 +139,12 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
 
 /**
  * Returns the current timestamp at the start of query evaluation.
- * All calls of current_timestamp within the same query return the same value.
- *
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_() - Returns the current timestamp at the start of query evaluation.
+    _FUNC_() - Returns the current timestamp at the start of query evaluation. All calls of current_timestamp within the same query return the same value.
 
     _FUNC_ - Returns the current timestamp at the start of query evaluation.
   """,
@@ -146,6 +160,7 @@ abstract class CurrentTimestampLike() extends LeafExpression with CodegenFallbac
   """,
   group = "datetime_funcs",
   since = "1.5.0")
+// scalastyle:on line.size.limit
 case class CurrentTimestamp() extends CurrentTimestampLike {
   override def prettyName: String = "current_timestamp"
 }
@@ -895,16 +910,19 @@ abstract class UnixTime extends ToTimestamp {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(unix_time, fmt) - Returns `unix_time` in the specified `fmt`.",
+  usage = "_FUNC_(unix_time[, fmt]) - Returns `unix_time` in the specified `fmt`.",
   arguments = """
     Arguments:
       * unix_time - UNIX Timestamp to be converted to the provided format.
       * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
-              for valid date and time format patterns.
+              for valid date and time format patterns. The 'yyyy-MM-dd HH:mm:ss' pattern is used if omitted.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
+       1969-12-31 16:00:00
+
+      > SELECT _FUNC_(0);
        1969-12-31 16:00:00
   """,
   group = "datetime_funcs",
@@ -1418,7 +1436,7 @@ case class MonthsBetween(
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
-  def this(left: Expression, format: Expression) {
+  def this(left: Expression, format: Expression) = {
     this(left, Option(format), Cast(GetTimestamp(left, format), DateType))
   }
 

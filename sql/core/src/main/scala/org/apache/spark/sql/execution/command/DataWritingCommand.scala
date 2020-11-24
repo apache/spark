@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.SerializableConfiguration
 
@@ -35,7 +34,7 @@ trait DataWritingCommand extends Command {
   /**
    * The input query plan that produces the data to be written.
    * IMPORTANT: the input query plan MUST be analyzed, so that we can carry its output columns
-   *            to [[FileFormatWriter]].
+   *            to [[org.apache.spark.sql.execution.datasources.FileFormatWriter]].
    */
   def query: LogicalPlan
 

@@ -52,6 +52,13 @@ import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
+  private val pythonExecutablePath = {
+    // To make sure to use the same Python executable.
+    val maybePath = TestUtils.getAbsolutePathFromExecutable("python3")
+    assert(maybePath.isDefined)
+    maybePath.get
+  }
+
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
@@ -175,9 +182,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       clientMode = false,
       extraConf = Map(
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", pythonExecutablePath),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
+          -> sys.env.getOrElse("PYSPARK_PYTHON", pythonExecutablePath)),
       extraEnv = Map(
         "PYSPARK_DRIVER_PYTHON" -> "not python",
         "PYSPARK_PYTHON" -> "not python"))
@@ -275,7 +282,10 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator),
+      "PYSPARK_DRIVER_PYTHON" -> pythonExecutablePath,
+      "PYSPARK_PYTHON" -> pythonExecutablePath
+    ) ++ extraEnv
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")

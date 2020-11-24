@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, MapStatus}
+import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
@@ -125,14 +125,19 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    * Update the map output location (e.g. during migration).
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
-    val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
-    mapStatusOpt match {
-      case Some(mapStatus) =>
-        logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
-        mapStatus.updateLocation(bmAddress)
-        invalidateSerializedMapOutputStatusCache()
-      case None =>
-        logError(s"Asked to update map output ${mapId} for untracked map status.")
+    try {
+      val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
+      mapStatusOpt match {
+        case Some(mapStatus) =>
+          logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
+          mapStatus.updateLocation(bmAddress)
+          invalidateSerializedMapOutputStatusCache()
+        case None =>
+          logWarning(s"Asked to update map output ${mapId} for untracked map status.")
+      }
+    } catch {
+      case e: java.lang.NullPointerException =>
+        logWarning(s"Unable to update map output for ${mapId}, status removed in-flight")
     }
   }
 

@@ -17,15 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
 
 case class RefreshTableExec(
+    session: SparkSession,
     catalog: TableCatalog,
+    table: Table,
     ident: Identifier) extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     catalog.invalidateTable(ident)
+
+    // invalidate all caches referencing the given table
+    // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
+    val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+
     Seq.empty
   }
 

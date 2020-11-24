@@ -25,10 +25,10 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.SQLExecution
@@ -325,11 +325,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
       def getTable: Table = {
-        // For file source, it's expensive to infer schema/partition at each write. Here we pass
-        // the schema of input query and the user-specified partitioning to `getTable`. If the
-        // query schema is not compatible with the existing data, the write can still success but
-        // following reads would fail.
-        if (provider.isInstanceOf[FileDataSourceV2]) {
+        // If the source accepts external table metadata, here we pass the schema of input query
+        // and the user-specified partitioning to `getTable`. This is for avoiding
+        // schema/partitioning inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        // For example, writing file source will success but the following reads will fail.
+        if (provider.supportsExternalMetadata()) {
           provider.getTable(
             df.schema.asNullable,
             partitioningAsV2.toArray,
@@ -468,8 +469,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
+
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 
@@ -512,7 +513,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = mode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
-        AppendData.byPosition(table, df.logicalPlan, Nil, extraOptions.toMap)
+        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -520,10 +521,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, Nil, extraOptions.toMap)
+          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
         } else {
           OverwriteByExpression.byPosition(
-            table, df.logicalPlan, Literal(true), Nil, extraOptions.toMap)
+            table, df.logicalPlan, Literal(true), extraOptions.toMap)
         }
     }
 
@@ -610,6 +611,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def saveAsTable(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
+
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession

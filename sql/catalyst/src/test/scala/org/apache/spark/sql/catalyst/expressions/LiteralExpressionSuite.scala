@@ -209,6 +209,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
     checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+    assert(Literal.create(Map("a" -> 1)).toString === "map(keys: [a], values: [1])")
   }
 
   test("struct") {
@@ -236,6 +237,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    checkEvaluation(Literal(Array('h', 'e', 'l', 'l', 'o')), "hello")
+    checkEvaluation(Literal(Array("hello".toCharArray)), Array("hello"))
+    // scalastyle:off
+    checkEvaluation(Literal(Array('测','试')), "测试")
+    checkEvaluation(Literal(Array('a', '测', 'b', '试', 'c')), "a测b试c")
+    // scalastyle:on
   }
 
   test("construct literals from java.time.LocalDate") {

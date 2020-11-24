@@ -1125,12 +1125,14 @@ This is the component with the largest amount of instrumented metrics
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
-  - tasks.blackListedExecutors.count
+  - tasks.blackListedExecutors.count // deprecated use excludedExecutors instead
+  - tasks.excludedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count
   - tasks.killedTasks.count
   - tasks.skippedTasks.count
-  - tasks.unblackListedExecutors.count
+  - tasks.unblackListedExecutors.count // deprecated use unexcludedExecutors instead
+  - tasks.unexcludedExecutors.count
   - jobs.succeededJobs
   - jobs.failedJobs
   - jobDuration
@@ -1153,6 +1155,11 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=executor
+  - **note:** These metrics are available in the driver in local mode only.
+  - A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+    
 - namespace=ExecutorMetrics
   - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
@@ -1165,10 +1172,11 @@ This is the component with the largest amount of instrumented metrics
   custom plugins into Spark.
 
 ### Component instance = Executor
-These metrics are exposed by Spark executors. Note, currently they are not available
-when running in local mode.
+These metrics are exposed by Spark executors. 
  
 - namespace=executor (metrics are of type counter or gauge)
+  - **notes:**
+    - `spark.executor.metrics.fileSystemSchemes` (default: `file,hdfs`) determines the exposed file system metrics.
   - bytesRead.count
   - bytesWritten.count
   - cpuTime.count

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -218,30 +218,12 @@ case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
- */
-case class AlterTableAddPartitionStatement(
-    tableName: Seq[String],
-    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean) extends ParsedStatement
-
-/**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
  */
 case class AlterTableRenamePartitionStatement(
     tableName: Seq[String],
     from: TablePartitionSpec,
     to: TablePartitionSpec) extends ParsedStatement
-
-/**
- * ALTER TABLE ... DROP PARTITION command, as parsed from SQL
- */
-case class AlterTableDropPartitionStatement(
-    tableName: Seq[String],
-    specs: Seq[TablePartitionSpec],
-    ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends ParsedStatement
 
 /**
  * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
@@ -284,14 +266,6 @@ case class RenameTableStatement(
     isView: Boolean) extends ParsedStatement
 
 /**
- * A DROP TABLE statement, as parsed from SQL.
- */
-case class DropTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean,
-    purge: Boolean) extends ParsedStatement
-
-/**
  * A DROP VIEW statement, as parsed from SQL.
  */
 case class DropViewStatement(
@@ -299,18 +273,10 @@ case class DropViewStatement(
     ifExists: Boolean) extends ParsedStatement
 
 /**
- * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
- */
-case class DescribeColumnStatement(
-    tableName: Seq[String],
-    colNameParts: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
- * @param columns              the list of columns that belong to the table.
+ * @param userSpecifiedCols    the user specified list of columns that belong to the table.
  * @param query                the logical plan representing data to write to.
  * @param overwrite            overwrite existing table or partitions.
  * @param partitionSpec        a map from the partition key to the partition value (optional).
@@ -325,7 +291,7 @@ case class DescribeColumnStatement(
 case class InsertIntoStatement(
     table: LogicalPlan,
     partitionSpec: Map[String, Option[String]],
-    columns: Seq[Attribute],
+    userSpecifiedCols: Seq[Attribute],
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean) extends ParsedStatement {
@@ -361,45 +327,9 @@ case class CreateNamespaceStatement(
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
 
 /**
- * An ANALYZE TABLE statement, as parsed from SQL.
- */
-case class AnalyzeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Map[String, Option[String]],
-    noScan: Boolean) extends ParsedStatement
-
-/**
- * An ANALYZE TABLE FOR COLUMNS statement, as parsed from SQL.
- */
-case class AnalyzeColumnStatement(
-    tableName: Seq[String],
-    columnNames: Option[Seq[String]],
-    allColumns: Boolean) extends ParsedStatement {
-  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
-    "mutually exclusive. Only one of them should be specified.")
-}
-
-/**
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
- * A LOAD DATA INTO TABLE statement, as parsed from SQL
- */
-case class LoadDataStatement(
-    tableName: Seq[String],
-    path: String,
-    isLocal: Boolean,
-    isOverwrite: Boolean,
-    partition: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
- * A SHOW CREATE TABLE statement, as parsed from SQL.
- */
-case class ShowCreateTableStatement(
-    tableName: Seq[String],
-    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL
