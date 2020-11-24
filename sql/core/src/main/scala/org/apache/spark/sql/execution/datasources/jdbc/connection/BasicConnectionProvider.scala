@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.{Connection, Driver}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
@@ -40,7 +42,7 @@ private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
     val properties = getAdditionalProperties(jdbcOptions)
-    options.foreach { case(k, v) =>
+    jdbcOptions.asProperties.asScala.foreach { case(k, v) =>
       properties.put(k, v)
     }
     logDebug(s"JDBC connection initiated with URL: ${jdbcOptions.url} and properties: $properties")
