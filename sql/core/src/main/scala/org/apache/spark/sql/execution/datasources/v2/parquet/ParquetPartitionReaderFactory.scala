@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataFileMetaCacheManager, DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{FileMetaCacheManager, DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -228,7 +228,7 @@ case class ParquetPartitionReaderFactory(
     // Set footer before initialize.
     if (parquetMetaCacheEnabled) {
       val filePath = new Path(new URI(file.filePath))
-      val fileMeta = DataFileMetaCacheManager
+      val fileMeta = FileMetaCacheManager
         .get(ParquetFileMetaKey(filePath, broadcastedConf.value.value))
         .asInstanceOf[ParquetFileMeta]
       vectorizedReader.setCachedFooter(fileMeta.footer)

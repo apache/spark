@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 
-private[sql] object DataFileMetaCacheManager extends Logging {
+private[sql] object FileMetaCacheManager extends Logging {
   type ENTRY = FileMetaKey
 
   // Need configurable
