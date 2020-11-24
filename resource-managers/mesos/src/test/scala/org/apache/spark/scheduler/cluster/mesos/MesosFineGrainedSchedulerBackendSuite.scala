@@ -264,6 +264,7 @@ class MesosFineGrainedSchedulerBackendSuite
       partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
+      addedArchives = mutable.Map.empty[String, Long],
       properties = new Properties(),
       resources = immutable.Map.empty[String, ResourceInformation],
       ByteBuffer.wrap(new Array[Byte](0)))
@@ -377,6 +378,7 @@ class MesosFineGrainedSchedulerBackendSuite
       partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
+      addedArchives = mutable.Map.empty[String, Long],
       properties = new Properties(),
       resources = immutable.Map.empty[String, ResourceInformation],
       ByteBuffer.wrap(new Array[Byte](0)))

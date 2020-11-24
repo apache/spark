@@ -160,6 +160,85 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("SPARK-33530: basic case for addArchive and listArchives") {
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+      val file3 = File.createTempFile("someprefix3", "somesuffix3", dir)
+      val file4 = File.createTempFile("someprefix4", "somesuffix4", dir)
+
+      val jarFile = new File(dir, "test!@$jar.jar")
+      val zipFile = new File(dir, "test-zip.zip")
+      val relativePath1 =
+        s"${zipFile.getParent}/../${zipFile.getParentFile.getName}/${zipFile.getName}"
+      val relativePath2 =
+        s"${jarFile.getParent}/../${jarFile.getParentFile.getName}/${jarFile.getName}#zoo"
+
+      try {
+        Files.write("somewords1", file1, StandardCharsets.UTF_8)
+        Files.write("somewords22", file2, StandardCharsets.UTF_8)
+        Files.write("somewords333", file3, StandardCharsets.UTF_8)
+        Files.write("somewords4444", file4, StandardCharsets.UTF_8)
+        val length1 = file1.length()
+        val length2 = file2.length()
+        val length3 = file1.length()
+        val length4 = file2.length()
+
+        createJar(Seq(file1, file2), jarFile)
+        createJar(Seq(file3, file4), zipFile)
+
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addArchive(jarFile.getAbsolutePath)
+        sc.addArchive(relativePath1)
+        sc.addArchive(s"${jarFile.getAbsolutePath}#foo")
+        sc.addArchive(s"${zipFile.getAbsolutePath}#bar")
+        sc.addArchive(relativePath2)
+
+        sc.parallelize(Array(1), 1).map { x =>
+          val gotten1 = new File(SparkFiles.get(jarFile.getName))
+          val gotten2 = new File(SparkFiles.get(zipFile.getName))
+          val gotten3 = new File(SparkFiles.get("foo"))
+          val gotten4 = new File(SparkFiles.get("bar"))
+          val gotten5 = new File(SparkFiles.get("zoo"))
+
+          Seq(gotten1, gotten2, gotten3, gotten4, gotten5).foreach { gotten =>
+            if (!gotten.exists()) {
+              throw new SparkException(s"The archive doesn't exist: ${gotten.getAbsolutePath}")
+            }
+            if (!gotten.isDirectory) {
+              throw new SparkException(s"The archive was not unpacked: ${gotten.getAbsolutePath}")
+            }
+          }
+
+          // Jars
+          Seq(gotten1, gotten3, gotten5).foreach { gotten =>
+            val actualLength1 = new File(gotten, file1.getName).length()
+            val actualLength2 = new File(gotten, file2.getName).length()
+            if (actualLength1 != length1 || actualLength2 != length2) {
+              s"Unpacked files have different lengths $actualLength1 and $actualLength2. at " +
+                s"${gotten.getAbsolutePath}. They should be $length1 and $length2."
+            }
+          }
+
+          // Zip
+          Seq(gotten2, gotten4).foreach { gotten =>
+            val actualLength3 = new File(gotten, file1.getName).length()
+            val actualLength4 = new File(gotten, file2.getName).length()
+            if (actualLength3 != length3 || actualLength4 != length4) {
+              s"Unpacked files have different lengths $actualLength3 and $actualLength4. at " +
+                s"${gotten.getAbsolutePath}. They should be $length3 and $length4."
+            }
+          }
+          x
+        }.count()
+        assert(sc.listArchives().count(_.endsWith("test!@$jar.jar")) == 1)
+        assert(sc.listArchives().count(_.contains("test-zip.zip")) == 2)
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
   test("add and list jar files") {
     val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     try {
