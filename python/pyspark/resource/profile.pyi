@@ -22,7 +22,7 @@ from pyspark.resource.requests import (  # noqa: F401
     TaskResourceRequest as TaskResourceRequest,
     TaskResourceRequests as TaskResourceRequests,
 )
-from typing import overload, Dict, Union
+from typing import overload, Dict, Union, Optional
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 class ResourceProfile:
@@ -35,8 +35,8 @@ class ResourceProfile:
     def __init__(
         self,
         _java_resource_profile: None = ...,
-        _exec_req: Dict[str, ExecutorResourceRequest] = ...,
-        _task_req: Dict[str, TaskResourceRequest] = ...,
+        _exec_req: Optional[Dict[str, ExecutorResourceRequest]] = ...,
+        _task_req: Optional[Dict[str, TaskResourceRequest]] = ...,
     ) -> None: ...
     @property
     def id(self) -> int: ...
