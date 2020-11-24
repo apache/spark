@@ -329,7 +329,7 @@ class PlanParserSuite extends AnalysisTest {
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      Aggregate(Seq(GroupingSetsV2(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
+      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
         Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
 
     val m = intercept[ParseException] {

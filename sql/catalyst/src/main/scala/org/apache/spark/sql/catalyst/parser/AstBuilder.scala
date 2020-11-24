@@ -855,7 +855,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         // GROUP BY .... GROUPING SETS (...)
         val selectedGroupByExprs =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSetsV2(selectedGroupByExprs, groupByExpressions)),
+        Aggregate(Seq(GroupingSets(selectedGroupByExprs, groupByExpressions)),
           selectExpressions, query)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
@@ -878,7 +878,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           if (groupingAnalytic.GROUPING() != null) {
             val selectedGroupByExprs = groupingAnalytic.groupingSet().asScala
               .map(_.expression.asScala.map(e => expression(e)).toSeq)
-            GroupingSetsV2(selectedGroupByExprs)
+            GroupingSets(selectedGroupByExprs, selectedGroupByExprs flatMap (_.distinct))
           } else if (groupingAnalytic.CUBE != null) {
             val selectedGroupByExprs = groupingAnalytic.groupingSet().asScala
               .map(_.expression.asScala.map(e => expression(e)).toSeq)

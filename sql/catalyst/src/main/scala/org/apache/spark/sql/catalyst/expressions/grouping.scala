@@ -49,7 +49,7 @@ case class Rollup(groupingSets: Seq[Seq[Expression]]) extends GroupingSet {
     groupingSets.flatMap(_.distinct).distinct
 }
 
-case class GroupingSetsV2(
+case class GroupingSets(
     groupingSets: Seq[Seq[Expression]],
     groupByExpressions: Seq[Expression] = Seq.empty) extends GroupingSet {
   override def groupByExprs: Seq[Expression] = groupByExpressions

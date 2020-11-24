@@ -68,7 +68,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
   test("grouping sets") {
     val originalPlan = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b))),
         Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
@@ -79,7 +79,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     checkAnalysis(originalPlan, expected)
 
     val originalPlan2 = Aggregate(
-      Seq(GroupingSetsV2(Seq(), Seq(unresolved_a, unresolved_b))),
+      Seq(GroupingSets(Seq(), Seq(unresolved_a, unresolved_b))),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     val expected2 = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
@@ -89,7 +89,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     checkAnalysis(originalPlan2, expected2)
 
     val originalPlan3 = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b),
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b),
       Seq(unresolved_c)), Seq(unresolved_a, unresolved_b))),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     assertAnalysisError(originalPlan3, Seq("doesn't show up in the GROUP BY list"))
@@ -97,7 +97,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
   test("grouping sets with no explicit group by expressions") {
     val originalPlan = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)), Nil)),
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)), Nil)),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
     val expected = Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
       Expand(
@@ -109,7 +109,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     // Computation of grouping expression should remove duplicate expression based on their
     // semantics (semanticEqual).
     val originalPlan2 = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(Multiply(unresolved_a, Literal(2))),
+      Seq(GroupingSets(Seq(Seq(Multiply(unresolved_a, Literal(2))),
         Seq(Multiply(Literal(2), unresolved_a), unresolved_b)), Nil)),
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))), r1)
@@ -166,7 +166,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   test("grouping function") {
     // GrouingSets
     val originalPlan = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b))),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
         UnresolvedAlias(Grouping(unresolved_a))), r1)
@@ -207,7 +207,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   test("grouping_id") {
     // GrouingSets
     val originalPlan = Aggregate(
-      Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+      Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b))),
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
         UnresolvedAlias(GroupingID(Seq(unresolved_a, unresolved_b)))), r1)
@@ -249,7 +249,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     // Filter with Grouping function
     val originalPlan = Filter(Grouping(unresolved_a) === 0,
       Aggregate(
-        Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+        Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
           Seq(unresolved_a, unresolved_b))),
         Seq(unresolved_a, unresolved_b), r1))
     val expected = Project(Seq(a, b),
@@ -271,7 +271,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     // Filter with GroupingID
     val originalPlan3 = Filter(GroupingID(Seq(unresolved_a, unresolved_b)) === 1L,
       Aggregate(
-        Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+        Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
           Seq(unresolved_a, unresolved_b))), Seq(unresolved_a, unresolved_b), r1))
     val expected3 = Project(Seq(a, b), Filter(gid === 1L,
       Aggregate(Seq(a, b, gid),
@@ -294,7 +294,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     val originalPlan = Sort(
       Seq(SortOrder(Grouping(unresolved_a), Ascending)), true,
       Aggregate(
-        Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+        Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
           Seq(unresolved_a, unresolved_b))), Seq(unresolved_a, unresolved_b), r1))
     val expected = Project(Seq(a, b), Sort(
       Seq(SortOrder('aggOrder.byte.withNullability(false), Ascending)), true,
@@ -315,7 +315,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
     // Sort with GroupingID
     val originalPlan3 = Sort(
       Seq(SortOrder(GroupingID(Seq(unresolved_a, unresolved_b)), Ascending)), true,
-      Aggregate(Seq(GroupingSetsV2(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
+      Aggregate(Seq(GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b))), Seq(unresolved_a, unresolved_b), r1))
     val expected3 = Project(Seq(a, b), Sort(
       Seq(SortOrder('aggOrder.long.withNullability(false), Ascending)), true,

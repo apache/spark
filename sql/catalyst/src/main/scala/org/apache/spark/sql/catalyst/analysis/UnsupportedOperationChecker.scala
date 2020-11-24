@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSetsV2, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSets, MonotonicallyIncreasingID, Now}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -207,8 +207,8 @@ object UnsupportedOperationChecker extends Logging {
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
+          val haveGroupingSets = groupingExpressions.exists(_.isInstanceOf[GroupingSets])
 
-          val haveGroupingSets = groupingExpressions.find(_.isInstanceOf[GroupingSetsV2]).isDefined
           throwErrorIf(
             child.isStreaming && distinctAggExprs.nonEmpty,
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
