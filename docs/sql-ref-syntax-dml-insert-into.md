@@ -41,7 +41,7 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
 * **partition_spec**
 
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions.
+    for partitions. Here we support use type constructed value as partition col value.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
@@ -196,6 +196,21 @@ SELECT * FROM students;
 +-------------+-------------------------+----------+
 |   Jason Wang|    908 Bird St, Saratoga|    121212|
 +-------------+-------------------------+----------+
+```
+
+#### Insert Using a type constructed partition col value
+```sql
+CREATE TABLE students(name STRING, address  STRING) PARTITIONED BY (birthday DATE);
+
+INSERT INTO students PARTITION(birthday = date'2019-01-02')
+    VALUES('Amy Smith', '123 Park Ave, San Jose');
+
+SELECT  * FROM students;
++-------------+-------------------------+-----------+
+|         name|                  address|   birthday|
++-------------+-------------------------+-----------+
+|    Amy Smith|   123 Park Ave, San Jose| 2019-01-02|
++-------------+-------------------------+-----------+
 ```
 
 ### Related Statements
