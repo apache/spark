@@ -92,7 +92,7 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case ExtractNestedArrayField(child, _, _, field @ StructField(_, _, _, _), _) =>
+      case ExtractNestedArrayField(child, _, _, field @ StructField(_, _, _, _), _, _) =>
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // ExtractNestedArrayField is the top level extractor. This means its result is
@@ -104,12 +104,12 @@ object SelectedField {
         val structType = struct(StructField(field.name, newFieldDataType, field.nullable))
 
         val newDataType = child match {
-          case ExtractNestedArrayField(_, _, _, childField, _) =>
+          case ExtractNestedArrayField(_, _, _, childField, containsNull, _) =>
             childField.dataType match {
-              case _: ArrayType => ArrayType(structType)
+              case _: ArrayType => ArrayType(structType, containsNull)
               case _ => structType
             }
-          case _: GetArrayStructFields => ArrayType(structType)
+          case GetArrayStructFields(_, _, _, _, nullable) => ArrayType(structType, nullable)
           case _ => structType
         }
         selectField(child, Some(newDataType), nestArray = true)

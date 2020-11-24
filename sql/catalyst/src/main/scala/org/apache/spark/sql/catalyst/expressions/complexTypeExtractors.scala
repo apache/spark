@@ -61,12 +61,12 @@ object ExtractValue {
         GetArrayStructFields(child, fields(ordinal).copy(name = fieldName),
           ordinal, fields.length, containsNull || fields(ordinal).nullable)
 
-      case (ExtractNestedArrayType(StructType(fields), _, containsNullSeq),
+      case (ExtractNestedArrayType(StructType(fields), containsNull, containsNullSeq),
       NonNullLiteral(v, StringType)) if containsNullSeq.nonEmpty =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
         ExtractNestedArrayField(child, ordinal, fields.length,
-          fields(ordinal).copy(name = fieldName), containsNullSeq)
+          fields(ordinal).copy(name = fieldName), containsNull, containsNullSeq)
 
       case (_: ArrayType, _) => GetArrayItem(child, extraction)
 
@@ -230,14 +230,10 @@ object ExtractNestedArrayType {
   type ReturnType = Option[(DataType, Boolean, Seq[Boolean])]
 
   def unapply(dataType: DataType): ReturnType = {
-    extractArrayType(dataType)
-  }
-
-  def extractArrayType(dataType: DataType): ReturnType = {
     dataType match {
       case ArrayType(dt, containsNull) =>
-        extractArrayType(dt) match {
-          case Some((d, cn, seq)) => Some((d, cn, containsNull +: seq))
+        unapply(dt) match {
+          case Some((d, cn, seq)) => Some((d, containsNull, cn +: seq))
           case None => Some((dt, containsNull, Seq.empty[Boolean]))
         }
       case _ => None
@@ -250,6 +246,7 @@ case class ExtractNestedArrayField(
     ordinal: Int,
     numFields: Int,
     field: StructField,
+    containsNull: Boolean,
     containsNullSeq: Seq[Boolean]) extends UnaryExpression
     with ExtractValue with NullIntolerant with CodegenFallback {
 
@@ -289,7 +286,7 @@ case class ExtractNestedArrayField(
     }
   }
 
-  override def dataType: DataType = ArrayType(nestedArrayType(0))
+  override def dataType: DataType = ArrayType(nestedArrayType(0), containsNull)
 
   def nestedArrayType(num: Int): DataType = {
     (num until containsNullSeq.size).reverse
