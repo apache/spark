@@ -33,7 +33,7 @@ ADD JAR file_name
 
 * **file_name**
 
-    The name of the JAR file to be added. It could be either on a local file system or a distributed file system.
+    The name of the JAR file to be added. It could be either on a local file system or a distributed file system or a ivy URL.
 
 ### Examples
 
@@ -42,6 +42,10 @@ ADD JAR /tmp/test.jar;
 ADD JAR "/path/to/some.jar";
 ADD JAR '/some/other.jar';
 ADD JAR "/path with space/abc.jar";
+ADD JAR "ivy://group:module:version";
+ADD JAR "ivy://group:module:version?transitive=true";
+ADD JAR "ivy://group:module:version?exclusin=group:module,group:module";
+ADD JAR "ivy://group:module:version?exclusin=group:module,group:module&transitive=false";
 ```
 
 ### Related Statements
