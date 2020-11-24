@@ -219,13 +219,13 @@ object SQLConf {
   val OPTIMIZER_MULTI_LIKE_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.multiLikeConversionThreshold")
       .internal()
-      .doc("Configure the maximum size of the pattern sequence in like [all|any|some]. Spark " +
-        "will convert the logical combination of like to avoid StackOverflowError. 200 is an " +
+      .doc("Configure the maximum size of the pattern sequence in LIKE [ALL|ANY|SOME]. Spark " +
+        "will convert the logical combination of LIKE to avoid StackOverflowError. 200 is an " +
         "empirical value that will not cause StackOverflowError.")
       .version("3.1.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The maximum size of pattern sequence " +
-        "in like [all|any|some] must be non-negative")
+        "in LIKE [ALL|ANY|SOME] must be non-negative")
       .createWithDefault(200)
 
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
