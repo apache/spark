@@ -958,16 +958,23 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-33084: Add jar support ivy url") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
-    assert(sc.listJars().find(_.contains("scalajs-test-interface_2.12")).nonEmpty)
 
+    // default transitive=false, only download specified jar
+    sc.addJar("ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    assert(
+      sc.listJars().exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+
+    // test download ivy URL jar return multiple jars
     sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
-    assert(sc.listJars().find(_.contains("scalajs-library_2.12")).nonEmpty)
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
     sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7" +
       "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=false")
-    assert(sc.listJars().find(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")).nonEmpty)
-    assert(sc.listJars().find(_.contains("org.apache.hive_hive-exec-2.3.7.jar")).isEmpty)
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
+    // when transitive=true, `org.apache.hive_hive-exec-2.3.7.jar` will be downloaded too
+    assert(!sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
   }
 }
 

@@ -3015,7 +3015,7 @@ private[spark] object Utils extends Logging {
     if (queryString == null || queryString.isEmpty) {
       Array.empty[String]
     } else {
-      val mapTokens: Array[String] = queryString.split("&")
+      val mapTokens = queryString.split("&")
       assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
       mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1))).filter(_._1 == "exclude")
         .flatMap { case (_, excludeString) =>
