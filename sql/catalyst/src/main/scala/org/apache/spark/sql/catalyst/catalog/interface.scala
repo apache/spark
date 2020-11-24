@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
+import org.apache.spark.sql.util.PartitioningUtils.castPartitionValues
 
 /**
  * A function defined in the catalog.
@@ -149,18 +149,8 @@ case class CatalogTablePartition(
   /**
    * Given the partition schema, returns a row with that schema holding the partition values.
    */
-  def toRow(partitionSchema: StructType, defaultTimeZondId: String): InternalRow = {
-    val caseInsensitiveProperties = CaseInsensitiveMap(storage.properties)
-    val timeZoneId = caseInsensitiveProperties.getOrElse(
-      DateTimeUtils.TIMEZONE_OPTION, defaultTimeZondId)
-    InternalRow.fromSeq(partitionSchema.map { field =>
-      val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
-        null
-      } else {
-        spec(field.name)
-      }
-      Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
-    })
+  def toRow(partitionSchema: StructType, defaultTimeZoneId: String): InternalRow = {
+    castPartitionValues(spec, partitionSchema, storage.properties, defaultTimeZoneId)
   }
 }
 
