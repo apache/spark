@@ -158,7 +158,7 @@ class InMemoryTable(
       case BucketTransform(numBuckets, ref) =>
         val (value, dataType) = extractor(ref.fieldNames, schema, row)
         val valueHashCode = if (value == null) 0 else value.hashCode
-        ((valueHashCode + dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
+        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
     }
   }
 
