@@ -1190,15 +1190,12 @@ private[spark] class Client(
    * Fetch links to the logs of the driver for the given application report. This requires
    * query the ResourceManager via RPC. Returns an empty map if the links could not be fetched.
    * If this feature is disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], or if the application
-   * report indicates that the driver container isn't yet running
-   * (states `NEW`, `NEW_SAVING`, `SUBMITTED`, or `ACCEPTED`), an empty map is returned immediately.
+   * report indicates that the driver container isn't currently running, an empty map is
+   * returned immediately.
    */
   private def getDriverLogsLink(appReport: ApplicationReport): IMap[String, String] = {
     if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)
-      || appReport.getYarnApplicationState == YarnApplicationState.NEW
-      || appReport.getYarnApplicationState == YarnApplicationState.NEW_SAVING
-      || appReport.getYarnApplicationState == YarnApplicationState.SUBMITTED
-      || appReport.getYarnApplicationState == YarnApplicationState.ACCEPTED) {
+      || appReport.getYarnApplicationState != YarnApplicationState.RUNNING) {
       return IMap.empty
     }
     try {
