@@ -52,6 +52,8 @@ license: |
 
   - In Spark 3.1, refreshing a table will trigger an uncache operation for all other caches that reference the table, even if the table itself is not cached. In Spark 3.0 the operation will only be triggered if the table itself is cached.
 
+  - In Spark 3.1, we support typed literal as partition column value, such as `PARTITION (dt = date '2020-01-01')`, it will be treated as partition column value `2020-01-01`. In Spark 3.0 the partition value will be treated as `date '2020-01-01'`.
+
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
