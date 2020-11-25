@@ -27,7 +27,6 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.NoopCommand
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -2041,11 +2040,8 @@ class DataSourceV2SQLSuite
     }
     assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
 
-    // If "IF EXISTS" is set, UNCACHE TABLE will be a no-op.
-    val noop = sql(s"UNCACHE TABLE IF EXISTS $t").queryExecution.optimizedPlan.collect {
-      case n @ NoopCommand("UNCACHE TABLE", Seq("testcat", "ns1", "ns2", "tbl")) => n
-    }
-    assert(noop.length == 1)
+    // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
+    sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
   test("SHOW COLUMNS") {

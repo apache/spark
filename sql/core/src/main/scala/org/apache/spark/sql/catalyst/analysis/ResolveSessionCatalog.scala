@@ -442,15 +442,11 @@ class ResolveSessionCatalog(
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    // CACHE TABLE ... AS SELECT creates a temp view with the input query.
-    case CacheTableAsSelect(tempViewName, plan, isLazy, options) =>
-      CacheTableCommand(TableIdentifier(tempViewName), Some(plan), isLazy, options)
+    case CacheTable(multipartIdent, plan, isLazy, options) =>
+      CacheTableCommand(multipartIdent, plan, isLazy, options)
 
-    case CacheTable(ResolvedV1TableOrViewIdentifier(ident), isLazy, options) =>
-      CacheTableCommand(ident.asTableIdentifier, None, isLazy, options)
-
-    case UncacheTable(ResolvedV1TableOrViewIdentifier(ident), ifExists) =>
-      UncacheTableCommand(ident.asTableIdentifier, ifExists)
+    case UncacheTable(multipartIdent, ifExists) =>
+      UncacheTableCommand(multipartIdent, ifExists)
 
     case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(

@@ -3340,17 +3340,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val isLazy = ctx.LAZY != null
-    if (query.isDefined) {
-      if (tableName.length > 1) {
-        val catalogAndNamespace = tableName.init
-        throw new ParseException("It is not allowed to add catalog/namespace " +
-          s"prefix ${catalogAndNamespace.quoted} to " +
-          "the table name in CACHE TABLE AS SELECT", ctx)
-      }
-      CacheTableAsSelect(tableName.head, query.get, isLazy, options)
-    } else {
-      CacheTable(UnresolvedTableOrView(tableName), isLazy, options)
+    if (query.isDefined && tableName.length > 1) {
+      val catalogAndNamespace = tableName.init
+      throw new ParseException("It is not allowed to add catalog/namespace " +
+        s"prefix ${catalogAndNamespace.quoted} to " +
+        "the table name in CACHE TABLE AS SELECT", ctx)
     }
+    CacheTable(tableName, query, isLazy, options)
   }
 
   /**
@@ -3358,7 +3354,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
     UncacheTable(
-      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.EXISTS != null)
   }
 

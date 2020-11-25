@@ -17,56 +17,71 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.Locale
+
+import scala.util.Try
+
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
-import org.apache.spark.sql.execution.CacheTableUtils
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.storage.StorageLevel
 
 case class CacheTableCommand(
-    tableIdent: TableIdentifier,
+    multipartIdentifier: Seq[String],
     plan: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends RunnableCommand {
-  require(plan.isEmpty || tableIdent.database.isEmpty,
-    "Database name is not allowed in CACHE TABLE AS SELECT")
+  require(plan.isEmpty || multipartIdentifier.length == 1,
+    "Namespace name is not allowed in CACHE TABLE AS SELECT")
 
   override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val tableName = multipartIdentifier.quoted
     plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
+      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableName)
     }
 
-    val optStorageLevel = CacheTableUtils.getStorageLevel(options)
-    if (optStorageLevel.nonEmpty) {
+    val storageLevelKey = "storagelevel"
+    val storageLevelValue =
+      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
+    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
+    if (withoutStorageLevel.nonEmpty) {
+      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
+    }
+
+    if (storageLevelValue.nonEmpty) {
       sparkSession.catalog.cacheTable(
-        tableIdent.quotedString, StorageLevel.fromString(optStorageLevel.get))
+        tableName, StorageLevel.fromString(storageLevelValue.get))
     } else {
-      sparkSession.catalog.cacheTable(tableIdent.quotedString)
+      sparkSession.catalog.cacheTable(tableName)
     }
 
     if (!isLazy) {
       // Performs eager caching
-      sparkSession.table(tableIdent).count()
+      sparkSession.table(tableName).count()
     }
 
     Seq.empty[Row]
   }
 }
 
-
 case class UncacheTableCommand(
-    tableIdent: TableIdentifier,
+    multipartIdentifier: Seq[String],
     ifExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableId = tableIdent.quotedString
-    if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
-      sparkSession.catalog.uncacheTable(tableId)
+    val tableName = multipartIdentifier.quoted
+    if (!ifExists || tableExists(sparkSession, tableName)) {
+      sparkSession.catalog.uncacheTable(tableName)
     }
     Seq.empty[Row]
+  }
+
+  private def tableExists(sparkSession: SparkSession, name: String): Boolean = {
+    Try(sparkSession.table(name)).isSuccess
   }
 }
 

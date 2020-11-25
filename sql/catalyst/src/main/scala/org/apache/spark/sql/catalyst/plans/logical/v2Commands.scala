@@ -684,25 +684,12 @@ case class TruncateTable(
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(
-    child: LogicalPlan,
-    isLazy: Boolean,
-    options: Map[String, String]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
-}
-
-/**
- * The logical plan of the CACHE TABLE ... AS SELECT command.
- */
-case class CacheTableAsSelect(
-    tempViewName: String,
-    plan: LogicalPlan,
+    tableName: Seq[String],
+    plan: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends Command
 
 /**
  * The logical plan of the UNCACHE TABLE command.
  */
-case class UncacheTable(child: LogicalPlan, ifExists: Boolean) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
-}
-
+case class UncacheTable(tableName: Seq[String], ifExists: Boolean) extends Command

@@ -1594,24 +1594,25 @@ class DDLParserSuite extends AnalysisTest {
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
-      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), false, Map.empty))
+      CacheTable(Seq("a", "b", "c"), None, false, Map.empty))
 
     comparePlans(
       parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
-      CacheTableAsSelect(
-        "t",
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
+      CacheTable(
+        Seq("t"),
+        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
         false,
         Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), true, Map.empty))
+      CacheTable(Seq("a", "b", "c"), None, true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
       CacheTable(
-        UnresolvedTableOrView(Seq("a", "b", "c")),
+        Seq("a", "b", "c"),
+        None,
         true,
         Map("storageLevel" -> "DISK_ONLY")))
 
@@ -1622,11 +1623,11 @@ class DDLParserSuite extends AnalysisTest {
   test("UNCACHE TABLE") {
     comparePlans(
       parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), ifExists = false))
+      UncacheTable(Seq("a", "b", "c"), ifExists = false))
 
     comparePlans(
       parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTable(UnresolvedTableOrView(Seq("a", "b", "c")), ifExists = true))
+      UncacheTable(Seq("a", "b", "c"), ifExists = true))
   }
 
   test("TRUNCATE table") {

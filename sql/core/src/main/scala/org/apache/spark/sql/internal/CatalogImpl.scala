@@ -471,8 +471,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val cascade = (multipartIdentifier.length <= 2) &&
+      !sessionCatalog.isTemporaryTable(multipartIdentifier.asTableIdentifier)
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
   }
 
