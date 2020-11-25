@@ -1911,7 +1911,7 @@ object AnsiCast {
       case (_: ArrayType, StringType) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
-           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function array_join or set $fallbackConfKey as $fallbackConfValue.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function ARRAY_JOIN or set $fallbackConfKey as $fallbackConfValue.
            |""".stripMargin
 
       case _ if Cast.canCast(from, to) =>
