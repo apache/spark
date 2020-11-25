@@ -23,13 +23,15 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, AlterTableRecoverPartitionsStatement, AlterTableRenamePartitionStatement}
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTablePartitionParserSuite extends AnalysisTest with SharedSparkSession {
+  private lazy val parser = new SparkSqlParser()
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
-      parsePlan(sql)
+      parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
     containsThesePhrases.foreach { p =>
@@ -142,5 +144,57 @@ class AlterTablePartitionParserSuite extends AnalysisTest with SharedSparkSessio
       Map("ds" -> "2017-06-10"),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed2, expected2)
+  }
+
+  test("alter table: exchange partition (not supported)") {
+    assertUnsupported(
+      """
+        |ALTER TABLE table_name_1 EXCHANGE PARTITION
+        |(dt='2008-08-08', country='us') WITH TABLE table_name_2
+      """.stripMargin)
+  }
+
+  test("alter table: archive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
+  }
+
+  test("alter table: unarchive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
+  }
+
+  test("alter table: set file format (not allowed)") {
+    assertUnsupported(
+      "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'")
+    assertUnsupported(
+      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
+        "SET FILEFORMAT PARQUET")
+  }
+
+  test("alter table: touch (not supported)") {
+    assertUnsupported("ALTER TABLE table_name TOUCH")
+    assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
+  }
+
+  test("alter table: compact (not supported)") {
+    assertUnsupported("ALTER TABLE table_name COMPACT 'compaction_type'")
+    assertUnsupported(
+      """
+        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
+        |COMPACT 'MAJOR'
+      """.stripMargin)
+  }
+
+  test("alter table: concatenate (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CONCATENATE")
+    assertUnsupported(
+      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
+  }
+
+  test("duplicate columns in partition specs") {
+    val e = intercept[ParseException] {
+      parser.parsePlan(
+        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
+    }.getMessage
+    assert(e.contains("Found duplicate keys 'a'"))
   }
 }

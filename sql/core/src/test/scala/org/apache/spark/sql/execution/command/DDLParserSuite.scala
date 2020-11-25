@@ -271,50 +271,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       containsThesePhrases = Seq("key_without_value"))
   }
 
-  test("alter table: exchange partition (not supported)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name_1 EXCHANGE PARTITION
-       |(dt='2008-08-08', country='us') WITH TABLE table_name_2
-      """.stripMargin)
-  }
-
-  test("alter table: archive partition (not supported)") {
-    assertUnsupported("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
-  }
-
-  test("alter table: unarchive partition (not supported)") {
-    assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
-  }
-
-  test("alter table: set file format (not allowed)") {
-    assertUnsupported(
-      "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'")
-    assertUnsupported(
-      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-        "SET FILEFORMAT PARQUET")
-  }
-
-  test("alter table: touch (not supported)") {
-    assertUnsupported("ALTER TABLE table_name TOUCH")
-    assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
-  }
-
-  test("alter table: compact (not supported)") {
-    assertUnsupported("ALTER TABLE table_name COMPACT 'compaction_type'")
-    assertUnsupported(
-      """
-        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-        |COMPACT 'MAJOR'
-      """.stripMargin)
-  }
-
-  test("alter table: concatenate (not supported)") {
-    assertUnsupported("ALTER TABLE table_name CONCATENATE")
-    assertUnsupported(
-      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
-  }
-
   test("alter table: cluster by (not supported)") {
     assertUnsupported(
       "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS")
@@ -349,14 +305,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
     }.getMessage
     assert(e.contains("Found duplicate keys 'key1'"))
-  }
-
-  test("duplicate columns in partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
   }
 
   test("Test CTAS #1") {
