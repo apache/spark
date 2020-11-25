@@ -856,7 +856,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           // push down filter and 2 times related to file read. The 1st query
           // run twice: df.collect() and df.rdd.count(), so it triggers 8 times
           // file meta read in total. missCount is 2 because cache is empty and
-          // 2 meta files need load, other 6 times will use meta in cache.
+          // 2 meta files need load, other 6 times will read meta from cache.
           assert(statsAfterQuery1.missCount() - statsBeforeQuery.missCount() == 2)
           assert(statsAfterQuery1.hitCount() - statsBeforeQuery.hitCount() == 6)
           checkAnswer(sql("SELECT id FROM parquet_use_meta_cache where id < 5"),
