@@ -2266,6 +2266,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("show columns - invalid db name") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
+      val message = intercept[AnalysisException] {
+        sql("SHOW COLUMNS IN tbl FROM a.b.c")
+      }.getMessage
+      assert(message.contains(
+        "The namespace in session catalog must have exactly one name part: a.b.c.tbl"))
+    }
+  }
+
   test("SPARK-18009 calling toLocalIterator on commands") {
     import scala.collection.JavaConverters._
     val df = sql("show databases")
