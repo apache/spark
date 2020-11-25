@@ -49,7 +49,7 @@ trait CreateNonNullCollection
   """,
   since = "1.1.0")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression with CreateNonEmptyNonNullCollection {
+  extends Expression with CreateNonNullCollection {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -167,7 +167,7 @@ private [sql] object GenArrayData {
   """,
   since = "2.0.0")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression with CreateNonEmptyNonNullCollection {
+  extends Expression with CreateNonNullCollection {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))

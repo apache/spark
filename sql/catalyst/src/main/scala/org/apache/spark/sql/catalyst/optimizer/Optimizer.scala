@@ -875,7 +875,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
       assert(g.children.length == 1)
       g.children.head match {
-        case _: CreateNonEmptyNonNullCollection =>
+        case _: CreateNonNullCollection =>
           // we don't need to add filters when creating an array because we know its size
           // is > 0 and its not null
           generate
