@@ -736,7 +736,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         if (varcharKeys.exists(c => resolver(c, attr.name))) {
           None
         } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType ||
-          attr.dataType == DateType) {
+            attr.dataType == DateType) {
           Some(attr.name)
         } else {
           None
@@ -774,7 +774,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
-        if useAdvanced && child.dataType == DateType =>
+          if useAdvanced && child.dataType == DateType =>
         Some(convertInToOr(name, values))
 
       case InSet(ExtractAttribute(SupportedAttribute(name)), ExtractableValues(values))
