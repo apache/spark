@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.execution.command.v2
 
 import java.time.{LocalDate, LocalDateTime}
 
@@ -23,16 +23,16 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.connector.{DatasourceV2SQLBase, InMemoryPartitionTable}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
-class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
+class AlterTablePartitionSuite extends DatasourceV2SQLBase {
 
   import CatalogV2Implicits._
   import DataSourceV2Implicits._
-
 
   test("ALTER TABLE RECOVER PARTITIONS") {
     val t = "testcat.ns1.ns2.tbl"
