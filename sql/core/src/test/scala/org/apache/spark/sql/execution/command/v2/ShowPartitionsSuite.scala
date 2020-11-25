@@ -33,7 +33,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
   override protected def wrongPartitionColumnsError(columns: String*): String = {
-    s"Partition key ${columns.mkString(",")} not exists"
+    s"${columns.head} is not a valid partition column"
   }
 
   test("a table does not support partitioning") {
