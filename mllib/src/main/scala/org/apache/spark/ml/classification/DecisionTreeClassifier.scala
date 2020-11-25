@@ -110,6 +110,10 @@ class DecisionTreeClassifier @Since("1.4.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): DecisionTreeClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
@@ -129,10 +133,12 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds)
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds,
+      intermediateStorageLevel)
 
-    val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+    val trees = RandomForest.run(instances, strategy, numTrees = 1,
+      featureSubsetStrategy = "all", seed = $(seed), instr = Some(instr),
+      parentUID = Some(uid), intermediateStorageLevel = $(intermediateStorageLevel))
 
     trees.head.asInstanceOf[DecisionTreeClassificationModel]
   }

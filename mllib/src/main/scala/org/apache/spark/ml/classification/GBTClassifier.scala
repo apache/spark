@@ -167,6 +167,10 @@ class GBTClassifier @Since("1.4.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
@@ -197,17 +201,18 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds,
+      intermediateStorageLevel)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = if (withValidation) {
       GradientBoostedTrees.runWithValidation(trainDataset, validationDataset, boostingStrategy,
-        $(seed), $(featureSubsetStrategy), Some(instr))
+        $(seed), $(featureSubsetStrategy), Some(instr), $(intermediateStorageLevel))
     } else {
       GradientBoostedTrees.run(trainDataset, boostingStrategy, $(seed), $(featureSubsetStrategy),
-        Some(instr))
+        Some(instr), $(intermediateStorageLevel))
     }
     baseLearners.foreach(copyValues(_))
 

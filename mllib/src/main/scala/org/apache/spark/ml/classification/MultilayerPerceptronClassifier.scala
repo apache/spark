@@ -32,7 +32,8 @@ import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /** Params for Multilayer Perceptron. */
 private[classification] trait MultilayerPerceptronParams extends ProbabilisticClassifierParams
-  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver with HasBlockSize {
+  with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver with HasBlockSize
+  with HasIntermediateStorageLevel {
 
   import MultilayerPerceptronClassifier._
 
@@ -78,8 +79,8 @@ private[classification] trait MultilayerPerceptronParams extends ProbabilisticCl
   @Since("2.0.0")
   final def getInitialWeights: Vector = $(initialWeights)
 
-  setDefault(maxIter -> 100, tol -> 1e-6, blockSize -> 128,
-    solver -> LBFGS, stepSize -> 0.03)
+  setDefault(maxIter -> 100, tol -> 1e-6, blockSize -> 128, solver -> LBFGS,
+    stepSize -> 0.03, intermediateStorageLevel -> "MEMORY_AND_DISK")
 }
 
 /**
@@ -169,6 +170,10 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("2.0.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
@@ -185,7 +190,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol, layers, maxIter,
-      tol, blockSize, solver, stepSize, seed, thresholds)
+      tol, blockSize, solver, stepSize, seed, thresholds, intermediateStorageLevel)
 
     val myLayers = $(layers)
     val labels = myLayers.last
@@ -225,7 +230,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
         s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
     }
     trainer.setStackSize($(blockSize))
-    val (mlpModel, objectiveHistory) = trainer.train(data)
+    val (mlpModel, objectiveHistory) = trainer.train(data, $(intermediateStorageLevel))
     createModel(dataset, mlpModel.weights, objectiveHistory)
   }
 

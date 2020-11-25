@@ -176,6 +176,10 @@ class FMClassifier @Since("3.0.0") (
   @Since("3.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): FMClassificationModel = instrumented { instr =>
     val numClasses = 2
@@ -188,7 +192,8 @@ class FMClassifier @Since("3.0.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, factorSize, fitIntercept, fitLinear, regParam,
-      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
+      miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds,
+      intermediateStorageLevel)
     instr.logNumClasses(numClasses)
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
@@ -198,7 +203,7 @@ class FMClassifier @Since("3.0.0") (
     val labeledPoint = extractLabeledPoints(dataset, numClasses)
     val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
 
-    if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
+    if (handlePersistence) data.persist(StorageLevel.fromString($(intermediateStorageLevel)))
 
     val (coefficients, objectiveHistory) = trainImpl(data, numFeatures, LogisticLoss)
 

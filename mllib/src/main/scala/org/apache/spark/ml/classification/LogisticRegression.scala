@@ -50,7 +50,7 @@ import org.apache.spark.util.VersionUtils
 private[classification] trait LogisticRegressionParams extends ProbabilisticClassifierParams
   with HasRegParam with HasElasticNetParam with HasMaxIter with HasFitIntercept with HasTol
   with HasStandardization with HasWeightCol with HasThreshold with HasAggregationDepth
-  with HasMaxBlockSizeInMB {
+  with HasMaxBlockSizeInMB with HasIntermediateStorageLevel {
 
   import org.apache.spark.ml.classification.LogisticRegression.supportedFamilyNames
 
@@ -245,7 +245,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
   setDefault(regParam -> 0.0, elasticNetParam -> 0.0, maxIter -> 100, tol -> 1E-6,
     fitIntercept -> true, family -> "auto", standardization -> true, threshold -> 0.5,
-    aggregationDepth -> 2, maxBlockSizeInMB -> 0.0)
+    aggregationDepth -> 2, maxBlockSizeInMB -> 0.0, intermediateStorageLevel -> "MEMORY_AND_DISK")
 
   protected def usingBoundConstrainedOptimization: Boolean = {
     isSet(lowerBoundsOnCoefficients) || isSet(upperBoundsOnCoefficients) ||
@@ -438,6 +438,10 @@ class LogisticRegression @Since("1.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   private def assertBoundConstrainedOptimizationParamsValid(
       numCoefficientSets: Int,
       numFeatures: Int): Unit = {
@@ -496,7 +500,7 @@ class LogisticRegression @Since("1.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, regParam, elasticNetParam, standardization, threshold, thresholds, maxIter,
-      tol, fitIntercept, maxBlockSizeInMB)
+      tol, fitIntercept, maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
@@ -949,7 +953,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses, $(fitIntercept),

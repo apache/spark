@@ -110,6 +110,10 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("3.1.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): DecisionTreeRegressionModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
@@ -122,8 +126,9 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
     instr.logDataset(instances)
     instr.logParams(this, params: _*)
 
-    val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+    val trees = RandomForest.run(instances, strategy, numTrees = 1,
+      featureSubsetStrategy = "all", seed = $(seed), instr = Some(instr),
+      parentUID = Some(uid), intermediateStorageLevel = $(intermediateStorageLevel))
 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }

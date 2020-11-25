@@ -266,7 +266,9 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      intermediateStorageLevel: String = "MEMORY_AND_DISK"): Array[DecisionTreeModel] = {
+    require(intermediateStorageLevel != "NONE")
     val timer = new TimeTracker()
 
     timer.start("build metadata")
@@ -294,7 +296,7 @@ private[spark] object RandomForest extends Logging with Serializable {
     val baggedInput = BaggedPoint
       .convertToBaggedRDD(treeInput, strategy.subsamplingRate, numTrees, strategy.bootstrap,
         (tp: TreePoint) => tp.weight, seed = seed)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString(intermediateStorageLevel))
       .setName("bagged tree points")
 
     val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,

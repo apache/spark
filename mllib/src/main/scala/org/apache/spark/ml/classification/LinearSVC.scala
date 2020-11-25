@@ -42,7 +42,8 @@ import org.apache.spark.storage.StorageLevel
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB {
+  with HasAggregationDepth with HasThreshold with HasMaxBlockSizeInMB
+  with HasIntermediateStorageLevel {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -57,7 +58,8 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
     "threshold in binary classification prediction applied to rawPrediction")
 
   setDefault(regParam -> 0.0, maxIter -> 100, fitIntercept -> true, tol -> 1E-6,
-    standardization -> true, threshold -> 0.0, aggregationDepth -> 2, maxBlockSizeInMB -> 0.0)
+    standardization -> true, threshold -> 0.0, aggregationDepth -> 2, maxBlockSizeInMB -> 0.0,
+    intermediateStorageLevel -> "MEMORY_AND_DISK")
 }
 
 /**
@@ -165,6 +167,10 @@ class LinearSVC @Since("2.2.0") (
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
@@ -173,7 +179,7 @@ class LinearSVC @Since("2.2.0") (
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, rawPredictionCol,
       regParam, maxIter, fitIntercept, tol, standardization, threshold, aggregationDepth,
-      maxBlockSizeInMB)
+      maxBlockSizeInMB, intermediateStorageLevel)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
       instr.logWarning(s"Input instances will be standardized, blockified to blocks, and " +
@@ -292,7 +298,7 @@ class LinearSVC @Since("2.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val getAggregatorFunc = new BlockHingeAggregator($(fitIntercept))(_)

@@ -48,7 +48,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   with HasMaxIter with HasTol with HasFitIntercept with HasAggregationDepth
-  with HasMaxBlockSizeInMB with Logging {
+  with HasMaxBlockSizeInMB with HasIntermediateStorageLevel with Logging {
 
   /**
    * Param for censor column name.
@@ -93,7 +93,7 @@ private[regression] trait AFTSurvivalRegressionParams extends PredictorParams
   setDefault(censorCol -> "censor",
     quantileProbabilities -> Array(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99),
     fitIntercept -> true, maxIter -> 100, tol -> 1E-6, aggregationDepth -> 2,
-    maxBlockSizeInMB -> 0.0)
+    maxBlockSizeInMB -> 0.0, intermediateStorageLevel -> "MEMORY_AND_DISK")
 
   /** Checks whether the input has quantiles column name. */
   private[regression] def hasQuantilesCol: Boolean = {
@@ -197,12 +197,16 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   @Since("3.1.0")
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): AFTSurvivalRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, censorCol, predictionCol, quantilesCol,
-      fitIntercept, maxIter, tol, aggregationDepth, maxBlockSizeInMB)
+      fitIntercept, maxIter, tol, aggregationDepth, maxBlockSizeInMB, intermediateStorageLevel)
     instr.logNamedValue("quantileProbabilities.size", $(quantileProbabilities).length)
 
     if (dataset.storageLevel != StorageLevel.NONE) {
@@ -289,7 +293,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(StorageLevel.fromString($(intermediateStorageLevel)))
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val getAggregatorFunc = new BlockAFTAggregator($(fitIntercept))(_)

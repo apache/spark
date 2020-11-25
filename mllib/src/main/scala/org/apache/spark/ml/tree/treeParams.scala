@@ -39,7 +39,8 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
  * Note: Marked as private since this may be made public in the future.
  */
 private[ml] trait DecisionTreeParams extends PredictorParams
-  with HasCheckpointInterval with HasSeed with HasWeightCol {
+  with HasCheckpointInterval with HasSeed with HasWeightCol
+  with HasIntermediateStorageLevel {
 
   /**
    * Leaf indices column name.
@@ -137,7 +138,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 
   setDefault(leafCol -> "", maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
     minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
-    cacheNodeIds -> false, checkpointInterval -> 10)
+    cacheNodeIds -> false, checkpointInterval -> 10,
+    intermediateStorageLevel -> "MEMORY_AND_DISK")
 
   /** @group setParam */
   @Since("3.0.0")

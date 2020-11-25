@@ -47,7 +47,8 @@ import org.apache.spark.storage.StorageLevel
  */
 private[ml] trait FactorizationMachinesParams extends PredictorParams
   with HasMaxIter with HasStepSize with HasTol with HasSolver with HasSeed
-  with HasFitIntercept with HasRegParam with HasWeightCol {
+  with HasFitIntercept with HasRegParam with HasWeightCol
+  with HasIntermediateStorageLevel {
 
   /**
    * Param for dimensionality of the factors (&gt;= 0)
@@ -115,7 +116,7 @@ private[ml] trait FactorizationMachinesParams extends PredictorParams
 
   setDefault(factorSize -> 8, fitIntercept -> true, fitLinear -> true, regParam -> 0.0,
     miniBatchFraction -> 1.0, initStd -> 0.01, maxIter -> 100, stepSize -> 1.0, tol -> 1E-6,
-    solver -> AdamW)
+    solver -> AdamW, intermediateStorageLevel -> "MEMORY_AND_DISK")
 }
 
 private[ml] trait FactorizationMachines extends FactorizationMachinesParams {

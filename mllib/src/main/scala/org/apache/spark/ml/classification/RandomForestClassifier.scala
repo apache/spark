@@ -134,6 +134,10 @@ class RandomForestClassifier @Since("1.4.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("3.2.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): RandomForestClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
@@ -156,10 +160,12 @@ class RandomForestClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,
       maxMemoryInMB, minInfoGain, minInstancesPerNode, minWeightFractionPerNode, seed,
-      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap)
+      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap,
+      intermediateStorageLevel)
 
     val trees = RandomForest
-      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed,
+        Some(instr), intermediateStorageLevel = $(intermediateStorageLevel))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
     trees.foreach(copyValues(_))
 
