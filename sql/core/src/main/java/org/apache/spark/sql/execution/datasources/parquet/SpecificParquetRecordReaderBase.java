@@ -94,7 +94,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.file = split.getPath();
 
     // then we need to apply the predicate push down filter
-    ParquetMetadata footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
+    ParquetMetadata footer =
+        readFooter(configuration, file, range(split.getStart(), split.getEnd()));
     MessageType fileSchema = footer.getFileMetaData().getSchema();
     FilterCompat.Filter filter = getFilter(configuration);
     List<BlockMetaData> blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
