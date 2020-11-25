@@ -2047,14 +2047,9 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1CommandSupportingTempView("SHOW COLUMNS", s"FROM $t")
-      testV1CommandSupportingTempView("SHOW COLUMNS", s"IN $t")
-
-      val e3 = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
-      }
-      assert(e3.message.contains("Namespace name should have " +
-        "only one part if specified: testcat.ns1.ns2"))
+      testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
+      testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
+      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
     }
   }
 

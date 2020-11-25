@@ -3400,7 +3400,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   /**
    * A command for users to list the column names for a table.
-   * This function creates a [[ShowColumnsStatement]] logical plan.
+   * This function creates a [[ShowColumns]] logical plan.
    *
    * The syntax of using this command in SQL is:
    * {{{
@@ -3409,9 +3409,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitMultipartIdentifier(ctx.table)
+    val nameParts = visitMultipartIdentifier(ctx.table)
     val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
-    ShowColumnsStatement(table, namespace)
+    // Use namespace only if table name doesn't specify it. If namespace is already specified
+    // in the table name, it's checked against the given namespace after table/view is resolved.
+    val tableName = if (namespace.isDefined && nameParts.length == 1) {
+      namespace.get ++ nameParts
+    } else {
+      nameParts
+    }
+    ShowColumns(UnresolvedTableOrView(tableName), namespace)
   }
 
   /**
