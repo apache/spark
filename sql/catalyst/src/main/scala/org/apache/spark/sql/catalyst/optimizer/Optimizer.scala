@@ -880,29 +880,29 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] with Logging {
       logWarning("children head class in generate are: " + g.children.head.getClass)
       // we don't need to add filters when creating an array because we know its size
       // is > 0 and its not null
-      if (g.children.head.isInstanceOf[CreateArray]) {
-        logWarning("children createArray head class in generate are: " + g.children.head.getClass)
-        generate
-      } else {
-        // Exclude child's constraints to guarantee idempotency
-        val inferredFilters = ExpressionSet(
-          Seq(
-            GreaterThan(Size(g.children.head), Literal(0)),
-             IsNotNull(g.children.head)
-           )
-         ) -- generate.child.constraints
+      g.children.head match {
+        case _: CreateNonEmptyNonNullCollection =>
+          logWarning("children createArray head class in generate are: " + g.children.head.getClass)
+          generate
+        case _ =>
+          // Exclude child's constraints to guarantee idempotency
+          val inferredFilters = ExpressionSet(
+            Seq(
+              GreaterThan(Size(g.children.head), Literal(0)),
+              IsNotNull(g.children.head)
+            )
+          ) -- generate.child.constraints
 
-         if (inferredFilters.nonEmpty) {
-           generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
-         } else {
-           generate
-         }
+          if (inferredFilters.nonEmpty) {
+            generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+          } else {
+            generate
+          }
       }
   }
 
   private def canInferFilters(g: Generator): Boolean = g match {
-    case _: ExplodeBase => true
-    case _: Inline => true
+    case _: CollectionGenerator => true
     case _ => false
   }
 }
