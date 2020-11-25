@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.{DatasourceV2SQLBase, InMemoryPartitionTable}
+import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InMemoryPartitionTable}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
@@ -241,6 +241,20 @@ class AlterTablePartitionSuite extends DatasourceV2SQLBase {
       assert(partTable.partitionExists(expectedPartition))
       sql(s" ALTER TABLE $t DROP PARTITION ($partSpec)")
       assert(!partTable.partitionExists(expectedPartition))
+    }
+  }
+
+  test("AlterTable: set partition location") {
+    val v2Format = classOf[FakeV2Provider].getName
+    val t = s"testcat.ns1.ns2.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION(ds='2017-06-10') SET LOCATION 's3://bucket/path'")
+      }
+      assert(exc.getMessage.contains(
+        "ALTER TABLE SET LOCATION does not support partition for v2 tables"))
     }
   }
 }
