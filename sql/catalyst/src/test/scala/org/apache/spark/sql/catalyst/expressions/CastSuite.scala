@@ -25,6 +25,7 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
@@ -841,12 +842,28 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
   }
 
+  protected def setConfigurationHint: String
+
+  private def verifyCastFailure(c: CastBase, optionalExpectedMsg: Option[String] = None): Unit = {
+    val typeCheckResult = c.checkInputDataTypes()
+    assert(typeCheckResult.isFailure)
+    assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
+    val message = typeCheckResult.asInstanceOf[TypeCheckFailure].message
+
+    if (optionalExpectedMsg.isDefined) {
+      assert(message.contains(optionalExpectedMsg.get))
+    } else {
+      assert(message.contains("with ANSI mode on"))
+      assert(message.contains(setConfigurationHint))
+    }
+  }
+
   test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(TimestampType)
     val timestampLiteral = Literal(1L, TimestampType)
     numericTypes.foreach { numericType =>
-      assert(cast(timestampLiteral, numericType).checkInputDataTypes().isFailure)
+      verifyCastFailure(cast(timestampLiteral, numericType))
     }
   }
 
@@ -855,7 +872,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkInvalidCastFromNumericType(DateType)
     val dateLiteral = Literal(1, DateType)
     numericTypes.foreach { numericType =>
-      assert(cast(dateLiteral, numericType).checkInputDataTypes().isFailure)
+      verifyCastFailure(cast(dateLiteral, numericType))
     }
   }
 
@@ -880,9 +897,9 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("ANSI mode: disallow casting complex types as String type") {
-    assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
-    assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
-    assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
+    verifyCastFailure(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType))
+    verifyCastFailure(cast(Literal.create(Map(1 -> "a")), StringType))
+    verifyCastFailure(cast(Literal.create((1, "a", 0.1)), StringType))
   }
 
   test("cast from invalid string to numeric should throw NumberFormatException") {
@@ -1311,20 +1328,6 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
-    Seq(true, false).foreach { enable =>
-      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
-        assert(cast(2.toByte, TimestampType).resolved == enable)
-        assert(cast(10.toShort, TimestampType).resolved == enable)
-        assert(cast(3, TimestampType).resolved == enable)
-        assert(cast(10L, TimestampType).resolved == enable)
-        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
-        assert(cast(1.7f, TimestampType).resolved == enable)
-        assert(cast(2.3d, TimestampType).resolved == enable)
-      }
-    }
-  }
-
   test("SPARK-32828: cast from a derived user-defined type to a base type") {
     val v = Literal.create(Row(1), new ExampleSubTypeUDT())
     checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
@@ -1503,6 +1506,9 @@ class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
       case _ => Cast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.ANSI_ENABLED.key} as false"
 }
 
 /**
@@ -1525,6 +1531,10 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
+      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
 }
 
 /**
@@ -1547,4 +1557,8 @@ class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
+      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
 }
