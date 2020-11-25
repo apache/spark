@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A common trait between [[MapStatus]] and [[MergeStatus]]. This allows us to reuse existing
- * code to handle MergeStatus inside [[MapOutputTracker]].
+ * code to handle MergeStatus inside MapOutputTracker.
  */
 private[spark] trait OutputStatus
 
@@ -40,7 +40,7 @@ private[spark] trait OutputStatus
  * on to the reduce tasks.
  */
 private[spark] sealed trait MapStatus extends OutputStatus {
-  /** Location where this task was run. */
+  /** Location where this task output is. */
   def location: BlockManagerId
 
   def updateLocation(newLoc: BlockManagerId): Unit
