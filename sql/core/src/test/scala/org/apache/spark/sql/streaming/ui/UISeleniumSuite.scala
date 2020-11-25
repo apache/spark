@@ -31,8 +31,10 @@ import org.apache.spark.internal.config.UI.{UI_ENABLED, UI_PORT}
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.functions.{window => windowFn, _}
+import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
-import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
@@ -52,6 +54,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     val conf = new SparkConf()
       .setMaster(master)
       .setAppName("ui-test")
+      .set(SHUFFLE_PARTITIONS, 5)
       .set(UI_ENABLED, true)
       .set(UI_PORT, 0)
       .set(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST, Seq("stateOnCurrentVersionSizeBytes"))
@@ -79,10 +82,15 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
           val input1 = spark.readStream.format("rate").load()
           val input2 = spark.readStream.format("rate").load()
+          val input3 = spark.readStream.format("rate").load()
           val activeQuery =
-            input1.join(input2, "value").writeStream.format("noop").start()
+            input1.selectExpr("timestamp", "mod(value, 100) as mod", "value")
+              .withWatermark("timestamp", "0 second")
+              .groupBy(windowFn($"timestamp", "10 seconds", "2 seconds"), $"mod")
+              .agg(avg("value").as("avg_value"))
+              .writeStream.format("noop").trigger(Trigger.ProcessingTime("5 seconds")).start()
           val completedQuery =
-            input1.join(input2, "value").writeStream.format("noop").start()
+            input2.join(input3, "value").writeStream.format("noop").start()
           completedQuery.stop()
           val failedQuery = spark.readStream.format("rate").load().select("value").as[Long]
             .map(_ / 0).writeStream.format("noop").start()
@@ -138,6 +146,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
             summaryText should contain ("Input Rows (?)")
             summaryText should contain ("Batch Duration (?)")
             summaryText should contain ("Operation Duration (?)")
+            summaryText should contain ("Global Watermark Gap (?)")
             summaryText should contain ("Aggregated Number Of Total State Rows (?)")
             summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
             summaryText should contain ("Aggregated State Memory Used In Bytes (?)")

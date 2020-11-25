@@ -140,6 +140,58 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <br />
   }
 
+  def generateWatermark(
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): Seq[Node] = {
+    // This is made sure on caller side but put it here to be defensive
+    require(query.lastProgress != null)
+    if (query.lastProgress.eventTime.containsKey("watermark")) {
+      val watermarkData = query.recentProgress.flatMap { p =>
+        val batchTimestamp = parseProgressTimestamp(p.timestamp)
+        val watermarkValue = parseProgressTimestamp(p.eventTime.get("watermark"))
+        if (watermarkValue > 0L) {
+          // seconds
+          Some((batchTimestamp, ((batchTimestamp - watermarkValue) / 1000.0)))
+        } else {
+          None
+        }
+      }
+
+      if (watermarkData.nonEmpty) {
+        val maxWatermark = watermarkData.maxBy(_._2)._2
+        val graphUIDataForWatermark =
+          new GraphUIData(
+            "watermark-gap-timeline",
+            "watermark-gap-histogram",
+            watermarkData,
+            minBatchTime,
+            maxBatchTime,
+            0,
+            maxWatermark,
+            "seconds")
+        graphUIDataForWatermark.generateDataJs(jsCollector)
+
+        // scalastyle:off
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class="watermark-gap-histogram">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        // scalastyle:on
+      } else {
+        Seq.empty[Node]
+      }
+    } else {
+      Seq.empty[Node]
+    }
+  }
+
   def generateAggregatedStateOperators(
       query: StreamingQueryUIData,
       minBatchTime: Long,
@@ -465,6 +517,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             </td>
             <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
+          {generateWatermark(query, minBatchTime, maxBatchTime, jsCollector)}
           {generateAggregatedStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}
         </tbody>
       </table>
