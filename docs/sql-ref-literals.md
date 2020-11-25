@@ -21,13 +21,73 @@ license: |
 
 A literal (also known as a constant) represents a fixed data value. Spark SQL supports the following literals:
 
+ * [Typed Literal](#typed-literal)
  * [String Literal](#string-literal)
  * [Binary Literal](#binary-literal)
  * [Null Literal](#null-literal)
  * [Boolean Literal](#boolean-literal)
  * [Numeric Literal](#numeric-literal)
+ * [Timestamp Literal](#timestamp-literal)
  * [Datetime Literal](#datetime-literal)
  * [Interval Literal](#interval-literal)
+
+### Typed Literal
+
+A typed Literal expression parsing string values to typed Literal 
+
+#### Syntax
+
+```sql
+[TYPE] '[VALUE]'
+```
+
+#### Parameters
+
+* **TYPE**
+   
+    `TYPE` parameter shows which type of Literal we will generate. Currently Date, Timestamp, Interval and Binary typed literal are supported.
+     
+      X: Binary Literal
+      DATE: Datetime Literal 
+      TIMESTAMP: Timestamp Literal
+      INTERVAL: Interval Literal
+     
+    
+* **VALUE**
+ 
+    One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
+
+#### Example
+
+```sql
+SELECT X'123456' AS col;
++----------+
+|       col|
++----------+
+|[12 34 56]|
++----------+
+
+SELECT DATE '2011-11-11' AS col;
++----------+
+|       col|
++----------+
+|2011-11-11|
++----------+
+
+SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
++-----------------------+
+|                    col|
++-----------------------+
+|1997-01-31 09:26:56.123|
++-----------------------+
+
+SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
++---------------------------------------------+
+|                                          col|
++---------------------------------------------+
+|20 days 15 hours 40 minutes 32.998999 seconds|
++---------------------------------------------+
+```
 
 ### String Literal
 
