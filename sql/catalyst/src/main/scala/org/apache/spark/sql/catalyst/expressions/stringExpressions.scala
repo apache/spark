@@ -2103,8 +2103,7 @@ case class UnBase64(child: Expression)
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class Decode(params: Seq[Expression], fakeChild: Expression)
-  extends RuntimeReplaceable {
+case class Decode(params: Seq[Expression], fakeChild: Expression) extends RuntimeReplaceable {
 
   def this(params: Seq[Expression]) = {
     this(params, null)
