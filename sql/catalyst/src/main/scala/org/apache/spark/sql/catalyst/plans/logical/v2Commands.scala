@@ -688,3 +688,4 @@ case class TruncateTable(
     partitionSpec: Option[TablePartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
