@@ -53,25 +53,26 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       partSchema: StructType): Seq[ResolvedPartitionSpec] =
     partSpecs.map {
       case unresolvedPartSpec: UnresolvedPartitionSpec =>
+        val normalizedSpec = normalizePartitionSpec(
+          unresolvedPartSpec.spec,
+          partSchema.map(_.name),
+          tableName,
+          conf.resolver)
+        val partitionNames = normalizedSpec.keySet
+        val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
         ResolvedPartitionSpec(
-          convertToPartIdent(tableName, unresolvedPartSpec.spec, partSchema),
+          requestedFields.map(_.name),
+          convertToPartIdent(normalizedSpec, requestedFields),
           unresolvedPartSpec.location)
       case resolvedPartitionSpec: ResolvedPartitionSpec =>
         resolvedPartitionSpec
     }
 
   private def convertToPartIdent(
-      tableName: String,
-      partitionSpec: TablePartitionSpec,
-      partSchema: StructType): InternalRow = {
-    val normalizedSpec = normalizePartitionSpec(
-      partitionSpec,
-      partSchema.map(_.name),
-      tableName,
-      conf.resolver)
-
-    val partValues = partSchema.map { part =>
-      val raw = normalizedSpec.get(part.name).orNull
+      spec: TablePartitionSpec,
+      schema: Seq[StructField]): InternalRow = {
+    val partValues = schema.map { part =>
+      val raw = spec.get(part.name).orNull
       Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)

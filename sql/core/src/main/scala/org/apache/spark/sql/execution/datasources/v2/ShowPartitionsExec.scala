@@ -36,10 +36,12 @@ case class ShowPartitionsExec(
     table: SupportsPartitionManagement,
     partitionSpec: Option[ResolvedPartitionSpec]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    // Empty `InternalRow` without any partition values is supposed to be the prefix of all
-    // partitions, and listPartitionIdentifiers() should return all partitions in that case.
-    val spec = partitionSpec.map(_.spec).getOrElse(InternalRow.empty)
-    val partitionIdentifiers = table.listPartitionIdentifiers(spec)
+    val (names, ident) = partitionSpec
+      .map(spec => (spec.names, spec.ident))
+      // listPartitionByNames() should return all partitions if the partition spec
+      // does not specify any partition names.
+      .getOrElse((Seq.empty[String], InternalRow.empty))
+    val partitionIdentifiers = table.listPartitionByNames(names.toArray, ident)
     // Converting partition identifiers as `InternalRow` of partition values,
     // for instance InternalRow(value0, value1, ..., valueN), to `InternalRow`s
     // with a string in the format: "col0=value0/col1=value1/.../colN=valueN".
