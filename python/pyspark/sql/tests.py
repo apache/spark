@@ -88,7 +88,7 @@ from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_
 from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.sql.types import _merge_type
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, PySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2, lit, input_file_name, udf
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit, input_file_name, udf, col
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
@@ -1133,6 +1133,12 @@ class SQLTests(ReusedSQLTestCase):
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{'a': 1}], ["b"])
         self.assertEqual(df.columns, ['b'])
+
+    def test_negative_decimal(self):
+        df = self.spark.createDataFrame([(1, ), (11, )], ["value"])
+        ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
+        actual = list(map(lambda r: int(r.value), ret))
+        self.assertEqual(actual, [0, 10])
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
