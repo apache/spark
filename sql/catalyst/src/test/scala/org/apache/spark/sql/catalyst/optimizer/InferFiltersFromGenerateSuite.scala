@@ -33,7 +33,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   val testRelation = LocalRelation('a.array(StructType(Seq(
     StructField("x", IntegerType),
     StructField("y", IntegerType)
-  ))))
+  ))), 'c1.string)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
     val generator = f('a)
@@ -68,6 +68,25 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     )))
     test("Don't infer filters from " + foldableExplode) {
       val originalQuery = testRelation.generate(foldableExplode).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+  }
+
+  Seq(Explode(_), PosExplode(_)).foreach { f =>
+    val createArrayExplode = f(CreateArray(Seq('c1)))
+    // val createArrayExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
+    test("Don't infer filters from Createarray " + createArrayExplode) {
+      val originalQuery = testRelation.generate(createArrayExplode).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+  }
+
+  Seq(Inline(_)).foreach { f =>
+    val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
+    test("Don't infer filters from Createarray " + createArrayStructExplode) {
+      val originalQuery = testRelation.generate(createArrayStructExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
