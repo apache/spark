@@ -216,7 +216,7 @@ case class AppendDataExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    afterWrite: () => Unit = () => ()) extends V2TableWriteExec with BatchWriteHelper {
+    afterWrite: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(newWriteBuilder().buildForBatch())
@@ -240,7 +240,7 @@ case class OverwriteByExpressionExec(
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    afterWrite: () => Unit = () => ()) extends V2TableWriteExec with BatchWriteHelper {
+    afterWrite: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -276,7 +276,7 @@ case class OverwritePartitionsDynamicExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    afterWrite: () => Unit = () => ()) extends V2TableWriteExec with BatchWriteHelper {
+    afterWrite: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = newWriteBuilder() match {

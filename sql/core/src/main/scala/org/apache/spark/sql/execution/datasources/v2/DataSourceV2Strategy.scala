@@ -52,6 +52,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
+  private def refreshCache(r: DataSourceV2Relation)(): Unit = {
+    session.sharedState.cacheManager.recacheByPlan(session, r)
+  }
+
+  private def invalidateCache(r: ResolvedTable)(): Unit = {
+    val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+  }
+
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters,
         relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
@@ -128,7 +137,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(session, r.catalog, r.table, r.identifier) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -170,13 +179,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
-      val refreshCache = () => session.sharedState.cacheManager.recacheByPlan(session, r)
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, writeOptions.asOptions, query, afterWrite = refreshCache) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query, refreshCache(r)) :: Nil
         case v2 =>
-          AppendDataExec(v2, writeOptions.asOptions, planLater(query),
-            afterWrite = refreshCache) :: Nil
+          AppendDataExec(v2, writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
@@ -186,21 +193,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           supportNestedPredicatePushdown = true).getOrElse(
             throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
-      val refreshCache = () => session.sharedState.cacheManager.recacheByPlan(session, r)
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
           OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions,
-            query, afterWrite = refreshCache) :: Nil
+            query, refreshCache(r)) :: Nil
         case v2 =>
           OverwriteByExpressionExec(v2, filters,
-            writeOptions.asOptions, planLater(query), afterWrite = refreshCache) :: Nil
+            writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
-      val refreshCache = () => session.sharedState.cacheManager.recacheByPlan(session, r)
       OverwritePartitionsDynamicExec(
-        r.table.asWritable, writeOptions.asOptions, planLater(query),
-        afterWrite = refreshCache) :: Nil
+        r.table.asWritable, writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -238,7 +242,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("Describing columns is not supported for v2 tables.")
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(session, r.catalog, r.table, r.identifier, ifExists, purge) :: Nil
+      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
 
     case _: NoopDropTable =>
       LocalTableScanExec(Nil, Nil) :: Nil

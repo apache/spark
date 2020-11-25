@@ -38,7 +38,7 @@ case class AppendDataExecV1(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    afterWrite: () => Unit = () => ()) extends V1FallbackWriters {
+    afterWrite: () => Unit) extends V1FallbackWriters {
 
   override protected def run(): Seq[InternalRow] = {
     writeWithV1(newWriteBuilder().buildForV1Write(), afterWrite = afterWrite)
@@ -61,7 +61,7 @@ case class OverwriteByExpressionExecV1(
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    afterWrite: () => Unit = () => ()) extends V1FallbackWriters {
+    afterWrite: () => Unit) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -70,10 +70,11 @@ case class OverwriteByExpressionExecV1(
   override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Builder.buildForV1Write(), afterWrite)
+        writeWithV1(builder.truncate().asV1Builder.buildForV1Write(), afterWrite = afterWrite)
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write(), afterWrite)
+        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write(),
+          afterWrite = afterWrite)
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
