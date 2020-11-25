@@ -158,9 +158,9 @@ object FallbackStorage extends Logging {
         val size = nextOffset - 1 - offset
         logDebug(s"To byte array $size")
         val array = new Array[Byte](size.toInt)
+        val startTimeNs = System.nanoTime()
         f.seek(offset)
         f.read(array)
-        val startTimeNs = System.nanoTime()
         logDebug(s"Took ${(System.nanoTime() - startTimeNs) / (1000 * 1000)}ms")
         f.close()
         new NioManagedBuffer(ByteBuffer.wrap(array))
@@ -168,3 +168,4 @@ object FallbackStorage extends Logging {
     }
   }
 }
+
