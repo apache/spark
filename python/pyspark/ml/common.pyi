@@ -16,5 +16,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-def callJavaFunc(sc, func, *args): ...
-def inherit_doc(cls): ...
+from typing import Any, TypeVar
+
+import pyspark.context
+
+C = TypeVar("C", bound=type)
+
+def callJavaFunc(sc: pyspark.context.SparkContext, func: Any, *args: Any) -> Any: ...
+def inherit_doc(cls: C) -> C: ...
