@@ -111,10 +111,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 
     val ids = Set((1, 1L, 1))
-    val bm1 = mock(classOf[BlockManager])
+    val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, false)
-    when(bm1.diskBlockManager).thenReturn(dbm)
-    val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm1)
+    when(bm.diskBlockManager).thenReturn(dbm)
+    val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm)
     val indexFile = indexShuffleBlockResolver.getIndexFile(1, 1L)
     val dataFile = indexShuffleBlockResolver.getDataFile(1, 1L)
     indexFile.createNewFile()
@@ -132,20 +132,18 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
     }
 
-    val bm2 = mock(classOf[BlockManager])
-    when(bm2.diskBlockManager).thenReturn(new DiskBlockManager(conf, false))
-    when(bm2.getPeers(mc.any()))
+    when(bm.getPeers(mc.any()))
       .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
     val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
-    when(bm2.master).thenReturn(bmm)
+    when(bm.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
     when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
       mc.any(), mc.any())).thenThrow(new IOException)
-    when(bm2.blockTransferService).thenReturn(blockTransferService)
-    when(bm2.migratableResolver).thenReturn(resolver)
-    when(bm2.getMigratableRDDBlocks()).thenReturn(Seq())
+    when(bm.blockTransferService).thenReturn(blockTransferService)
+    when(bm.migratableResolver).thenReturn(resolver)
+    when(bm.getMigratableRDDBlocks()).thenReturn(Seq())
 
-    val decommissioner = new BlockManagerDecommissioner(conf, bm2)
+    val decommissioner = new BlockManagerDecommissioner(conf, bm)
 
     try {
       decommissioner.start()
