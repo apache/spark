@@ -795,7 +795,7 @@ class SessionCatalog(
 
     if (metadata.tableType == CatalogTableType.VIEW) {
       val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-      val viewConfigs = metadata.viewQuerySQLConfigs
+      val viewConfigs = metadata.viewSQLConfigs
       val viewPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs)) {
         parser.parsePlan(viewText)
       }

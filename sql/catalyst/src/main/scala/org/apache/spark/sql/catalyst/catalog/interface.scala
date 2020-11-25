@@ -306,6 +306,22 @@ case class CatalogTable(
   }
 
   /**
+   * Return the SQL configs of when the view was created, the configs are applied when parsing and
+   * analyzing the view, should be empty if the CatalogTable is not a View or created by older
+   * versions of Spark(before 3.1.0).
+   */
+  def viewSQLConfigs: Map[String, String] = {
+    try {
+      for ((key, value) <- properties if key.startsWith(CatalogTable.VIEW_SQL_CONFIG_PREFIX))
+        yield (key.substring(CatalogTable.VIEW_SQL_CONFIG_PREFIX.length), value)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          "Corrupted view SQL configs in catalog", cause = Some(e))
+    }
+  }
+
+  /**
    * Return the output column names of the query that creates a view, the column names are used to
    * resolve a view, should be empty if the CatalogTable is not a View or created by older versions
    * of Spark(before 2.2.0).
@@ -319,22 +335,6 @@ case class CatalogTable(
       throw new AnalysisException("Corrupted view query output column names in catalog: " +
         s"$numCols parts expected, but part $index is missing.")
     )
-  }
-
-  /**
-   * Return the SQL configs when creating a view, the configs are applied when parsing and
-   * analyzing the view, should be empty if the CatalogTable is not a View or created by older
-   * versions of Spark(before 3.1.0).
-   */
-  def viewQuerySQLConfigs: Map[String, String] = {
-    try {
-      for ((key, value) <- properties if key.startsWith(CatalogTable.VIEW_SQL_CONFIG_PREFIX))
-        yield (key.substring(CatalogTable.VIEW_SQL_CONFIG_PREFIX.length), value)
-    } catch {
-      case e: Exception =>
-        throw new AnalysisException(
-          "Corrupted view SQL configs in catalog", cause = Some(e))
-    }
   }
 
   /** Syntactic sugar to update a field in `storage`. */
