@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -37,6 +37,11 @@ import org.apache.spark.sql.internal.SQLConf
 object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
 
   private val ensureRequirements = EnsureRequirements
+
+  /**
+   * The list of [[ShuffleOrigin]]s supported by this rule.
+   */
+  val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
@@ -144,6 +149,6 @@ object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
   }
 
   private def supportLocalReader(s: ShuffleExchangeLike): Boolean = {
-    s.outputPartitioning != SinglePartition && s.shuffleOrigin == ENSURE_REQUIREMENTS
+    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

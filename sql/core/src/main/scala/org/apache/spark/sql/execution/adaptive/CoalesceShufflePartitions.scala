@@ -21,7 +21,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -87,6 +87,13 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
     s.outputPartitioning != SinglePartition &&
-      (s.shuffleOrigin == ENSURE_REQUIREMENTS || s.shuffleOrigin == REPARTITION)
+      CoalesceShufflePartitions.supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
+}
+
+object CoalesceShufflePartitions {
+  /**
+   * The list of [[ShuffleOrigin]]s supported by this rule.
+   */
+  val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
 }

@@ -25,7 +25,7 @@ import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -54,6 +54,11 @@ import org.apache.spark.sql.internal.SQLConf
  * `CoalesceShufflePartitions` does.
  */
 object OptimizeSkewedJoin extends Rule[SparkPlan] {
+
+  /**
+   * The list of [[ShuffleOrigin]]s supported by this rule.
+   */
+  val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
   private val ensureRequirements = EnsureRequirements
 
