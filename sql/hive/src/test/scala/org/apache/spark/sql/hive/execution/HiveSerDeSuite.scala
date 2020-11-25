@@ -21,11 +21,10 @@ import java.net.URI
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -71,8 +70,8 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
-    TestHive.sessionState.sqlParser.parsePlan(sql).collect {
-      case CreateTable(tableDesc, mode, _) => (tableDesc, mode == SaveMode.Ignore)
+    TestHive.sessionState.analyzer.execute(TestHive.sessionState.sqlParser.parsePlan(sql)).collect {
+      case CreateTableCommand(tableDesc, ifNotExists) => (tableDesc, ifNotExists)
     }.head
   }
 
