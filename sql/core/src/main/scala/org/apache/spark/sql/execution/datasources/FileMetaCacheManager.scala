@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalListener, RemovalNotification}
+import com.google.common.cache.{CacheBuilder, CacheLoader, CacheStats, RemovalListener, RemovalNotification}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -54,13 +54,11 @@ private[sql] object FileMetaCacheManager extends Logging {
       .removalListener(removalListener)
       .build[FileMetaKey, FileMeta](cacheLoader)
 
-  def get(dataFile: FileMetaKey): FileMeta = {
-    cache.get(dataFile)
-  }
+  def get(dataFile: FileMetaKey): FileMeta = cache.get(dataFile)
 
-  def stop(): Unit = {
-    cache.cleanUp()
-  }
+  def cacheStats: CacheStats = cache.stats()
+
+  def cleanUp(): Unit = cache.cleanUp()
 }
 
 abstract class FileMetaKey {
