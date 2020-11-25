@@ -878,7 +878,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           if (groupingAnalytic.GROUPING() != null) {
             val selectedGroupByExprs = groupingAnalytic.groupingSet().asScala
               .map(_.expression.asScala.map(e => expression(e)).toSeq)
-            GroupingSets(selectedGroupByExprs, selectedGroupByExprs flatMap (_.distinct))
+            GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
           } else if (groupingAnalytic.CUBE != null) {
             val selectedGroupByExprs = groupingAnalytic.groupingSet().asScala
               .map(_.expression.asScala.map(e => expression(e)).toSeq)
