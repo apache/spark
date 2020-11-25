@@ -453,8 +453,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_,
-        utfs => DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, ansiEnabled).orNull)
+      buildCast[UTF8String](_, utfs => {
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId).orNull
+        } else {
+          DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
+        }
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -1255,11 +1260,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
+      val stringToTimestampFunc = if (ansiEnabled) "stringToTimestampAnsi" else "stringToTimestamp"
       (c, evPrim, evNull) =>
         code"""
           scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampAnsi($c, $zid,
-              $ansiEnabled);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.$stringToTimestampFunc($c, $zid);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
