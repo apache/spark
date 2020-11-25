@@ -440,7 +440,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val location = visitLocationSpecList(ctx.locationSpec())
     // TODO: Do not skip serde check for CREATE TABLE LIKE.
     val serdeInfo = getSerdeInfo(
-      ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx, skipCheck = true)
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx, skipCheck = true)
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
