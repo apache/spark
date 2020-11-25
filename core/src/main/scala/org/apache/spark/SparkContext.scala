@@ -40,7 +40,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -1533,6 +1533,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def listFiles(): Seq[String] = addedFiles.keySet.toSeq
 
   /**
+   * :: Experimental ::
    * Add an archive to be downloaded and unpacked with this Spark job on every node.
    *
    * If an archive is added during execution, it will not be available until the next TaskSet
@@ -1547,15 +1548,18 @@ class SparkContext(config: SparkConf) extends Logging {
    *
    * @since 3.1.0
    */
+  @Experimental
   def addArchive(path: String): Unit = {
     addFile(path, false, false, isArchive = true)
   }
 
   /**
+   * :: Experimental ::
    * Returns a list of archive paths that are added to resources.
    *
    * @since 3.1.0
    */
+  @Experimental
   def listArchives(): Seq[String] = addedArchives.keySet.toSeq
 
   /**

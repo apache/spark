@@ -335,7 +335,7 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
-  test("SPARK-33530: handles standalone mode") {
+  test("SPARK-33530: handles standalone mode with archives") {
     val clArgs = Seq(
       "--master", "spark://localhost:1234",
       "--executor-memory", "5g",
@@ -356,7 +356,6 @@ class SparkSubmitSuite
     childArgsStr should include ("arg1 arg2")
     mainClass should be ("org.SomeClass")
 
-    // In yarn cluster mode, also adding jars to classpath
     classpath(0) should endWith ("thejar.jar")
     classpath(1) should endWith ("one.jar")
     classpath(2) should endWith ("two.jar")

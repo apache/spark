@@ -586,7 +586,7 @@ private[spark] object Utils extends Logging {
       lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
       FileUtil.unTar(source, dest)
     } else {
-      logWarning("Cannot unpack " + source)
+      logWarning(s"Cannot unpack $source, just copying it to $dest.")
       copyRecursive(source, dest)
     }
   }
