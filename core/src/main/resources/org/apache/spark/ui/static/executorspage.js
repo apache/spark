@@ -222,7 +222,14 @@ $(document).ready(function () {
                     totalOffHeapStorageMemory: 0
                 };
 
+                var peakMemoryMetrics = {
+                    JVMOffHeapMemory : 0,
+                    JVMHeapMemory : 0
+                };
+
                 exec.memoryMetrics = exec.hasOwnProperty('memoryMetrics') ? exec.memoryMetrics : memoryMetrics;
+                exec.peakMemoryMetrics = exec.hasOwnProperty('peakMemoryMetrics') ? exec.peakMemoryMetrics : peakMemoryMetrics;
+
             });
 
             response.forEach(function (exec) {
@@ -486,6 +493,28 @@ $(document).ready(function () {
                         {data: 'totalInputBytes', render: formatBytes},
                         {data: 'totalShuffleRead', render: formatBytes},
                         {data: 'totalShuffleWrite', render: formatBytes},
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.peakMemoryMetrics.JVMHeapMemory;
+                                else
+                                    return (formatBytes(row.peakMemoryMetrics.JVMHeapMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('jvm_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.peakMemoryMetrics.JVMOffHeapMemory;
+                                else
+                                    return (formatBytes(row.peakMemoryMetrics.JVMOffHeapMemory, type));
+                            },
+                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                                $(nTd).addClass('jvm_off_heap_memory')
+                            }
+                        },
                         {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
                         {
                             name: 'threadDumpCol',
