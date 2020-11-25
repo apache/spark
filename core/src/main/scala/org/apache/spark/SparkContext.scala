@@ -426,8 +426,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption(FILES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
-    _archives = _conf.getOption(ARCHIVES.key).map(_.split(",")).map(_.filter(_.nonEmpty))
-      .toSeq.flatten
+    _archives = _conf.getOption(ARCHIVES.key).map(Utils.stringToSeq).toSeq.flatten
 
     _eventLogDir =
       if (isEventLogEnabled) {
@@ -1638,10 +1637,11 @@ class SparkContext(config: SparkConf) extends Logging {
       val uriToDownload = UriBuilder.fromUri(new URI(key)).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
         env.securityManager, hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
-      logInfo(s"Unpacking an archive $path")
       val dest = new File(
         SparkFiles.getRootDirectory(),
         if (uri.getFragment != null) uri.getFragment else source.getName)
+      logInfo(
+        s"Unpacking an archive $path from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
       Utils.deleteRecursively(dest)
       Utils.unpack(source, dest)
       postEnvironmentUpdate()

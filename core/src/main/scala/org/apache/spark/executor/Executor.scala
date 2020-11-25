@@ -233,7 +233,7 @@ private[spark] class Executor(
 
   // To allow users to distribute plugins and their required files
   // specified by --jars, --files and --archives on application submission, those
-  // jars/files/archives should be downloaded and added to the class loader vi
+  // jars/files/archives should be downloaded and added to the class loader via
   // updateDependencies. This should be done before plugin initialization below
   // because executors search plugins from the class loader and initialize them.
   private val Seq(initialUserJars, initialUserFiles, initialUserArchives) =
@@ -930,11 +930,12 @@ private[spark] class Executor(
         val sourceURI = new URI(name)
         val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
         val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-          env.securityManager, hadoopConf, timestamp, useCache = false, shouldUntar = false)
-        logInfo(s"Unpacking an archive $name")
+          env.securityManager, hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
           SparkFiles.getRootDirectory(),
           if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
+        logInfo(
+          s"Unpacking an archive $name from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
         Utils.deleteRecursively(dest)
         Utils.unpack(source, dest)
         currentArchives(name) = timestamp

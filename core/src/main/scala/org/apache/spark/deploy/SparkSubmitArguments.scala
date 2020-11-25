@@ -513,7 +513,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor. File paths of these files
         |                              in executors can be accessed via SparkFiles.get(fileName).
-        |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
+        |  --archives ARCHIVES         Comma-separated list of archives to be extracted into the
         |                              working directory of each executor.
         |
         |  --conf, -c PROP=VALUE       Arbitrary Spark configuration property.

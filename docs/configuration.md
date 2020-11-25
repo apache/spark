@@ -788,7 +788,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.archives</code></td>
   <td></td>
   <td>
-    Comma separated list of archives to be extracted into the working directory of each executor.
+    Comma-separated list of archives to be extracted into the working directory of each executor.
     .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory name to unpack via
     adding <code>#</code> after the file name to unpack, for example, <code>file.zip#directory</code>.
     This configuration is experimental.

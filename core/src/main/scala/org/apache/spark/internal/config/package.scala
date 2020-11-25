@@ -1805,7 +1805,7 @@ package object config {
 
   private[spark] val ARCHIVES = ConfigBuilder("spark.archives")
     .version("3.1.0")
-    .doc("Comma separated list of archives to be extracted into the working directory of each " +
+    .doc("Comma-separated list of archives to be extracted into the working directory of each " +
       "executor. .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory " +
       "name to unpack via adding '#' after the file name to unpack, for example, " +
       "'file.zip#directory'. This configuration is experimental.")
