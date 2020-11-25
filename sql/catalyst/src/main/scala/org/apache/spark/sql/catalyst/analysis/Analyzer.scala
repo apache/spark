@@ -3115,29 +3115,27 @@ class Analyzer(override val catalogManager: CatalogManager)
         i.copy(userSpecifiedCols = Nil, query = projection)
     }
 
-    private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[Attribute] = {
-      val resolved = i.userSpecifiedCols.map {
-        case u: UnresolvedAttribute => withPosition(u) {
-          i.table.resolve(u.nameParts, resolver).map(_.toAttribute)
-            .getOrElse(failAnalysis(s"Cannot resolve column name ${u.name}"))
-        }
-        case other => other
+    private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
+      SchemaUtils.checkColumnNameDuplication(
+        i.userSpecifiedCols, "in the column list", resolver)
+
+      val resolved = i.userSpecifiedCols.map { col =>
+          i.table.resolve(Seq(col), resolver)
+            .getOrElse(failAnalysis(s"Cannot resolve column name ${col}"))
       }
 
-      SchemaUtils.checkColumnNameDuplication(
-        resolved.map(_.name), "in the column list", conf.resolver)
       resolved
     }
 
     private def addColumnListOnQuery(
         tableOutput: Seq[Attribute],
-        cols: Seq[Attribute],
+        cols: Seq[NamedExpression],
         query: LogicalPlan): LogicalPlan = {
       val errors = new mutable.ArrayBuffer[String]()
 
       def failAdd(): Unit = {
         val errMsg = if (errors.nonEmpty) errors.mkString("\n- ", "\n- ", "") else ""
-        failAnalysis(
+        query.failAnalysis(
           s"""Cannot write to table due to mismatched user specified columns and data columns:
              |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
              |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}$errMsg"""

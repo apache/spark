@@ -291,7 +291,7 @@ case class DropViewStatement(
 case class InsertIntoStatement(
     table: LogicalPlan,
     partitionSpec: Map[String, Option[String]],
-    userSpecifiedCols: Seq[Attribute],
+    userSpecifiedCols: Seq[String],
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean) extends ParsedStatement {
