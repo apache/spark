@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.connector
 
+import java.time.{LocalDate, LocalDateTime}
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
 
@@ -183,6 +187,60 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         spark.sql(s"ALTER TABLE $t DROP PARTITION (Id=1)")
         assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
       }
+    }
+  }
+
+  test("SPARK-33521: universal type conversions of partition values") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (
+        |  part0 tinyint,
+        |  part1 smallint,
+        |  part2 int,
+        |  part3 bigint,
+        |  part4 float,
+        |  part5 double,
+        |  part6 string,
+        |  part7 boolean,
+        |  part8 date,
+        |  part9 timestamp
+        |) USING foo
+        |PARTITIONED BY (part0, part1, part2, part3, part4, part5, part6, part7, part8, part9)
+        |""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      val expectedPartition = InternalRow.fromSeq(Seq[Any](
+        -1,    // tinyint
+        0,     // smallint
+        1,     // int
+        2,     // bigint
+        3.14F, // float
+        3.14D, // double
+        UTF8String.fromString("abc"), // string
+        true, // boolean
+        LocalDate.parse("2020-11-23").toEpochDay,
+        DateTimeUtils.instantToMicros(
+          LocalDateTime.parse("2020-11-23T22:13:10.123456").atZone(DateTimeTestUtils.LA).toInstant)
+      ))
+      assert(!partTable.partitionExists(expectedPartition))
+      val partSpec = """
+        |  part0 = -1,
+        |  part1 = 0,
+        |  part2 = 1,
+        |  part3 = 2,
+        |  part4 = 3.14,
+        |  part5 = 3.14,
+        |  part6 = 'abc',
+        |  part7 = true,
+        |  part8 = '2020-11-23',
+        |  part9 = '2020-11-23T22:13:10.123456'
+        |""".stripMargin
+      sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
+      assert(partTable.partitionExists(expectedPartition))
+      sql(s" ALTER TABLE $t DROP PARTITION ($partSpec)")
+      assert(!partTable.partitionExists(expectedPartition))
     }
   }
 }
