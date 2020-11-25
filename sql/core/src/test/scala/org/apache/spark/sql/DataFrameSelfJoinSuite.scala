@@ -221,7 +221,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-33536: Avoid changing dataset_id of LogicalPlan in join() " +
+  test("SPARK-33071/SPARK-33536: Avoid changing dataset_id of LogicalPlan in join() " +
     "to not break DetectAmbiguousSelfJoin") {
     val emp1 = Seq[TestData](
       TestData(1, "sales"),
