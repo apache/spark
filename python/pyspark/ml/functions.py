@@ -69,6 +69,21 @@ def vector_to_array(col, dtype="float64"):
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype))
 
 
+def array_to_vector(col):
+    """
+    Converts a column of array<double> or array<float> type into a column of MLlib dense vectors
+
+    :param col: the column of array<double> type
+    :param dtype: The data type of the output array. Valid values: "float64" or "float32".
+    :return: a column of type "pyspark.ml.linalg.Vector"
+
+    .. versionadded:: 3.1.0
+    """
+    sc = SparkContext._active_spark_context
+    return Column(
+        sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
+
+
 def _test():
     import doctest
     from pyspark.sql import SparkSession
