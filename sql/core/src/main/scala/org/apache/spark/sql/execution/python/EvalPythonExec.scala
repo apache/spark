@@ -149,7 +149,7 @@ trait EvalPythonExec extends UnaryExecNode {
  */
 class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
 
-  val thread = new AtomicReference[Thread]()
+  private val thread = new AtomicReference[Thread]()
 
   if (iter.hasNext) {
     val failed = new AtomicBoolean(false)
