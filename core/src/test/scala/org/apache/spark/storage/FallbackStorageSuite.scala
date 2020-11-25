@@ -67,8 +67,9 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val bm = mock(classOf[BlockManager])
     when(bm.diskBlockManager).thenReturn(new DiskBlockManager(conf, false))
     when(bm.master).thenReturn(bmm)
-
     val resolver = new IndexShuffleBlockResolver(conf, bm)
+    when(bm.migratableResolver).thenReturn(resolver)
+
     resolver.getIndexFile(1, 1L).createNewFile()
     resolver.getDataFile(1, 1L).createNewFile()
 
@@ -87,7 +88,6 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       }
     }
 
-    when(bm.migratableResolver).thenReturn(resolver)
     fallbackStorage.copy(ShuffleBlockInfo(1, 1L), bm)
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
 
@@ -110,11 +110,9 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 
     val ids = Set((1, 1L, 1))
-    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
-    val bm = mock(classOf[BlockManager])
-    when(bm.diskBlockManager).thenReturn(new DiskBlockManager(conf, false))
-
-    val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm)
+    val bm1 = mock(classOf[BlockManager])
+    when(bm1.diskBlockManager).thenReturn(new DiskBlockManager(conf, false))
+    val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm1)
     val indexFile = indexShuffleBlockResolver.getIndexFile(1, 1L)
     val dataFile = indexShuffleBlockResolver.getDataFile(1, 1L)
     indexFile.createNewFile()
@@ -132,17 +130,20 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
     }
 
-    when(bm.getPeers(mc.any()))
+    val bm2 = mock(classOf[BlockManager])
+    when(bm2.diskBlockManager).thenReturn(new DiskBlockManager(conf, false))
+    when(bm2.getPeers(mc.any()))
       .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
-    when(bm.master).thenReturn(bmm)
+    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+    when(bm2.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
     when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
       mc.any(), mc.any())).thenThrow(new IOException)
-    when(bm.blockTransferService).thenReturn(blockTransferService)
-    when(bm.migratableResolver).thenReturn(resolver)
-    when(bm.getMigratableRDDBlocks()).thenReturn(Seq())
+    when(bm2.blockTransferService).thenReturn(blockTransferService)
+    when(bm2.migratableResolver).thenReturn(resolver)
+    when(bm2.getMigratableRDDBlocks()).thenReturn(Seq())
 
-    val decommissioner = new BlockManagerDecommissioner(conf, bm)
+    val decommissioner = new BlockManagerDecommissioner(conf, bm2)
 
     try {
       decommissioner.start()
