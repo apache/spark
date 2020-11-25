@@ -33,7 +33,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   val testRelation = LocalRelation('a.array(StructType(Seq(
     StructField("x", IntegerType),
     StructField("y", IntegerType)
-  ))), 'c1.string)
+  ))), 'c1.string, 'c2.string)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
     val generator = f('a)
@@ -75,9 +75,20 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
   Seq(Explode(_), PosExplode(_)).foreach { f =>
     val createArrayExplode = f(CreateArray(Seq('c1)))
-    // val createArrayExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
-    test("Don't infer filters from Createarray " + createArrayExplode) {
+    test("Don't infer filters from CreateArray " + createArrayExplode) {
       val originalQuery = testRelation.generate(createArrayExplode).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+    val createMapExplode = f(CreateMap(Seq('c1, 'c2)))
+    test("Don't infer filters from CreateMap " + createMapExplode) {
+      val originalQuery = testRelation.generate(createMapExplode).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+    val createEmptyMapExplode = f(CreateMap(Seq()))
+    test("Don't infer filters from empty CreateMap " + createEmptyMapExplode) {
+      val originalQuery = testRelation.generate(createEmptyMapExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
@@ -85,7 +96,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
   Seq(Inline(_)).foreach { f =>
     val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
-    test("Don't infer filters from Createarray " + createArrayStructExplode) {
+    test("Don't infer filters from CreateArray " + createArrayStructExplode) {
       val originalQuery = testRelation.generate(createArrayStructExplode).analyze
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
@@ -865,24 +864,19 @@ object TransposeWindow extends Rule[LogicalPlan] {
  * Infers filters from [[Generate]], such that rows that would have been removed
  * by this [[Generate]] can be removed earlier - before joins and in data sources.
  */
-object InferFiltersFromGenerate extends Rule[LogicalPlan] with Logging {
+object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // This rule does not infer filters from foldable expressions to avoid constant filters
     // like 'size([1, 2, 3]) > 0'. These do not show up in child's constraints and
     // then the idempotence will break.
     case generate @ Generate(e, _, _, _, _, _)
-      if !e.deterministic || e.children.forall(_.foldable) => 
-        logWarning("children are foldable or not deterministc: " + e.children)
-        generate
+      if !e.deterministic || e.children.forall(_.foldable) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
-      logWarning("children head in generate are: " + g.children.head)
-      logWarning("children head class in generate are: " + g.children.head.getClass)
-      // we don't need to add filters when creating an array because we know its size
-      // is > 0 and its not null
       g.children.head match {
         case _: CreateNonEmptyNonNullCollection =>
-          logWarning("children createArray head class in generate are: " + g.children.head.getClass)
+          // we don't need to add filters when creating an array because we know its size
+          // is > 0 and its not null
           generate
         case _ =>
           // Exclude child's constraints to guarantee idempotency
