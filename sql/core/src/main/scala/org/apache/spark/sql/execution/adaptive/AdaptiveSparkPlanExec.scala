@@ -109,8 +109,11 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages()
   )
 
-  // Final plan may have contained repartition shuffle that has been optimized out, in which case
-  // we need to skip local shuffle reader optimization and potentially partition coalescing.
+  // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
+  // original plan contains a repartition operator, we need to preserve the specified partitioning,
+  // whether or not the repartition-introduced shuffle is optimized out because of an underlying
+  // shuffle of the same partitioning. Thus, we need to exclude some `CustomShuffleReaderRule`s
+  // from the final stage, depending on the presence and properties of repartition operators.
   private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
     val origins = inputPlan.collect {
       case s: ShuffleExchangeLike => s.shuffleOrigin
