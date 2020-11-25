@@ -1448,14 +1448,14 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
-  val APPLY_VIEW_SQL_CONFIGS =
-    buildConf("spark.sql.legacy.view.applySQLConfigs")
+  val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
+    buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
-      .doc("When true, captured SQL Configs will be applied during the parsing and analysis " +
-        "phases of the view resolution.")
+      .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
+        "ones will be applied during the parsing and analysis phases of the view resolution.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
@@ -3394,7 +3394,7 @@ class SQLConf extends Serializable with Logging {
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
-  def applyViewSQLConfigs: Boolean = getConf(SQLConf.APPLY_VIEW_SQL_CONFIGS)
+  def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

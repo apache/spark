@@ -756,72 +756,72 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33141: view should be parsed and analyzed with configs set when creating") {
-    withTable("t33141") {
-      withView("v33141", "v33141_1", "v33141_2", "v33141_3", "v33141_4") {
-        Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t33141")
-        sql("CREATE VIEW v33141 (c1) AS SELECT C1 FROM t33141")
-        sql("CREATE VIEW v33141_1 (c1) AS SELECT c1 FROM t33141 ORDER BY 1 ASC, c1 DESC")
-        sql("CREATE VIEW v33141_2 (c1, count) AS SELECT c1, count(c1) FROM t33141 GROUP BY 1")
-        sql("CREATE VIEW v33141_3 (a, count) AS SELECT c1 as a, count(c1) FROM t33141 GROUP BY a")
-        sql("CREATE VIEW v33141_4 (c1) AS SELECT 1/0")
+    withTable("t") {
+      withView("v1", "v2", "v3", "v4", "v5") {
+        Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (c1) AS SELECT C1 FROM t")
+        sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
+        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) FROM t GROUP BY 1")
+        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) FROM t GROUP BY a")
+        sql("CREATE VIEW v5 (c1) AS SELECT 1/0")
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
-          checkAnswer(sql("SELECT * FROM v33141"), Seq(Row(2), Row(3), Row(1)))
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
         }
         withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v33141_1"), Seq(Row(1), Row(2), Row(3)))
+          checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1), Row(2), Row(3)))
         }
         withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v33141_2"),
+          checkAnswer(sql("SELECT * FROM v3"),
             Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
         }
         withSQLConf(GROUP_BY_ALIASES.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v33141_3"),
+          checkAnswer(sql("SELECT * FROM v4"),
             Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
         }
         withSQLConf(ANSI_ENABLED.key -> "true") {
-          checkAnswer(sql("SELECT * FROM v33141_4"), Seq(Row(null)))
+          checkAnswer(sql("SELECT * FROM v5"), Seq(Row(null)))
         }
 
-        withSQLConf(APPLY_VIEW_SQL_CONFIGS.key -> "false") {
+        withSQLConf(USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
           withSQLConf(CASE_SENSITIVE.key -> "true") {
             val e = intercept[AnalysisException] {
-              sql("SELECT * FROM v33141")
+              sql("SELECT * FROM v1")
             }.getMessage
             assert(e.contains("cannot resolve '`C1`' given input columns: " +
-              "[spark_catalog.default.t33141.c1]"))
+              "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
-            checkAnswer(sql("SELECT * FROM v33141_1"), Seq(Row(3), Row(2), Row(1)))
+            checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
           }
           withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
             val e = intercept[AnalysisException] {
-              sql("SELECT * FROM v33141_2")
+              sql("SELECT * FROM v3")
             }.getMessage
-            assert(e.contains("expression 'spark_catalog.default.t33141.`c1`' is neither present " +
+            assert(e.contains("expression 'spark_catalog.default.t.`c1`' is neither present " +
               "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
               "first() (or first_value) if you don't care which value you get."))
           }
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
-              sql("SELECT * FROM v33141_3")
+              sql("SELECT * FROM v4")
             }.getMessage
             assert(e.contains("cannot resolve '`a`' given input columns: " +
-              "[spark_catalog.default.t33141.c1]"))
+              "[spark_catalog.default.t.c1]"))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {
-              sql("SELECT * FROM v33141_4").collect()
+              sql("SELECT * FROM v5").collect()
             }.getMessage
             assert(e.contains("divide by zero"))
           }
         }
 
         withSQLConf(ANSI_ENABLED.key -> "true") {
-          sql("ALTER VIEW v33141 AS SELECT 1/0")
+          sql("ALTER VIEW v1 AS SELECT 1/0")
         }
         val e = intercept[ArithmeticException] {
-          sql("SELECT * FROM v33141").collect()
+          sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
       }

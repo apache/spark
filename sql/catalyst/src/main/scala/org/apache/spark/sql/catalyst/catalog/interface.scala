@@ -25,7 +25,6 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
-import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -39,7 +38,6 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.JsonProtocol
 
 
 /**
@@ -324,19 +322,18 @@ case class CatalogTable(
   }
 
   /**
-   * Return the SQL configs of the query that creates a view, the configs are applied when parsing
-   * and analyzing the view, should be empty if the CatalogTable is not a View or created by older
+   * Return the SQL configs when creating a view, the configs are applied when parsing and
+   * analyzing the view, should be empty if the CatalogTable is not a View or created by older
    * versions of Spark(before 3.1.0).
    */
   def viewQuerySQLConfigs: Map[String, String] = {
     try {
-      properties.get(CatalogTable.VIEW_QUERY_SQL_CONFIGS)
-        .map(confJson => JsonProtocol.mapFromJson(JsonMethods.parse(confJson)).toMap)
-        .getOrElse(Map.empty)
+      for ((key, value) <- properties if key.startsWith(CatalogTable.VIEW_SQL_CONFIG_PREFIX))
+        yield (key.substring(CatalogTable.VIEW_SQL_CONFIG_PREFIX.length), value)
     } catch {
       case e: Exception =>
         throw new AnalysisException(
-          "Corrupted view query SQL configs in catalog", cause = Some(e))
+          "Corrupted view SQL configs in catalog", cause = Some(e))
     }
   }
 
@@ -430,11 +427,11 @@ object CatalogTable {
     props.toMap
   }
 
+  val VIEW_SQL_CONFIG_PREFIX = VIEW_PREFIX + "sqlConfig."
+
   val VIEW_QUERY_OUTPUT_PREFIX = VIEW_PREFIX + "query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
-
-  val VIEW_QUERY_SQL_CONFIGS = VIEW_PREFIX + "query.sqlConfigs"
 }
 
 /**

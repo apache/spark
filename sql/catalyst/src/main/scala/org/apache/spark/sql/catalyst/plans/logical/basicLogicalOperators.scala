@@ -456,12 +456,14 @@ case class View(
 object View {
   def effectiveSQLConf(configs: Map[String, String]): SQLConf = {
     val activeConf = SQLConf.get
-    if (!activeConf.applyViewSQLConfigs) return activeConf
+    if (activeConf.useCurrentSQLConfigsForView) return activeConf
 
     val sqlConf = new SQLConf()
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
+    // We should respect the current maxNestedViewDepth cause the view resolving are executed
+    // from top to down.
     sqlConf.setConf(SQLConf.MAX_NESTED_VIEW_DEPTH, activeConf.maxNestedViewDepth)
     sqlConf
   }

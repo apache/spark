@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
 
-import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
@@ -32,7 +30,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.JsonProtocol
 
 /**
  * Create or replace a view with given query plan. This command will generate some view-specific
@@ -337,7 +334,7 @@ case class ShowViewsCommand(
 
 object ViewHelper {
 
-  private val configPrefixBlacklist = Seq(
+  private val configPrefixDenyList = Seq(
     SQLConf.MAX_NESTED_VIEW_DEPTH.key,
     "spark.sql.optimizer.",
     "spark.sql.codegen.",
@@ -345,11 +342,8 @@ object ViewHelper {
     "spark.sql.shuffle.",
     "spark.sql.adaptive.")
 
-  private def isConfigBlacklisted(key: String): Boolean = {
-    for (prefix <- configPrefixBlacklist if key.startsWith(prefix)) {
-       return true
-    }
-    false
+  private def shouldCaptureConfig(key: String): Boolean = {
+    !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
   }
 
   import CatalogTable._
@@ -380,28 +374,27 @@ object ViewHelper {
   }
 
   /**
-   * Convert the view query SQL configs in `properties`.
+   * Convert the view SQL configs to `properties`.
    */
-  private def generateQuerySQLConfigs(conf: SQLConf): Map[String, String] = {
+  private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
     val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
-      conf.isModifiable(k) && !isConfigBlacklisted(k)
+      conf.isModifiable(k) && shouldCaptureConfig(k)
     }
     val props = new mutable.HashMap[String, String]
-    if (modifiedConfs.nonEmpty) {
-      val confJson = compact(render(JsonProtocol.mapToJson(modifiedConfs)))
-      props.put(VIEW_QUERY_SQL_CONFIGS, confJson)
+    for ((key, value) <- modifiedConfs) {
+      props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
     }
     props.toMap
   }
 
   /**
-   * Remove the view query SQL configs in `properties`.
+   * Remove the view SQL configs in `properties`.
    */
-  private def removeQuerySQLConfigs(properties: Map[String, String]): Map[String, String] = {
+  private def removeSQLConfigs(properties: Map[String, String]): Map[String, String] = {
     // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
     // while `CatalogTable` should be serializable.
     properties.filterNot { case (key, _) =>
-      key == VIEW_QUERY_SQL_CONFIGS
+      key.startsWith(VIEW_SQL_CONFIG_PREFIX)
     }
   }
 
@@ -425,19 +418,19 @@ object ViewHelper {
     // for createViewCommand queryOutput may be different from fieldNames
     val queryOutput = analyzedPlan.schema.fieldNames
 
-    val conf = SQLConf.get
+    val conf = session.sessionState.conf
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
     SchemaUtils.checkColumnNameDuplication(
       fieldNames, "in the view definition", conf.resolver)
 
-    // Generate the view default catalog and namespace.
+    // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
-    removeQuerySQLConfigs(removeQueryColumnNames(properties)) ++
+    removeSQLConfigs(removeQueryColumnNames(properties)) ++
       catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
-      generateQueryColumnNames(queryOutput) ++
-      generateQuerySQLConfigs(conf)
+      sqlConfigsToProps(conf) ++
+      generateQueryColumnNames(queryOutput)
   }
 
   /**
