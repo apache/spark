@@ -432,7 +432,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       bitmap, 4000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    assert(slaveTracker.getMapSizesForMergeResult(10, 0) ===
+    assert(slaveTracker.getMapSizesForMergeResult(10, 0).toSeq ===
       Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
         (ShuffleBlockId(10, 1, 0), size1000, 1), (ShuffleBlockId(10, 2, 0), size1000, 2),
         (ShuffleBlockId(10, 3, 0), size1000, 3)))))
@@ -470,7 +470,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     chunkBitmap.add(0)
     chunkBitmap.add(2)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
-    assert(slaveTracker.getMapSizesForMergeResult(10, 0, chunkBitmap) ===
+    assert(slaveTracker.getMapSizesForMergeResult(10, 0, chunkBitmap).toSeq ===
       Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, 0, 0), size1000, 0),
         (ShuffleBlockId(10, 2, 0), size1000, 2))))
     )

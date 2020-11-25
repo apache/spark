@@ -489,7 +489,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    */
   def getMapSizesForMergeResult(
       shuffleId: Int,
-      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+      partitionId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Called from executors upon fetch failure on a merged shuffle partition chunk. This is to get
@@ -500,7 +500,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   def getMapSizesForMergeResult(
       shuffleId: Int,
       partitionId: Int,
-      chunkBitmap: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+      chunkBitmap: RoaringBitmap): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -981,8 +981,8 @@ private[spark] class MapOutputTrackerMaster(
   // enabled in local-mode, this method returns empty list.
   override def getMapSizesForMergeResult(
       shuffleId: Int,
-      partitionId: Int): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    Seq.empty
+      partitionId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    Seq.empty.toIterator
   }
 
   // This method is only called in local-mode. Since push based shuffle won't be
@@ -990,8 +990,8 @@ private[spark] class MapOutputTrackerMaster(
   override def getMapSizesForMergeResult(
       shuffleId: Int,
       partitionId: Int,
-      chunkTracker: RoaringBitmap): Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    Seq.empty
+      chunkTracker: RoaringBitmap): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+    Seq.empty.toIterator
   }
 
   override def stop(): Unit = {
