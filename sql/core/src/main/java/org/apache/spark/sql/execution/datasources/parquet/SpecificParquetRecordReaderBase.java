@@ -251,7 +251,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.cachedFooter = cachedFooter;
   }
 
-  private ParquetMetadata getFooterByRange(Configuration configuration, long start, long end) throws IOException {
+  private ParquetMetadata getFooterByRange(Configuration configuration,
+      long start, long end) throws IOException {
     if (cachedFooter != null) {
       List<BlockMetaData> filteredBlocks = Lists.newArrayList();
       List<BlockMetaData> blocks = cachedFooter.getBlocks();
