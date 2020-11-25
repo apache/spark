@@ -44,7 +44,7 @@ private[sql] object FileMetaCacheManager extends Logging {
   }
 
   private lazy val ttlTime =
-    SparkEnv.get.conf.get(SQLConf.PARQUET_META_CACHE_TTL_SINCE_LAST_ACCESS)
+    SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS)
 
   private lazy val cache =
     CacheBuilder

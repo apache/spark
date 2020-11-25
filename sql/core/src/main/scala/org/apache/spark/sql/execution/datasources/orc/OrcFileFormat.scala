@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -169,11 +170,19 @@ class OrcFileFormat
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
+      val metaCacheEnabled =
+        conf.getBoolean(SQLConf.ORC_META_CACHE_ENABLED.key, false)
 
       val filePath = new Path(new URI(file.filePath))
 
       val fs = filePath.getFileSystem(conf)
-      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+      val readerOptions = if (metaCacheEnabled) {
+        val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
+          .asInstanceOf[OrcFileMeta].tail
+        OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
+      } else {
+        OrcFile.readerOptions(conf).filesystem(fs)
+      }
       val resultedColPruneInfo =
         Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
           OrcUtils.requestedColumnIds(
@@ -213,6 +222,11 @@ class OrcFileFormat
           val requestedDataColIds = requestedColIds ++ Array.fill(partitionSchema.length)(-1)
           val requestedPartitionColIds =
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
+          if (metaCacheEnabled) {
+            val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
+              .asInstanceOf[OrcFileMeta].tail
+            batchReader.setCachedTail(tail)
+          }
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             TypeDescription.fromString(resultSchemaString),
