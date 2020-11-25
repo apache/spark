@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -503,25 +503,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  private def convertTypeConstructorContextToString(ctx: TypeConstructorContext): String = {
-    val literal = visitTypeConstructor(ctx)
-    literal match {
-      case Literal(data: Int, _: DateType) =>
-        UTF8String.fromString(
-          DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
-            .format(data)).toString
-      case Literal(data: Long, _: TimestampType) =>
-        UTF8String.fromString(
-          TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
-            .format(data)).toString
-      case Literal(data: CalendarInterval, _: CalendarIntervalType) =>
-        UTF8String.fromString(data.toString).toString
-      case Literal(data: Array[Byte], _: BinaryType) =>
-        UTF8String.fromBytes(data).toString
-      case Literal(_, dataType) =>
-        throw new ParseException(s"Literals of type '$dataType' are not" +
-          " supported when use typed literal as partition col value.", ctx)
-    }
+  private def convertTypedLiteralToString(literal: Literal): String = literal match {
+    case Literal(data: Int, _: DateType) =>
+      UTF8String.fromString(
+        DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
+          .format(data)).toString
+    case Literal(data: Long, _: TimestampType) =>
+      UTF8String.fromString(
+        TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
+          .format(data)).toString
+    case Literal(data: CalendarInterval, _: CalendarIntervalType) =>
+      UTF8String.fromString(data.toString).toString
+    case Literal(data: Array[Byte], _: BinaryType) =>
+      UTF8String.fromBytes(data).toString
+    case Literal(_, dataType) =>
+      throw new IllegalArgumentException(s"Literals of type '$dataType' are not" +
+        " supported when use typed literal as partition col value.")
   }
 
   /**
@@ -531,7 +528,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
     ctx match {
-      case l: TypeConstructorContext => convertTypeConstructorContextToString(l)
+      case l: TypeConstructorContext => convertTypedLiteralToString(visitTypeConstructor(l))
       case s: StringLiteralContext => createString(s)
       case o => o.getText
     }
