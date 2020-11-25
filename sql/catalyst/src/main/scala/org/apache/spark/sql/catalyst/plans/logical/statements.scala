@@ -360,13 +360,6 @@ case class ShowPartitionsStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * A SHOW COLUMNS statement, as parsed from SQL
- */
-case class ShowColumnsStatement(
-    table: Seq[String],
-    namespace: Option[Seq[String]]) extends ParsedStatement
-
-/**
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement

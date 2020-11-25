@@ -1555,15 +1555,15 @@ class DDLParserSuite extends AnalysisTest {
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", false, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", false, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", true, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, true, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", true, true, None))
 
     comparePlans(
       parsePlan(
@@ -1572,7 +1572,7 @@ class DDLParserSuite extends AnalysisTest {
            |PARTITION(ds='2017-06-10')
          """.stripMargin),
       LoadData(
-        UnresolvedTable(Seq("a", "b", "c")),
+        UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"),
         "filepath",
         true,
         true,
@@ -1621,11 +1621,13 @@ class DDLParserSuite extends AnalysisTest {
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTableStatement(Seq("a", "b", "c"), None))
+      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"), None))
 
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
+      TruncateTable(
+        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"),
+        Some(Map("ds" -> "2017-06-10"))))
   }
 
   test("REFRESH TABLE") {
@@ -1641,13 +1643,13 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
 
     val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumnsStatement(Seq("t1"), None)
+    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1")), None)
     val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumnsStatement(Seq("db1", "t1"), None)
+    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), None)
     val parsed3 = parsePlan(sql3)
-    val expected3 = ShowColumnsStatement(Seq("t1"), Some(Seq("db1")))
+    val expected3 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), Some(Seq("db1")))
     val parsed4 = parsePlan(sql4)
-    val expected4 = ShowColumnsStatement(Seq("db1", "t1"), Some(Seq("db1")))
+    val expected4 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), Some(Seq("db1")))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -1674,13 +1676,13 @@ class DDLParserSuite extends AnalysisTest {
     val parsed2 = parsePlan(sql2)
 
     val expected1 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
       ifNotExists = true)
     val expected2 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
       ifNotExists = false)
 
@@ -1747,7 +1749,7 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql2_view)
 
     val expected1_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name")),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -1763,7 +1765,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,
@@ -2174,7 +2176,7 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
-      CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
+      CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
   }
 
   // TODO: ignored by SPARK-31707, restore the test after create table syntax unification

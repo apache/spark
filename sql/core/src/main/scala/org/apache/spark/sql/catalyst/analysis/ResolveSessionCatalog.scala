@@ -456,10 +456,9 @@ class ResolveSessionCatalog(
       val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
       UncacheTableCommand(name.asTableIdentifier, ifExists)
 
-    case TruncateTableStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "TRUNCATE TABLE")
+    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         partitionSpec)
 
     case ShowPartitionsStatement(tbl, partitionSpec) =>
@@ -468,25 +467,13 @@ class ResolveSessionCatalog(
         v1TableName.asTableIdentifier,
         partitionSpec)
 
-    case ShowColumnsStatement(tbl, ns) =>
-      if (ns.isDefined && ns.get.length > 1) {
-        throw new AnalysisException(
-          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
-      }
-      // Use namespace only if table name doesn't specify it. If namespace is already specified
-      // in the table name, it's checked against the given namespace below.
-      val nameParts = if (ns.isDefined && tbl.length == 1) {
-        ns.get ++ tbl
-      } else {
-        tbl
-      }
-      val sql = "SHOW COLUMNS"
-      val v1TableName = parseTempViewOrV1Table(nameParts, sql).asTableIdentifier
+    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
+      val v1TableName = ident.asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
         case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
           throw new AnalysisException(
-            s"SHOW COLUMNS with conflicting databases: " +
+            "SHOW COLUMNS with conflicting databases: " +
               s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => ns.map(_.head)
       }

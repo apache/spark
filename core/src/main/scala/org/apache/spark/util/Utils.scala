@@ -50,7 +50,7 @@ import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileUtil, Path, Trash}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -267,29 +267,6 @@ private[spark] object Utils extends Logging {
     file.setWritable(true, true) &&
     file.setExecutable(false, false) &&
     file.setExecutable(true, true)
-  }
-
-  /**
-   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true, else
-   * delete the data permanently. If move data to trash failed fallback to hard deletion.
-   */
-  def moveToTrashOrDelete(
-      fs: FileSystem,
-      partitionPath: Path,
-      isTrashEnabled: Boolean,
-      hadoopConf: Configuration): Boolean = {
-    if (isTrashEnabled) {
-      logDebug(s"Try to move data ${partitionPath.toString} to trash")
-      val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
-      if (!isSuccess) {
-        logWarning(s"Failed to move data ${partitionPath.toString} to trash. " +
-          "Fallback to hard deletion")
-        return fs.delete(partitionPath, true)
-      }
-      isSuccess
-    } else {
-      fs.delete(partitionPath, true)
-    }
   }
 
   /**

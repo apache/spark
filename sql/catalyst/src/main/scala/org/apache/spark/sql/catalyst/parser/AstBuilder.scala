@@ -967,6 +967,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
+          case Some(c) =>
+            throw new ParseException(s"Unimplemented joinCriteria: $c", ctx)
           case None if join.NATURAL != null =>
             if (baseJoinType == Cross) {
               throw new ParseException("NATURAL CROSS JOIN is not supported", ctx)
@@ -3303,7 +3305,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
     LoadData(
-      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "LOAD DATA"),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3354,7 +3356,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[TruncateTableStatement]] command.
+   * Create a [[TruncateTable]] command.
    *
    * For example:
    * {{{
@@ -3362,8 +3364,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    TruncateTableStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    TruncateTable(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "TRUNCATE TABLE"),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
@@ -3398,7 +3400,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   /**
    * A command for users to list the column names for a table.
-   * This function creates a [[ShowColumnsStatement]] logical plan.
+   * This function creates a [[ShowColumns]] logical plan.
    *
    * The syntax of using this command in SQL is:
    * {{{
@@ -3407,9 +3409,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitMultipartIdentifier(ctx.table)
+    val nameParts = visitMultipartIdentifier(ctx.table)
     val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
-    ShowColumnsStatement(table, namespace)
+    // Use namespace only if table name doesn't specify it. If namespace is already specified
+    // in the table name, it's checked against the given namespace after table/view is resolved.
+    val tableName = if (namespace.isDefined && nameParts.length == 1) {
+      namespace.get ++ nameParts
+    } else {
+      nameParts
+    }
+    ShowColumns(UnresolvedTableOrView(tableName), namespace)
   }
 
   /**
@@ -3449,7 +3458,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(spec, location)
     }
     AlterTableAddPartition(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3491,7 +3502,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null,
@@ -3720,6 +3733,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case _ => string(ctx.STRING)
     }
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CommentOnTable(UnresolvedTable(nameParts), comment)
+    CommentOnTable(UnresolvedTable(nameParts, "COMMENT ON TABLE"), comment)
   }
 }

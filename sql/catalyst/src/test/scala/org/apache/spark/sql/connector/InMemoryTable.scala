@@ -156,9 +156,13 @@ class InMemoryTable(
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
       case BucketTransform(numBuckets, ref) =>
-        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+        val (value, dataType) = extractor(ref.fieldNames, schema, row)
+        val valueHashCode = if (value == null) 0 else value.hashCode
+        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
     }
   }
+
+  protected def addPartitionKey(key: Seq[Any]): Unit = {}
 
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
@@ -166,6 +170,7 @@ class InMemoryTable(
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
         .getOrElse(key -> new BufferedRows(key.toArray.mkString("/")).withRow(row))
+      addPartitionKey(key)
     })
     this
   }

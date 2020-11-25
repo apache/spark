@@ -313,7 +313,6 @@ trait MesosSchedulerUtils extends Logging {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {
-          case None => false
           case Some(_) if requiredValues.isEmpty => true // empty value matches presence
           case Some(scalarValue: Value.Scalar) =>
             // check if provided values is less than equal to the offered values
@@ -332,6 +331,7 @@ trait MesosSchedulerUtils extends Logging {
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
             requiredValues.contains(textValue.getValue)
+          case _ => false
         }
     }
   }
