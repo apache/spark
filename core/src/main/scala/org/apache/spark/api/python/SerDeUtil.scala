@@ -17,8 +17,6 @@
 
 package org.apache.spark.api.python
 
-import java.nio.ByteOrder
-import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._

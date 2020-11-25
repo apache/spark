@@ -82,9 +82,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Operator combine
         CollapseRepartition,
         CollapseProject,
+        OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
-        CombineLimits,
+        EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
         TransposeWindow,
@@ -376,9 +377,8 @@ object SimpleTestOptimizer extends SimpleTestOptimizer
 
 class SimpleTestOptimizer extends Optimizer(
   new CatalogManager(
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true),
     FakeV2SessionCatalog,
-    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf())))
+    new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
@@ -803,6 +803,21 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+  }
+}
+
+/**
+ * Replaces first(col) to nth_value(col, 1) for better performance.
+ */
+object OptimizeWindowFunctions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _),
+        WindowSpecDefinition(_, orderSpec, frameSpecification: SpecifiedWindowFrame))
+        if orderSpec.nonEmpty && frameSpecification.frameType == RowFrame &&
+          frameSpecification.lower == UnboundedPreceding &&
+          (frameSpecification.upper == UnboundedFollowing ||
+            frameSpecification.upper == CurrentRow) =>
+      we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
   }
 }
 
@@ -1269,6 +1284,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: Sort => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
+    case _: Expand => true
     case _ => false
   }
 
@@ -1438,11 +1454,20 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Combines two adjacent [[Limit]] operators into one, merging the
- * expressions into one single expression.
+ * This rule optimizes Limit operators by:
+ * 1. Eliminate [[Limit]] operators if it's child max row <= limit.
+ * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ *    expressions into one single expression.
  */
-object CombineLimits extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+object EliminateLimits extends Rule[LogicalPlan] {
+  private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
+    limitExpr.foldable && child.maxRows.exists { _ <= limitExpr.eval().asInstanceOf[Int] }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Limit(l, child) if canEliminate(l, child) =>
+      child
+
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Least(Seq(ne, le)), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>

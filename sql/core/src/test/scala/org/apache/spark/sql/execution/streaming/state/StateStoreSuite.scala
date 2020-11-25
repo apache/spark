@@ -567,7 +567,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     try {
       val checkpointLocation = Utils.createTempDir().getAbsoluteFile
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
-      SparkSession.setActiveSessionInternal(spark)
+      SparkSession.setActiveSession(spark)
       implicit val sqlContext = spark.sqlContext
       spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._

@@ -16,7 +16,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NoReturn,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+)
+from types import TracebackType
 
 from py4j.java_gateway import JavaGateway, JavaObject  # type: ignore[import]
 
@@ -51,9 +63,14 @@ class SparkContext:
         jsc: Optional[JavaObject] = ...,
         profiler_cls: type = ...,
     ) -> None: ...
-    def __getnewargs__(self): ...
-    def __enter__(self): ...
-    def __exit__(self, type, value, trace): ...
+    def __getnewargs__(self) -> NoReturn: ...
+    def __enter__(self) -> SparkContext: ...
+    def __exit__(
+        self,
+        type: Optional[Type[BaseException]],
+        value: Optional[BaseException],
+        trace: Optional[TracebackType],
+    ) -> None: ...
     @classmethod
     def getOrCreate(cls, conf: Optional[SparkConf] = ...) -> SparkContext: ...
     def setLogLevel(self, logLevel: str) -> None: ...

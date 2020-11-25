@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration

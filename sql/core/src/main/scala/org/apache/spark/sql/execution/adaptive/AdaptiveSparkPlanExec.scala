@@ -88,8 +88,8 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
-    RemoveRedundantSorts,
     EnsureRequirements,
+    RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
@@ -97,7 +97,7 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(context.subqueryCache),
-    CoalesceShufflePartitions,
+    CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
     OptimizeSkewedJoin,
@@ -123,8 +123,10 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(
-    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 

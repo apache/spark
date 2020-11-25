@@ -65,5 +65,5 @@ class Statistics:
     def chiSqTest(observed: RDD[LabeledPoint]) -> List[ChiSqTestResult]: ...
     @staticmethod
     def kolmogorovSmirnovTest(
-        data, distName: Literal["norm"] = ..., *params: float
+        data: RDD[float], distName: Literal["norm"] = ..., *params: float
     ) -> KolmogorovSmirnovTestResult: ...

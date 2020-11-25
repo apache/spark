@@ -106,4 +106,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
   }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+      s" TBLPROPERTIES('ENGINE'='InnoDB', 'DEFAULT CHARACTER SET'='utf8')")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
+  }
 }

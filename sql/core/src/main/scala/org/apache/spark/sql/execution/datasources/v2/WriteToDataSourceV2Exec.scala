@@ -26,6 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -127,6 +128,7 @@ case class AtomicCreateTableAsSelectExec(
  * ReplaceTableAsSelectStagingExec.
  */
 case class ReplaceTableAsSelectExec(
+    session: SparkSession,
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -146,6 +148,8 @@ case class ReplaceTableAsSelectExec(
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
     if (catalog.tableExists(ident)) {
+      val table = catalog.loadTable(ident)
+      uncacheTable(session, catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
@@ -169,6 +173,7 @@ case class ReplaceTableAsSelectExec(
  * is left untouched.
  */
 case class AtomicReplaceTableAsSelectExec(
+    session: SparkSession,
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -180,6 +185,10 @@ case class AtomicReplaceTableAsSelectExec(
 
   override protected def run(): Seq[InternalRow] = {
     val schema = query.schema.asNullable
+    if (catalog.tableExists(ident)) {
+      val table = catalog.loadTable(ident)
+      uncacheTable(session, catalog, table, ident)
+    }
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
         ident, schema, partitioning.toArray, properties.asJava)
@@ -204,12 +213,16 @@ case class AtomicReplaceTableAsSelectExec(
  * Rows in the output data set are appended.
  */
 case class AppendDataExec(
+    session: SparkSession,
     table: SupportsWrite,
+    relation: DataSourceV2Relation,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    writeWithV2(newWriteBuilder().buildForBatch())
+    val writtenRows = writeWithV2(newWriteBuilder().buildForBatch())
+    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    writtenRows
   }
 }
 
@@ -224,7 +237,9 @@ case class AppendDataExec(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExec(
+    session: SparkSession,
     table: SupportsWrite,
+    relation: DataSourceV2Relation,
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
@@ -234,7 +249,7 @@ case class OverwriteByExpressionExec(
   }
 
   override protected def run(): Seq[InternalRow] = {
-    newWriteBuilder() match {
+    val writtenRows = newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV2(builder.truncate().buildForBatch())
 
@@ -244,8 +259,11 @@ case class OverwriteByExpressionExec(
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
     }
+    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    writtenRows
   }
 }
+
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -257,18 +275,22 @@ case class OverwriteByExpressionExec(
  * are not modified.
  */
 case class OverwritePartitionsDynamicExec(
+    session: SparkSession,
     table: SupportsWrite,
+    relation: DataSourceV2Relation,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    newWriteBuilder() match {
+    val writtenRows = newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
         writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
+    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    writtenRows
   }
 }
 
@@ -369,6 +391,15 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     }
 
     Nil
+  }
+
+  protected def uncacheTable(
+      session: SparkSession,
+      catalog: TableCatalog,
+      table: Table,
+      ident: Identifier): Unit = {
+    val plan = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+    session.sharedState.cacheManager.uncacheQuery(session, plan, cascade = true)
   }
 }
 
@@ -484,3 +515,4 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
+

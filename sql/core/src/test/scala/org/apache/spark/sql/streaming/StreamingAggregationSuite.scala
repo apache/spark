@@ -20,8 +20,6 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import scala.collection.mutable
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 

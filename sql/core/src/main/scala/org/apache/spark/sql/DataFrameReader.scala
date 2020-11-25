@@ -493,6 +493,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
@@ -750,6 +756,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -781,6 +793,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -814,6 +832,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -825,8 +849,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
 
   /**
-   * Returns the specified table as a `DataFrame`.
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
+   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
+   * streaming query plan.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table or view.
+   *                  If a database is specified, it identifies the table/view from the database.
+   *                  Otherwise, it first attempts to find a temporary view with the given name
+   *                  and then match the table/view from the current database.
+   *                  Note that, the global temporary view database is also valid here.
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
@@ -872,6 +904,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>

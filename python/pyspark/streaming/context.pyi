@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Callable, List, Optional, TypeVar, Union
+from typing import Any, Callable, List, Optional, TypeVar
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -32,7 +32,7 @@ class StreamingContext:
     def __init__(
         self,
         sparkContext: SparkContext,
-        batchDuration: Union[float, int] = ...,
+        batchDuration: int = ...,
         jssc: Optional[JavaObject] = ...,
     ) -> None: ...
     @classmethod

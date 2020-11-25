@@ -30,7 +30,6 @@ object RankingMetricsExample {
       .builder
       .appName("RankingMetricsExample")
       .getOrCreate()
-    import spark.implicits._
     // $example on$
     // Read in the ratings data
     val ratings = spark.read.textFile("data/mllib/sample_movielens_data.txt").rdd.map { line =>

@@ -199,6 +199,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       SparkSQLEnv.sqlContext.setConf(k, v)
     }
 
+    cli.printMasterAndAppId
+
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
     }
@@ -267,8 +269,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def promptWithCurrentDB: String = s"$prompt$currentDB"
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
-
-    cli.printMasterAndAppId
 
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
@@ -465,7 +465,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
         private var interruptRequested: Boolean = false
 
-        override def handle(signal: Signal) {
+        override def handle(signal: Signal): Unit = {
           val initialRequest = !interruptRequested
           interruptRequested = true
 
@@ -503,7 +503,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
             if (ret != 0 && !ignoreErrors) {
               CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-              ret
+              return ret
             }
           }
         }
