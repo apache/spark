@@ -2028,7 +2028,7 @@ package object config {
     ConfigBuilder("spark.shuffle.push.numPushThreads")
       .doc("Specify the number of threads in the block pusher pool. These threads assist " +
         "in creating connections and pushing blocks to remote shuffle services. By default, the " +
-        "threadpool size is equal to the number of cores.")
+        "threadpool size is equal to the number of spark executor cores.")
       .version("3.1.0")
       .intConf
       .createOptional
