@@ -23,29 +23,36 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, RemovalListener, Remo
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object FileMetaCacheManager extends Logging {
-  type ENTRY = FileMetaKey
 
-  // Need configurable
+  private lazy val removalListener = new RemovalListener[FileMetaKey, FileMeta]() {
+    override def onRemoval(n: RemovalNotification[FileMetaKey, FileMeta]): Unit = {
+      logDebug(s"Evicting Data File Meta ${n.getKey.path}")
+    }
+  }
+
+  private lazy val cacheLoader = new CacheLoader[FileMetaKey, FileMeta]() {
+    override def load(entry: FileMetaKey)
+    : FileMeta = {
+      logDebug(s"Loading Data File Meta ${entry.path}")
+      entry.getFileMeta
+    }
+  }
+
+  private lazy val ttlTime =
+    SparkEnv.get.conf.get(SQLConf.PARQUET_META_CACHE_TTL_SINCE_LAST_ACCESS)
+
   private lazy val cache =
     CacheBuilder
       .newBuilder()
-      .concurrencyLevel(4) // DEFAULT_CONCURRENCY_LEVEL TODO verify that if it works
-      .expireAfterAccess(1000, TimeUnit.SECONDS) // auto expire after 1000 seconds.
-      .removalListener(new RemovalListener[ENTRY, FileMeta]() {
-        override def onRemoval(n: RemovalNotification[ENTRY, FileMeta]): Unit = {
-          logDebug(s"Evicting Data File Meta ${n.getKey.path}")
-        }
-      })
-      .build[ENTRY, FileMeta](new CacheLoader[ENTRY, FileMeta]() {
-        override def load(entry: ENTRY)
-        : FileMeta = {
-          logDebug(s"Loading Data File Meta ${entry.path}")
-          entry.getFileMeta
-        }
-      })
+      .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
+      .recordStats()
+      .removalListener(removalListener)
+      .build[FileMetaKey, FileMeta](cacheLoader)
 
   def get(dataFile: FileMetaKey): FileMeta = {
     cache.get(dataFile)

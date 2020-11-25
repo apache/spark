@@ -766,9 +766,18 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARQUET_META_CACHE_ENABLED = buildConf("spark.sql.parquet.metadataCache.enabled")
+    .doc("To indicate if enable parquet file meta cache, it is recommended to enabled " +
+      "this config in long-running process mode, such as Thrift Server, default is false")
     .version("3.1.0")
     .booleanConf
     .createWithDefault(false)
+
+  val PARQUET_META_CACHE_TTL_SINCE_LAST_ACCESS =
+    buildConf("spark.sql.parquet.metadataCache.ttl.sinceLastAccess")
+      .version("3.1.0")
+      .doc("Time-to-live for parquet metadata cache entry after last access, the unit is seconds.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(1000L)
 
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
