@@ -672,6 +672,25 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
 }
 
 /**
+ * The logical plan of the SHOW COLUMN command.
+ */
+case class ShowColumns(
+    child: LogicalPlan,
+    namespace: Option[Seq[String]]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the TRUNCATE TABLE command.
+ */
+case class TruncateTable(
+    child: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+
+/**
  * The logical plan of the SHOW PARTITIONS command.
  */
 case class ShowPartitions(

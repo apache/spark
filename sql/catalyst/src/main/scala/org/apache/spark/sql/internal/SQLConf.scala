@@ -2824,15 +2824,6 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
-    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
-      .internal()
-      .doc("When true, allow casting numeric to timestamp," +
-        "when false, forbid the cast, more details in SPARK-31710")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val COALESCE_BUCKETS_IN_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
@@ -2909,18 +2900,6 @@ object SQLConf {
         "key, but the value is different with the table serde properties. If the check passes, " +
         "the extra options will be merged with the serde properties as the scan options. " +
         "Otherwise, an exception will be thrown.")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val TRUNCATE_TRASH_ENABLED =
-    buildConf("spark.sql.truncate.trash.enabled")
-      .doc("This configuration decides when truncating table, whether data files will be moved " +
-        "to trash directory or deleted permanently. The trash retention time is controlled by " +
-        "'fs.trash.interval', and in default, the server side configuration value takes " +
-        "precedence over the client-side one. Note that if 'fs.trash.interval' is non-positive, " +
-        "this will be a no-op and log a warning message. If the data fails to be moved to "  +
-        "trash, Spark will turn to delete it permanently.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -3562,9 +3541,6 @@ class SQLConf extends Serializable with Logging {
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
 
-  def legacyAllowCastNumericToTimestamp: Boolean =
-    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
-
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 
   def coalesceBucketsInJoinEnabled: Boolean = getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED)
@@ -3576,8 +3552,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
-
-  def truncateTrashEnabled: Boolean = getConf(SQLConf.TRUNCATE_TRASH_ENABLED)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 

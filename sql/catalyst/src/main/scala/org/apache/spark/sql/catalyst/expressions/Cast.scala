@@ -59,8 +59,7 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: NumericType, TimestampType) =>
-      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+    case (_: NumericType, TimestampType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -273,15 +272,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       TypeCheckResult.TypeCheckSuccess
     } else {
       TypeCheckResult.TypeCheckFailure(
-        if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
-          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
-            "you can enable the casting by setting " +
-            s"${SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
-            "but we strongly recommend using function " +
-            "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
-        } else {
-          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
-        })
+        s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}")
     }
   }
 

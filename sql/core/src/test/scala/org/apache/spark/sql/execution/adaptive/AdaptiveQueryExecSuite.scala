@@ -1307,4 +1307,14 @@ class AdaptiveQueryExecSuite
       spark.listenerManager.unregister(listener)
     }
   }
+
+  test("SPARK-33494: Do not use local shuffle reader for repartition") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.table("testData").repartition('key)
+      df.collect()
+      // local shuffle reader breaks partitioning and shouldn't be used for repartition operation
+      // which is specified by users.
+      checkNumLocalShuffleReaders(df.queryExecution.executedPlan, numShufflesWithoutLocalReader = 1)
+    }
+  }
 }

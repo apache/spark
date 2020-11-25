@@ -94,7 +94,7 @@ private[this] object JsonPathParser extends RegexParsers {
       case Success(result, _) =>
         Some(result)
 
-      case NoSuccess(msg, next) =>
+      case _ =>
         None
     }
   }

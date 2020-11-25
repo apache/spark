@@ -1311,20 +1311,6 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
-    Seq(true, false).foreach { enable =>
-      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
-        assert(cast(2.toByte, TimestampType).resolved == enable)
-        assert(cast(10.toShort, TimestampType).resolved == enable)
-        assert(cast(3, TimestampType).resolved == enable)
-        assert(cast(10L, TimestampType).resolved == enable)
-        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
-        assert(cast(1.7f, TimestampType).resolved == enable)
-        assert(cast(2.3d, TimestampType).resolved == enable)
-      }
-    }
-  }
-
   test("SPARK-32828: cast from a derived user-defined type to a base type") {
     val v = Literal.create(Row(1), new ExampleSubTypeUDT())
     checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
