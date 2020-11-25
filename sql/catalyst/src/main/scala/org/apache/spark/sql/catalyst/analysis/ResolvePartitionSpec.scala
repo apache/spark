@@ -41,7 +41,10 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
 
     case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
-      r.copy(pattern = resolvePartitionSpecs(partSpecs.toSeq, table.partitionSchema()).headOption)
+      r.copy(pattern = resolvePartitionSpecs(
+        table.name,
+        partSpecs.toSeq,
+        table.partitionSchema()).headOption)
   }
 
   private def resolvePartitionSpecs(
