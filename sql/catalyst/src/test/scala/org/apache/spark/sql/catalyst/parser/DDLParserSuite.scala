@@ -1657,39 +1657,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed4, expected4)
   }
 
-  test("alter table: recover partitions") {
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
-      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
-  }
-
-  test("alter table: add partition") {
-    val sql1 =
-      """
-        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
-        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-
-    val parsed1 = parsePlan(sql1)
-    val parsed2 = parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
-      Seq(
-        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)
-    val expected2 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
-      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("alter view: add partition (not supported)") {
     assertUnsupported(
       """
@@ -1697,82 +1664,6 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin)
-  }
-
-  test("alter table: rename partition") {
-    val sql1 =
-      """
-        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-        |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableRenamePartitionStatement(
-      Seq("table_name"),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed1, expected1)
-
-    val sql2 =
-      """
-        |ALTER TABLE a.b.c PARTITION (ds='2017-06-10')
-        |RENAME TO PARTITION (ds='2018-06-10')
-      """.stripMargin
-    val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableRenamePartitionStatement(
-      Seq("a", "b", "c"),
-      Map("ds" -> "2017-06-10"),
-      Map("ds" -> "2018-06-10"))
-    comparePlans(parsed2, expected2)
-  }
-
-  // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  // ALTER VIEW table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
-  test("alter table: drop partition") {
-    val sql1_table =
-      """
-        |ALTER TABLE table_name DROP IF EXISTS PARTITION
-        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2_table =
-      """
-        |ALTER TABLE table_name DROP PARTITION
-        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql1_view = sql1_table.replace("TABLE", "VIEW")
-    val sql2_view = sql2_table.replace("TABLE", "VIEW")
-
-    val parsed1_table = parsePlan(sql1_table)
-    val parsed2_table = parsePlan(sql2_table)
-    val parsed1_purge = parsePlan(sql1_table + " PURGE")
-
-    assertUnsupported(sql1_view)
-    assertUnsupported(sql2_view)
-
-    val expected1_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
-      Seq(
-        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
-        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
-      ifExists = true,
-      purge = false,
-      retainData = false)
-    val expected2_table = expected1_table.copy(ifExists = false)
-    val expected1_purge = expected1_table.copy(purge = true)
-
-    comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_purge, expected1_purge)
-
-    val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
-    val expected3_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
-      Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
-      ifExists = true,
-      purge = false,
-      retainData = false)
-
-    val parsed3_table = parsePlan(sql3_table)
-    comparePlans(parsed3_table, expected3_table)
   }
 
   test("show current namespace") {
