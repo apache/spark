@@ -691,6 +691,63 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id prefix") {
+    // Group ID prefix is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("groupIdPrefix", (expected, actual) => {
+        assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+          "Valid consumer groups don't contain the expected group id - " +
+            s"Valid consumer groups: $actual / expected group id: $expected")
+      })
+    }
+  }
+
+  test("allow group.id override") {
+    // Group ID override is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("kafka.group.id", (expected, actual) => {
+        assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+          s"contain the expected group id - Valid consumer groups: $actual / " +
+          s"expected group id: $expected")
+      })
+    }
+  }
+
+  private def testGroupId(groupIdKey: String,
+      validateGroupId: (String, Iterable[String]) => Unit): Unit = {
+    // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
+    // as well as KafkaOffsetReader.createConsumer(.)
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 3)
+    testUtils.sendMessages(topic, (1 to 10).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (11 to 20).map(_.toString).toArray, Some(1))
+    testUtils.sendMessages(topic, (21 to 30).map(_.toString).toArray, Some(2))
+
+    val customGroupId = "id-" + Random.nextInt()
+    val dsKafka = spark
+      .readStream
+      .format("kafka")
+      .option(groupIdKey, customGroupId)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+      .selectExpr("CAST(value AS STRING)")
+      .as[String]
+      .map(_.toInt)
+
+    testStream(dsKafka)(
+      makeSureGetOffsetCalled,
+      CheckAnswer(1 to 30: _*),
+      Execute { _ =>
+        val consumerGroups = testUtils.listConsumerGroups()
+        val validGroups = consumerGroups.valid().get()
+        val validGroupsId = validGroups.asScala.map(_.groupId())
+        validateGroupId(customGroupId, validGroupsId)
+      }
+    )
+  }
+
   test("ensure stream-stream self-join generates only one offset in log and correct metrics") {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 2)
