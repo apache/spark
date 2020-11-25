@@ -310,7 +310,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowPartitions(
         ResolvedTable(catalog, _, table: SupportsPartitionManagement),
-        pattern @ (None | Some(ResolvedPartitionSpec(_, _)))) =>
+        pattern @ (None | Some(_: ResolvedPartitionSpec))) =>
       ShowPartitionsExec(
         r.output,
         catalog,
