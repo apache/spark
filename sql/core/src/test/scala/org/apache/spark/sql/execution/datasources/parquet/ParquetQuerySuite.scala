@@ -842,8 +842,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-33449: simple select queries with file meta cache") {
-    withSQLConf(SQLConf.PARQUET_META_CACHE_ENABLED.key -> "true",
-      SQLConf.PARQUET_META_CACHE_TTL_SINCE_LAST_ACCESS.key -> "5") {
+    withSQLConf(SQLConf.PARQUET_META_CACHE_ENABLED.key -> "true") {
       val tableName = "parquet_use_meta_cache"
       withTable(tableName) {
         (0 until 10).map(i => (i, i.toString)).toDF("id", "value")
