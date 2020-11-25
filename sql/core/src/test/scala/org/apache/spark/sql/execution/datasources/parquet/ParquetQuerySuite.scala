@@ -849,7 +849,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           .write.saveAsTable(tableName)
         try {
           val statsBeforeQuery = FileMetaCacheManager.cacheStats
-          checkAnswer(sql("SELECT id FROM  parquet_use_meta_cache where id > 5"),
+          checkAnswer(sql(s"SELECT id FROM  $tableName where id > 5"),
             (6 until 10).map(Row.apply(_)))
           val statsAfterQuery1 = FileMetaCacheManager.cacheStats
           // The 1st query triggers 4 times file meta read: 2 times related to
@@ -859,7 +859,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           // 2 meta files need load, other 6 times will read meta from cache.
           assert(statsAfterQuery1.missCount() - statsBeforeQuery.missCount() == 2)
           assert(statsAfterQuery1.hitCount() - statsBeforeQuery.hitCount() == 6)
-          checkAnswer(sql("SELECT id FROM parquet_use_meta_cache where id < 5"),
+          checkAnswer(sql(s"SELECT id FROM $tableName where id < 5"),
             (0 until 5).map(Row.apply(_)))
           val statsAfterQuery2 = FileMetaCacheManager.cacheStats
           // The 2nd query also triggers 8 times file meta read in total and
