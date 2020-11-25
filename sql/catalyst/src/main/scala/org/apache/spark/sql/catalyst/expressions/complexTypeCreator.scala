@@ -30,8 +30,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-// This trait is to indicate that this is an expression that creates a collection
-// that will not be null and will not be empty as long as its not foldable.
+/**
+ * This trait is to indicate that this is an expression that creates a collection
+ * that will not be null and will not be empty when it contains children.
+ * Note that it will be foldable if it doesn't container children.
+ */
 trait CreateNonEmptyNonNullCollection
 
 /**
