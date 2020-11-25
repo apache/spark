@@ -3325,7 +3325,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CacheTable]] or [[CacheTableAsSelect]].
+   * Create a [[CacheTable]].
    *
    * For example:
    * {{{
@@ -3338,15 +3338,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val query = Option(ctx.query).map(plan)
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val isLazy = ctx.LAZY != null
     if (query.isDefined && tableName.length > 1) {
       val catalogAndNamespace = tableName.init
       throw new ParseException("It is not allowed to add catalog/namespace " +
         s"prefix ${catalogAndNamespace.quoted} to " +
         "the table name in CACHE TABLE AS SELECT", ctx)
     }
-    CacheTable(tableName, query, isLazy, options)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    CacheTable(tableName, query, ctx.LAZY != null, options)
   }
 
   /**
