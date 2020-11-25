@@ -116,13 +116,10 @@ case class AdaptiveSparkPlanExec(
       case s: ShuffleExchangeLike => s.shuffleOrigin
     }
     val allRules = queryStageOptimizerRules ++ postStageCreationRules
-    allRules.filter { r =>
-      (origins.forall(CoalesceShufflePartitions.supportedShuffleOrigins.contains) ||
-        !r.isInstanceOf[CoalesceShufflePartitions]) &&
-        (origins.forall(OptimizeLocalShuffleReader.supportedShuffleOrigins.contains) ||
-          r != OptimizeLocalShuffleReader) &&
-        (origins.forall(OptimizeSkewedJoin.supportedShuffleOrigins.contains) ||
-          r != OptimizeSkewedJoin)
+    allRules.filter {
+      case c: CustomShuffleReaderRule =>
+        origins.forall(c.supportedShuffleOrigins.contains)
+      case _ => true
     }
   }
 

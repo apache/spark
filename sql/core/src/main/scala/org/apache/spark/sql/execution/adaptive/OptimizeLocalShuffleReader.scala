@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -34,14 +33,11 @@ import org.apache.spark.sql.internal.SQLConf
  * then run `EnsureRequirements` to check whether additional shuffle introduced.
  * If introduced, we will revert all the local readers.
  */
-object OptimizeLocalShuffleReader extends Rule[SparkPlan] {
+object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
+
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
   private val ensureRequirements = EnsureRequirements
-
-  /**
-   * The list of [[ShuffleOrigin]]s supported by this rule.
-   */
-  val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
