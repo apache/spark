@@ -69,7 +69,8 @@ private[spark] class ShuffleBlockPusher(
   private[this] val deferredPushRequests = new HashMap[BlockManagerId, Queue[PushRequest]]()
   private[this] val pushRequests = new Queue[PushRequest]
   private[this] val errorHandler = createErrorHandler()
-  private[this] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
+  // VisibleForTesting
+  private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
 
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
@@ -300,7 +301,7 @@ private[spark] class ShuffleBlockPusher(
           removed += droppedReq.get.length
         }
         logWarning(s"Received a ConnectException from $address. " +
-          s"Dropping push of $removed blocks and " +
+          s"Dropping $removed push-requests and " +
           s"not pushing any more blocks to this address.")
       }
     }

@@ -208,13 +208,14 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
             blockId, new RuntimeException(new ConnectException()))
         })
       })
-    new TestShuffleBlockPusher(mock(classOf[File]),
+    val shuffleBlockPusher = new TestShuffleBlockPusher(mock(classOf[File]),
       Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0, conf)
-        .initiateBlockPush()
+    shuffleBlockPusher.initiateBlockPush()
     verify(shuffleClient, times(2))
       .pushBlocks(any(), any(), any(), any(), any())
     // 2 blocks for each merger locations
     assert(pushedBlocks.length == 4)
+    assert(shuffleBlockPusher.unreachableBlockMgrs.size == 2)
   }
 
   private class TestShuffleBlockPusher(
@@ -228,10 +229,6 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     override protected def submitTask(task: Runnable): Unit = {
      // Making this synchronous for testing
       task.run()
-    }
-
-    def getPartitionLengths(): Array[Long] = {
-      partitionLengths
     }
 
     override protected def createRequestBuffer(
