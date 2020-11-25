@@ -2824,15 +2824,6 @@ object SQLConf {
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
 
-  val LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP =
-    buildConf("spark.sql.legacy.allowCastNumericToTimestamp")
-      .internal()
-      .doc("When true, allow casting numeric to timestamp," +
-        "when false, forbid the cast, more details in SPARK-31710")
-      .version("3.1.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val COALESCE_BUCKETS_IN_JOIN_ENABLED =
     buildConf("spark.sql.bucketing.coalesceBucketsInJoin.enabled")
       .doc("When true, if two bucketed tables with the different number of buckets are joined, " +
@@ -3549,9 +3540,6 @@ class SQLConf extends Serializable with Logging {
   def avroFilterPushDown: Boolean = getConf(AVRO_FILTER_PUSHDOWN_ENABLED)
 
   def integerGroupingIdEnabled: Boolean = getConf(SQLConf.LEGACY_INTEGER_GROUPING_ID)
-
-  def legacyAllowCastNumericToTimestamp: Boolean =
-    getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
 
   def metadataCacheTTL: Long = getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
 

@@ -90,7 +90,7 @@ class RandomRDDs:
     def logNormalVectorRDD(
         sc: SparkContext,
         mean: float,
-        std,
+        std: float,
         numRows: int,
         numCols: int,
         numPartitions: Optional[int] = ...,
