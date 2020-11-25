@@ -133,7 +133,7 @@ object DataType {
       ddl,
       CatalystSqlParser.parseDataType,
       "Cannot parse the data type: ",
-      fallbackParser = str => CharVarcharUtils.replaceCharVarcharWithString(
+      fallbackParser = str => CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         CatalystSqlParser.parseTableSchema(str)))
   }
 

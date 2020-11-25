@@ -38,7 +38,7 @@ Spark SQL and DataFrames support the following data types:
 * String type
   - `StringType`: Represents character string values.
   - `VarcharType(length)`: A variant of `StringType` which has a length limitation. Data writing will fail if the input string exceeds the length limitation. Note: this type can only be used in table schema, not functions/operators.
-  - `CharType(length)`: A variant of `VarcharType(length)` which is fixed length. Data writing will pad the input string if its length is smaller than the char type length. Char type comparison will pad the short one to the longer length.
+  - `CharType(length)`: A variant of `VarcharType(length)` which is fixed length. Reading column of type `VarcharType(n)` always returns string values of length `n`. Char type column comparison will pad the short one to the longer length.
 * Binary type
   - `BinaryType`: Represents byte sequence values.
 * Boolean type

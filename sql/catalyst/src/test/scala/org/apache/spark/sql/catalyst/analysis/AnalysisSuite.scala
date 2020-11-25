@@ -58,7 +58,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("fail if a plan node has char/varchar type output") {
+  test("fail if a leaf node has char/varchar type output") {
     val schema1 = new StructType().add("c", CharType(5))
     val schema2 = new StructType().add("c", VarcharType(5))
     val schema3 = new StructType().add("c", ArrayType(CharType(5)))

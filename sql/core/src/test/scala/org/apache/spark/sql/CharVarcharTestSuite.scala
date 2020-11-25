@@ -18,19 +18,34 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructField, StructType}
 
+// The base trait for char/varchar tests that need to be run with different table implementations.
 trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 
   def format: String
+
+  def checkColType(f: StructField, dt: DataType): Unit = {
+    assert(f.dataType == CharVarcharUtils.replaceCharVarcharWithString(dt))
+    assert(CharVarcharUtils.getRawType(f.metadata) == Some(dt))
+  }
 
   test("char type values should be padded: top-level columns") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format")
       sql("INSERT INTO t VALUES ('1', 'a')")
       checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
+      checkColType(spark.table("t").schema(1), CharType(5))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
     }
   }
 
@@ -39,6 +54,11 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
       sql("INSERT INTO t VALUES ('1', 'a')")
       checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
+      checkColType(spark.table("t").schema(1), CharType(5))
+
+      sql("ALTER TABLE t DROP PARTITION(c='a')")
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
     }
   }
 
@@ -47,6 +67,12 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c STRUCT<c: CHAR(5)>) USING $format")
       sql("INSERT INTO t VALUES ('1', struct('a'))")
       checkAnswer(spark.table("t"), Row("1", Row("a" + " " * 4)))
+      checkColType(spark.table("t").schema(1), new StructType().add("c", CharType(5)))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', struct(null))")
+      checkAnswer(spark.table("t"), Row("1", Row(null)))
     }
   }
 
@@ -55,6 +81,12 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c ARRAY<CHAR(5)>) USING $format")
       sql("INSERT INTO t VALUES ('1', array('a', 'ab'))")
       checkAnswer(spark.table("t"), Row("1", Seq("a" + " " * 4, "ab" + " " * 3)))
+      checkColType(spark.table("t").schema(1), ArrayType(CharType(5)))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', array(null))")
+      checkAnswer(spark.table("t"), Row("1", Seq(null)))
     }
   }
 
@@ -63,6 +95,10 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c MAP<CHAR(5), STRING>) USING $format")
       sql("INSERT INTO t VALUES ('1', map('a', 'ab'))")
       checkAnswer(spark.table("t"), Row("1", Map(("a" + " " * 4, "ab"))))
+      checkColType(spark.table("t").schema(1), MapType(CharType(5), StringType))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
     }
   }
 
@@ -71,6 +107,12 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c MAP<STRING, CHAR(5)>) USING $format")
       sql("INSERT INTO t VALUES ('1', map('a', 'ab'))")
       checkAnswer(spark.table("t"), Row("1", Map(("a", "ab" + " " * 3))))
+      checkColType(spark.table("t").schema(1), MapType(StringType, CharType(5)))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', map('a', null))")
+      checkAnswer(spark.table("t"), Row("1", Map("a" -> null)))
     }
   }
 
@@ -79,6 +121,10 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c MAP<CHAR(5), CHAR(10)>) USING $format")
       sql("INSERT INTO t VALUES ('1', map('a', 'ab'))")
       checkAnswer(spark.table("t"), Row("1", Map(("a" + " " * 4, "ab" + " " * 8))))
+      checkColType(spark.table("t").schema(1), MapType(CharType(5), CharType(10)))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
     }
   }
 
@@ -87,6 +133,15 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c STRUCT<c: ARRAY<CHAR(5)>>) USING $format")
       sql("INSERT INTO t VALUES ('1', struct(array('a', 'ab')))")
       checkAnswer(spark.table("t"), Row("1", Row(Seq("a" + " " * 4, "ab" + " " * 3))))
+      checkColType(spark.table("t").schema(1),
+        new StructType().add("c", ArrayType(CharType(5))))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', struct(null))")
+      checkAnswer(spark.table("t"), Row("1", Row(null)))
+      sql("INSERT OVERWRITE t VALUES ('1', struct(array(null)))")
+      checkAnswer(spark.table("t"), Row("1", Row(Seq(null))))
     }
   }
 
@@ -95,6 +150,15 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c ARRAY<STRUCT<c: CHAR(5)>>) USING $format")
       sql("INSERT INTO t VALUES ('1', array(struct('a'), struct('ab')))")
       checkAnswer(spark.table("t"), Row("1", Seq(Row("a" + " " * 4), Row("ab" + " " * 3))))
+      checkColType(spark.table("t").schema(1),
+        ArrayType(new StructType().add("c", CharType(5))))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', array(null))")
+      checkAnswer(spark.table("t"), Row("1", Seq(null)))
+      sql("INSERT OVERWRITE t VALUES ('1', array(struct(null)))")
+      checkAnswer(spark.table("t"), Row("1", Seq(Row(null))))
     }
   }
 
@@ -103,6 +167,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c ARRAY<ARRAY<CHAR(5)>>) USING $format")
       sql("INSERT INTO t VALUES ('1', array(array('a', 'ab')))")
       checkAnswer(spark.table("t"), Row("1", Seq(Seq("a" + " " * 4, "ab" + " " * 3))))
+      checkColType(spark.table("t").schema(1), ArrayType(ArrayType(CharType(5))))
+
+      sql("INSERT OVERWRITE t VALUES ('1', null)")
+      checkAnswer(spark.table("t"), Row("1", null))
+      sql("INSERT OVERWRITE t VALUES ('1', array(null))")
+      checkAnswer(spark.table("t"), Row("1", Seq(null)))
+      sql("INSERT OVERWRITE t VALUES ('1', array(array(null)))")
+      checkAnswer(spark.table("t"), Row("1", Seq(Seq(null))))
     }
   }
 
@@ -353,6 +425,60 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 }
 
+// Some basic char/varchar tests which doesn't rely on table implementation.
+class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
+
+  test("user-specified schema in cast") {
+    def assertNoCharType(df: DataFrame): Unit = {
+      checkAnswer(df, Row("0"))
+      assert(df.schema.map(_.dataType) == Seq(StringType))
+    }
+
+    assertNoCharType(spark.range(1).select($"id".cast("char(5)")))
+    assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
+    assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
+    assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
+  }
+
+  test("user-specified schema in functions") {
+    val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+    checkAnswer(df, Row(Row("str")))
+    val schema = df.schema.head.dataType.asInstanceOf[StructType]
+    assert(schema.map(_.dataType) == Seq(StringType))
+  }
+
+  test("user-specified schema in DataFrameReader: DSV1") {
+    def checkSchema(df: DataFrame): Unit = {
+      val relations = df.queryExecution.analyzed.collect {
+        case l: LogicalRelation => l.relation
+      }
+      assert(relations.length == 1)
+      assert(relations.head.schema.map(_.dataType) == Seq(StringType))
+    }
+
+    checkSchema(spark.read.schema(new StructType().add("id", CharType(5)))
+      .format(classOf[SimpleInsertSource].getName).load())
+    checkSchema(spark.read.schema("id char(5)")
+      .format(classOf[SimpleInsertSource].getName).load())
+  }
+
+  test("user-specified schema in DataFrameReader: DSV2") {
+    def checkSchema(df: DataFrame): Unit = {
+      val tables = df.queryExecution.analyzed.collect {
+        case d: DataSourceV2Relation => d.table
+      }
+      assert(tables.length == 1)
+      assert(tables.head.schema.map(_.dataType) == Seq(StringType))
+    }
+
+    checkSchema(spark.read.schema(new StructType().add("id", CharType(5)))
+      .format(classOf[SchemaRequiredDataSource].getName).load())
+    checkSchema(spark.read.schema("id char(5)")
+      .format(classOf[SchemaRequiredDataSource].getName).load())
+  }
+}
+
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
@@ -365,7 +491,7 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
   override def format: String = "foo"
   protected override def sparkConf = {
     super.sparkConf
-      .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+      .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
   }
 }

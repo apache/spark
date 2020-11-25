@@ -110,9 +110,14 @@ object CharVarcharUtils {
     case CharType(length) => StringRPad(expr, Literal(length))
 
     case StructType(fields) =>
-      CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
         Seq(Literal(f.name), charTypePadding(GetStructField(expr, i, Some(f.name)), f.dataType))
       })
+      if (expr.nullable) {
+        If(IsNull(expr), Literal(null, struct.dataType), struct)
+      } else {
+        struct
+      }
 
     case ArrayType(et, containsNull) => charTypePaddingInArray(expr, et, containsNull)
 
@@ -173,9 +178,14 @@ object CharVarcharUtils {
           StringRPad(trimmed, Literal(length))))
 
     case StructType(fields) =>
-      CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
+      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
         Seq(Literal(f.name), stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
       })
+      if (expr.nullable) {
+        If(IsNull(expr), Literal(null, struct.dataType), struct)
+      } else {
+        struct
+      }
 
     case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
 
