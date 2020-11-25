@@ -873,6 +873,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
       if !e.deterministic || e.children.forall(_.foldable) => generate
 
     case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+      assert(g.children.length == 1)
       g.children.head match {
         case _: CreateNonEmptyNonNullCollection =>
           // we don't need to add filters when creating an array because we know its size
