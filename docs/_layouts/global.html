@@ -187,13 +187,7 @@
             // 2. a JavaScript snippet to be inserted in your website that will bind this Algolia index
             //    to your search input and display its results in a dropdown UI. If you want to find more
             //    details on how works DocSearch, check the docs of DocSearch.
-            docsearch({
-                apiKey: 'b18ca3732c502995563043aa17bc6ecb',
-                indexName: 'apache_spark',
-                inputSelector: '#docsearch-input',
-                enhancedSearchInput: true,
-                debug: false // Set debug to true if you want to inspect the dropdown
-        });
+            {{site.DOCSEARCH_SCRIPT}}
         </script>
 
         <!-- MathJax Section -->

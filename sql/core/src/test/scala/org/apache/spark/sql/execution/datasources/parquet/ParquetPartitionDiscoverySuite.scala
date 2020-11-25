@@ -23,8 +23,6 @@ import java.sql.{Date, Timestamp}
 import java.time.{ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale}
 
-import scala.collection.mutable.ArrayBuffer
-
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat

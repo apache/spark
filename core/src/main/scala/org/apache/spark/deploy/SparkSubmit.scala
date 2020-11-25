@@ -391,6 +391,7 @@ private[spark] class SparkSubmit extends Logging {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
         args.files = renameResourcesToLocalFS(args.files, localFiles)
+        args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }
 

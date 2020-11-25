@@ -222,6 +222,8 @@ class SparkContext(object):
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
         self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
+        os.environ["SPARK_AUTH_SOCKET_TIMEOUT"] = \
+            str(self._jvm.PythonUtils.getPythonAuthSocketTimeout(self._jsc))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]

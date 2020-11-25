@@ -188,7 +188,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("extra resources from executor") {
-    import TestUtils._
 
     val execCores = 3
     val conf = new SparkConf()

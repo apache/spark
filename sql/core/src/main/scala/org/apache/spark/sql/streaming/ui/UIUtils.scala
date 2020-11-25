@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming.ui
 
 import java.text.SimpleDateFormat
-import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 

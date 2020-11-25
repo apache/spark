@@ -147,6 +147,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param blockIds block ids to be pushed
    * @param buffers buffers to be pushed
    * @param listener the listener to receive block push status.
+   *
+   * @since 3.1.0
    */
   public void pushBlocks(
       String host,
@@ -154,6 +156,26 @@ public abstract class BlockStoreClient implements Closeable {
       String[] blockIds,
       ManagedBuffer[] buffers,
       BlockFetchingListener listener) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Invoked by Spark driver to notify external shuffle services to finalize the shuffle merge
+   * for a given shuffle. This allows the driver to start the shuffle reducer stage after properly
+   * finishing the shuffle merge process associated with the shuffle mapper stage.
+   *
+   * @param host host of shuffle server
+   * @param port port of shuffle server.
+   * @param shuffleId shuffle ID of the shuffle to be finalized
+   * @param listener the listener to receive MergeStatuses
+   *
+   * @since 3.1.0
+   */
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
     throw new UnsupportedOperationException();
   }
 }

@@ -1357,8 +1357,9 @@ object ParseUrl {
        1
   """,
   since = "2.0.0")
-case class ParseUrl(children: Seq[Expression])
+case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression with ExpectsInputTypes with CodegenFallback {
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
@@ -1404,7 +1405,9 @@ case class ParseUrl(children: Seq[Expression])
     try {
       new URI(url.toString)
     } catch {
-      case e: URISyntaxException => null
+      case e: URISyntaxException if failOnError =>
+        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+      case _: URISyntaxException => null
     }
   }
 

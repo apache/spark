@@ -48,7 +48,7 @@ If you want to install extra dependencies for a specific componenet, you can ins
 
     pip install pyspark[sql]
 
-For PySpark with a different Hadoop version, you can install it by using ``HADOOP_VERSION`` environment variables as below:
+For PySpark with/without a specific Hadoop version, you can install it by using ``HADOOP_VERSION`` environment variables as below:
 
 .. code-block:: bash
 
@@ -68,8 +68,13 @@ It is recommended to use ``-v`` option in ``pip`` to track the installation and 
 
     HADOOP_VERSION=2.7 pip install pyspark -v
 
-Supported versions of Hadoop are ``HADOOP_VERSION=2.7`` and ``HADOOP_VERSION=3.2`` (default).
-Note that this installation of PySpark with a different version of Hadoop is experimental. It can change or be removed between minor releases.
+Supported values in ``HADOOP_VERSION`` are:
+
+- ``without``: Spark pre-built with user-provided Apache Hadoop
+- ``2.7``: Spark pre-built for Apache Hadoop 2.7
+- ``3.2``: Spark pre-built for Apache Hadoop 3.2 and later (default)
+
+Note that this installation way of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
 
 Using Conda

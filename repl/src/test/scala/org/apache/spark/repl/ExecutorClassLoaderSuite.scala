@@ -28,7 +28,6 @@ import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
-import scala.language.implicitConversions
 
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, anyString}

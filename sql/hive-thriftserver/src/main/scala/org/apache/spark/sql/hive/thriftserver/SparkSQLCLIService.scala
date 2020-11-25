@@ -24,7 +24,6 @@ import javax.security.auth.login.LoginException
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
@@ -37,7 +36,6 @@ import org.apache.hive.service.server.HiveServer2
 import org.slf4j.Logger
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
 private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLContext)

@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.IOException
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -28,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo}
+import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.ThreadUtils
 

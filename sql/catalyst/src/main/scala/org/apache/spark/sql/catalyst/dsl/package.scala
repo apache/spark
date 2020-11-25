@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -102,6 +103,10 @@ package object dsl {
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
+    def likeAll(others: Expression*): Expression =
+      LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAll(others: Expression*): Expression =
+      NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)
