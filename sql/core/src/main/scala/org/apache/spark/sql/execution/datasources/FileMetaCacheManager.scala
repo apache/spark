@@ -29,7 +29,7 @@ private[sql] object FileMetaCacheManager extends Logging {
   type ENTRY = FileMetaKey
 
   // Need configurable
-  private val cache =
+  private lazy val cache =
     CacheBuilder
       .newBuilder()
       .concurrencyLevel(4) // DEFAULT_CONCURRENCY_LEVEL TODO verify that if it works

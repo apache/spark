@@ -134,8 +134,12 @@ case class ParquetPartitionReaderFactory(
         Array.empty,
         null)
 
-    lazy val footerFileMetaData =
+    lazy val footerFileMetaData = if (parquetMetaCacheEnabled) {
+      FileMetaCacheManager.get(ParquetFileMetaKey(filePath, conf))
+        .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
+    } else {
       ParquetFileReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+    }
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (enableParquetFilterPushDown) {
       val parquetSchema = footerFileMetaData.getSchema
@@ -226,14 +230,7 @@ case class ParquetPartitionReaderFactory(
   private def createVectorizedReader(file: PartitionedFile): VectorizedParquetRecordReader = {
     val vectorizedReader = buildReaderBase(file, createParquetVectorizedReader)
       .asInstanceOf[VectorizedParquetRecordReader]
-    // Set footer before initialize.
-    if (parquetMetaCacheEnabled) {
-      val filePath = new Path(new URI(file.filePath))
-      val fileMeta = FileMetaCacheManager
-        .get(ParquetFileMetaKey(filePath, broadcastedConf.value.value))
-        .asInstanceOf[ParquetFileMeta]
-      vectorizedReader.setCachedFooter(fileMeta.footer)
-    }
+
     vectorizedReader.initBatch(partitionSchema, file.partitionValues)
     vectorizedReader
   }
@@ -253,6 +250,13 @@ case class ParquetPartitionReaderFactory(
       int96RebaseMode.toString,
       enableOffHeapColumnVector && taskContext.isDefined,
       capacity)
+    // Set footer before initialize.
+    if (parquetMetaCacheEnabled) {
+      val fileMeta = FileMetaCacheManager
+        .get(ParquetFileMetaKey(split.getPath, hadoopAttemptContext.getConfiguration))
+        .asInstanceOf[ParquetFileMeta]
+      vectorizedReader.setCachedFooter(fileMeta.footer)
+    }
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
