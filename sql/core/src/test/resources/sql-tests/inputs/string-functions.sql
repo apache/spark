@@ -55,6 +55,8 @@ SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
 
 -- decode
+select decode();
+select decode(encode('abc', 'utf-8'));
 select decode(encode('abc', 'utf-8'), 'utf-8');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
