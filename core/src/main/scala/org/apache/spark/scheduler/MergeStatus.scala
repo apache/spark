@@ -27,7 +27,8 @@ import org.apache.spark.util.Utils
 
 /**
  * The status for the result of merging shuffle partition blocks per individual shuffle partition
- * maintained by the scheduler. The scheduler would separate the [[MergeStatuses]] received from
+ * maintained by the scheduler. The scheduler would separate the
+ * [[org.apache.spark.network.shuffle.protocol.MergeStatuses]] received from
  * ExternalShuffleService into individual [[MergeStatus]] which is maintained inside
  * MapOutputTracker to be served to the reducers when they start fetching shuffle partition
  * blocks. Note that, the reducers are ultimately fetching individual chunks inside a merged
