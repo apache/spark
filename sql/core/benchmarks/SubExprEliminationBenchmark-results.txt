@@ -7,19 +7,19 @@ OpenJDK 64-Bit Server VM 1.8.0_265-b01 on Mac OS X 10.15.6
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 from_json as subExpr in Project:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subExprElimination false, codegen: true           22767          23240         424          0.0   227665316.7       1.0X
-subExprElimination false, codegen: false          22869          23351         465          0.0   228693464.1       1.0X
-subExprElimination true, codegen: true             1328           1340          10          0.0    13280056.2      17.1X
-subExprElimination true, codegen: false            1248           1276          31          0.0    12476135.1      18.2X
+subExprElimination false, codegen: true           23094          23763         585          0.0   230939301.2       1.0X
+subExprElimination false, codegen: false          23161          24087         844          0.0   231611379.8       1.0X
+subExprElimination true, codegen: true             1492           1517          30          0.0    14921022.9      15.5X
+subExprElimination true, codegen: false            1300           1361          93          0.0    12996167.7      17.8X
 
 Preparing data for benchmarking ...
 OpenJDK 64-Bit Server VM 1.8.0_265-b01 on Mac OS X 10.15.6
 Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 from_json as subExpr in Filter:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-subexpressionElimination off, codegen on          37691          38846        1004          0.0   376913767.9       1.0X
-subexpressionElimination off, codegen on          37852          39124        1103          0.0   378517745.5       1.0X
-subexpressionElimination off, codegen on          22900          23085         202          0.0   229000242.5       1.6X
-subexpressionElimination off, codegen on          38298          38598         374          0.0   382978731.3       1.0X
+subexpressionElimination off, codegen on          37069          37767         985          0.0   370694301.5       1.0X
+subexpressionElimination off, codegen on          37095          37970        1008          0.0   370945081.6       1.0X
+subexpressionElimination off, codegen on          20618          21443         715          0.0   206175173.8       1.8X
+subexpressionElimination off, codegen on          21563          21887         307          0.0   215626274.7       1.7X
 
 
