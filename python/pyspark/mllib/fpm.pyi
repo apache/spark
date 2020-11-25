@@ -37,8 +37,8 @@ class FPGrowth:
         cls, data: RDD[List[T]], minSupport: float = ..., numPartitions: int = ...
     ) -> FPGrowthModel[T]: ...
     class FreqItemset(Generic[T]):
-        items = ...  # List[T]
-        freq = ...  # int
+        items: List[T]
+        freq: int
 
 class PrefixSpanModel(JavaModelWrapper, Generic[T]):
     def freqSequences(self) -> RDD[PrefixSpan.FreqSequence[T]]: ...
