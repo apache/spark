@@ -257,7 +257,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveCommandsWithIfExists) ++
+      Seq(ResolveNoopDropTable) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,

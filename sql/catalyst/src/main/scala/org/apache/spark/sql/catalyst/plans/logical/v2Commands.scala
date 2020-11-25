@@ -417,9 +417,9 @@ case class DropTable(
 }
 
 /**
- * The logical plan for no-op command handling non-existing table.
+ * The logical plan for handling non-existing table for DROP TABLE command.
  */
-case class NoopCommand(commandName: String, multipartIdentifier: Seq[String]) extends Command
+case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command.
@@ -688,17 +688,3 @@ case class TruncateTable(
     partitionSpec: Option[TablePartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
-
-/**
- * The logical plan of the CACHE TABLE command.
- */
-case class CacheTable(
-    tableName: Seq[String],
-    plan: Option[LogicalPlan],
-    isLazy: Boolean,
-    options: Map[String, String]) extends Command
-
-/**
- * The logical plan of the UNCACHE TABLE command.
- */
-case class UncacheTable(tableName: Seq[String], ifExists: Boolean) extends Command

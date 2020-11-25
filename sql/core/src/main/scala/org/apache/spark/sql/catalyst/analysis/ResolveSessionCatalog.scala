@@ -446,12 +446,6 @@ class ResolveSessionCatalog(
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    case CacheTable(multipartIdent, plan, isLazy, options) =>
-      CacheTableCommand(multipartIdent, plan, isLazy, options)
-
-    case UncacheTable(multipartIdent, ifExists) =>
-      UncacheTableCommand(multipartIdent, ifExists)
-
     case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,

@@ -1907,45 +1907,6 @@ class DDLParserSuite extends AnalysisTest {
         asSerde = true))
   }
 
-  test("CACHE TABLE") {
-    comparePlans(
-      parsePlan("CACHE TABLE a.b.c"),
-      CacheTable(Seq("a", "b", "c"), None, false, Map.empty))
-
-    comparePlans(
-      parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
-      CacheTable(
-        Seq("t"),
-        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
-        false,
-        Map.empty))
-
-    comparePlans(
-      parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTable(Seq("a", "b", "c"), None, true, Map.empty))
-
-    comparePlans(
-      parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
-      CacheTable(
-        Seq("a", "b", "c"),
-        None,
-        true,
-        Map("storageLevel" -> "DISK_ONLY")))
-
-    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/namespace prefix a.b")
-  }
-
-  test("UNCACHE TABLE") {
-    comparePlans(
-      parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTable(Seq("a", "b", "c"), ifExists = false))
-
-    comparePlans(
-      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTable(Seq("a", "b", "c"), ifExists = true))
-  }
-
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),

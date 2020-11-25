@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan, NoopCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan, NoopDropTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- * A rule for handling commands when the table or temp view is not resolved.
- * These commands support a flag, "ifExists", so that they do not fail when a relation is not
- * resolved. If the "ifExists" flag is set to true. the plan is resolved to [[NoopCommand]],
+ * A rule for handling [[DropTable]] logical plan when the table or temp view is not resolved.
+ * If "ifExists" flag is set to true, the plan is resolved to [[NoopDropTable]],
  * which is a no-op command.
  */
-object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
+object ResolveNoopDropTable extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
-      NoopCommand("DROP TABLE", u.multipartIdentifier)
+      NoopDropTable(u.multipartIdentifier)
   }
 }
