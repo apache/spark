@@ -1643,13 +1643,13 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
 
     val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumnsStatement(Seq("t1"), None)
+    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1")), None)
     val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumnsStatement(Seq("db1", "t1"), None)
+    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), None)
     val parsed3 = parsePlan(sql3)
-    val expected3 = ShowColumnsStatement(Seq("t1"), Some(Seq("db1")))
+    val expected3 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), Some(Seq("db1")))
     val parsed4 = parsePlan(sql4)
-    val expected4 = ShowColumnsStatement(Seq("db1", "t1"), Some(Seq("db1")))
+    val expected4 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1")), Some(Seq("db1")))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
