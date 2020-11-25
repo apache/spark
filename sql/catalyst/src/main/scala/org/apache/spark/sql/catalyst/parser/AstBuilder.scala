@@ -1893,7 +1893,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       direction.defaultNullOrdering
     }
-    SortOrder(expression(ctx.expression), direction, nullOrdering, Set.empty)
+    SortOrder(expression(ctx.expression), direction, nullOrdering, Seq.empty)
   }
 
   /**

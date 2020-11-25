@@ -131,9 +131,9 @@ package object dsl {
     }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
-    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }

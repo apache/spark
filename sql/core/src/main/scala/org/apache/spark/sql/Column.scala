@@ -1226,7 +1226,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Set.empty) }
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1242,7 +1242,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Set.empty) }
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1273,7 +1273,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Set.empty) }
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1289,7 +1289,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Set.empty) }
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Seq.empty) }
 
   /**
    * Prints the expression to the console for debugging purposes.
