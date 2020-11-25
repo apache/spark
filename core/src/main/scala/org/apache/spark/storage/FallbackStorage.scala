@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{DataInputStream, InputStream, IOException}
+import java.io.DataInputStream
 import java.nio.ByteBuffer
 
 import scala.concurrent.Future
@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH
