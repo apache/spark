@@ -3677,7 +3677,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       nameParts
     }
-    ShowColumns(UnresolvedTableOrView(tableName), namespace)
+    ShowColumns(UnresolvedTableOrView(tableName, "SHOW COLUMNS"), namespace)
   }
 
   /**
