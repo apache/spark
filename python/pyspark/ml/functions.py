@@ -71,13 +71,23 @@ def vector_to_array(col, dtype="float64"):
 
 def array_to_vector(col):
     """
-    Converts a column of array<double> or array<float> type into a column of MLlib dense vectors
+    Converts a column of array<NumericType> type into a column of MLlib dense vectors
 
-    :param col: the column of array<double> type
-    :param dtype: The data type of the output array. Valid values: "float64" or "float32".
+    :param col: the column of array<NumericType> type
     :return: a column of type "pyspark.ml.linalg.Vector"
 
     .. versionadded:: 3.1.0
+
+    >>> from pyspark.ml.functions import array_to_vector
+    >>> df1 = spark.createDataFrame([([1.5, 2.5],),], schema='v1 array<double>')
+    >>> df1.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.5, 2.5]))]
+    >>> df2 = spark.createDataFrame([([1.5, 3.5],),], schema='v1 array<float>')
+    >>> df2.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.5, 3.5]))]
+    >>> df3 = spark.createDataFrame([([1, 3],),], schema='v1 array<int>')
+    >>> df3.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.0, 3.0]))]
     """
     sc = SparkContext._active_spark_context
     return Column(

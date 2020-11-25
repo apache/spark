@@ -77,9 +77,9 @@ object functions {
   }
 
   /**
-   * Converts a column of array&lt;double&gt or array&lt;float&gt type into a column of MLlib
+   * Converts a column of array&lt;NumericType&gt type into a column of MLlib
    * dense vectors
-   * @param v: the column of array&lt;double&gt type
+   * @param v: the column of array&lt;NumericType&gt type
    * @return a column of type "org.apache.spark.ml.linalg.Vector"
    * @since 3.1.0
    */
