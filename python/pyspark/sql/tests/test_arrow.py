@@ -228,7 +228,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_toggle(self):
         pdf = self.create_pandas_data_frame()
         df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf, schema=self.schema)
-        self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
+        self.assertEqual(df_no_arrow.collect(), df_arrow.collect())
 
     def test_createDataFrame_respect_session_timezone(self):
         from datetime import timedelta
@@ -258,7 +258,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_schema(self):
         pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(pdf, schema=self.schema)
-        self.assertEquals(self.schema, df.schema)
+        self.assertEqual(self.schema, df.schema)
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
@@ -277,19 +277,19 @@ class ArrowTests(ReusedSQLTestCase):
         new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=list(new_names))
-        self.assertEquals(df.schema.fieldNames(), new_names)
+        self.assertEqual(df.schema.fieldNames(), new_names)
         # Test that schema as tuple of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
-        self.assertEquals(df.schema.fieldNames(), new_names)
+        self.assertEqual(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
         pdf = pd.DataFrame({u'a': [1]})
         columns = self.spark.createDataFrame(pdf).columns
         self.assertTrue(isinstance(columns[0], str))
-        self.assertEquals(columns[0], 'a')
+        self.assertEqual(columns[0], 'a')
         columns = self.spark.createDataFrame(pdf, [u'b']).columns
         self.assertTrue(isinstance(columns[0], str))
-        self.assertEquals(columns[0], 'b')
+        self.assertEqual(columns[0], 'b')
 
     def test_createDataFrame_with_single_data_type(self):
         with QuietTest(self.sc):
@@ -311,7 +311,7 @@ class ArrowTests(ReusedSQLTestCase):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
         schema_rt = from_arrow_schema(arrow_schema)
-        self.assertEquals(self.schema, schema_rt)
+        self.assertEqual(self.schema, schema_rt)
 
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})

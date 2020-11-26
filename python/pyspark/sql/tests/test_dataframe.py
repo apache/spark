@@ -523,12 +523,12 @@ class DataFrameTests(ReusedSQLTestCase):
         import numpy as np
         pdf = self._to_pandas()
         types = pdf.dtypes
-        self.assertEquals(types[0], np.int32)
-        self.assertEquals(types[1], np.object)
-        self.assertEquals(types[2], np.bool)
-        self.assertEquals(types[3], np.float32)
-        self.assertEquals(types[4], np.object)  # datetime.date
-        self.assertEquals(types[5], 'datetime64[ns]')
+        self.assertEqual(types[0], np.int32)
+        self.assertEqual(types[1], np.object)
+        self.assertEqual(types[2], np.bool)
+        self.assertEqual(types[3], np.float32)
+        self.assertEqual(types[4], np.object)  # datetime.date
+        self.assertEqual(types[5], 'datetime64[ns]')
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
@@ -540,8 +540,8 @@ class DataFrameTests(ReusedSQLTestCase):
                 df = self.spark.sql(sql)
                 pdf = df.toPandas()
                 types = pdf.dtypes
-                self.assertEquals(types.iloc[0], np.int32)
-                self.assertEquals(types.iloc[1], np.int32)
+                self.assertEqual(types.iloc[0], np.int32)
+                self.assertEqual(types.iloc[1], np.int32)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_on_cross_join(self):
@@ -560,8 +560,8 @@ class DataFrameTests(ReusedSQLTestCase):
                 df = self.spark.sql(sql)
                 pdf = df.toPandas()
                 types = pdf.dtypes
-                self.assertEquals(types.iloc[0], np.int32)
-                self.assertEquals(types.iloc[1], np.int32)
+                self.assertEqual(types.iloc[0], np.int32)
+                self.assertEqual(types.iloc[1], np.int32)
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
@@ -577,9 +577,9 @@ class DataFrameTests(ReusedSQLTestCase):
         data = [(1, "foo", 16777220), (None, "bar", None)]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
-        self.assertEquals(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
-        self.assertEquals(types[1], np.object)
-        self.assertEquals(types[2], np.float64)
+        self.assertEqual(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
+        self.assertEqual(types[1], np.object)
+        self.assertEqual(types[2], np.float64)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
@@ -724,7 +724,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 ||22222|22222|
                 |+-----+-----+
                 |"""
-            self.assertEquals(re.sub(pattern, '', expected1), df.__repr__())
+            self.assertEqual(re.sub(pattern, '', expected1), df.__repr__())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
                 expected2 = """+---+-----+
                 ||key|value|
@@ -733,7 +733,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 ||222|  222|
                 |+---+-----+
                 |"""
-                self.assertEquals(re.sub(pattern, '', expected2), df.__repr__())
+                self.assertEqual(re.sub(pattern, '', expected2), df.__repr__())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     expected3 = """+---+-----+
                     ||key|value|
@@ -742,7 +742,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     |+---+-----+
                     |only showing top 1 row
                     |"""
-                    self.assertEquals(re.sub(pattern, '', expected3), df.__repr__())
+                    self.assertEqual(re.sub(pattern, '', expected3), df.__repr__())
 
         # test when eager evaluation is enabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": True}):
@@ -752,7 +752,7 @@ class DataFrameTests(ReusedSQLTestCase):
                 |<tr><td>22222</td><td>22222</td></tr>
                 |</table>
                 |"""
-            self.assertEquals(re.sub(pattern, '', expected1), df._repr_html_())
+            self.assertEqual(re.sub(pattern, '', expected1), df._repr_html_())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
                 expected2 = """<table border='1'>
                     |<tr><th>key</th><th>value</th></tr>
@@ -760,7 +760,7 @@ class DataFrameTests(ReusedSQLTestCase):
                     |<tr><td>222</td><td>222</td></tr>
                     |</table>
                     |"""
-                self.assertEquals(re.sub(pattern, '', expected2), df._repr_html_())
+                self.assertEqual(re.sub(pattern, '', expected2), df._repr_html_())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
                     expected3 = """<table border='1'>
                         |<tr><th>key</th><th>value</th></tr>
@@ -768,19 +768,19 @@ class DataFrameTests(ReusedSQLTestCase):
                         |</table>
                         |only showing top 1 row
                         |"""
-                    self.assertEquals(re.sub(pattern, '', expected3), df._repr_html_())
+                    self.assertEqual(re.sub(pattern, '', expected3), df._repr_html_())
 
         # test when eager evaluation is disabled and _repr_html_ will be called
         with self.sql_conf({"spark.sql.repl.eagerEval.enabled": False}):
             expected = "DataFrame[key: bigint, value: string]"
-            self.assertEquals(None, df._repr_html_())
-            self.assertEquals(expected, df.__repr__())
+            self.assertEqual(None, df._repr_html_())
+            self.assertEqual(expected, df.__repr__())
             with self.sql_conf({"spark.sql.repl.eagerEval.truncate": 3}):
-                self.assertEquals(None, df._repr_html_())
-                self.assertEquals(expected, df.__repr__())
+                self.assertEqual(None, df._repr_html_())
+                self.assertEqual(expected, df.__repr__())
                 with self.sql_conf({"spark.sql.repl.eagerEval.maxNumRows": 1}):
-                    self.assertEquals(None, df._repr_html_())
-                    self.assertEquals(expected, df.__repr__())
+                    self.assertEqual(None, df._repr_html_())
+                    self.assertEqual(expected, df.__repr__())
 
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)
@@ -830,7 +830,7 @@ class DataFrameTests(ReusedSQLTestCase):
             input_files_list = self.spark.read.parquet(tpath).inputFiles()
 
             # input files list should contain 10 entries
-            self.assertEquals(len(input_files_list), 10)
+            self.assertEqual(len(input_files_list), 10)
             # all file paths in list must contain tpath
             for file_path in input_files_list:
                 self.assertTrue(tpath in file_path)

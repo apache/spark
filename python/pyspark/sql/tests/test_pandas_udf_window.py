@@ -241,7 +241,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
         result1 = df.withColumn('v2', array_udf(df['v']).over(w))
-        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+        self.assertEqual(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
         df = self.data

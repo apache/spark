@@ -135,8 +135,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .applyInPandas(lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]),
                            'sum1 int, sum2 int').collect()
 
-        self.assertEquals(result[0]['sum1'], 165)
-        self.assertEquals(result[0]['sum2'], 165)
+        self.assertEqual(result[0]['sum1'], 165)
+        self.assertEqual(result[0]['sum2'], 165)
 
     def test_with_key_left(self):
         self._test_with_key(self.data1, self.data1, isLeft=True)
@@ -194,14 +194,14 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         row = df1.groupby("ColUmn").cogroup(
             df1.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
         df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
 
         row = df1.groupby("ColUmn").cogroup(
             df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

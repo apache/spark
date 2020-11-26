@@ -482,7 +482,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
                                                  col('temp0.key') == col('temp1.key'))
-        self.assertEquals(res.count(), 5)
+        self.assertEqual(res.count(), 5)
 
     def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
@@ -494,7 +494,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                               'sum int',
                               PandasUDFType.GROUPED_MAP))
 
-        self.assertEquals(result.collect()[0]['sum'], 165)
+        self.assertEqual(result.collect()[0]['sum'], 165)
 
     def test_grouped_with_empty_partition(self):
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
@@ -604,7 +604,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
         row = df.groupby('COLUMN').applyInPandas(
             my_pandas_udf, schema="column integer, score float").first()
-        self.assertEquals(row.asDict(), Row(column=1, score=0.5).asDict())
+        self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
 
 if __name__ == "__main__":

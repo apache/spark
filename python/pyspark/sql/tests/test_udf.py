@@ -587,17 +587,17 @@ class UDFTests(ReusedSQLTestCase):
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 result = df.withColumn('c', c1)
                 expected = df.withColumn('c', lit(2))
-                self.assertEquals(expected.collect(), result.collect())
+                self.assertEqual(expected.collect(), result.collect())
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 result = df.withColumn('c', c2)
                 expected = df.withColumn('c', col('i') + 1)
-                self.assertEquals(expected.collect(), result.collect())
+                self.assertEqual(expected.collect(), result.collect())
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 for f in [f1, f2]:
                     result = df.filter(f)
-                    self.assertEquals(0, result.count())
+                    self.assertEqual(0, result.count())
         finally:
             shutil.rmtree(path)
 
