@@ -19,26 +19,26 @@ package org.apache.spark.network.shuffle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
-public interface BlockFetchingListener extends BlockTransferListener {
+public interface BlockPushingListener extends BlockTransferListener  {
   /**
-   * Called once per successfully fetched block. After this call returns, data will be released
+   * Called once per successfully pushed block. After this call returns, data will be released
    * automatically. If the data will be passed to another thread, the receiver should retain()
    * and release() the buffer on their own, or copy the data to a new buffer.
    */
-  void onBlockFetchSuccess(String blockId, ManagedBuffer data);
+  void onBlockPushSuccess(String blockId, ManagedBuffer data);
 
   /**
    * Called at least once per block upon failures.
    */
-  void onBlockFetchFailure(String blockId, Throwable exception);
+  void onBlockPushFailure(String blockId, Throwable exception);
 
   @Override
   default void onBlockTransferSuccess(String blockId, ManagedBuffer data) {
-    onBlockFetchSuccess(blockId, data);
+    onBlockPushSuccess(blockId, data);
   }
 
   @Override
   default void onBlockTransferFailure(String blockId, Throwable exception) {
-    onBlockFetchFailure(blockId, exception);
+    onBlockPushFailure(blockId, exception);
   }
 }

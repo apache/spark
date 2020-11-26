@@ -153,7 +153,7 @@ public abstract class BlockStoreClient implements Closeable {
       int port,
       String[] blockIds,
       ManagedBuffer[] buffers,
-      BlockFetchingListener listener) {
+      BlockPushingListener listener) {
     throw new UnsupportedOperationException();
   }
 }
