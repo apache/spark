@@ -137,8 +137,15 @@ private[deploy] class HadoopFSDelegationTokenProvider
   }
 
   private def getIssueDate(kind: String, identifier: AbstractDelegationTokenIdentifier): Long = {
+    val now = System.currentTimeMillis()
     val issueDate = identifier.getIssueDate
-    if (issueDate > 0L) {
+    if (issueDate > now) {
+      logWarning(s"Token $kind has set up issue date later than current time. (provided: " +
+        s"$issueDate / current timestamp: $now) Please make sure clocks are in sync between " +
+        "machines. If the issue is not a clock mismatch, consult token implementor to check " +
+        "whether issue date is valid.")
+      issueDate
+    } else if (issueDate > 0L) {
       issueDate
     } else {
       val now = System.currentTimeMillis()
