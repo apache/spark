@@ -138,7 +138,7 @@ class MLWriter(BaseReadWrite):
         Adds an option to the underlying MLWriter. See the documentation for the specific model's
         writer for possible options. The option name (key) is case-insensitive.
         """
-        self.option(key.lower(), str(value))
+        self.optionMap[key.lower()] = str(value)
         return self
 
 
@@ -566,8 +566,7 @@ class DefaultParamsReader(MLReader):
 
     @staticmethod
     def isPythonParamsInstance(metadata):
-        return 'language' in metadata['paramMap'] and \
-               metadata['paramMap']['language'].lower() == 'python'
+        return metadata['class'].startswith('pyspark')
 
     @staticmethod
     def loadParamsInstance(path, sc):
@@ -623,11 +622,6 @@ class MetaAlgorithmReadWrite:
             subStageMaps.extend(MetaAlgorithmReadWrite.getUidMapImpl(subStage))
 
         return [(instance.uid, instance)] + subStageMaps
-
-
-
-
-
 
 
 @inherit_doc

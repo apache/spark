@@ -225,7 +225,7 @@ class _ValidatorSharedReadWrite:
                         isinstance(v, _ValidatorParams) or
                         isinstance(v, OneVsRest))
                     ) or isinstance(v, Transformer) or \
-                        isinstance(Evaluator):
+                        isinstance(v, Evaluator):
                     relative_path = f'epm_{p.name}{numParamsNotJson}'
                     param_path = os.path.join(path, relative_path)
                     numParamsNotJson += 1
@@ -246,9 +246,9 @@ class _ValidatorSharedReadWrite:
         skipParams = ['estimator', 'evaluator', 'estimatorParamMaps']
 
         jsonParams = {}
-        for p, v in instance._paramMap.items():
-            if p.name not in skipParams:
-                jsonParams[p.name] = v
+        for param in instance.params:
+            if param.name not in skipParams:
+                jsonParams[param.name] = instance.getOrDefault(param)
 
         jsonParams['estimatorParamMaps'] = jsonEstimatorParamMaps
 
@@ -300,7 +300,7 @@ class _ValidatorSharedReadWrite:
                     f'persistSubModels option value {persistSubModelsParam} is invalid, '
                     f"the possible values are True, 'True' or False, 'False'")
         else:
-            return False
+            return writer.instance.subModels is not None
 
 
 _save_with_persist_submodels_no_submodels_found_err = \
@@ -360,7 +360,7 @@ class CrossValidatorModelReader(MLReader):
             bestModelPath = os.path.join(path, 'bestModel')
             bestModel = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
             avgMetrics = metadata['avgMetrics']
-            persistSubModels = metadata['persistSubModels']
+            persistSubModels = ('persistSubModels' in metadata) and metadata['persistSubModels']
 
             if persistSubModels:
                 subModels = [[None] * len(estimatorParamMaps)] * numFolds
@@ -376,7 +376,7 @@ class CrossValidatorModelReader(MLReader):
             cvModel = CrossValidatorModel(bestModel, avgMetrics=avgMetrics, subModels=subModels)
             cvModel = cvModel._resetUid(metadata['uid'])
             cvModel.set(cvModel.estimator, estimator)
-            cvModel.setEstimatorParamMaps(cvModel.estimatorParamMaps, estimatorParamMaps)
+            cvModel.set(cvModel.estimatorParamMaps, estimatorParamMaps)
             cvModel.set(cvModel.evaluator, evaluator)
             DefaultParamsReader.getAndSetParams(cvModel, metadata, skipParams=['estimatorParamMaps'])
             return cvModel
@@ -406,7 +406,7 @@ class CrossValidatorModelWriter(MLWriter):
                 splitPath = os.path.join(subModelsPath, f'fold{splitIndex}')
                 for paramIndex in range(len(instance.getEstimatorParamMaps())):
                     modelPath = os.path.join(splitPath, f'{paramIndex}')
-                    instance.subModels[splitPath][paramIndex].save(modelPath)
+                    instance.subModels[splitIndex][paramIndex].save(modelPath)
 
 
 class _CrossValidatorParams(_ValidatorParams):
@@ -675,13 +675,13 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
+        return CrossValidatorWriter(self)
 
     @classmethod
     @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return CrossValidatorReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -784,13 +784,13 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
+        return CrossValidatorModelWriter(self)
 
     @classmethod
     @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return CrossValidatorModelReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -910,7 +910,7 @@ class TrainValidationSplitModelReader(MLReader):
             bestModelPath = os.path.join(path, 'bestModel')
             bestModel = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
             validationMetrics = metadata['validationMetrics']
-            persistSubModels = metadata['persistSubModels']
+            persistSubModels = ('persistSubModels' in metadata) and metadata['persistSubModels']
 
             if persistSubModels:
                 subModels = [None] * len(estimatorParamMaps)
@@ -925,7 +925,7 @@ class TrainValidationSplitModelReader(MLReader):
                 bestModel, validationMetrics=validationMetrics, subModels=subModels)
             tvsModel = tvsModel._resetUid(metadata['uid'])
             tvsModel.set(tvsModel.estimator, estimator)
-            tvsModel.setEstimatorParamMaps(tvsModel.estimatorParamMaps, estimatorParamMaps)
+            tvsModel.set(tvsModel.estimatorParamMaps, estimatorParamMaps)
             tvsModel.set(tvsModel.evaluator, evaluator)
             DefaultParamsReader.getAndSetParams(tvsModel, metadata, skipParams=['estimatorParamMaps'])
             return tvsModel
@@ -942,6 +942,7 @@ class TrainValidationSplitModelWriter(MLWriter):
         instance = self.instance
         persistSubModels = _ValidatorSharedReadWrite \
             .getValidatorModelWriterPersistSubModelsParam(self)
+
         extraMetadata = {'validationMetrics': instance.validationMetrics,
                          'persistSubModels': persistSubModels}
         _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
@@ -1160,13 +1161,13 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
+        return TrainValidationSplitWriter(self)
 
     @classmethod
     @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return TrainValidationSplitReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -1264,13 +1265,13 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
+        return TrainValidationSplitModelWriter(self)
 
     @classmethod
     @since("2.3.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return TrainValidationSplitModelReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
