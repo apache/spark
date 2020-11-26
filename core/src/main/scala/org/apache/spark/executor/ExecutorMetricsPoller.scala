@@ -99,7 +99,7 @@ private[spark] class ExecutorMetricsPoller(
   def start(): Unit = {
     poller.foreach { exec =>
       val pollingTask: Runnable = () => Utils.logUncaughtExceptions(poll())
-      exec.scheduleWithFixedDelay(pollingTask, 0L, pollingInterval, TimeUnit.MILLISECONDS)
+      exec.scheduleAtFixedRate(pollingTask, 0L, pollingInterval, TimeUnit.MILLISECONDS)
     }
   }
 
