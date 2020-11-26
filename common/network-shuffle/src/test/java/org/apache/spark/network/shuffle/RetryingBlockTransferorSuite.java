@@ -38,13 +38,13 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
-import static org.apache.spark.network.shuffle.RetryingBlockFetcher.BlockFetchStarter;
+import static org.apache.spark.network.shuffle.RetryingBlockTransferor.BlockTransferStarter;
 
 /**
  * Tests retry logic by throwing IOExceptions and ensuring that subsequent attempts are made to
  * fetch the lost blocks.
  */
-public class RetryingBlockFetcherSuite {
+public class RetryingBlockTransferorSuite {
 
   private final ManagedBuffer block0 = new NioManagedBuffer(ByteBuffer.wrap(new byte[13]));
   private final ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
@@ -243,7 +243,7 @@ public class RetryingBlockFetcherSuite {
       "spark.shuffle.io.maxRetries", "2",
       "spark.shuffle.io.retryWait", "0"));
     TransportConf conf = new TransportConf("shuffle", provider);
-    BlockFetchStarter fetchStarter = mock(BlockFetchStarter.class);
+    BlockTransferStarter fetchStarter = mock(BlockTransferStarter.class);
 
     Stubber stub = null;
 
@@ -293,6 +293,6 @@ public class RetryingBlockFetcherSuite {
     assertNotNull(stub);
     stub.when(fetchStarter).createAndStart(any(), any());
     String[] blockIdArray = blockIds.toArray(new String[blockIds.size()]);
-    new RetryingBlockFetcher(conf, fetchStarter, blockIdArray, listener).start();
+    new RetryingBlockTransferor(conf, fetchStarter, blockIdArray, listener).start();
   }
 }
