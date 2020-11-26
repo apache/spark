@@ -45,8 +45,8 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegexp(e.desc, "1024 is not in the permitted values")
-            self.assertRegexp(e.stackTrace,
+            self.assertRegex(e.desc, "1024 is not in the permitted values")
+            self.assertRegex(e.stackTrace,
                                      "org.apache.spark.sql.functions")
 
 
