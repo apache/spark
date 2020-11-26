@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
@@ -79,7 +80,9 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
-        return listPartitionIdentifiers(ident).length > 0;
+        String[] partitionNames = partitionSchema().names();
+        String[] requiredNames = Arrays.copyOfRange(partitionNames, 0, ident.numFields());
+        return listPartitionByNames(requiredNames, ident).length > 0;
     }
 
     /**
