@@ -819,8 +819,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       wCtx =>
         (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
     }
-    baseWindowTuples.groupBy(_._1).foreach { case (k, v) if v.size > 1 =>
-      throw new ParseException(s"The definition of window '$k' is repetitive", ctx)
+    baseWindowTuples.groupBy(_._1).foreach { kv =>
+      if (kv._2.size > 1) {
+        throw new ParseException(s"The definition of window '${kv._1}' is repetitive", ctx)
+      }
     }
     val baseWindowMap = baseWindowTuples.toMap
 
