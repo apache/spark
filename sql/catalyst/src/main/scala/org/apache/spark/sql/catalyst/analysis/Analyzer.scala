@@ -3121,7 +3121,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       i.userSpecifiedCols.map { col =>
           i.table.resolve(Seq(col), resolver)
-            .getOrElse(i.table.failAnalysis(s"Cannot resolve column name ${col}"))
+            .getOrElse(i.table.failAnalysis(s"Cannot resolve column name $col"))
       }
     }
 

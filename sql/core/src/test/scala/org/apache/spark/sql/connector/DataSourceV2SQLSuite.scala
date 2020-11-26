@@ -51,7 +51,12 @@ class DataSourceV2SQLSuite
   private val defaultUser: String = Utils.getCurrentUserName()
 
   protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
-    processInsert(tableName, insert, mode = mode)
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
