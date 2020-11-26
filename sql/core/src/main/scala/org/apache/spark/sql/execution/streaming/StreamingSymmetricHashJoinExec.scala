@@ -350,8 +350,8 @@ case class StreamingSymmetricHashJoinExec(
             case 2 => kv.matched
             case _ => throwBadStateFormatVersionException()
           }
-        val leftSideOutputIter = leftSideJoiner.removeOldState().filterNot(isKeyToValuePairMatched)
-          .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        val leftSideOutputIter = leftSideJoiner.removeOldState().filterNot(
+          isKeyToValuePairMatched).map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
         val rightSideOutputIter = rightSideJoiner.removeOldState().filterNot(
           isKeyToValuePairMatched).map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
@@ -388,11 +388,15 @@ case class StreamingSymmetricHashJoinExec(
         // For inner and left semi joins, we have to remove unnecessary state rows from both sides
         // if possible.
         //
-        // For outer joins, we have already removed unnecessary state rows from the outer side
-        // (e.g., left side for left outer join) while generating the outer "null" outputs. Now, we
-        // have to remove unnecessary state rows from the other side (e.g., right side for the left
-        // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
-        // needs to be done greedily by immediately consuming the returned iterator.
+        // For left outer and right outer joins, we have already removed unnecessary state rows from
+        // the outer side (e.g., left side for left outer join) while generating the outer "null"
+        // outputs. Now, we have to remove unnecessary state rows from the other side (e.g., right
+        // side for the left outer join) if possible. In all cases, nothing needs to be outputted,
+        // hence the removal needs to be done greedily by immediately consuming the returned
+        // iterator.
+        //
+        // For full outer joins, we have already removed unnecessary states from both sides, so
+        // nothing needs to be outputted here.
         val cleanupIter = joinType match {
           case Inner | LeftSemi =>
             leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()

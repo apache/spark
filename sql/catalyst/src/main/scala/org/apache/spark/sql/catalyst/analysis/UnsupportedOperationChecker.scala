@@ -299,10 +299,10 @@ object UnsupportedOperationChecker extends Logging {
 
             case FullOuter =>
               if (left.isStreaming && !right.isStreaming) {
-                throwError(s"$FullOuter joins with streaming DataFrames/Datasets on the left " +
+                throwError(s"FullOuter joins with streaming DataFrames/Datasets on the left " +
                   "and a static DataFrame/Dataset on the right is not supported")
               } else if (!left.isStreaming && right.isStreaming) {
-                throwError(s"$FullOuter joins with streaming DataFrames/Datasets on the right " +
+                throwError(s"FullOuter joins with streaming DataFrames/Datasets on the right " +
                   "and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 checkForStreamStreamJoinWatermark(j)
@@ -328,7 +328,7 @@ object UnsupportedOperationChecker extends Logging {
             // stream on both sides under the appropriate conditions.
             case RightOuter =>
               if (left.isStreaming && !right.isStreaming) {
-                throwError(s"$RightOuter join with a streaming DataFrame/Dataset on the left and " +
+                throwError(s"RightOuter join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 checkForStreamStreamJoinWatermark(j)
@@ -425,6 +425,8 @@ object UnsupportedOperationChecker extends Logging {
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
     val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
 
+    // Check if the nullable side has a watermark, and there's a range condition which
+    // implies a state value watermark on the first side.
     val hasValidWatermarkRange = join.joinType match {
       case LeftOuter | LeftSemi => StreamingJoinHelper.getStateValueWatermark(
         join.left.outputSet, join.right.outputSet, join.condition, Some(1000000)).isDefined
