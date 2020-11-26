@@ -34,7 +34,7 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401

@@ -688,7 +688,7 @@ class DataFrameTests(ReusedSQLTestCase):
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_dst(self):
         import pandas as pd
-        from pandas.util.testing import assert_frame_equal
+        from pandas.testing import assert_frame_equal
         from datetime import datetime
 
         pdf = pd.DataFrame({'time': [datetime(2015, 10, 31, 22, 30)]})
