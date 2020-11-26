@@ -3119,12 +3119,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       SchemaUtils.checkColumnNameDuplication(
         i.userSpecifiedCols, "in the column list", resolver)
 
-      val resolved = i.userSpecifiedCols.map { col =>
+      i.userSpecifiedCols.map { col =>
           i.table.resolve(Seq(col), resolver)
-            .getOrElse(failAnalysis(s"Cannot resolve column name ${col}"))
+            .getOrElse(i.table.failAnalysis(s"Cannot resolve column name ${col}"))
       }
-
-      resolved
     }
 
     private def addColumnListOnQuery(
