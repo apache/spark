@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
