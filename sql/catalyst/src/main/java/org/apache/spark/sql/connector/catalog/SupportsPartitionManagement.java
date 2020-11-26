@@ -82,7 +82,7 @@ public interface SupportsPartitionManagement extends Table {
     default boolean partitionExists(InternalRow ident) {
         String[] partitionNames = partitionSchema().names();
         String[] requiredNames = Arrays.copyOfRange(partitionNames, 0, ident.numFields());
-        return listPartitionByNames(requiredNames, ident).length > 0;
+        return listPartitionIdentifiers(requiredNames, ident).length > 0;
     }
 
     /**
@@ -115,5 +115,5 @@ public interface SupportsPartitionManagement extends Table {
      * @param ident a partition identifier values.
      * @return an array of Identifiers for the partitions
      */
-    InternalRow[] listPartitionByNames(String[] names, InternalRow ident);
+    InternalRow[] listPartitionIdentifiers(String[] names, InternalRow ident);
 }

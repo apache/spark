@@ -49,7 +49,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   }
 
   private def hasPartitions(table: SupportsPartitionManagement): Boolean = {
-    !table.listPartitionByNames(Array.empty, InternalRow.empty).isEmpty
+    !table.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty
   }
 
   test("createPartition") {
@@ -77,10 +77,10 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     val partIdent1 = InternalRow.apply("4")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 2)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
     assert(!hasPartitions(partTable))
   }
@@ -132,15 +132,15 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
 
     val partIdent = InternalRow.apply("3")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
 
     val partIdent1 = InternalRow.apply("4")
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 2)
-    assert(partTable.listPartitionByNames(Array("dt"), partIdent1).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+    assert(partTable.listPartitionIdentifiers(Array("dt"), partIdent1).length == 1)
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
     assert(!hasPartitions(partTable))
   }
@@ -174,7 +174,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       (Array("part0", "part1"), InternalRow(3, "xyz")) -> Set(),
       (Array("part1"), InternalRow(3.14f)) -> Set()
     ).foreach { case ((names, idents), expected) =>
-      assert(partTable.listPartitionByNames(names, idents).toSet === expected)
+      assert(partTable.listPartitionIdentifiers(names, idents).toSet === expected)
     }
     // Check invalid parameters
     Seq(
@@ -182,7 +182,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       (Array("col0", "part1"), InternalRow(0, 1)),
       (Array("wrong"), InternalRow("invalid"))
     ).foreach { case (names, idents) =>
-      intercept[AssertionError](partTable.listPartitionByNames(names, idents))
+      intercept[AssertionError](partTable.listPartitionIdentifiers(names, idents))
     }
   }
 }

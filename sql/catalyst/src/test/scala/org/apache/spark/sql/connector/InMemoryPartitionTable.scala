@@ -90,7 +90,7 @@ class InMemoryPartitionTable(
     memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
   }
 
-  override def listPartitionByNames(
+  override def listPartitionIdentifiers(
       names: Array[String],
       ident: InternalRow): Array[InternalRow] = {
     assert(names.length == ident.numFields,

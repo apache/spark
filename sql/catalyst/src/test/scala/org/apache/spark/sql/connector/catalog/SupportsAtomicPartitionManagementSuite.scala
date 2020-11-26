@@ -48,7 +48,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
   }
 
   private def hasPartitions(table: SupportsPartitionManagement): Boolean = {
-    !table.listPartitionByNames(Array.empty, InternalRow.empty).isEmpty
+    !table.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty
   }
 
   test("createPartitions") {
@@ -118,7 +118,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
 
     val partIdent = InternalRow.apply("4")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionByNames(Array.empty, InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     assert(!partTable.dropPartitions(partIdents))
