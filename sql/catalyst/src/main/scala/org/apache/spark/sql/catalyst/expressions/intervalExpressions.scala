@@ -197,6 +197,8 @@ case class MakeInterval(
   override def dataType: DataType = CalendarIntervalType
   override def nullable: Boolean = true
 
+  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+
   override def nullSafeEval(
       year: Any,
       month: Any,
@@ -215,7 +217,10 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case _: ArithmeticException => null
+      case e: ArithmeticException =>
+        if (ansiEnabled) {
+          throw e
+        } else null
     }
   }
 
@@ -223,11 +228,12 @@ case class MakeInterval(
     nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
+      val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
       s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
         } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
+          $exceptionCode
         }
       """
     })

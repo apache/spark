@@ -1776,23 +1776,29 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
   override def dataType: DataType = DateType
   override def nullable: Boolean = true
 
+  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
     try {
       val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
       localDateToDays(ld)
     } catch {
-      case _: java.time.DateTimeException => null
+      case e: java.time.DateTimeException =>
+        if (ansiEnabled) {
+          throw e
+        } else null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day) => {
       s"""
       try {
         ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
       } catch (java.time.DateTimeException e) {
-        ${ev.isNull} = true;
+        $exceptionCode
       }"""
     })
   }
@@ -1876,6 +1882,8 @@ case class MakeTimestamp(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+
   private def toMicros(
       year: Int,
       month: Int,
@@ -1905,7 +1913,10 @@ case class MakeTimestamp(
       }
       instantToMicros(ldt.atZone(zoneId).toInstant)
     } catch {
-      case _: DateTimeException => null
+      case e: DateTimeException =>
+        if (ansiEnabled) {
+          throw e
+        } else null
     }
   }
 
@@ -1934,6 +1945,7 @@ case class MakeTimestamp(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
+    val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       s"""
@@ -1957,7 +1969,7 @@ case class MakeTimestamp(
         java.time.Instant instant = ldt.atZone($zoneId).toInstant();
         ${ev.value} = $dtu.instantToMicros(instant);
       } catch (java.time.DateTimeException e) {
-        ${ev.isNull} = true;
+        $exceptionCode
       }"""
     })
   }

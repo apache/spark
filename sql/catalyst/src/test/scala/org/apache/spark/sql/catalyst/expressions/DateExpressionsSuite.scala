@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{Instant, LocalDate, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, ZoneId}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
@@ -1022,6 +1023,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
   }
 
+  test("creating values of DateType via make_date with ansiEnabled") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+      checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(Int.MaxValue), Literal(13),
+        Literal(19)), EmptyRow, "Invalid value for Year")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019),
+        Literal(13), Literal(19)), EmptyRow, "Invalid value for Month")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019), Literal(7),
+        Literal(32)), EmptyRow, "Invalid value for Day")
+    }
+  }
+
   test("creating values of TimestampType via make_timestamp") {
     var makeTimestampExpr = MakeTimestamp(
       Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
@@ -1057,6 +1073,52 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
+
+  test("creating values of TimestampType via make_timestamp with ansiEnabled") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      var makeTimestampExpr = MakeTimestamp(
+        Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+        Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+      val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
+      checkEvaluation(makeTimestampExpr, expected)
+      checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
+
+      checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](
+        makeTimestampExpr.copy(year = Literal(Int.MaxValue)), EmptyRow, "Invalid value for Year")
+
+      checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(month = Literal(13)),
+        EmptyRow, "Invalid value for Month")
+
+      checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(day = Literal(32)),
+        EmptyRow, "Invalid value for Day")
+
+      checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(hour = Literal(25)),
+        EmptyRow, "Invalid value for Hour")
+
+      checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(min = Literal(65)),
+        EmptyRow, "Invalid value for Min")
+
+      checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(Decimal(
+        BigDecimal(70.0), 8, 6))), EmptyRow, "Invalid value for Second")
+
+      makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+        Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(Decimal(
+        BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+
+      makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+        Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+      checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+    }
+  }
+
 
   test("ISO 8601 week-numbering year") {
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
