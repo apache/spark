@@ -32,9 +32,11 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     // If you change `imageName`, you need to update the version of `mariadb-plugin-gssapi-server`
     // in `resources/mariadb_docker_entrypoint.sh` accordingly.
-    override val imageName = "mariadb:10.5"
+    override val imageName = sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:10.5.8")
     override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+      "MYSQL_ROOT_PASSWORD" -> "rootpass",
+      "MARIADB_GSSAPI_VERSION" ->
+        sys.env.getOrElse("MARIADB_GSSAPI_VERSION", "1:10.5.8+maria~focal")
     )
     override val usesIpc = false
     override val jdbcPort = 3306
