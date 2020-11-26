@@ -98,7 +98,7 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_udf_registration_return_type_not_none(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, "Invalid return type"):
+            with self.assertRaisesRegex(TypeError, "Invalid return type"):
                 self.spark.catalog.registerFunction(
                     "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType())
 
@@ -149,9 +149,9 @@ class UDFTests(ReusedSQLTestCase):
         df = self.spark.range(10)
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
                 df.groupby('id').agg(sum(udf_random_col())).collect()
-            with self.assertRaisesRegexp(AnalysisException, "nondeterministic"):
+            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
                 df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
@@ -203,7 +203,7 @@ class UDFTests(ReusedSQLTestCase):
         # Cross join.
         df = left.join(right, f("a", "b"))
         with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
-            with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+            with self.assertRaisesRegex(AnalysisException, 'Detected implicit cartesian product'):
                 df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
@@ -238,7 +238,7 @@ class UDFTests(ReusedSQLTestCase):
         f = udf(lambda a, b: a == b, BooleanType())
 
         def runWithJoinType(join_type, type_string):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     'Using PythonUDF.*%s is not supported.' % type_string):
                 left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
@@ -385,17 +385,17 @@ class UDFTests(ReusedSQLTestCase):
 
     def test_non_existed_udf(self):
         spark = self.spark
-        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+        self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udf",
                                 lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
         sqlContext = spark._wrapped
-        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+        self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udf",
                                 lambda: sqlContext.registerJavaFunction("udf1", "non_existed_udf"))
 
     def test_non_existed_udaf(self):
         spark = self.spark
-        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
+        self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_udf_with_input_file_name(self):

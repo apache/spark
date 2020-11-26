@@ -248,7 +248,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         w = self.unbounded_window
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     '.*not supported within a window function'):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)

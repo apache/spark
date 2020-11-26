@@ -54,7 +54,7 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
         model.__del__()
 
         def condition():
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 model._java_obj.toString()
             self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
             return True
@@ -67,9 +67,9 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
             pass
 
         def condition():
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 model._java_obj.toString()
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 summary._java_obj.toString()
             return True
 

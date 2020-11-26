@@ -29,7 +29,7 @@ class CatalogTests(ReusedSQLTestCase):
             spark.sql("CREATE DATABASE some_db")
             spark.catalog.setCurrentDatabase("some_db")
             self.assertEqual(spark.catalog.currentDatabase(), "some_db")
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.setCurrentDatabase("does_not_exist"))
@@ -99,7 +99,7 @@ class CatalogTests(ReusedSQLTestCase):
                         description=None,
                         tableType="TEMPORARY",
                         isTemporary=True))
-                    self.assertRaisesRegexp(
+                    self.assertRaisesRegex(
                         AnalysisException,
                         "does_not_exist",
                         lambda: spark.catalog.listTables("does_not_exist"))
@@ -141,7 +141,7 @@ class CatalogTests(ReusedSQLTestCase):
                 self.assertTrue("temp_func" in newFunctionsSomeDb)
                 self.assertTrue("func1" not in newFunctionsSomeDb)
                 self.assertTrue("func2" in newFunctionsSomeDb)
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listFunctions("does_not_exist"))
@@ -191,11 +191,11 @@ class CatalogTests(ReusedSQLTestCase):
                     nullable=True,
                     isPartition=False,
                     isBucket=False))
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "tab2",
                     lambda: spark.catalog.listColumns("tab2"))
-                self.assertRaisesRegexp(
+                self.assertRaisesRegex(
                     AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"))

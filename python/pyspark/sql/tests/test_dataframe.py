@@ -343,7 +343,7 @@ class DataFrameTests(ReusedSQLTestCase):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({u"Alice": u"Bob", 10: 20}).first()
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
                 TypeError,
                 'value argument is required when to_replace is not a dictionary.'):
             self.spark.createDataFrame(
@@ -390,7 +390,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
     def test_sample(self):
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "should be a bool, float and number",
             lambda: self.spark.range(1).sample())
@@ -426,11 +426,11 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df.collect(), data)
 
         # number of fields must match.
-        self.assertRaisesRegexp(Exception, "Length of object",
+        self.assertRaisesRegex(Exception, "Length of object",
                                 lambda: rdd.toDF("key: int").collect())
 
         # field types mismatch will cause exception at runtime.
-        self.assertRaisesRegexp(Exception, "FloatType can not accept",
+        self.assertRaisesRegex(Exception, "FloatType can not accept",
                                 lambda: rdd.toDF("key: float, value: string").collect())
 
         # flat schema values will be wrapped into row.
@@ -491,15 +491,15 @@ class DataFrameTests(ReusedSQLTestCase):
             spark.catalog.clearCache()
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.isCached("does_not_exist"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.cacheTable("does_not_exist"))
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
                 lambda: spark.catalog.uncacheTable("does_not_exist"))
@@ -566,7 +566,7 @@ class DataFrameTests(ReusedSQLTestCase):
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
+            with self.assertRaisesRegex(ImportError, 'Pandas >= .* must be installed'):
                 self._to_pandas()
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
@@ -675,7 +675,7 @@ class DataFrameTests(ReusedSQLTestCase):
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     ImportError,
                     "(Pandas >= .* must be installed|No module named '?pandas'?)"):
                 import pandas as pd
@@ -818,7 +818,7 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, "should be of DataFrame.*int"):
+            with self.assertRaisesRegex(ValueError, "should be of DataFrame.*int"):
                 self.spark.range(10).sameSemantics(1)
 
     def test_input_files(self):

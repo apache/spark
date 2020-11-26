@@ -174,7 +174,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     NotImplementedError,
                     'Invalid return type.*ArrayType.*TimestampType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
@@ -183,7 +183,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_wrong_args(self):
         left = self.data1
         right = self.data2
-        with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+        with self.assertRaisesRegex(ValueError, 'Invalid function'):
             left.groupby('id').cogroup(right.groupby('id')) \
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
 

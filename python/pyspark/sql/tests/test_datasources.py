@@ -135,7 +135,7 @@ class DataSourcesTests(ReusedSQLTestCase):
                 StructField('f1', IntegerType(), nullable=True)])
             df = self.spark.read.option('header', 'true').schema(schema)\
                 .csv(path, enforceSchema=False)
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 Exception,
                 "CSV header does not conform to the schema",
                 lambda: df.collect())

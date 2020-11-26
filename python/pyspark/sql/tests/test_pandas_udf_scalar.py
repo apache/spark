@@ -375,7 +375,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         Exception,
                         'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
@@ -435,14 +435,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for raise_exception in [scalar_raise_exception, iter_raise_exception]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'division( or modulo)? by zero'):
+                with self.assertRaisesRegex(Exception, 'division( or modulo)? by zero'):
                     df.select(raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_invalid_length(self):
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     Exception,
                     'Result vector from pandas_udf was not the required length'):
                 df.select(raise_exception(col('id'))).collect()
@@ -453,7 +453,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield pd.Series(1)
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     Exception,
                     "The length of output in Scalar iterator.*"
                     "the length of output was 1"):
@@ -469,7 +469,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df1 = self.spark.range(10).repartition(1)
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         Exception,
                         "pandas iterator UDF should exhaust"):
                     df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
@@ -517,7 +517,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_wrong_return_type(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
                     pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
@@ -529,7 +529,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                             PandasUDFType.SCALAR_ITER)
         for f in [scalar_f, iter_f]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'Return.*type.*Series'):
+                with self.assertRaisesRegex(Exception, 'Return.*type.*Series'):
                     df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_decorator(self):
@@ -590,11 +590,11 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_unsupported_types(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
                     pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):
                     pandas_udf(lambda x: x,
@@ -799,9 +799,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for random_udf in [self.nondeterministic_vectorized_udf,
                            self.nondeterministic_vectorized_iter_udf]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                with self.assertRaisesRegex(AnalysisException, 'nondeterministic'):
                     df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
-                with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                with self.assertRaisesRegex(AnalysisException, 'nondeterministic'):
                     df.agg(sum(random_udf(df.id))).collect()
 
     def test_register_vectorized_udf_basic(self):
@@ -854,7 +854,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             finally:
                 raise RuntimeError("reached finally block")
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "reached finally block"):
+            with self.assertRaisesRegex(Exception, "reached finally block"):
                 self.spark.range(1).select(test_close(col("id"))).collect()
 
     def test_scalar_iter_udf_close_early(self):

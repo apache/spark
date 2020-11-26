@@ -137,7 +137,7 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
-                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                with self.assertRaisesRegex(Exception, 'Unsupported type'):
                     df.toPandas()
 
     def test_null_conversion(self):
@@ -214,7 +214,7 @@ class ArrowTests(ReusedSQLTestCase):
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'My error'):
+            with self.assertRaisesRegex(Exception, 'My error'):
                 df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
@@ -269,7 +269,7 @@ class ArrowTests(ReusedSQLTestCase):
         wrong_schema = StructType(fields)
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -293,7 +293,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_single_data_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, ".*IntegerType.*not supported.*"):
+            with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -420,7 +420,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
+            with self.assertRaisesRegex(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
                     "a: array<timestamp>")
@@ -545,7 +545,7 @@ class MaxResultArrowTests(unittest.TestCase):
             cls.spark.stop()
 
     def test_exception_by_max_results(self):
-        with self.assertRaisesRegexp(Exception, "is bigger than"):
+        with self.assertRaisesRegex(Exception, "is bigger than"):
             self.spark.range(0, 10000, 1, 100).toPandas()
 
 

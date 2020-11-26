@@ -169,7 +169,7 @@ class FunctionsTests(ReusedSQLTestCase):
         ]
 
         df = self.spark.createDataFrame([['nick']], schema=['name'])
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
