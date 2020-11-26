@@ -484,6 +484,12 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    if "GITHUB_ACTIONS" in os.environ:
+        # See SPARK-33565. Python 3.8 was temporarily removed as its default Python executables
+        # to test because of Jenkins environment issue. Once Jenkins has Python 3.8 to test,
+        # we should remove this change back and add python3.8 into python/run-tests.py script.
+        command.append("--python-executable=%s" % ','.join(
+            x for x in ["python3.8", "python2.7", "pypy3", "pypy"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
