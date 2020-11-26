@@ -31,7 +31,7 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             self.spark.sql("select `中文字段`")
         except AnalysisException as e:
-            self.assertRegexpMatches(str(e), "cannot resolve '`中文字段`'")
+            self.assertRegex(str(e), "cannot resolve '`中文字段`'")
 
     def test_capture_parse_exception(self):
         self.assertRaises(ParseException, lambda: self.spark.sql("abc"))
@@ -45,8 +45,8 @@ class UtilsTests(ReusedSQLTestCase):
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
-            self.assertRegexpMatches(e.desc, "1024 is not in the permitted values")
-            self.assertRegexpMatches(e.stackTrace,
+            self.assertRegexp(e.desc, "1024 is not in the permitted values")
+            self.assertRegexp(e.stackTrace,
                                      "org.apache.spark.sql.functions")
 
 
