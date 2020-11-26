@@ -299,10 +299,10 @@ object UnsupportedOperationChecker extends Logging {
 
             case FullOuter =>
               if (left.isStreaming && !right.isStreaming) {
-                throwError(s"FullOuter joins with streaming DataFrames/Datasets on the left " +
+                throwError("FullOuter joins with streaming DataFrames/Datasets on the left " +
                   "and a static DataFrame/Dataset on the right is not supported")
               } else if (!left.isStreaming && right.isStreaming) {
-                throwError(s"FullOuter joins with streaming DataFrames/Datasets on the right " +
+                throwError("FullOuter joins with streaming DataFrames/Datasets on the right " +
                   "and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 checkForStreamStreamJoinWatermark(j)
@@ -328,7 +328,7 @@ object UnsupportedOperationChecker extends Logging {
             // stream on both sides under the appropriate conditions.
             case RightOuter =>
               if (left.isStreaming && !right.isStreaming) {
-                throwError(s"RightOuter join with a streaming DataFrame/Dataset on the left and " +
+                throwError("RightOuter join with a streaming DataFrame/Dataset on the left and " +
                     "a static DataFrame/DataSet on the right not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 checkForStreamStreamJoinWatermark(j)
