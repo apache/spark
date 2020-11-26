@@ -75,6 +75,8 @@ abstract class CSVSuite
   private val valueMalformedFile = "test-data/value-malformed.csv"
   private val badAfterGoodFile = "test-data/bad_after_good.csv"
   private val malformedRowFile = "test-data/malformedRow.csv"
+  private val unescapedQuotesAndUnescapedDelimiterFile =
+    "test-data/unescaped-quotes-unescaped-delimiter.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -2427,6 +2429,19 @@ abstract class CSVSuite
         .csv(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(csvTableName, """\\$1""")}")
       assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
     }
+  }
+
+  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
+    "unescapedQuotesAndUnescapedDelimiterFile correctly") {
+    // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
+    // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
+    val result = spark.read
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
+      .csv(testFile(unescapedQuotesAndUnescapedDelimiterFile)).collect()
+    val exceptResults = Array(Row("""a,""b,c""", "xyz"), Row("""a,b,c""", """x""yz"""))
+    assert(result.sameElements(exceptResults))
   }
 }
 
