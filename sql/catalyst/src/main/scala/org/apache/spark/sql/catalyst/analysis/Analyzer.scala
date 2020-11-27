@@ -395,41 +395,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
-    /*
-     *  GROUP BY a, b, c WITH ROLLUP
-     *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
-     *  Group Count: N + 1 (N is the number of group expressions)
-     *
-     *  We need to get all of its subsets for the rule described above, the subset is
-     *  represented as sequence of expressions.
-     */
-    def rollupExprs(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] =
-      exprs.inits.map(_.flatten).toIndexedSeq
-
-    /*
-     *  GROUP BY a, b, c WITH CUBE
-     *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-     *  Group Count: 2 ^ N (N is the number of group expressions)
-     *
-     *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
-     *  represented as sequence of expressions.
-     */
-    def cubeExprs(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] = {
-      // `cubeExprs0` is recursive and returns a lazy Stream. Here we call `toIndexedSeq` to
-      // materialize it and avoid serialization problems later on.
-      cubeExprs0(exprs).toIndexedSeq
-    }
-
-    def cubeExprs0(exprs: Seq[Seq[Expression]]): Seq[Seq[Expression]] = exprs.toList match {
-      case x :: xs =>
-        val initial = cubeExprs0(xs)
-        initial.map(x ++ _) ++ initial
-      case Nil =>
-        Seq(Seq.empty)
-    }
-
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
         case g: Grouping => g
@@ -609,13 +574,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(c: Cube), _, _) =>
-          a.copy(groupingExpressions =
-            getFinalGroupByExpressions(c.groupingSets, c.groupByExprs))
-        case a @ Aggregate(Seq(r: Rollup), _, _) =>
-          a.copy(groupingExpressions =
-            getFinalGroupByExpressions(r.groupingSets, r.groupByExprs))
-        case a @ Aggregate(Seq(gs: GroupingSets), _, _) =>
+        case a @ Aggregate(Seq(gs: GroupingSet), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
       }
@@ -627,17 +586,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (resolvedInfo.nonEmpty) {
         val (extraAggExprs, resolvedHavingCond) = resolvedInfo.get
         val newChild = h.child match {
-          case Aggregate(Seq(c @ Cube(groupingSets)), aggregateExpressions, child) =>
+          case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child) =>
             constructAggregate(
-              cubeExprs(groupingSets),
-              c.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(r @ Rollup(groupingSets)), aggregateExpressions, child) =>
-            constructAggregate(
-              rollupExprs(groupingSets),
-              r.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
-          case Aggregate(Seq(gs @ GroupingSets(groupingSets, _)), aggregateExpressions, child) =>
-            constructAggregate(
-              groupingSets, gs.groupByExprs, aggregateExpressions ++ extraAggExprs, child)
+              gs.selectedGroupByExprs, gs.groupByExprs,
+              aggregateExpressions ++ extraAggExprs, child)
         }
 
         // Since the exprId of extraAggExprs will be changed in the constructed aggregate, and the
@@ -660,29 +612,16 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(c: Cube), aggregateExpressions, _))
-          if agg.childrenResolved && (c.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(r: Rollup), aggregateExpressions, _))
-          if agg.childrenResolved && (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(
-        _, agg @ Aggregate(Seq(gs: GroupingSets), aggregateExpressions, _))
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(gs: GroupingSet), aggregateExpressions, _))
         if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(Seq(c @ Cube(groupingSets)), aggregateExpressions, child)
-        if (c.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(cubeExprs(groupingSets), c.groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(r @ Rollup(groupingSets)), aggregateExpressions, child)
-        if (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(rollupExprs(groupingSets), r.groupByExprs, aggregateExpressions, child)
-      case Aggregate(Seq(gs @ GroupingSets(groupingSets, _)), aggregateExpressions, child)
+      case Aggregate(Seq(gs: GroupingSet), aggregateExpressions, child)
         if (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
-        constructAggregate(groupingSets, gs.groupByExprs, aggregateExpressions, child)
+        constructAggregate(gs.selectedGroupByExprs, gs.groupByExprs, aggregateExpressions, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
