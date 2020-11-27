@@ -48,7 +48,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       insert: DataFrame,
       cols: Seq[String] = Nil,
       partitionExprs: Seq[String] = Nil,
-      mode: SaveMode): Unit = {
+      overwrite: Boolean): Unit = {
     val tmpView = "tmp_view"
     val columnList = if (cols.nonEmpty) cols.mkString("(", ",", ")") else ""
     val partitionList = if (partitionExprs.nonEmpty) {
@@ -56,8 +56,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     } else ""
     withTempView(tmpView) {
       insert.createOrReplaceTempView(tmpView)
-      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
-      sql(s"INSERT $overwrite TABLE $tableName $partitionList $columnList SELECT * FROM $tmpView")
+      val overwriteStr = if (overwrite) "OVERWRITE" else "INTO"
+      sql(
+        s"INSERT $overwriteStr TABLE $tableName $partitionList $columnList SELECT * FROM $tmpView")
     }
   }
 
@@ -66,82 +67,91 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - follow table output order") {
-    val t1 = "t1"
-    withTable(t1) {
+    withTable("t1") {
       val df = Seq((1, 2L, "3")).toDF()
       val cols = Seq("c1", "c2", "c3")
-      createTable(t1, cols, Seq("int", "long", "string"))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1, df, cols, mode = m)
-        verifyTable(t1, df)
+      createTable("t1", cols, Seq("int", "long", "string"))
+      Seq(false, true).foreach { m =>
+        processInsert("t1", df, cols, overwrite = m)
+        verifyTable("t1", df)
       }
     }
 
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1, df, cols, mode = m)
-        verifyTable(t1, df)
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert("t1", df, cols, overwrite = m)
+        verifyTable("t1", df)
+      }
+    }
+  }
+
+  test("insert with column list - follow table output order + partitioned table") {
+    val cols = Seq("c1", "c2", "c3", "c4")
+    val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
+
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert(
+          "t1", df.selectExpr("c1", "c2"), cols.take(2), Seq("c3=3", "c4=4"), overwrite = m)
+        verifyTable("t1", df)
       }
     }
 
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1, df.selectExpr("c1", "c2"), cols.take(2), Seq("c3=3", "c4=4"), mode = m)
-        verifyTable(t1, df)
-      }
-    }
-
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1,
-          df.selectExpr("c1", "c2", "c4"), cols.filterNot(_ == "c3"), Seq("c3=3", "c4"), mode = m)
-        verifyTable(t1, df)
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert("t1", df.selectExpr("c1", "c2", "c4"),
+          cols.filterNot(_ == "c3"), Seq("c3=3", "c4"), overwrite = m)
+        verifyTable("t1", df)
       }
     }
   }
 
   test("insert with column list - table output reorder") {
-    val t1 = "t1"
-    withTable(t1) {
+    withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
       val df = Seq((1, 2, 3)).toDF(cols: _*)
-      createTable(t1, cols, Seq("int", "int", "int"))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1, df, cols.reverse, mode = m)
-        verifyTable(t1, df.selectExpr(cols.reverse : _*))
+      createTable("t1", cols, Seq("int", "int", "int"))
+      Seq(false, true).foreach { m =>
+        processInsert("t1", df, cols.reverse, overwrite = m)
+        verifyTable("t1", df.selectExpr(cols.reverse: _*))
       }
     }
 
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(t1, df, cols.reverse, mode = m)
-        verifyTable(t1, df.selectExpr(cols.reverse : _*))
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert("t1", df, cols.reverse, overwrite = m)
+        verifyTable("t1", df.selectExpr(cols.reverse: _*))
+      }
+    }
+  }
+
+  test("insert with column list - table output reorder  + partitioned table") {
+    val cols = Seq("c1", "c2", "c3", "c4")
+    val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
+
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert(
+          "t1", df.selectExpr("c1", "c2"), cols.take(2).reverse, Seq("c3=3", "c4=4"), overwrite = m)
+        verifyTable("t1", df.selectExpr("c2", "c1", "c3", "c4"))
       }
     }
 
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(
-          t1, df.selectExpr("c1", "c2"), cols.take(2).reverse, Seq("c3=3", "c4=4"), mode = m)
-        verifyTable(t1, df.selectExpr("c2", "c1", "c3", "c4"))
-      }
-    }
-
-    withTable(t1) {
-      createTable(t1, cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
-      Seq(SaveMode.Append, SaveMode.Overwrite).foreach { m =>
-        processInsert(
-          t1, df.selectExpr("c1", "c2", "c4"), Seq("c4", "c2", "c1"), Seq("c3=3", "c4"), mode = m)
-        verifyTable(t1, df.selectExpr("c4", "c2", "c3", "c1"))
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      Seq(false, true).foreach { m =>
+        processInsert("t1",
+          df.selectExpr("c1", "c2", "c4"), Seq("c4", "c2", "c1"), Seq("c3=3", "c4"), overwrite = m)
+        verifyTable("t1", df.selectExpr("c4", "c2", "c3", "c1"))
       }
     }
   }
@@ -178,35 +188,30 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       assert(e2.getMessage.contains(msg))
     }
   }
-}
 
-/**
- * TODO: Currently, v1 and v2 have different error handling in some cases, we should merge this to
- * the base trait after unifying them
- */
-trait V1SQLInsertTestSuite extends SQLInsertTestSuite {
+  test("insert with column list - mismatched target table out size after rewritten query") {
+    val v2Msg = "Cannot write to 'testcat.t12', not enough data columns:"
+    val cols = Seq("c1", "c2", "c3", "c4")
 
-  test("insert with column list - mismatched target table out size w/ rewritten query") {
-    val table = "t1"
-
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 INT) USING $format")
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1) values(1)"))
-      assert(e1.getMessage.contains("target table has 3 column(s) but the inserted data has 1"))
+    withTable("t12") {
+      createTable("t12", cols, Seq.fill(4)("int"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t12 (c1) values(1)"))
+      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+        e1.getMessage.contains(v2Msg))
     }
 
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 STRING, c4 STRING) " +
-        s"USING $format PARTITIONED BY (c3, c4)")
+    withTable("t12") {
+      createTable("t12", cols, Seq.fill(4)("int"), cols.takeRight(2))
       val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO $table partition(c3='3', c4='4') (c1) values(1)")
+        sql(s"INSERT INTO t12 partition(c3=3, c4=4) (c1) values(1)")
       }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3"))
+      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+        e1.getMessage.contains(v2Msg))
     }
   }
 }
 
-class FileSourceSQLInsertTestSuite extends V1SQLInsertTestSuite with SharedSparkSession {
+class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, format)
@@ -221,24 +226,5 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-  }
-
-  test("insert with column list - mismatched target table out size w/ rewritten query") {
-    val table = "t1"
-    val msg = "Cannot write to 'testcat.t1', not enough data columns:"
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 INT) USING $format")
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $table (c1) values(1)"))
-      assert(e1.getMessage.contains(msg))
-    }
-
-    withTable(table) {
-      sql(s"CREATE TABLE $table(c1 INT, c2 INT, c3 STRING, c4 STRING) " +
-        s"USING $format PARTITIONED BY (c3, c4)")
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO $table partition(c3='3', c4='4') (c1) values(1)")
-      }
-      assert(e1.getMessage.contains(msg))
-    }
   }
 }

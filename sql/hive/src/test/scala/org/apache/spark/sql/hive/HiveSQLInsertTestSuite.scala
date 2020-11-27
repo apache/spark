@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.V1SQLInsertTestSuite
+import org.apache.spark.sql.SQLInsertTestSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveSQLInsertTestSuite extends V1SQLInsertTestSuite with TestHiveSingleton {
+class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
 }
