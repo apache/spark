@@ -34,6 +34,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.util.Utils
 
 /**
@@ -90,25 +91,60 @@ private[spark] object ClientArguments {
  * watcher that monitors and logs the application status. Waits for the application to terminate if
  * spark.kubernetes.submission.waitAppCompletion is true.
  *
- * @param conf The kubernetes driver config.
+ * @param k8sConf The kubernetes driver config.
  * @param builder Responsible for building the base driver pod based on a composition of
  *                implemented features.
  * @param kubernetesClient the client to talk to the Kubernetes API server
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
-    conf: KubernetesDriverConf,
+    k8sConf: KubernetesDriverConf,
     builder: KubernetesDriverBuilder,
     kubernetesClient: KubernetesClient,
     watcher: LoggingPodStatusWatcher) extends Logging {
 
+  private var appId: String = null
+
+  val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = k8sConf.sparkConf
+
+    override protected def onStopRequest(): Unit = {
+      stop()
+    }
+  }
+
+  def stop(): Unit = {
+    if (appId != null) {
+      val driverPod = kubernetesClient
+        .pods()
+        .inNamespace(k8sConf.namespace)
+        .withName(appId)
+      // scalastyle:off println
+      System.err.println(s"Deleting driver pod: ${appId}.")
+      // scalastyle:on println
+
+      k8sConf.sparkConf.get(KUBERNETES_SUBMIT_GRACE_PERIOD) match {
+        case Some(period) =>
+          driverPod
+            .withGracePeriod(period)
+            .delete()
+        case _ => driverPod.delete()
+      }
+    } else {
+      // scalastyle:off println
+      System.err.println("No applications found.")
+      // scalastyle:on println
+    }
+    launcherBackend.close()
+  }
+
   def run(): Unit = {
-    val resolvedDriverSpec = builder.buildFromFeatures(conf, kubernetesClient)
+    launcherBackend.connect()
+    val resolvedDriverSpec = builder.buildFromFeatures(k8sConf, kubernetesClient)
     val configMapName = KubernetesClientUtils.configMapNameDriver
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
-      conf.sparkConf, resolvedDriverSpec.systemProperties)
+      k8sConf.sparkConf, resolvedDriverSpec.systemProperties)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap)
-
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(resolvedDriverSpec.pod.container)
@@ -135,6 +171,9 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    appId = driverPodName
+    launcherBackend.setAppId(driverPodName)
+
     var watch: Watch = null
     val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
     try {
@@ -146,7 +185,9 @@ private[spark] class Client(
         kubernetesClient.pods().delete(createdDriverPod)
         throw e
     }
-    val sId = Seq(conf.namespace, driverPodName).mkString(":")
+    val sId = Seq(k8sConf.namespace, driverPodName).mkString(":")
+    watcher.launcherBackend(launcherBackend)
+
     breakable {
       while (true) {
         val podWithName = kubernetesClient

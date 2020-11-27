@@ -25,10 +25,12 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.KubernetesDriverConf
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
+import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
+  def launcherBackend(backend: LauncherBackend): Unit
 }
 
 /**
@@ -48,7 +50,15 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private var pod = Option.empty[Pod]
 
+  private var backend = Option.empty[LauncherBackend]
+
+  private var latestPhase: String = null
+
   private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
+
+  override def launcherBackend(launcherBackend: LauncherBackend): Unit = {
+    this.backend = Option(launcherBackend)
+  }
 
   override def reset(): Unit = {
     resourceTooOldReceived = false
@@ -58,10 +68,12 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
     this.pod = Option(pod)
     action match {
       case Action.DELETED | Action.ERROR =>
+        monitorApplication()
         closeWatch()
 
       case _ =>
         logLongStatus()
+        monitorApplication()
         if (hasCompleted()) {
           closeWatch()
         }
@@ -80,6 +92,25 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   private def logLongStatus(): Unit = {
     logInfo("State changed, new state: " + pod.map(formatPodState).getOrElse("unknown"))
+  }
+
+  private def monitorApplication(): Unit = {
+    // if phase changed, report to backend
+    if (phase != latestPhase) {
+      latestPhase = phase
+      latestPhase match {
+        case "Pending" => reportLauncherState(SparkAppHandle.State.SUBMITTED)
+        case "Running" => reportLauncherState(SparkAppHandle.State.RUNNING)
+        case "Succeeded" => reportLauncherState(SparkAppHandle.State.FINISHED)
+        case "Failed" => reportLauncherState(SparkAppHandle.State.FAILED)
+        case "Unknown" => reportLauncherState(SparkAppHandle.State.LOST)
+        case _ => reportLauncherState(SparkAppHandle.State.UNKNOWN)
+      }
+    }
+  }
+
+  def reportLauncherState(state: SparkAppHandle.State): Unit = {
+    backend.foreach(_.setState(state))
   }
 
   private def hasCompleted(): Boolean = {
