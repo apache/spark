@@ -1430,6 +1430,7 @@ test_that("column functions", {
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
     desc_nulls_first(c1) + desc_nulls_last(c1)
+  c29 <- acosh(c1) + asinh(c1) + atanh(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))

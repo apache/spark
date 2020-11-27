@@ -220,6 +220,19 @@ def acos(col):
     return _invoke_function_over_column("acos", col)
 
 
+def acosh(col):
+    """
+    Computes inverse hyperbolic cosine of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("acosh", col)
+
+
 def asin(col):
     """
     .. versionadded:: 1.3.0
@@ -233,6 +246,19 @@ def asin(col):
     return _invoke_function_over_column("asin", col)
 
 
+def asinh(col):
+    """
+    Computes inverse hyperbolic sine of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("asinh", col)
+
+
 def atan(col):
     """
     .. versionadded:: 1.4.0
@@ -243,6 +269,19 @@ def atan(col):
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
     """
     return _invoke_function_over_column("atan", col)
+
+
+def atanh(col):
+    """
+    Computes inverse hyperbolic tangent of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("atanh", col)
 
 
 @since(1.4)
