@@ -849,7 +849,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    if (ctx.groupingExpressionWithGroupingAnalytics.isEmpty) {
+    if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
       val groupByExpressions = expressionList(ctx.groupingExpressions)
       if (ctx.GROUPING != null) {
         // GROUP BY .... GROUPING SETS (...)
@@ -869,7 +869,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Aggregate(mappedGroupByExpressions, selectExpressions, query)
       }
     } else {
-      val groupByExpressions = ctx.groupingExpressionWithGroupingAnalytics.asScala
+      val groupByExpressions = ctx.groupingExpressionsWithGroupingAnalytics.asScala
       val others = groupByExpressions.filter(_.expression() != null)
         .map(e => expression(e.expression()))
       val groupingAnalyticsExpressions =

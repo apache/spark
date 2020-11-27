@@ -593,8 +593,8 @@ fromClause
     ;
 
 aggregationClause
-    : GROUP BY groupingExpressionWithGroupingAnalytics+=groupByClause
-        (',' groupingExpressionWithGroupingAnalytics+=groupByClause)*
+    : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
+        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
     | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
