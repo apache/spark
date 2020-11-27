@@ -927,7 +927,7 @@ class StreamingKMeans(object):
     @since('1.5.0')
     def setRandomCenters(self, dim, weight, seed):
         """
-        Set the initial centres to be random samples from
+        Set the initial centers to be random samples from
         a gaussian population with constant weights.
         """
         rng = random.RandomState(seed)

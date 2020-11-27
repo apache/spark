@@ -2088,7 +2088,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>${hive.version}</version>
+        <version>3.1.2</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>

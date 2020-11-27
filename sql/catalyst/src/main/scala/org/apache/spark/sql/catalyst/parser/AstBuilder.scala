@@ -815,10 +815,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: WindowClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
-    val baseWindowMap = ctx.namedWindow.asScala.map {
+    val baseWindowTuples = ctx.namedWindow.asScala.map {
       wCtx =>
         (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
-    }.toMap
+    }
+    baseWindowTuples.groupBy(_._1).foreach { kv =>
+      if (kv._2.size > 1) {
+        throw new ParseException(s"The definition of window '${kv._1}' is repetitive", ctx)
+      }
+    }
+    val baseWindowMap = baseWindowTuples.toMap
 
     // Handle cases like
     // window w1 as (partition by p_mfgr order by p_name
@@ -2946,7 +2952,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val location = visitLocationSpecList(ctx.locationSpec())
     val (cleanedOptions, newLocation) = cleanTableOptions(ctx, options, location)
     val comment = visitCommentSpecList(ctx.commentSpec())
-    val serdeInfo = getSerdeInfo(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    val serdeInfo =
+      getSerdeInfo(ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     (partTransforms, partCols, bucketSpec, cleanedProperties, cleanedOptions, newLocation, comment,
       serdeInfo)
   }
@@ -3147,7 +3154,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     // DROP TABLE works with either a table or a temporary view.
     DropTable(
-      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier()), "DROP TABLE"),
       ctx.EXISTS != null,
       ctx.PURGE != null)
   }
@@ -3452,12 +3459,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val relation = UnresolvedTableOrView(
+      visitMultipartIdentifier(ctx.multipartIdentifier()),
+      "DESCRIBE TABLE")
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
         throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
       } else {
         DescribeColumn(
-          UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
+          relation,
           ctx.describeColName.nameParts.asScala.map(_.getText).toSeq,
           isExtended)
       }
@@ -3472,10 +3482,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         Map.empty[String, String]
       }
-      DescribeRelation(
-        UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())),
-        partitionSpec,
-        isExtended)
+      DescribeRelation(relation, partitionSpec, isExtended)
     }
   }
 
@@ -3513,7 +3520,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val tableName = visitMultipartIdentifier(ctx.multipartIdentifier())
     if (ctx.ALL() != null) {
       checkPartitionSpec()
-      AnalyzeColumn(UnresolvedTableOrView(tableName), None, allColumns = true)
+      AnalyzeColumn(
+        UnresolvedTableOrView(tableName, "ANALYZE TABLE ... FOR ALL COLUMNS"),
+        None,
+        allColumns = true)
     } else if (ctx.identifierSeq() == null) {
       val partitionSpec = if (ctx.partitionSpec != null) {
         visitPartitionSpec(ctx.partitionSpec)
@@ -3521,13 +3531,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Map.empty[String, Option[String]]
       }
       AnalyzeTable(
-        UnresolvedTableOrView(tableName, allowTempView = false),
+        UnresolvedTableOrView(tableName, "ANALYZE TABLE", allowTempView = false),
         partitionSpec,
         noScan = ctx.identifier != null)
     } else {
       checkPartitionSpec()
       AnalyzeColumn(
-        UnresolvedTableOrView(tableName),
+        UnresolvedTableOrView(tableName, "ANALYZE TABLE ... FOR COLUMNS ..."),
         Option(visitIdentifierSeq(ctx.identifierSeq())),
         allColumns = false)
     }
@@ -3571,6 +3581,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     ShowCreateTable(
       UnresolvedTableOrView(
         visitMultipartIdentifier(ctx.multipartIdentifier()),
+        "SHOW CREATE TABLE",
         allowTempView = false),
       ctx.SERDE != null)
   }
@@ -3615,7 +3626,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
-    RefreshTable(UnresolvedTableOrView(visitMultipartIdentifier(ctx.multipartIdentifier())))
+    RefreshTable(
+      UnresolvedTableOrView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        "REFRESH TABLE"))
   }
 
   /**
@@ -3638,7 +3652,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       nameParts
     }
-    ShowColumns(UnresolvedTableOrView(tableName), namespace)
+    ShowColumns(UnresolvedTableOrView(tableName, "SHOW COLUMNS"), namespace)
   }
 
   /**
@@ -3849,7 +3863,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitShowTblProperties(
       ctx: ShowTblPropertiesContext): LogicalPlan = withOrigin(ctx) {
     ShowTableProperties(
-      UnresolvedTableOrView(visitMultipartIdentifier(ctx.table)),
+      UnresolvedTableOrView(visitMultipartIdentifier(ctx.table), "SHOW TBLPROPERTIES"),
       Option(ctx.key).map(visitTablePropertyKey))
   }
 
