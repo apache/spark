@@ -116,6 +116,7 @@ class FunctionsTests(ReusedSQLTestCase):
             c = get_values(b)
             diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
             return sum(diff) == len(a)
+
         assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos(df.a)).collect())
         assert_close([math.cos(i) for i in range(10)],
@@ -138,6 +139,21 @@ class FunctionsTests(ReusedSQLTestCase):
                      df.select(functions.hypot("a", 2)).collect())
         assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot(df.a, 2)).collect())
+
+    def test_inverse_trig_functions(self):
+        from pyspark.sql import functions
+
+        funs = [
+            (functions.acosh, "ACOSH"),
+            (functions.asinh, "ASINH"),
+            (functions.atanh, "ATANH"),
+        ]
+
+        cols = ["a", functions.col("a")]
+
+        for f, alias in funs:
+            for c in cols:
+                self.assertIn(f"{alias}(a)", repr(f(c)))
 
     def test_rand_functions(self):
         df = self.df
