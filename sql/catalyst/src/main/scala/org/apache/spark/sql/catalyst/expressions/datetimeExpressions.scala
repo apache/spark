@@ -1783,10 +1783,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
       localDateToDays(ld)
     } catch {
-      case e: java.time.DateTimeException =>
-        if (ansiEnabled) {
-          throw e
-        } else null
+      case _: java.time.DateTimeException if !ansiEnabled => null
     }
   }
 
@@ -1913,10 +1910,7 @@ case class MakeTimestamp(
       }
       instantToMicros(ldt.atZone(zoneId).toInstant)
     } catch {
-      case e: DateTimeException =>
-        if (ansiEnabled) {
-          throw e
-        } else null
+      case _: DateTimeException if !ansiEnabled => null
     }
   }
 

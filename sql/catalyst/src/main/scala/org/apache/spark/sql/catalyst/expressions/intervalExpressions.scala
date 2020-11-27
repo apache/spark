@@ -217,10 +217,7 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case e: ArithmeticException =>
-        if (ansiEnabled) {
-          throw e
-        } else null
+      case _: ArithmeticException if !ansiEnabled => null
     }
   }
 
