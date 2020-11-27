@@ -710,6 +710,11 @@ class SparkContext(config: SparkConf) extends Logging {
     }
   }
 
+  /** Set spark conf */
+  def setSparkConf(sparkConf: SparkConf): Unit = {
+    _conf = sparkConf
+  }
+
   /**
    * Get a local property set in this thread, or null if it is missing. See
    * `org.apache.spark.SparkContext.setLocalProperty`.
@@ -2611,6 +2616,7 @@ object SparkContext extends Logging {
           logWarning("Using an existing SparkContext; some configuration may not take effect.")
         }
       }
+      activeContext.get().setSparkConf(config)
       activeContext.get()
     }
   }
