@@ -3129,35 +3129,21 @@ class Analyzer(override val catalogManager: CatalogManager)
         tableOutput: Seq[Attribute],
         cols: Seq[NamedExpression],
         query: LogicalPlan): LogicalPlan = {
-      val errors = new mutable.ArrayBuffer[String]()
 
-      def failAdd(): Unit = {
-        val errMsg = if (errors.nonEmpty) errors.mkString("\n- ", "\n- ", "") else ""
+      if (cols.size != query.output.size) {
         query.failAnalysis(
           s"""Cannot write to table due to mismatched user specified columns and data columns:
              |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}$errMsg"""
+             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
             .stripMargin)
       }
 
-      if (cols.size != query.output.size) failAdd()
-
       val nameToQueryExpr = cols.zip(query.output).toMap
-      val resolved = tableOutput.flatMap { tableAttr =>
-        if (nameToQueryExpr.contains(tableAttr)) {
-          TableOutputResolver.checkField(
-            tableAttr, nameToQueryExpr(tableAttr), byName = false, conf, err => errors += err)
-        } else {
-          None
-        }
-      }
-
-      if (errors.nonEmpty) failAdd()
-
-      if (resolved == query.output) {
+      val reordered = tableOutput.flatMap {nameToQueryExpr.get(_).orElse(None) }
+      if (reordered == query.output) {
         query
       } else {
-        Project(resolved, query)
+        Project(reordered, query)
       }
     }
   }

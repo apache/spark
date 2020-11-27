@@ -76,7 +76,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         verifyTable("t1", df)
       }
     }
+  }
 
+  test("insert with column list - follow table output order + partitioned table") {
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
     withTable("t1") {
@@ -86,11 +88,6 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         verifyTable("t1", df)
       }
     }
-  }
-
-  test("insert with column list - follow table output order + partitioned table") {
-    val cols = Seq("c1", "c2", "c3", "c4")
-    val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
 
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
@@ -121,7 +118,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         verifyTable("t1", df.selectExpr(cols.reverse: _*))
       }
     }
+  }
 
+  test("insert with column list - table output reorder  + partitioned table") {
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
     withTable("t1") {
@@ -131,11 +130,6 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         verifyTable("t1", df.selectExpr(cols.reverse: _*))
       }
     }
-  }
-
-  test("insert with column list - table output reorder  + partitioned table") {
-    val cols = Seq("c1", "c2", "c3", "c4")
-    val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
 
     withTable("t1") {
       createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
@@ -190,20 +184,20 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "Cannot write to 'testcat.t12', not enough data columns:"
+    val v2Msg = "Cannot write to 'testcat.t1', not enough data columns:"
     val cols = Seq("c1", "c2", "c3", "c4")
 
-    withTable("t12") {
-      createTable("t12", cols, Seq.fill(4)("int"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t12 (c1) values(1)"))
+    withTable("t1") {
+      createTable("t1", cols, Seq.fill(4)("int"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
         e1.getMessage.contains(v2Msg))
     }
 
-    withTable("t12") {
-      createTable("t12", cols, Seq.fill(4)("int"), cols.takeRight(2))
+    withTable("t1") {
+      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
       val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO t12 partition(c3=3, c4=4) (c1) values(1)")
+        sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
       }
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
         e1.getMessage.contains(v2Msg))

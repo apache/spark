@@ -80,7 +80,7 @@ object TableOutputResolver {
     }
   }
 
-  def checkField(
+  private def checkField(
       tableAttr: Attribute,
       queryExpr: NamedExpression,
       byName: Boolean,
