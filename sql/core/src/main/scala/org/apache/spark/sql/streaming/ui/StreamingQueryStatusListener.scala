@@ -49,6 +49,8 @@ private[sql] class StreamingQueryStatusListener(
     cleanupInactiveQueries(count)
   }
 
+  // Events from the same query run will never be processed concurrently, so it's safe to
+  // access `progressIds` without any protection.
   private val queryToProgress = new ConcurrentHashMap[UUID, mutable.Queue[String]]()
 
   private def cleanupInactiveQueries(count: Long): Unit = {
@@ -75,7 +77,7 @@ private[sql] class StreamingQueryStatusListener(
       event.runId,
       Array.empty[String],
       startTimestamp,
-      true,
+      isActive = true,
       None
     ))
   }
@@ -97,7 +99,7 @@ private[sql] class StreamingQueryStatusListener(
   }
 
   override def onQueryTerminated(
-      event: StreamingQueryListener.QueryTerminatedEvent): Unit = synchronized {
+      event: StreamingQueryListener.QueryTerminatedEvent): Unit = {
     val querySummary = store.read(classOf[StreamingQueryData], event.runId)
     store.write(new StreamingQueryData(
       querySummary.name,
@@ -105,7 +107,7 @@ private[sql] class StreamingQueryStatusListener(
       querySummary.runId,
       querySummary.progressIds,
       querySummary.startTimestamp,
-      false,
+      isActive = false,
       querySummary.exception
     ))
     queryToProgress.remove(event.runId)
