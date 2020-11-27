@@ -526,7 +526,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg = intercept[AnalysisException] {
         sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg.contains(s"Table or view 'tempView' not found in database 'default'"))
+      assert(errMsg.contains("Temporary view `tempView` is not cached for analyzing columns"))
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -548,7 +548,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg2 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg2.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      assert(errMsg2.contains(
+        s"Temporary view `$globalTempDB`.`gTempView` is not cached for analyzing columns"))
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
