@@ -45,7 +45,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
 
   protected def processInsert(
       tableName: String,
-      insert: DataFrame,
+      input: DataFrame,
       cols: Seq[String] = Nil,
       partitionExprs: Seq[String] = Nil,
       overwrite: Boolean): Unit = {
@@ -55,7 +55,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       partitionExprs.mkString("PARTITION (", ",", ")")
     } else ""
     withTempView(tmpView) {
-      insert.createOrReplaceTempView(tmpView)
+      input.createOrReplaceTempView(tmpView)
       val overwriteStr = if (overwrite) "OVERWRITE" else "INTO"
       sql(
         s"INSERT $overwriteStr TABLE $tableName $partitionList $columnList SELECT * FROM $tmpView")
@@ -120,7 +120,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert with column list - table output reorder  + partitioned table") {
+  test("insert with column list - table output reorder + partitioned table") {
     val cols = Seq("c1", "c2", "c3", "c4")
     val df = Seq((1, 2, 3, 4)).toDF(cols: _*)
     withTable("t1") {
@@ -151,34 +151,31 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - duplicated columns") {
-    val t1 = "t1"
-    withTable(t1) {
+    withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
-      createTable(t1, cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $t1 (c1, c2, c2) values(1, 2, 3)"))
+      createTable("t1", cols, Seq("int", "long", "string"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)"))
       assert(e1.getMessage === "Found duplicate column(s) in the column list: `c2`;")
     }
   }
 
   test("insert with column list - invalid columns") {
-    val t1 = "t1"
-    withTable(t1) {
+    withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
-      createTable(t1, cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $t1 (c1, c2, c4) values(1, 2, 3)"))
+      createTable("t1", cols, Seq("int", "long", "string"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
       assert(e1.getMessage === "Cannot resolve column name c4;")
     }
   }
 
   test("insert with column list - mismatched column list size") {
-    val t1 = "t1"
-    val msg = "Cannot write to table due to mismatched user specified columns and data columns"
-    withTable(t1) {
+    val msg = "Cannot write to table due to mismatched user specified column size"
+    withTable("t1") {
       val cols = Seq("c1", "c2", "c3")
-      createTable(t1, cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO $t1 (c1, c2) values(1, 2, 3)"))
+      createTable("t1", cols, Seq("int", "long", "string"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
       assert(e1.getMessage.contains(msg))
-      val e2 = intercept[AnalysisException](sql(s"INSERT INTO $t1 (c1, c2, c3) values(1, 2)"))
+      val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
       assert(e2.getMessage.contains(msg))
     }
   }

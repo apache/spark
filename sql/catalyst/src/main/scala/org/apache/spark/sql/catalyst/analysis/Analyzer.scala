@@ -3131,10 +3131,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         query: LogicalPlan): LogicalPlan = {
       if (cols.size != query.output.size) {
         query.failAnalysis(
-          s"""Cannot write to table due to mismatched user specified columns and data columns:
-             |Specified columns: ${cols.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-            .stripMargin)
+          s"Cannot write to table due to mismatched user specified column size(${cols.size}) and" +
+            s" data column size(${query.output.size})")
       }
       val nameToQueryExpr = cols.zip(query.output).toMap
       // Static partition columns in the table output should not appear in the column list
