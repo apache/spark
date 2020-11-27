@@ -2977,6 +2977,20 @@ private[spark] object Utils extends Logging {
       0
     }
   }
+
+  def heartbeatTimeoutAsMs(sparkConf: SparkConf): Long = {
+    val heartbeatTimeoutMs = sparkConf.get(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+    val netWorkTimeoutMs = timeStringAsMs(s"${sparkConf.get(Network.NETWORK_TIMEOUT)}s")
+    val defaultNetWorkTimeoutMs = timeStringAsMs(Network.NETWORK_TIMEOUT.defaultValueString)
+
+    if (heartbeatTimeoutMs != defaultNetWorkTimeoutMs) {
+      heartbeatTimeoutMs
+    } else if (netWorkTimeoutMs != defaultNetWorkTimeoutMs) {
+      defaultNetWorkTimeoutMs
+    } else {
+      defaultNetWorkTimeoutMs
+    }
+  }
 }
 
 private[util] object CallerContext extends Logging {
