@@ -20,14 +20,17 @@ AS courseSales(course, year, earnings);
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP (course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year)) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY ROLLUP(course, year, (course, year), ()) ORDER BY course, year;
 
 -- CUBE
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE (course, year) ORDER BY course, year;
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year)) ORDER BY course, year;
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY CUBE(course, year, (course, year), ()) ORDER BY course, year;
 
 -- GROUPING SETS
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year);
+SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course, year, ());
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(course);
 SELECT course, year, SUM(earnings) FROM courseSales GROUP BY course, year GROUPING SETS(year);
 
