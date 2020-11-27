@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 case class StateSchemaNotCompatible(message: String) extends Exception(message)
 
@@ -42,21 +42,6 @@ class StateSchemaCompatibilityChecker(
       logDebug(s"Schema file for provider $providerId exists. Comparing with provided schema.")
       val (storedKeySchema, storedValueSchema) = readSchemaFile()
 
-      def fieldCompatible(fieldOld: StructField, fieldNew: StructField): Boolean = {
-        // compatibility for nullable
-        // - same: OK
-        // - non-nullable -> nullable: OK
-        // - nullable -> non-nullable: Not compatible
-        (fieldOld.dataType == fieldNew.dataType) &&
-          ((fieldOld.nullable == fieldNew.nullable) ||
-            (!fieldOld.nullable && fieldNew.nullable))
-      }
-
-      def schemaCompatible(schemaOld: StructType, schemaNew: StructType): Boolean = {
-        (schemaOld.length == schemaNew.length) &&
-          schemaOld.zip(schemaNew).forall { case (f1, f2) => fieldCompatible(f1, f2) }
-      }
-
       val errorMsg = "Provided schema doesn't match to the schema for existing state! " +
         "Please note that Spark allow difference of field name: check count of fields " +
         "and data type of each field.\n" +
@@ -67,8 +52,8 @@ class StateSchemaCompatibilityChecker(
 
       if (storedKeySchema.equals(keySchema) && storedValueSchema.equals(valueSchema)) {
         // schema is exactly same
-      } else if (!schemaCompatible(storedKeySchema, keySchema) ||
-        !schemaCompatible(storedValueSchema, valueSchema)) {
+      } else if (!schemasCompatible(storedKeySchema, keySchema) ||
+        !schemasCompatible(storedValueSchema, valueSchema)) {
         logError(errorMsg)
         throw StateSchemaNotCompatible(errorMsg)
       } else {
@@ -85,9 +70,41 @@ class StateSchemaCompatibilityChecker(
     }
   }
 
+  private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
+    equalsIgnoreCompatibleNullability(storedSchema, schema)
+
+  private def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
+    // This implementations should be same with DataType.equalsIgnoreCompatibleNullability, except
+    // this shouldn't check the name equality.
+    (from, to) match {
+      case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
+        (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
+
+      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+        (tn || !fn) &&
+          equalsIgnoreCompatibleNullability(fromKey, toKey) &&
+          equalsIgnoreCompatibleNullability(fromValue, toValue)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields).forall { case (fromField, toField) =>
+              (toField.nullable || !fromField.nullable) &&
+              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType)
+          }
+
+      case (fromDataType, toDataType) => fromDataType == toDataType
+    }
+  }
+
   private def readSchemaFile(): (StructType, StructType) = {
     val inStream = fm.open(schemaFileLocation)
     try {
+      val version = inStream.readInt()
+      // Currently we only support version 1, which we can simplify the version validation and
+      // the parse logic.
+      require(version == StateSchemaCompatibilityChecker.VERSION,
+        s"version $version is not supported.")
+
       val keySchemaStr = inStream.readUTF()
       val valueSchemaStr = inStream.readUTF()
 
@@ -104,6 +121,7 @@ class StateSchemaCompatibilityChecker(
   private def createSchemaFile(keySchema: StructType, valueSchema: StructType): Unit = {
     val outStream = fm.createAtomic(schemaFileLocation, overwriteIfPossible = true)
     try {
+      outStream.writeInt(StateSchemaCompatibilityChecker.VERSION)
       outStream.writeUTF(keySchema.json)
       outStream.writeUTF(valueSchema.json)
       outStream.close()
@@ -117,4 +135,8 @@ class StateSchemaCompatibilityChecker(
 
   private def schemaFile(storeCpLocation: Path): Path =
     new Path(new Path(storeCpLocation, "_metadata"), "schema")
+}
+
+object StateSchemaCompatibilityChecker {
+  val VERSION = 1
 }

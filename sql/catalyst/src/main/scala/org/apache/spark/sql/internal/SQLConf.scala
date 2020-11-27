@@ -1298,6 +1298,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
       .doc("When true, Spark will validate the state schema against schema on existing state and " +
         "fail query if it's incompatible.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 

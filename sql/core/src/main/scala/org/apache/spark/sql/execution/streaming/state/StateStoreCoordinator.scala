@@ -173,11 +173,11 @@ private class StateStoreCoordinator(conf: SparkConf, override val rpcEnv: RpcEnv
       context.reply(true)
 
     case ValidateSchema(providerId, keySchema, valueSchema, checkEnabled) =>
-      // normalize partition ID to validate only once for one state operator
-      val newProviderId = StateStoreProviderId.withNoPartitionInformation(providerId)
+      require(providerId.storeId.partitionId == -1, "Expect the normalized partition ID in" +
+        " provider ID")
 
-      val result = schemaValidated.getOrElseUpdate(newProviderId, {
-        val checker = new StateSchemaCompatibilityChecker(newProviderId, hadoopConf)
+      val result = schemaValidated.getOrElseUpdate(providerId, {
+        val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
 
         // regardless of configuration, we check compatibility to at least write schema file
         // if necessary
