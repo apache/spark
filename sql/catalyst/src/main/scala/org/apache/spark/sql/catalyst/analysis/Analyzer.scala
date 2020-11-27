@@ -609,13 +609,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggForResolving = h.child match {
         // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
         // groupingExpressions for condition resolving.
-        case a @ Aggregate(Seq(c @ Cube(_)), _, _) =>
+        case a @ Aggregate(Seq(c: Cube), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(c.groupingSets, c.groupByExprs))
-        case a @ Aggregate(Seq(r @ Rollup(_)), _, _) =>
+        case a @ Aggregate(Seq(r: Rollup), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(r.groupingSets, r.groupByExprs))
-        case a @ Aggregate(Seq(gs @ GroupingSets(_, _)), _, _) =>
+        case a @ Aggregate(Seq(gs: GroupingSets), _, _) =>
           a.copy(groupingExpressions =
             getFinalGroupByExpressions(gs.groupingSets, gs.groupByExprs))
       }
@@ -660,14 +660,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     // CUBE/ROLLUP/GROUPING SETS. This also replace grouping()/grouping_id() in resolved
     // Filter/Sort.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(c @ Cube(_)), aggregateExpressions, _))
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(c: Cube), aggregateExpressions, _))
           if agg.childrenResolved && (c.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
-      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(r @ Rollup(_)), aggregateExpressions, _))
+      case h @ UnresolvedHaving(_, agg @ Aggregate(Seq(r: Rollup), aggregateExpressions, _))
           if agg.childrenResolved && (r.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
       case h @ UnresolvedHaving(
-        _, agg @ Aggregate(Seq(gs @ GroupingSets(_, _)), aggregateExpressions, _))
+        _, agg @ Aggregate(Seq(gs: GroupingSets), aggregateExpressions, _))
         if agg.childrenResolved && (gs.groupByExprs ++ aggregateExpressions).forall(_.resolved) =>
         tryResolveHavingCondition(h)
 
