@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Map => JMap}
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -45,10 +45,27 @@ private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
     statement: String,
     confOverlay: JMap[String, String],
-    runInBackground: Boolean = true)
+    runInBackground: Boolean = true,
+    queryTimeout: Long)
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with SparkOperation
   with Logging {
+
+  // If a timeout value `queryTimeout` is specified by users and it is smaller than
+  // a global timeout value, we use the user-specified value.
+  // This code follows the Hive timeout behaviour (See #29933 for details).
+  private val timeout = {
+    val globalTimeout = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
+    if (globalTimeout > 0 && (queryTimeout <= 0 || globalTimeout < queryTimeout)) {
+      globalTimeout
+    } else {
+      queryTimeout
+    }
+  }
+
+  private val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+    new VariableSubstitution().substitute(statement)
+  }
 
   private var result: DataFrame = _
 
@@ -113,13 +130,23 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withLocalProperties {
+    try {
+      sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement)
+      getNextRowSetInternal(order, maxRowsL)
+    } finally {
+      sqlContext.sparkContext.clearJobGroup()
+    }
+  }
+
+  private def getNextRowSetInternal(
+      order: FetchOrientation,
+      maxRowsL: Long): RowSet = withLocalProperties {
     log.info(s"Received getNextRowSet request order=${order} and maxRowsL=${maxRowsL} " +
       s"with ${statementId}")
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val resultRowSet: RowSet =
-      ThriftserverShimUtils.resultRowSet(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter when FETCH_FIRST or FETCH_PRIOR
     if ((order.equals(FetchOrientation.FETCH_FIRST) ||
@@ -201,6 +228,23 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
+    if (timeout > 0) {
+      val timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+      timeoutExecutor.schedule(new Runnable {
+        override def run(): Unit = {
+          try {
+            timeoutCancel()
+          } catch {
+            case NonFatal(e) =>
+              setOperationException(new HiveSQLException(e))
+              logError(s"Error cancelling the query after timeout: $timeout seconds")
+          } finally {
+            timeoutExecutor.shutdown()
+          }
+        }
+      }, timeout, TimeUnit.SECONDS)
+    }
+
     if (!runInBackground) {
       execute()
     } else {
@@ -277,7 +321,6 @@ private[hive] class SparkExecuteStatementOperation(
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
 
-      val substitutorStatement = new VariableSubstitution(sqlContext.conf).substitute(statement)
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -326,6 +369,17 @@ private[hive] class SparkExecuteStatementOperation(
         }
       }
       sqlContext.sparkContext.clearJobGroup()
+    }
+  }
+
+  def timeoutCancel(): Unit = {
+    synchronized {
+      if (!getStatus.getState.isTerminal) {
+        logInfo(s"Query with $statementId timed out after $timeout seconds")
+        setState(OperationState.TIMEDOUT)
+        cleanup()
+        HiveThriftServer2.eventManager.onStatementTimeout(statementId)
+      }
     }
   }
 

@@ -495,7 +495,7 @@ final class ShuffleBlockFetcherIterator(
         hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
           case Success(dirsByExecId) =>
             fetchMultipleHostLocalBlocks(
-              hostLocalBlocksWithMissingDirs.filterKeys(bmIds.contains),
+              hostLocalBlocksWithMissingDirs.filterKeys(bmIds.contains).toMap,
               dirsByExecId,
               cached = false)
 

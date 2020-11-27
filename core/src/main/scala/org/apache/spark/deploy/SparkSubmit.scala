@@ -391,6 +391,7 @@ private[spark] class SparkSubmit extends Logging {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
         args.files = renameResourcesToLocalFS(args.files, localFiles)
+        args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }
 
@@ -1160,13 +1161,16 @@ private[spark] object SparkSubmitUtils {
     val br: IBiblioResolver = new IBiblioResolver
     br.setM2compatible(true)
     br.setUsepoms(true)
+    val defaultInternalRepo : Option[String] = sys.env.get("DEFAULT_ARTIFACT_REPOSITORY")
+    br.setRoot(defaultInternalRepo.getOrElse("https://repo1.maven.org/maven2/"))
     br.setName("central")
     cr.add(br)
 
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
+    sp.setRoot(sys.env.getOrElse(
+      "DEFAULT_ARTIFACT_REPOSITORY", "https://dl.bintray.com/spark-packages/maven"))
     sp.setName("spark-packages")
     cr.add(sp)
     cr
@@ -1182,10 +1186,12 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+    artifacts.map { ai =>
+      val artifactInfo = ai.asInstanceOf[Artifact]
+      val artifact = artifactInfo.getModuleRevisionId
+      val testSuffix = if (artifactInfo.getType == "test-jar") "-tests" else ""
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}${testSuffix}.jar"
     }.mkString(",")
   }
 

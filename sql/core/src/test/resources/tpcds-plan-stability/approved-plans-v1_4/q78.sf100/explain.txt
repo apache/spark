@@ -285,7 +285,7 @@ Input [12]: [ss_sold_year#25, ss_item_sk#2, ss_customer_sk#3, ss_qty#26, ss_wc#2
 Output [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
-PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_bill_customer_sk), IsNotNull(ws_item_sk)]
+PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk), IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_order_number:int,ws_quantity:int,ws_wholesale_cost:decimal(7,2),ws_sales_price:decimal(7,2)>
 
 (48) ColumnarToRow [codegen id : 16]
@@ -293,7 +293,7 @@ Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_
 
 (49) Filter [codegen id : 16]
 Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
-Condition : ((isnotnull(ws_sold_date_sk#55) AND isnotnull(ws_bill_customer_sk#57)) AND isnotnull(ws_item_sk#56))
+Condition : ((isnotnull(ws_sold_date_sk#55) AND isnotnull(ws_item_sk#56)) AND isnotnull(ws_bill_customer_sk#57))
 
 (50) Exchange
 Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
@@ -382,10 +382,10 @@ Right keys [3]: [ws_sold_year#76, ws_item_sk#56, ws_customer_sk#77]
 Join condition: None
 
 (69) Project [codegen id : 23]
-Output [12]: [round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) AS ratio#81, ss_qty#26 AS store_qty#82, ss_wc#27 AS store_wholesale_cost#83, ss_sp#28 AS store_sales_price#84, (coalesce(ws_qty#78, 0) + coalesce(cs_qty#52, 0)) AS other_chan_qty#85, CheckOverflow((promote_precision(cast(coalesce(ws_wc#79, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_wc#53, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_wholesale_cost#86, CheckOverflow((promote_precision(cast(coalesce(ws_sp#80, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_sp#54, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_sales_price#87, ss_sp#28, ss_qty#26, ws_qty#78, ss_wc#27, cs_qty#52]
+Output [12]: [round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) AS ratio#81, ss_qty#26 AS store_qty#82, ss_wc#27 AS store_wholesale_cost#83, ss_sp#28 AS store_sales_price#84, (coalesce(ws_qty#78, 0) + coalesce(cs_qty#52, 0)) AS other_chan_qty#85, CheckOverflow((promote_precision(cast(coalesce(ws_wc#79, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_wc#53, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_wholesale_cost#86, CheckOverflow((promote_precision(cast(coalesce(ws_sp#80, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_sp#54, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_sales_price#87, ss_qty#26, ss_wc#27, ss_sp#28, ws_qty#78, cs_qty#52]
 Input [15]: [ss_sold_year#25, ss_item_sk#2, ss_customer_sk#3, ss_qty#26, ss_wc#27, ss_sp#28, cs_qty#52, cs_wc#53, cs_sp#54, ws_sold_year#76, ws_item_sk#56, ws_customer_sk#77, ws_qty#78, ws_wc#79, ws_sp#80]
 
 (70) TakeOrderedAndProject
-Input [12]: [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87, ss_sp#28, ss_qty#26, ws_qty#78, ss_wc#27, cs_qty#52]
+Input [12]: [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87, ss_qty#26, ss_wc#27, ss_sp#28, ws_qty#78, cs_qty#52]
 Arguments: 100, [ratio#81 ASC NULLS FIRST, ss_qty#26 DESC NULLS LAST, ss_wc#27 DESC NULLS LAST, ss_sp#28 DESC NULLS LAST, other_chan_qty#85 ASC NULLS FIRST, other_chan_wholesale_cost#86 ASC NULLS FIRST, other_chan_sales_price#87 ASC NULLS FIRST, round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) ASC NULLS FIRST], [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87]
 

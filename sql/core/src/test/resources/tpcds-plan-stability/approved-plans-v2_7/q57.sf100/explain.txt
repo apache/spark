@@ -139,7 +139,7 @@ Arguments: [cs_item_sk#3 ASC NULLS FIRST], false, 0
 Output [3]: [i_item_sk#13, i_brand#14, i_category#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand), IsNotNull(i_category)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
 
 (19) ColumnarToRow [codegen id : 5]
@@ -147,7 +147,7 @@ Input [3]: [i_item_sk#13, i_brand#14, i_category#15]
 
 (20) Filter [codegen id : 5]
 Input [3]: [i_item_sk#13, i_brand#14, i_category#15]
-Condition : ((isnotnull(i_item_sk#13) AND isnotnull(i_brand#14)) AND isnotnull(i_category#15))
+Condition : ((isnotnull(i_item_sk#13) AND isnotnull(i_category#15)) AND isnotnull(i_brand#14))
 
 (21) Exchange
 Input [3]: [i_item_sk#13, i_brand#14, i_category#15]

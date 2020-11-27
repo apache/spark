@@ -563,7 +563,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims whitespaces (<= ASCII 32) from both ends of this string.
+   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
    *
    * Note that, this method is the same as java's {@link String#trim}, and different from
    * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.

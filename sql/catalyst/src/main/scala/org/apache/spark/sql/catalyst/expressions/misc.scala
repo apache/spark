@@ -53,7 +53,53 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
- * A function throws an exception if 'condition' is not true.
+ * Throw with the result of an expression (used for debugging).
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Throws an exception with `expr`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('custom error message');
+       java.lang.RuntimeException
+       custom error message
+  """,
+  since = "3.1.0")
+case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def foldable: Boolean = false
+  override def nullable: Boolean = true
+  override def dataType: DataType = NullType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def prettyName: String = "raise_error"
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      throw new RuntimeException()
+    }
+    throw new RuntimeException(value.toString)
+  }
+
+  // if (true) is to avoid codegen compilation exception that statement is unreachable
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ExprCode(
+      code = code"""${eval.code}
+        |if (true) {
+        |  if (${eval.isNull}) {
+        |    throw new RuntimeException();
+        |  }
+        |  throw new RuntimeException(${eval.value}.toString());
+        |}""".stripMargin,
+      isNull = TrueLiteral,
+      value = JavaCode.defaultLiteral(dataType)
+    )
+  }
+}
+
+/**
+ * A function that throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Throws an exception if `expr` is not true.",
@@ -61,42 +107,27 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     Examples:
       > SELECT _FUNC_(0 < 1);
        NULL
-  """)
-case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def nullable: Boolean = true
-
-  override def inputTypes: Seq[DataType] = Seq(BooleanType)
-
-  override def dataType: DataType = NullType
+  """,
+  since = "2.0.0")
+case class AssertTrue(left: Expression, right: Expression, child: Expression)
+  extends RuntimeReplaceable {
 
   override def prettyName: String = "assert_true"
 
-  private val errMsg = s"'${child.simpleString(SQLConf.get.maxToStringFields)}' is not true!"
-
-  override def eval(input: InternalRow) : Any = {
-    val v = child.eval(input)
-    if (v == null || java.lang.Boolean.FALSE.equals(v)) {
-      throw new RuntimeException(errMsg)
-    } else {
-      null
-    }
+  def this(left: Expression, right: Expression) = {
+    this(left, right, If(left, Literal(null), RaiseError(right)))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the value is null or false.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
-    ExprCode(code = code"""${eval.code}
-       |if (${eval.isNull} || !${eval.value}) {
-       |  throw new RuntimeException($errMsgField);
-       |}""".stripMargin, isNull = TrueLiteral,
-      value = JavaCode.defaultLiteral(dataType))
+  def this(left: Expression) = {
+    this(left, Literal(s"'${left.simpleString(SQLConf.get.maxToStringFields)}' is not true!"))
   }
 
-  override def sql: String = s"assert_true(${child.sql})"
+  override def flatArguments: Iterator[Any] = Iterator(left, right)
+  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+}
+
+object AssertTrue {
+  def apply(left: Expression): AssertTrue = new AssertTrue(left)
 }
 
 /**
@@ -108,10 +139,10 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     Examples:
       > SELECT _FUNC_();
        default
-  """)
+  """,
+  since = "1.6.0")
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def prettyName: String = "current_database"
 }
@@ -129,7 +160,6 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
   since = "3.1.0")
 case class CurrentCatalog() extends LeafExpression with Unevaluable {
   override def dataType: DataType = StringType
-  override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
 }
@@ -144,7 +174,8 @@ case class CurrentCatalog() extends LeafExpression with Unevaluable {
   """,
   note = """
     The function is non-deterministic.
-  """)
+  """,
+  since = "2.3.0")
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {
@@ -185,6 +216,11 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_() - Returns the Spark version. The string contains 2 fields, the first being a release version and the second being a git revision.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       3.1.0 a6d6ea3efedbad14d99c24143834cd4e2e52fb40
+  """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class SparkVersion() extends LeafExpression with CodegenFallback {
@@ -200,7 +236,7 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
 @ExpressionDescription(
   usage = """_FUNC_(expr) - Return DDL-formatted type string for the data type of the input.""",
   examples = """
-      Examples:
+    Examples:
       > SELECT _FUNC_(1);
        int
       > SELECT _FUNC_(array(1));

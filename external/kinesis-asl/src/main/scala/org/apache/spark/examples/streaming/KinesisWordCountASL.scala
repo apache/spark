@@ -43,7 +43,7 @@ import org.apache.spark.streaming.kinesis.KinesisInputDStream
  *
  * Usage: KinesisWordCountASL <app-name> <stream-name> <endpoint-url> <region-name>
  *   <app-name> is the name of the consumer app, used to track the read data in DynamoDB
- *   <stream-name> name of the Kinesis stream (ie. mySparkStream)
+ *   <stream-name> name of the Kinesis stream (i.e. mySparkStream)
  *   <endpoint-url> endpoint of the Kinesis service
  *     (e.g. https://kinesis.us-east-1.amazonaws.com)
  *
@@ -167,9 +167,9 @@ object KinesisWordCountASL extends Logging {
  * Usage: KinesisWordProducerASL <stream-name> <endpoint-url> \
  *   <records-per-sec> <words-per-record>
  *
- *   <stream-name> is the name of the Kinesis stream (ie. mySparkStream)
+ *   <stream-name> is the name of the Kinesis stream (i.e. mySparkStream)
  *   <endpoint-url> is the endpoint of the Kinesis service
- *     (ie. https://kinesis.us-east-1.amazonaws.com)
+ *     (i.e. https://kinesis.us-east-1.amazonaws.com)
  *   <records-per-sec> is the rate of records per second to put onto the stream
  *   <words-per-record> is the number of words per record
  *

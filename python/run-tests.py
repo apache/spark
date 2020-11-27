@@ -48,7 +48,7 @@ def print_red(text):
     print('\033[31m' + text + '\033[0m')
 
 
-SKIPPED_TESTS = Manager().dict()
+SKIPPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
@@ -72,6 +72,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
+        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -138,6 +140,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
                 key = (pyspark_python, test_name)
+                assert SKIPPED_TESTS is not None
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
         except:
@@ -157,7 +160,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "python3.8", "pypy3"] if which(x)]
+    python_execs = [x for x in ["python3.6", "pypy3"] if which(x)]
 
     if "python3.6" not in python_execs:
         p = which("python3")
@@ -318,4 +321,5 @@ def main():
 
 
 if __name__ == "__main__":
+    SKIPPED_TESTS = Manager().dict()
     main()

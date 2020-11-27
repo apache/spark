@@ -256,9 +256,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
 
-    // Blacklisting executor for stage
+    // Excluding executor for stage
     time += 1
-    listener.onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage(
+    listener.onExecutorExcludedForStage(SparkListenerExecutorExcludedForStage(
       time = time,
       executorId = execIds.head,
       taskFailures = 2,
@@ -273,18 +273,21 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(executorStageSummaryWrappers.nonEmpty)
     executorStageSummaryWrappers.foreach { exec =>
-      // only the first executor is expected to be blacklisted
-      val expectedBlacklistedFlag = exec.executorId == execIds.head
-      assert(exec.info.isBlacklistedForStage === expectedBlacklistedFlag)
+      // only the first executor is expected to be excluded
+      val expectedExcludedFlag = exec.executorId == execIds.head
+      assert(exec.info.isBlacklistedForStage === expectedExcludedFlag)
+      assert(exec.info.isExcludedForStage === expectedExcludedFlag)
     }
 
     check[ExecutorSummaryWrapper](execIds.head) { exec =>
       assert(exec.info.blacklistedInStages === Set(stages.head.stageId))
+      assert(exec.info.excludedInStages === Set(stages.head.stageId))
+
     }
 
-    // Blacklisting node for stage
+    // Excluding node for stage
     time += 1
-    listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
+    listener.onNodeExcludedForStage(SparkListenerNodeExcludedForStage(
       time = time,
       hostId = "2.example.com", // this is where the second executor is hosted
       executorFailures = 1,
@@ -299,8 +302,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     assert(executorStageSummaryWrappersForNode.nonEmpty)
     executorStageSummaryWrappersForNode.foreach { exec =>
-      // both executor is expected to be blacklisted
+      // both executor is expected to be excluded
       assert(exec.info.isBlacklistedForStage)
+      assert(exec.info.isExcludedForStage)
+
     }
 
     // Fail one of the tasks, re-start it.
@@ -450,6 +455,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[ExecutorSummaryWrapper](execIds.head) { exec =>
       assert(exec.info.blacklistedInStages === Set())
+      assert(exec.info.excludedInStages === Set())
     }
 
     // Submit stage 2.
@@ -466,9 +472,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.submissionTime === Some(new Date(stages.last.submissionTime.get)))
     }
 
-    // Blacklisting node for stage
+    // Excluding node for stage
     time += 1
-    listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
+    listener.onNodeExcludedForStage(SparkListenerNodeExcludedForStage(
       time = time,
       hostId = "1.example.com",
       executorFailures = 1,
@@ -477,6 +483,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[ExecutorSummaryWrapper](execIds.head) { exec =>
       assert(exec.info.blacklistedInStages === Set(stages.last.stageId))
+      assert(exec.info.excludedInStages === Set(stages.last.stageId))
     }
 
     // Start and fail all tasks of stage 2.
@@ -628,30 +635,34 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(job.info.numSkippedTasks === s1Tasks.size)
     }
 
-    // Blacklist an executor.
+    // Exclude an executor.
     time += 1
-    listener.onExecutorBlacklisted(SparkListenerExecutorBlacklisted(time, "1", 42))
+    listener.onExecutorExcluded(SparkListenerExecutorExcluded(time, "1", 42))
     check[ExecutorSummaryWrapper]("1") { exec =>
       assert(exec.info.isBlacklisted)
+      assert(exec.info.isExcluded)
     }
 
     time += 1
-    listener.onExecutorUnblacklisted(SparkListenerExecutorUnblacklisted(time, "1"))
+    listener.onExecutorUnexcluded(SparkListenerExecutorUnexcluded(time, "1"))
     check[ExecutorSummaryWrapper]("1") { exec =>
       assert(!exec.info.isBlacklisted)
+      assert(!exec.info.isExcluded)
     }
 
-    // Blacklist a node.
+    // Exclude a node.
     time += 1
-    listener.onNodeBlacklisted(SparkListenerNodeBlacklisted(time, "1.example.com", 2))
+    listener.onNodeExcluded(SparkListenerNodeExcluded(time, "1.example.com", 2))
     check[ExecutorSummaryWrapper]("1") { exec =>
       assert(exec.info.isBlacklisted)
+      assert(exec.info.isExcluded)
     }
 
     time += 1
-    listener.onNodeUnblacklisted(SparkListenerNodeUnblacklisted(time, "1.example.com"))
+    listener.onNodeUnexcluded(SparkListenerNodeUnexcluded(time, "1.example.com"))
     check[ExecutorSummaryWrapper]("1") { exec =>
       assert(!exec.info.isBlacklisted)
+      assert(!exec.info.isExcluded)
     }
 
     // Stop executors.

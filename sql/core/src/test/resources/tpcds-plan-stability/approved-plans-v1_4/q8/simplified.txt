@@ -1,35 +1,35 @@
 TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
   WholeStageCodegen (9)
-    HashAggregate [s_store_name,sum] [sum,sum(UnscaledValue(ss_net_profit)),sum(ss_net_profit)]
+    HashAggregate [s_store_name,sum] [sum(UnscaledValue(ss_net_profit)),sum(ss_net_profit),sum]
       InputAdapter
         Exchange [s_store_name] #1
           WholeStageCodegen (8)
             HashAggregate [s_store_name,ss_net_profit] [sum,sum]
-              Project [s_store_name,ss_net_profit]
-                BroadcastHashJoin [ca_zip,s_zip]
-                  Project [s_store_name,s_zip,ss_net_profit]
-                    BroadcastHashJoin [s_store_sk,ss_store_sk]
-                      Project [ss_net_profit,ss_store_sk]
-                        BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+              Project [ss_net_profit,s_store_name]
+                BroadcastHashJoin [s_zip,ca_zip]
+                  Project [ss_net_profit,s_store_name,s_zip]
+                    BroadcastHashJoin [ss_store_sk,s_store_sk]
+                      Project [ss_store_sk,ss_net_profit]
+                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                           Filter [ss_sold_date_sk,ss_store_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.store_sales [ss_net_profit,ss_sold_date_sk,ss_store_sk]
+                                Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
                           InputAdapter
                             BroadcastExchange #2
                               WholeStageCodegen (1)
                                 Project [d_date_sk]
-                                  Filter [d_date_sk,d_qoy,d_year]
+                                  Filter [d_qoy,d_year,d_date_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.date_dim [d_date_sk,d_qoy,d_year]
+                                        Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                       InputAdapter
                         BroadcastExchange #3
                           WholeStageCodegen (2)
                             Filter [s_store_sk,s_zip]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.store [s_store_name,s_store_sk,s_zip]
+                                  Scan parquet default.store [s_store_sk,s_store_name,s_zip]
                   InputAdapter
                     BroadcastExchange #4
                       WholeStageCodegen (7)
@@ -49,13 +49,13 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                           WholeStageCodegen (5)
                                             Project [ca_zip]
                                               Filter [count(1)]
-                                                HashAggregate [ca_zip,count] [ca_zip,count,count(1),count(1)]
+                                                HashAggregate [ca_zip,count] [count(1),ca_zip,count(1),count]
                                                   InputAdapter
                                                     Exchange [ca_zip] #7
                                                       WholeStageCodegen (4)
                                                         HashAggregate [ca_zip] [count,count]
                                                           Project [ca_zip]
-                                                            BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
+                                                            BroadcastHashJoin [ca_address_sk,c_current_addr_sk]
                                                               Filter [ca_address_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
@@ -64,7 +64,7 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                                                 BroadcastExchange #8
                                                                   WholeStageCodegen (3)
                                                                     Project [c_current_addr_sk]
-                                                                      Filter [c_current_addr_sk,c_preferred_cust_flag]
+                                                                      Filter [c_preferred_cust_flag,c_current_addr_sk]
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.customer [c_current_addr_sk,c_preferred_cust_flag]

@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._

@@ -25,9 +25,11 @@ import scala.xml.Node
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.ui.SparkUI
 
 class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
 
@@ -71,6 +73,12 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.appName).thenReturn("testing")
     when(tab.headerTabs).thenReturn(Seq.empty)
     when(tab.store).thenReturn(store)
+    val ui = mock(classOf[SparkUI])
+    when(request.getParameter("id")).thenReturn(id.toString)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    when(ui.conf).thenReturn(new SparkConf())
+    when(tab.parent).thenReturn(ui)
 
     val streamQuery = createStreamQueryUIData(id)
     when(store.allQueryUIData).thenReturn(Seq(streamQuery))

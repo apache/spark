@@ -568,7 +568,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
-      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
+      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be greater than the value of " +
       s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
   }
 
@@ -603,7 +603,7 @@ private[spark] object SparkConf extends Logging {
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new blacklisting options, spark.blacklist.*"),
+        "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
@@ -612,7 +612,31 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
-        "Feature replaced with new plugin API. See Monitoring documentation.")
+        "Feature replaced with new plugin API. See Monitoring documentation."),
+      DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.enabled"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
+      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
+      DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
+        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
+      DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
+        "Please use spark.excludeOnFailure.timeout"),
+      DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
+        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
+      DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
+        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
+      DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
+        "Please use spark.excludeOnFailure.killExcludedExecutors"),
+      DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
+        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

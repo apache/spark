@@ -30,7 +30,9 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val keytabFileName = "mariadb.keytab"
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "mariadb:10.4"
+    // If you change `imageName`, you need to update the version of `mariadb-plugin-gssapi-server`
+    // in `resources/mariadb_docker_entrypoint.sh` accordingly.
+    override val imageName = "mariadb:10.5"
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )

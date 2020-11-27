@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.IOException
 import java.util.Collection
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean

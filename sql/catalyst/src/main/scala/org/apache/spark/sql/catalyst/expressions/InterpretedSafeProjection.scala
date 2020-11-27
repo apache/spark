@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -29,6 +30,15 @@ import org.apache.spark.sql.types._
  *                    to a schema.
  */
 class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection {
+
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
+  private[this] val exprs = if (subExprEliminationEnabled) {
+    runtime.proxyExpressions(expressions)
+  } else {
+    expressions
+  }
 
   private[this] val mutableRow = new SpecificInternalRow(expressions.map(_.dataType))
 
@@ -49,7 +59,7 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
         }
       }
     }
-    (e, f)
+    (exprs(i), f)
   }
 
   private def generateSafeValueConverter(dt: DataType): Any => Any = dt match {
@@ -97,6 +107,10 @@ class InterpretedSafeProjection(expressions: Seq[Expression]) extends Projection
   }
 
   override def apply(row: InternalRow): InternalRow = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(row)
+    }
+
     var i = 0
     while (i < exprsWithWriters.length) {
       val (expr, writer) = exprsWithWriters(i)

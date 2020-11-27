@@ -106,7 +106,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     testParsingMultipleResources(conf, ResourceProfile.getOrCreateDefaultProfile(conf))
   }
 
-  def testParsingMultipleResources(conf: SparkConf, resourceProfile: ResourceProfile) {
+  def testParsingMultipleResources(conf: SparkConf, resourceProfile: ResourceProfile): Unit = {
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     // we don't really use this, just need it to get at the parser function

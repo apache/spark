@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -40,10 +41,15 @@ object UnsupportedOperationChecker extends Logging {
     }
   }
 
+  /**
+   * Checks for possible correctness issue in chained stateful operators. The behavior is
+   * controlled by SQL config `spark.sql.streaming.statefulOperator.checkCorrectness.enabled`.
+   * Once it is enabled, an analysis exception will be thrown. Otherwise, Spark will just
+   * print a warning message.
+   */
   def checkStreamingQueryGlobalWatermarkLimit(
       plan: LogicalPlan,
-      outputMode: OutputMode,
-      failWhenDetected: Boolean): Unit = {
+      outputMode: OutputMode): Unit = {
     def isStatefulOperationPossiblyEmitLateRows(p: LogicalPlan): Boolean = p match {
       case s: Aggregate
         if s.isStreaming && outputMode == InternalOutputModes.Append => true
@@ -62,6 +68,8 @@ object UnsupportedOperationChecker extends Logging {
       case _ => false
     }
 
+    val failWhenDetected = SQLConf.get.statefulOperatorCorrectnessCheckEnabled
+
     try {
       plan.foreach { subPlan =>
         if (isStatefulOperation(subPlan)) {
@@ -73,7 +81,10 @@ object UnsupportedOperationChecker extends Logging {
               "The query contains stateful operation which can emit rows older than " +
               "the current watermark plus allowed late record delay, which are \"late rows\"" +
               " in downstream stateful operations and these rows can be discarded. " +
-              "Please refer the programming guide doc for more details."
+              "Please refer the programming guide doc for more details. If you understand " +
+              "the possible risk of correctness issue and still need to run the query, " +
+              "you can disable this check by setting the config " +
+              "`spark.sql.streaming.statefulOperator.checkCorrectness.enabled` to false."
             throwError(errorMsg)(plan)
           }
         }
@@ -212,11 +223,11 @@ object UnsupportedOperationChecker extends Logging {
         case m: FlatMapGroupsWithState if m.isStreaming =>
 
           // Check compatibility with output modes and aggregations in query
-          val aggsAfterFlatMapGroups = collectStreamingAggregates(plan)
+          val aggsInQuery = collectStreamingAggregates(plan)
 
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
-            if (aggsAfterFlatMapGroups.nonEmpty) {
+            if (aggsInQuery.nonEmpty) {
               throwError(
                 "mapGroupsWithState is not supported with aggregation " +
                   "on a streaming DataFrame/Dataset")
@@ -225,8 +236,8 @@ object UnsupportedOperationChecker extends Logging {
                 "mapGroupsWithState is not supported with " +
                   s"$outputMode output mode on a streaming DataFrame/Dataset")
             }
-          } else {                                           // check latMapGroupsWithState
-            if (aggsAfterFlatMapGroups.isEmpty) {
+          } else {                                           // check flatMapGroupsWithState
+            if (aggsInQuery.isEmpty) {
               // flatMapGroupsWithState without aggregation: operation's output mode must
               // match query output mode
               m.outputMode match {
@@ -252,7 +263,7 @@ object UnsupportedOperationChecker extends Logging {
               } else if (collectStreamingAggregates(m).nonEmpty) {
                 throwError(
                   "flatMapGroupsWithState in append mode is not supported after " +
-                    s"aggregation on a streaming DataFrame/Dataset")
+                    "aggregation on a streaming DataFrame/Dataset")
               }
             }
           }
@@ -291,17 +302,17 @@ object UnsupportedOperationChecker extends Logging {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
 
-            case LeftSemi | LeftAnti =>
+            case LeftAnti =>
               if (right.isStreaming) {
-                throwError("Left semi/anti joins with a streaming DataFrame/Dataset " +
+                throwError(s"$LeftAnti joins with a streaming DataFrame/Dataset " +
                     "on the right are not supported")
               }
 
-            // We support streaming left outer joins with static on the right always, and with
-            // stream on both sides under the appropriate conditions.
-            case LeftOuter =>
+            // We support streaming left outer and left semi joins with static on the right always,
+            // and with stream on both sides under the appropriate conditions.
+            case LeftOuter | LeftSemi =>
               if (!left.isStreaming && right.isStreaming) {
-                throwError("Left outer join with a streaming DataFrame/Dataset " +
+                throwError(s"$joinType join with a streaming DataFrame/Dataset " +
                   "on the right and a static DataFrame/Dataset on the left is not supported")
               } else if (left.isStreaming && right.isStreaming) {
                 val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
@@ -311,7 +322,8 @@ object UnsupportedOperationChecker extends Logging {
                     left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
 
                 if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
+                  throwError(
+                    s"Stream-stream $joinType join between two streaming DataFrame/Datasets " +
                     "is not supported without a watermark in the join keys, or a watermark on " +
                     "the nullable side and an appropriate range condition")
                 }
@@ -387,7 +399,7 @@ object UnsupportedOperationChecker extends Logging {
       checkUnsupportedExpressions(subPlan)
     }
 
-    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode, failWhenDetected = false)
+    checkStreamingQueryGlobalWatermarkLimit(plan, outputMode)
   }
 
   def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {

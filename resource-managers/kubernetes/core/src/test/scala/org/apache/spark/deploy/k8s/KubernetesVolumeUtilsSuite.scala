@@ -118,6 +118,17 @@ class KubernetesVolumeUtilsSuite extends SparkFunSuite {
     assert(e.getMessage.contains("hostPath.volumeName.options.path"))
   }
 
+  test("SPARK-33063: Fails on missing option key in persistentVolumeClaim") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.path", "/path")
+    sparkConf.set("test.persistentVolumeClaim.volumeName.mount.readOnly", "true")
+
+    val e = intercept[NoSuchElementException] {
+      KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, "test.")
+    }
+    assert(e.getMessage.contains("persistentVolumeClaim.volumeName.options.claimName"))
+  }
+
   test("Parses read-only nfs volumes correctly") {
     val sparkConf = new SparkConf(false)
     sparkConf.set("test.nfs.volumeName.mount.path", "/path")

@@ -24,13 +24,20 @@ import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnectionProvider
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., postgres:13.0):
+ * {{{
+ *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *     ./build/sbt -Pdocker-integration-tests "testOnly *PostgresKrbIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val userName = s"postgres/$dockerIp"
   override protected val keytabFileName = "postgres.keytab"
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:12.0"
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:13.0")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )

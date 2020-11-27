@@ -23,13 +23,15 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.resource.ResourceProfile
 
 private[spark] class KubernetesExecutorBuilder {
 
   def buildFromFeatures(
       conf: KubernetesExecutorConf,
       secMgr: SecurityManager,
-      client: KubernetesClient): SparkPod = {
+      client: KubernetesClient,
+      resourceProfile: ResourceProfile): KubernetesExecutorSpec = {
     val initialPod = conf.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
@@ -40,14 +42,26 @@ private[spark] class KubernetesExecutorBuilder {
       .getOrElse(SparkPod.initialPod())
 
     val features = Seq(
-      new BasicExecutorFeatureStep(conf, secMgr),
+      new BasicExecutorFeatureStep(conf, secMgr, resourceProfile),
       new ExecutorKubernetesCredentialsFeatureStep(conf),
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
       new LocalDirsFeatureStep(conf))
 
-    features.foldLeft(initialPod) { case (pod, feature) => feature.configurePod(pod) }
+    val spec = KubernetesExecutorSpec(
+      initialPod,
+      executorKubernetesResources = Seq.empty)
+
+    // If using a template this will always get the resources from that and combine
+    // them with any Spark conf or ResourceProfile resources.
+    features.foldLeft(spec) { case (spec, feature) =>
+      val configuredPod = feature.configurePod(spec.pod)
+      val addedResources = feature.getAdditionalKubernetesResources()
+      KubernetesExecutorSpec(
+        configuredPod,
+        spec.executorKubernetesResources ++ addedResources)
+    }
   }
 
 }

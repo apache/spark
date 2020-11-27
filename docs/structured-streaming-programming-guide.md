@@ -861,6 +861,8 @@ isStreaming(df)
 </div>
 </div>
 
+You may want to check the query plan of the query, as Spark could inject stateful operations during interpret of SQL statement against streaming dataset. Once stateful operations are injected in the query plan, you may need to check your query with considerations in stateful operations. (e.g. output mode, watermark, state store size maintenance, etc.)
+
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
 
@@ -1115,7 +1117,7 @@ val staticDf = spark.read. ...
 val streamingDf = spark.readStream. ...
 
 streamingDf.join(staticDf, "type")          // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  // right outer join with a static DF  
+streamingDf.join(staticDf, "type", "left_outer")  // left outer join with a static DF
 
 {% endhighlight %}
 
@@ -1126,7 +1128,7 @@ streamingDf.join(staticDf, "type", "right_join")  // right outer join with a sta
 Dataset<Row> staticDf = spark.read(). ...;
 Dataset<Row> streamingDf = spark.readStream(). ...;
 streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join");  // right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer");  // left outer join with a static DF
 {% endhighlight %}
 
 
@@ -1137,7 +1139,7 @@ streamingDf.join(staticDf, "type", "right_join");  // right outer join with a st
 staticDf = spark.read. ...
 streamingDf = spark.readStream. ...
 streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  # right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1149,10 +1151,10 @@ staticDf <- read.df(...)
 streamingDf <- read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
 joined <- join(
+            streamingDf,
             staticDf,
-            streamingDf, 
             streamingDf$value == staticDf$value,
-            "right_outer")  # right outer join with a static DF
+            "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1761,7 +1763,9 @@ Here is the compatibility matrix.
   <tr>
     <td colspan="2" style="vertical-align: middle;">Queries with <code>mapGroupsWithState</code></td>
     <td style="vertical-align: middle;">Update</td>
-    <td style="vertical-align: middle;"></td>
+    <td style="vertical-align: middle;">
+      Aggregations not allowed in a query with <code>mapGroupsWithState</code>.
+    </td>
   </tr>
   <tr>
     <td rowspan="2" style="vertical-align: middle;">Queries with <code>flatMapGroupsWithState</code></td>
@@ -1775,7 +1779,7 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Update operation mode</td>
     <td style="vertical-align: middle;">Update</td>
     <td style="vertical-align: middle;">
-      Aggregations not allowed after <code>flatMapGroupsWithState</code>.
+      Aggregations not allowed in a query with <code>flatMapGroupsWithState</code>.
     </td>
   </tr>
   <tr>

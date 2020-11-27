@@ -37,7 +37,7 @@ else:
                                           "spark-streaming-kinesis-asl-assembly-",
                                           "spark-streaming-kinesis-asl-assembly_")
     if kinesis_asl_assembly_jar is None:
-        kinesis_requirement_message = (
+        kinesis_requirement_message = (  # type: ignore
             "Skipping all Kinesis Python tests as the optional Kinesis project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
@@ -47,7 +47,7 @@ else:
         existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         jars_args = "--jars %s" % kinesis_asl_assembly_jar
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([jars_args, existing_args])
-        kinesis_requirement_message = None
+        kinesis_requirement_message = None  # type: ignore
 
 should_test_kinesis = kinesis_requirement_message is None
 
@@ -116,7 +116,10 @@ class PySparkStreamingTestCase(unittest.TestCase):
         """
         Collect each RDDs into the returned list.
 
-        :return: list, which will have the collected items.
+        Returns
+        -------
+        list
+            which will have the collected items.
         """
         result = []
 
@@ -137,9 +140,14 @@ class PySparkStreamingTestCase(unittest.TestCase):
 
     def _test_func(self, input, func, expected, sort=False, input2=None):
         """
-        :param input: dataset for the test. This should be list of lists.
-        :param func: wrapped function. This function should return PythonDStream object.
-        :param expected: expected output for this testcase.
+        Parameters
+        ----------
+        input : list
+            dataset for the test. This should be list of lists.
+        func : function
+            wrapped function. This function should return PythonDStream object.
+        expected
+            expected output for this testcase.
         """
         if not isinstance(input[0], RDD):
             input = [self.sc.parallelize(d, 1) for d in input]

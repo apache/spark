@@ -847,4 +847,26 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
+
+  test("SPARK-32508 " +
+    "Disallow empty part col values in partition spec before static partition writing") {
+    withTable("t1") {
+      spark.sql(
+        """
+          |CREATE TABLE t1 (c1 int)
+          |PARTITIONED BY (d string)
+          """.stripMargin)
+
+      val e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |INSERT OVERWRITE TABLE t1 PARTITION(d='')
+            |SELECT 1
+          """.stripMargin)
+      }.getMessage
+
+      assert(!e.contains("get partition: Value for key d is null or empty"))
+      assert(e.contains("Partition spec is invalid"))
+    }
+  }
 }

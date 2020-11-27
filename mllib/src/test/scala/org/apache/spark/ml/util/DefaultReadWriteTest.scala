@@ -19,7 +19,6 @@ package org.apache.spark.ml.util
 
 import java.io.{File, IOException}
 
-import org.json4s.JNothing
 import org.scalatest.Suite
 
 import org.apache.spark.{SparkException, SparkFunSuite}

@@ -399,8 +399,7 @@ SELECT range(1, 100) OVER () FROM empsalary;
 
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
--- SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
+SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- filter
 

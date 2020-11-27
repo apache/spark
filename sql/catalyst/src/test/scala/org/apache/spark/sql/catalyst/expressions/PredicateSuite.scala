@@ -538,4 +538,20 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
     checkEvaluation(inSet, false, row)
   }
+
+  test("SPARK-32764: compare special double/float values") {
+    checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.NaN)), true)
+    checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.PositiveInfinity)), false)
+    checkEvaluation(EqualTo(Literal(0.0D), Literal(-0.0D)), true)
+    checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.PositiveInfinity)), true)
+    checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.NaN)), false)
+    checkEvaluation(GreaterThan(Literal(0.0D), Literal(-0.0D)), false)
+
+    checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.NaN)), true)
+    checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.PositiveInfinity)), false)
+    checkEvaluation(EqualTo(Literal(0.0F), Literal(-0.0F)), true)
+    checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.PositiveInfinity)), true)
+    checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.NaN)), false)
+    checkEvaluation(GreaterThan(Literal(0.0F), Literal(-0.0F)), false)
+  }
 }

@@ -534,7 +534,7 @@ class SelectedFieldSuite extends AnalysisTest {
   private def unapplySelect(expr: String, relation: LocalRelation) = {
     val parsedExpr = parseAsCatalystExpression(Seq(expr)).head
     val select = relation.select(parsedExpr)
-    val analyzed = caseSensitiveAnalyzer.execute(select)
+    val analyzed = getAnalyzer.execute(select)
     SelectedField.unapply(analyzed.expressions.head)
   }
 

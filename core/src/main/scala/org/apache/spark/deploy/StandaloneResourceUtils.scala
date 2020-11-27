@@ -149,11 +149,11 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourcesUsed(
-      resourcesTotal: Map[String, ResourceInformation],
-      resourcesUsed: Map[String, ResourceInformation]): String = {
-    resourcesTotal.map { case (rName, rInfo) =>
-      val used = resourcesUsed(rName).addresses.length
-      val total = rInfo.addresses.length
+      resourcesTotal: Map[String, Int],
+      resourcesUsed: Map[String, Int]): String = {
+    resourcesTotal.map { case (rName, totalSize) =>
+      val used = resourcesUsed(rName)
+      val total = totalSize
       s"$used / $total $rName"
     }.mkString(", ")
   }
