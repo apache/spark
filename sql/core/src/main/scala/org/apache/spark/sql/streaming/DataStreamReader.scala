@@ -64,7 +64,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def schema(schema: StructType): DataStreamReader = {
-    this.userSpecifiedSchema = Option(schema)
+    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
     this
   }
 
@@ -203,9 +203,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       extraOptions + ("path" -> path.get)
     }
 
-    val cleanedUserSpecifiedSchema = userSpecifiedSchema
-      .map(CharVarcharUtils.replaceCharVarcharWithStringInSchema)
-
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
       getConstructor().newInstance()
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
@@ -213,7 +210,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     // writer or whether the query is continuous.
     val v1DataSource = DataSource(
       sparkSession,
-      userSpecifiedSchema = cleanedUserSpecifiedSchema,
+      userSpecifiedSchema = userSpecifiedSchema,
       className = source,
       options = optionsWithPath.originalMap)
     val v1Relation = ds match {
@@ -228,8 +225,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
             optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-        val table = DataSourceV2Utils.getTableFromProvider(
-          provider, dsOptions, cleanedUserSpecifiedSchema)
+        val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>

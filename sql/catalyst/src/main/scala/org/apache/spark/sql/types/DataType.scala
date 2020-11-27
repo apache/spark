@@ -32,7 +32,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
@@ -133,8 +132,7 @@ object DataType {
       ddl,
       CatalystSqlParser.parseDataType,
       "Cannot parse the data type: ",
-      fallbackParser = str => CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-        CatalystSqlParser.parseTableSchema(str)))
+      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
   }
 
   /**

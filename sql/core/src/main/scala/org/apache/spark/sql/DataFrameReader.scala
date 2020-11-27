@@ -73,7 +73,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
-    this.userSpecifiedSchema = Option(schema)
+    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
     this
   }
 
@@ -274,14 +274,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val cleanedUserSpecifiedSchema = userSpecifiedSchema
-        .map(CharVarcharUtils.replaceCharVarcharWithStringInSchema)
-
       val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
-        case _: SupportsCatalogOptions if cleanedUserSpecifiedSchema.nonEmpty =>
+        case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
           throw new IllegalArgumentException(
             s"$source does not support user specified schema. Please don't specify the schema.")
         case hasCatalog: SupportsCatalogOptions =>
@@ -293,8 +290,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           (catalog.loadTable(ident), Some(catalog), Some(ident))
         case _ =>
           // TODO: Non-catalog paths for DSV2 are currently not well defined.
-          val tbl = DataSourceV2Utils.getTableFromProvider(
-            provider, dsOptions, cleanedUserSpecifiedSchema)
+          val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
           (tbl, None, None)
       }
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -316,15 +312,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     } else {
       (paths, extraOptions)
     }
-    val cleanedUserSpecifiedSchema = userSpecifiedSchema
-      .map(CharVarcharUtils.replaceCharVarcharWithStringInSchema)
 
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = finalPaths,
-        userSpecifiedSchema = cleanedUserSpecifiedSchema,
+        userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = finalOptions.originalMap).resolveRelation())
   }

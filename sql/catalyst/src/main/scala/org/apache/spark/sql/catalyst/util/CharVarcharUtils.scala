@@ -137,8 +137,9 @@ object CharVarcharUtils {
   }
 
   /**
-   * Returns an expression to apply write-side char type padding for the given expression. A string
-   * value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N) column/field.
+   * Returns an expression to apply write-side string length check for the given expression. A
+   * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
+   * column/field.
    */
   def stringLengthCheck(expr: Expression, targetAttr: Attribute): Expression = {
     getRawType(targetAttr.metadata).map { rawType =>

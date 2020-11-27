@@ -99,7 +99,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
-    withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(visitColTypeList(ctx.colTypeList)))
+    withOrigin(ctx)(schema)
   }
 
   def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {

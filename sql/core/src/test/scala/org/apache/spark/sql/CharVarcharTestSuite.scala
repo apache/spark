@@ -448,6 +448,14 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
     assert(schema.map(_.dataType) == Seq(StringType))
   }
 
+  test("user-specified schema in DataFrameReader: file source from Dataset") {
+    val ds = spark.range(10).map(_.toString)
+    val df1 = spark.read.schema(new StructType().add("id", CharType(5))).csv(ds)
+    assert(df1.schema.map(_.dataType) == Seq(StringType))
+    val df2 = spark.read.schema("id char(5)").csv(ds)
+    assert(df2.schema.map(_.dataType) == Seq(StringType))
+  }
+
   test("user-specified schema in DataFrameReader: DSV1") {
     def checkSchema(df: DataFrame): Unit = {
       val relations = df.queryExecution.analyzed.collect {
