@@ -52,7 +52,7 @@ license: |
 
   - In Spark 3.1, refreshing a table will trigger an uncache operation for all other caches that reference the table, even if the table itself is not cached. In Spark 3.0 the operation will only be triggered if the table itself is cached.
 
-  - In Spark 3.1, we support typed literal as partition column value, such as `PARTITION (dt = date '2020-01-01')`, it will be treated as partition column value `2020-01-01`. In Spark 3.0 the partition value will be treated as `date '2020-01-01'`.
+  - In Spark 3.1, we support using corresponding typed literal of partition column value type as partition column value in SQL, such as if we have a partition table with partition column of date type, we can use typed date literal `date '2020-01-01'` as partition spec `PARTITION (dt = date '2020-01-01')`, it will be treated as partition column value `2020-01-01`. In Spark 3.0 the partition value will be treated as string value `date '2020-01-01'` and it's a illegal date type string value and will been converted to `__HIVE_DEFAULT_PARTITION__`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 

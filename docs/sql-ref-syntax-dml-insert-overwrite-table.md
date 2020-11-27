@@ -41,7 +41,7 @@ INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
 * **partition_spec**
 
     An optional parameter that specifies a comma separated list of key and value pairs
-    for partitions. Note that one can use a typed value (e.g., date'2019-01-02') for a partition column value.
+    for partitions. Note that one can use a typed literal (e.g., date'2019-01-02') for a partition column value.
 
     **Syntax:** `PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )`
 
@@ -169,7 +169,7 @@ SELECT * FROM students;
 +-----------+-------------------------+----------+
 ```
 
-#### Insert Using a Type Constructed Partition Column Value
+#### Insert Using a Typed Date Literal for a Partition Column Value
 ```sql
 CREATE TABLE students (name STRING, address  STRING) PARTITIONED BY (birthday DATE);
 
