@@ -116,7 +116,7 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
-    def test_parallelism_doesnt_change_output(self):
+    def test_parallelism_does_not_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
