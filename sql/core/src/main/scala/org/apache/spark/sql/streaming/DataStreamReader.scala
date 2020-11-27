@@ -396,6 +396,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
+   * <li>`unescapedQuoteHandling` (default `STOP_AT_DELIMITER`): defines how the CsvParser
+   * will handle values with unescaped quotes.
+   *   <ul>
+   *     <li>`STOP_AT_CLOSING_QUOTE`: If unescaped quotes are found in the input, accumulate
+   *     the quote character and proceed parsing the value as a quoted value, until a closing
+   *     quote is found.</li>
+   *     <li>`BACK_TO_DELIMITER`: If unescaped quotes are found in the input, consider the value
+   *     as an unquoted value. This will make the parser accumulate all characters of the current
+   *     parsed value until the delimiter is found. If no delimiter is found in the value, the
+   *     parser will continue accumulating characters from the input until a delimiter or line
+   *     ending is found.</li>
+   *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, consider the value
+   *     as an unquoted value. This will make the parser accumulate all characters until the
+   *     delimiter or a line ending is found in the input.</li>
+   *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, the content parsed
+   *     for the given value will be skipped and the value set in nullValue will be produced
+   *     instead.</li>
+   *     <li>`RAISE_ERROR`: If unescaped quotes are found in the input, a TextParsingException
+   *     will be thrown.</li>
+   *   </ul>
+   * </li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>

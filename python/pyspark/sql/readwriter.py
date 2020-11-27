@@ -259,6 +259,27 @@ class DataFrameReader(OptionUtils):
             allows accepting quoting of all character
             using backslash quoting mechanism. If None is
             set, it uses the default value, ``false``.
+        unescapedQuoteHandling : str, optional
+            defines how the CsvParser will handle values with unescaped quotes. If None is
+            set, it uses the default value, ``STOP_AT_DELIMITER``.
+
+            * ``STOP_AT_CLOSING_QUOTE``: If unescaped quotes are found in the input, accumulate \
+              the quote character and proceed parsing the value as a quoted value, until a closing \
+              quote is found.
+            * ``BACK_TO_DELIMITER``: If unescaped quotes are found in the input, consider the value \
+              as an unquoted value. This will make the parser accumulate all characters of the current \
+              parsed value until the delimiter is found. If no delimiter is found in the value, the \
+              parser will continue accumulating characters from the input until a delimiter or line \
+              ending is found.
+            * ``STOP_AT_DELIMITER`: If unescaped quotes are found in the input, consider the value \
+              as an unquoted value. This will make the parser accumulate all characters until the \
+              delimiter or a line ending is found in the input.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, the content parsed \
+              for the given value will be skipped and the value set in nullValue will be produced \
+              instead.
+            * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException \
+              will be thrown.
+
         mode : str, optional
             allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
