@@ -21,7 +21,7 @@ license: |
 
 A literal (also known as a constant) represents a fixed data value. Spark SQL supports the following literals:
 
- * [Typed Literal](#typed-literal)
+ * [Typed Literal for Binary, Date, Timestamp, and Interval](#typed-literal)
  * [String Literal](#string-literal)
  * [Binary Literal](#binary-literal)
  * [Null Literal](#null-literal)
@@ -31,7 +31,7 @@ A literal (also known as a constant) represents a fixed data value. Spark SQL su
  * [Datetime Literal](#datetime-literal)
  * [Interval Literal](#interval-literal)
 
-### Typed Literal
+### Typed Literal for Binary, Date, Timestamp, and Interval
 
 A typed Literal expression parsing string values to typed Literal 
 
