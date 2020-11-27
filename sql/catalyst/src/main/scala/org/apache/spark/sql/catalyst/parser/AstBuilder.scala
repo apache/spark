@@ -815,10 +815,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: WindowClauseContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
-    val baseWindowMap = ctx.namedWindow.asScala.map {
+    val baseWindowTuples = ctx.namedWindow.asScala.map {
       wCtx =>
         (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
-    }.toMap
+    }
+    baseWindowTuples.groupBy(_._1).foreach { kv =>
+      if (kv._2.size > 1) {
+        throw new ParseException(s"The definition of window '${kv._1}' is repetitive", ctx)
+      }
+    }
+    val baseWindowMap = baseWindowTuples.toMap
 
     // Handle cases like
     // window w1 as (partition by p_mfgr order by p_name
