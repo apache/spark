@@ -183,11 +183,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val e4 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e4.contains(s"$viewName is a temp view not table or permanent view"))
+      assert(e4.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
       val e5 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       }.getMessage
-      assert(e5.contains(s"$viewName is a temp view not table or permanent view"))
+      assert(e5.contains(
+        s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
       val e6 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
