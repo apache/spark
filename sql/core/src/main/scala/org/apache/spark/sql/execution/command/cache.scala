@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import scala.util.Try
-
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -52,16 +50,19 @@ case class CacheTableCommand(
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }
 
+    val table = sparkSession.table(tableName)
     if (storageLevelValue.nonEmpty) {
-      sparkSession.catalog.cacheTable(
-        tableName, StorageLevel.fromString(storageLevelValue.get))
+      sparkSession.sharedState.cacheManager.cacheQuery(
+        table,
+        Some(tableName),
+        StorageLevel.fromString(storageLevelValue.get))
     } else {
-      sparkSession.catalog.cacheTable(tableName)
+      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableName))
     }
 
     if (!isLazy) {
       // Performs eager caching
-      sparkSession.table(tableName).count()
+      table.count()
     }
 
     Seq.empty[Row]
@@ -74,14 +75,20 @@ case class UncacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableName = multipartIdentifier.quoted
-    if (!ifExists || tableExists(sparkSession, tableName)) {
-      sparkSession.catalog.uncacheTable(tableName)
+    table(sparkSession, tableName).foreach { table =>
+      val cascade = !sparkSession.sessionState.catalog.isTempView(multipartIdentifier)
+      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade)
     }
     Seq.empty[Row]
   }
 
-  private def tableExists(sparkSession: SparkSession, name: String): Boolean = {
-    Try(sparkSession.table(name)).isSuccess
+  private def table(sparkSession: SparkSession, name: String): Option[DataFrame] = {
+    try {
+      Some(sparkSession.table(name))
+    } catch {
+      case ex: AnalysisException if ifExists && ex.getMessage.contains("Table or view not found") =>
+        None
+    }
   }
 }
 
