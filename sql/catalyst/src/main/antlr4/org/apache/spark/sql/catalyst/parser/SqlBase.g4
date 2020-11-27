@@ -594,12 +594,11 @@ fromClause
 
 aggregationClause
     : GROUP BY groupingExpressionWithGroupingAnalytics+=groupByClause
-      (',' groupingExpressionWithGroupingAnalytics+=groupByClause)*
+        (',' groupingExpressionWithGroupingAnalytics+=groupByClause)*
     | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
-    | GROUP BY kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')'
     ;
 
 groupByClause
