@@ -729,7 +729,8 @@ class DataFrameReader(OptionUtils):
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, samplingRatio=samplingRatio,
             enforceSchema=enforceSchema, emptyValue=emptyValue, locale=locale, lineSep=lineSep,
             pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
-            modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter, unescapedQuoteHandling=unescapedQuoteHandling)
+            modifiedBefore=modifiedBefore, modifiedAfter=modifiedAfter,
+            unescapedQuoteHandling=unescapedQuoteHandling)
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
