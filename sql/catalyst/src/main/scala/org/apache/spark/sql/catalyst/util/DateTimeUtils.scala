@@ -364,12 +364,12 @@ object DateTimeUtils {
     }
   }
 
-  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
+  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     val timestamp = stringToTimestamp(s, timeZoneId)
     if (timestamp.isEmpty) {
       throw new DateTimeException(s"Cannot cast $s to TimestampType.")
     } else {
-      timestamp
+      timestamp.get
     }
   }
 

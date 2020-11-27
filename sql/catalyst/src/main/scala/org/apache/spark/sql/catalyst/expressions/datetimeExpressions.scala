@@ -799,6 +799,8 @@ case class UnixTimestamp(
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
+  def failOnError: Boolean
+
   // The result of the conversion to timestamp is microseconds divided by this factor.
   // For example if the factor is 1000000, the result of the expression is in seconds.
   protected def downScaleFactor: Long
@@ -810,9 +812,7 @@ abstract class ToTimestamp
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
 
   override def dataType: DataType = LongType
-  override def nullable: Boolean = true
-
-  def failOnError: Boolean
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   private def isParseError(e: Throwable): Boolean = e match {
     case _: DateTimeParseException |

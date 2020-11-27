@@ -455,7 +455,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId).orNull
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId)
         } else {
           DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
         }
@@ -1260,17 +1260,23 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
-      val stringToTimestampFunc = if (ansiEnabled) "stringToTimestampAnsi" else "stringToTimestamp"
       (c, evPrim, evNull) =>
-        code"""
-          scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.$stringToTimestampFunc($c, $zid);
-          if ($longOpt.isDefined()) {
-            $evPrim = ((Long) $longOpt.get()).longValue();
-          } else {
-            $evNull = true;
-          }
-         """
+        if (ansiEnabled) {
+          code"""
+            $evPrim =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampAnsi($c, $zid);
+           """
+        } else {
+          code"""
+            scala.Option<Long> $longOpt =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
+            if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case _: IntegralType =>
