@@ -3129,7 +3129,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         tableOutput: Seq[Attribute],
         cols: Seq[NamedExpression],
         query: LogicalPlan): LogicalPlan = {
-
       if (cols.size != query.output.size) {
         query.failAnalysis(
           s"""Cannot write to table due to mismatched user specified columns and data columns:
@@ -3137,9 +3136,10 @@ class Analyzer(override val catalogManager: CatalogManager)
              |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
             .stripMargin)
       }
-
       val nameToQueryExpr = cols.zip(query.output).toMap
-      val reordered = tableOutput.flatMap {nameToQueryExpr.get(_).orElse(None) }
+      // Static partition columns in the table output should not appear in the column list
+      // they will be handled in another rule ResolveInsertInto
+      val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
       if (reordered == query.output) {
         query
       } else {
