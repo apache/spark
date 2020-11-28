@@ -251,3 +251,15 @@ WINDOW w AS (
   RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
 )
 ORDER BY department;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW
+    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)
+ORDER BY salary DESC;

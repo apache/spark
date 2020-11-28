@@ -5798,7 +5798,7 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
 class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
     """
     Params for :py:class:`VarianceThresholdSelector` and
-    :py:class:`VarianceThresholdSelectorrModel`.
+    :py:class:`VarianceThresholdSelectorModel`.
 
     .. versionadded:: 3.1.0
     """
