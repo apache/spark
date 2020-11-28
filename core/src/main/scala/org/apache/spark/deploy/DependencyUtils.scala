@@ -83,6 +83,10 @@ private[deploy] object DependencyUtils extends Logging {
     if (transitive.isEmpty) {
       false
     } else {
+      if (transitive.length > 1) {
+        logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
+          " If there are multiple `transitive` parameter, we will select the last one")
+      }
       transitive.last.toBoolean
     }
   }
