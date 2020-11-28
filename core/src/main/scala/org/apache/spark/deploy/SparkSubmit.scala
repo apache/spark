@@ -304,8 +304,8 @@ private[spark] class SparkSubmit extends Logging {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
       val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
-        args.packagesExclusions, args.packages, args.repositories, args.ivyRepoPath,
-        args.ivySettingsPath)
+        true, args.packagesExclusions, args.packages,
+        args.repositories, args.ivyRepoPath, args.ivySettingsPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         // In K8s client mode, when in the driver, add resolved jars early as we might need
@@ -1340,6 +1340,7 @@ private[spark] object SparkSubmitUtils {
    * Resolves any dependencies that were supplied through maven coordinates
    * @param coordinates Comma-delimited string of maven coordinates
    * @param ivySettings An IvySettings containing resolvers to use
+   * @param transitive Whether resolving transitive dependencies, default is true
    * @param exclusions Exclusions to apply when resolving transitive dependencies
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
@@ -1347,8 +1348,8 @@ private[spark] object SparkSubmitUtils {
   def resolveMavenCoordinates(
       coordinates: String,
       ivySettings: IvySettings,
-      exclusions: Seq[String] = Nil,
       transitive: Boolean = true,
+      exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""

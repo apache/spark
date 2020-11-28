@@ -214,7 +214,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val files = SparkSubmitUtils.resolveMavenCoordinates(
         main.toString,
         SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath)),
-        Seq("my.great.dep:mydep"),
+        exclusions = Seq("my.great.dep:mydep"),
         isTest = true)
       assert(files.indexOf(main.artifactId) >= 0, "Did not return artifact")
       assert(files.indexOf("my.great.dep") < 0, "Returned excluded artifact")
