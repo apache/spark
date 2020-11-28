@@ -434,7 +434,7 @@ class ExecutorSuite extends SparkFunSuite
         isFatal: Boolean): Unit = {
       import Executor.isFatalError
       // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1))
+      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
       assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
