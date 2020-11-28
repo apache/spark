@@ -364,6 +364,15 @@ object DateTimeUtils {
     }
   }
 
+  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
+    val timestamp = stringToTimestamp(s, timeZoneId)
+    if (timestamp.isEmpty) {
+      throw new DateTimeException(s"Cannot cast $s to TimestampType.")
+    } else {
+      timestamp.get
+    }
+  }
+
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of

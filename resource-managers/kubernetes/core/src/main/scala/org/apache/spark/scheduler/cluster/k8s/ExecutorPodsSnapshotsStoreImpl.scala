@@ -52,7 +52,7 @@ import org.apache.spark.util.ThreadUtils
  * time-windowed chunks. Each subscriber can choose to receive their snapshot chunks at different
  * time intervals.
  * <br>
- * The subcriber notification callback is guaranteed to be called from a single thread at a time.
+ * The subscriber notification callback is guaranteed to be called from a single thread at a time.
  */
 private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: ScheduledExecutorService)
   extends ExecutorPodsSnapshotsStore with Logging {
@@ -142,7 +142,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
           }
 
           if (notificationCount.decrementAndGet() > 0) {
-            // There was another concurrent request for this subcriber. Schedule a task to
+            // There was another concurrent request for this subscriber. Schedule a task to
             // immediately process snapshots again, so that the subscriber can pick up any
             // changes that may have happened between the time it started looking at snapshots
             // above, and the time the concurrent request arrived.

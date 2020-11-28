@@ -509,7 +509,7 @@ object SQLConf {
         "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
-      .checkValue(_ > 0, "The skew factor must be positive.")
+      .checkValue(_ >= 0, "The skew factor cannot be negative.")
       .createWithDefault(5)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
@@ -1480,6 +1480,15 @@ object SQLConf {
       .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
         "must be positive.")
       .createWithDefault(100)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
+    buildConf("spark.sql.legacy.useCurrentConfigsForView")
+      .internal()
+      .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
+        "ones will be applied during the parsing and analysis phases of the view resolution.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
@@ -3414,6 +3423,8 @@ class SQLConf extends Serializable with Logging {
   def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

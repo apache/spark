@@ -119,20 +119,9 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW (DATABASES | NAMESPACES) ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader ('(' colTypeList ')')? tableProvider
+    | createTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | createTableHeader ('(' columns=colTypeList ')')?
-        (commentSpec |
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')' |
-        PARTITIONED BY partitionColumnNames=identifierList) |
-        bucketSpec |
-        skewSpec |
-        rowFormat |
-        createFileFormat |
-        locationSpec |
-        (TBLPROPERTIES tableProps=tablePropertyList))*
-        (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier
         (tableProvider |
@@ -140,7 +129,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=tablePropertyList))*                 #createTableLike
-    | replaceTableHeader ('(' colTypeList ')')? tableProvider
+    | replaceTableHeader ('(' colTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -393,8 +382,11 @@ tableProvider
 
 createTableClauses
     :((OPTIONS options=tablePropertyList) |
-     (PARTITIONED BY partitioning=transformList) |
+     (PARTITIONED BY partitioning=partitionFieldList) |
+     skewSpec |
      bucketSpec |
+     rowFormat |
+     createFileFormat |
      locationSpec |
      commentSpec |
      (TBLPROPERTIES tableProps=tablePropertyList))*
@@ -741,8 +733,13 @@ namedExpressionSeq
     : namedExpression (',' namedExpression)*
     ;
 
-transformList
-    : '(' transforms+=transform (',' transforms+=transform)* ')'
+partitionFieldList
+    : '(' fields+=partitionField (',' fields+=partitionField)* ')'
+    ;
+
+partitionField
+    : transform  #partitionTransform
+    | colType    #partitionColumn
     ;
 
 transform

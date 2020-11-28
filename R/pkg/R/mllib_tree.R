@@ -53,7 +53,7 @@ setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
 #' @note DecisionTreeClassificationModel since 2.3.0
 setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 
-# Create the summary of a tree ensemble model (eg. Random Forest, GBT)
+# Create the summary of a tree ensemble model (e.g. Random Forest, GBT)
 summary.treeEnsemble <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
@@ -73,7 +73,7 @@ summary.treeEnsemble <- function(model) {
        jobj = jobj)
 }
 
-# Prints the summary of tree ensemble models (eg. Random Forest, GBT)
+# Prints the summary of tree ensemble models (e.g. Random Forest, GBT)
 print.summary.treeEnsemble <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)

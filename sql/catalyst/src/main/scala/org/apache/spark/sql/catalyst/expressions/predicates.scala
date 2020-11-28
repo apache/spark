@@ -46,11 +46,26 @@ abstract class BasePredicate {
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
-  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
+  private[this] val expr = if (subExprEliminationEnabled) {
+    runtime.proxyExpressions(Seq(expression)).head
+  } else {
+    expression
+  }
+
+  override def eval(r: InternalRow): Boolean = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(r)
+    }
+
+    expr.eval(r).asInstanceOf[Boolean]
+  }
 
   override def initialize(partitionIndex: Int): Unit = {
     super.initialize(partitionIndex)
-    expression.foreach {
+    expr.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     }
