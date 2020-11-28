@@ -190,13 +190,11 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
         return _java_obj
 
-    def _make_java_param_pair(self, param, value):
+    def _make_java_param_pair(self, java_param, value):
         """
         Makes a Java param pair.
         """
         sc = SparkContext._active_spark_context
-        param = self._resolveParam(param)
-        java_param = sc._jvm.org.apache.spark.ml.param.Param(param.parent, param.name, param.doc)
         if isinstance(value, Params) and hasattr(value, "_to_java"):
             # Convert JavaEstimator/JavaTransformer object or Estimator/Transformer object which
             # implements `_to_java` method (such as OneVsRest, Pipeline object) to java object.
@@ -212,11 +210,21 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Transforms a Python ParamMap into a Java ParamMap.
         """
+        java_stages = []
+        for stage in self.getStages():
+            java_stages.append(stage._to_java())
+
         paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
-        for param in self.params:
-            if param in pyParamMap:
-                pair = self._make_java_param_pair(param, pyParamMap[param])
-                paramMap.put([pair])
+        for param, value in pyParamMap.items():
+            java_param = None
+            for idx, stage in enumerate(self.getStages()):
+                if stage._testOwnParam(param.parent, param.name):
+                    java_param = java_stages[idx].getParam(param.name)
+                    break
+            if java_param is None:
+                raise ValueError('Resolve param in estimatorParamMaps failed: ' + str(param))
+            pair = self._make_java_param_pair(java_param, value)
+            paramMap.put([pair])
         return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
@@ -226,17 +234,22 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         sc = SparkContext._active_spark_context
         paramMap = dict()
         for pair in javaParamMap.toList():
-            param = pair.param()
-            if self.hasParam(str(param.name())):
-                java_obj = pair.value()
-                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(java_obj):
-                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
-                    # and Estimator/Transformer class which implements `_from_java` static method
-                    # (such as OneVsRest, Pipeline class).
-                    py_obj = JavaParams._from_java(java_obj)
-                else:
-                    py_obj = _java2py(sc, java_obj)
-                paramMap[self.getParam(param.name())] = py_obj
+            java_param = pair.param()
+            param = None
+            for stage in self.getStages():
+                if stage._testOwnParam(java_param.parent(), java_param.name()):
+                    param = stage.getParam(java_param.name())
+            if param is None:
+                raise ValueError('Resolve param in estimatorParamMaps failed: ' + str(param))
+            java_obj = pair.value()
+            if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(java_obj):
+                # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
+                # and Estimator/Transformer class which implements `_from_java` static method
+                # (such as OneVsRest, Pipeline class).
+                py_obj = JavaParams._from_java(java_obj)
+            else:
+                py_obj = _java2py(sc, java_obj)
+            paramMap[param] = py_obj
         return paramMap
 
 
