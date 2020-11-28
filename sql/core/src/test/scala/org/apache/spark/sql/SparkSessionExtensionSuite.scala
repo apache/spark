@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
@@ -766,7 +766,9 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
 case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
   override def numMappers: Int = delegate.numMappers
   override def numPartitions: Int = delegate.numPartitions
-  override def canChangeNumPartitions: Boolean = delegate.canChangeNumPartitions
+  override def shuffleOrigin: ShuffleOrigin = {
+    delegate.shuffleOrigin
+  }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
     delegate.mapOutputStatisticsFuture
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =

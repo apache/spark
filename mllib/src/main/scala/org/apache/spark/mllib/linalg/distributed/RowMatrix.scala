@@ -748,6 +748,8 @@ class RowMatrix @Since("1.0.0") (
               }
               buf
             }.flatten
+          case v =>
+            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
       }
     }.reduceByKey(_ + _).map { case ((i, j), sim) =>
