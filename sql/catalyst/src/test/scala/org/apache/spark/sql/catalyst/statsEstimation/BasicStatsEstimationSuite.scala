@@ -22,12 +22,12 @@ import org.mockito.Mockito.mock
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeMap, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
 
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
@@ -205,6 +205,41 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       plan,
       expectedStatsCboOn = Statistics.DUMMY,
       expectedStatsCboOff = Statistics.DUMMY)
+  }
+
+  test("row size and column stats estimation for sort") {
+    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+      Seq(
+        AttributeReference("cbool", BooleanType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(false),
+          max = Some(true),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1)),
+        AttributeReference("cbyte", ByteType)() -> ColumnStat(
+          distinctCount = Some(2),
+          min = Some(1),
+          max = Some(2),
+          nullCount = Some(0),
+          avgLen = Some(1),
+          maxLen = Some(1))))
+
+    val expectedSize = 16
+    val child = StatsTestPlan(
+      outputList = columnInfo.keys.toSeq,
+      rowCount = 2,
+      attributeStats = columnInfo,
+      size = Some(expectedSize))
+
+    val sortOrder = SortOrder(columnInfo.keys.head, Ascending)
+    val sort = Sort(order = Seq(sortOrder), global = true, child = child)
+    val expectedSortStats = Statistics(
+      sizeInBytes = expectedSize,
+      rowCount = Some(2),
+      attributeStats = columnInfo)
+    checkStats(sort, expectedStatsCboOn = expectedSortStats,
+      expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
   }
 
   /** Check estimated stats when cbo is turned on/off. */

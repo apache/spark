@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.statsEstimation
 
-import java.sql.{Date, Timestamp}
-
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Cast, CurrentDate, Literal}
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Union}
-import org.apache.spark.sql.types.{ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, TimestampType}
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType}
 
 class UnionEstimationSuite extends StatsEstimationTestBase {
 
@@ -56,8 +54,6 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val attrLong = AttributeReference("clong", LongType)()
     val attrByte = AttributeReference("cbyte", ByteType)()
     val attrFloat = AttributeReference("cfloat", FloatType)()
-    val attrDate = AttributeReference("cdate", DateType)()
-    val attrTimestamp = AttributeReference("ctimestamp", TimestampType)()
     val attrDecimal = AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)()
 
     val s1: Short = 1
