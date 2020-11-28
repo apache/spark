@@ -150,6 +150,8 @@ private[spark] class Executor(
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
+  private val killOnNestedFatalError = conf.get(EXECUTOR_KILL_ON_NESTED_FATAL_ERROR)
+
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
@@ -648,7 +650,7 @@ private[spark] class Executor(
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
-        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+        case t: Throwable if hasFetchFailure && !Executor.isFatalError(t, killOnNestedFatalError) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
@@ -711,7 +713,7 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
+          if (Executor.isFatalError(t, killOnNestedFatalError)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
@@ -997,4 +999,27 @@ private[spark] object Executor {
 
   // Used to store executorSource, for local mode only
   var executorSourceLocalModeOnly: ExecutorSource = null
+
+  /**
+   * Whether a `Throwable` thrown from a task is a fatal error. We use this to decide whether to
+   * kill the executor.
+   *
+   * @param shouldDetectNestedFatalError whether to go through the exception chain to check whether
+   *                                     exists a fatal error.
+   * @param depth the current depth of the recursive call. Return `false` when it's greater than 5.
+   *              This is to avoid `StackOverflowError` when hitting a cycle in the exception chain.
+   */
+  def isFatalError(t: Throwable, shouldDetectNestedFatalError: Boolean, depth: Int = 0): Boolean = {
+    if (depth <= 5) {
+      t match {
+        case _: SparkOutOfMemoryError => false
+        case e if Utils.isFatalError(e) => true
+        case e if e.getCause != null && shouldDetectNestedFatalError =>
+          isFatalError(e.getCause, shouldDetectNestedFatalError, depth + 1)
+        case _ => false
+      }
+    } else {
+      false
+    }
+  }
 }

@@ -28,6 +28,7 @@ import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -43,7 +44,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.memory.TestMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceInformation
@@ -52,7 +53,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
+import org.apache.spark.util.{LongAccumulator, ThreadUtils, UninterruptibleThread}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -400,6 +401,73 @@ class ExecutorSuite extends SparkFunSuite
     val metrics = taskFailedReason.asInstanceOf[ExceptionFailure].metricPeaks.toArray
     val taskMetrics = new ExecutorMetrics(metrics)
     assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
+  test("SPARK-33587: isFatalError") {
+    def errorInThreadPool(e: => Throwable): Throwable = {
+      intercept[Throwable] {
+        val taskPool = ThreadUtils.newDaemonFixedThreadPool(1, "test")
+        try {
+          val f = taskPool.submit(new java.util.concurrent.Callable[String] {
+            override def call(): String = throw e
+          })
+          f.get()
+        } finally {
+          taskPool.shutdown()
+        }
+      }
+    }
+
+    def errorInGuavaCache(e: => Throwable): Throwable = {
+      val cache = CacheBuilder.newBuilder()
+        .build(new CacheLoader[String, String] {
+          override def load(key: String): String = throw e
+        })
+      intercept[Throwable] {
+        cache.get("test")
+      }
+    }
+
+    def testThrowable(
+      e: => Throwable,
+      shouldDetectNestedFatalError: Boolean,
+      isFatal: Boolean): Unit = {
+      import Executor.isFatalError
+      assert(isFatalError(e, shouldDetectNestedFatalError) == isFatal)
+      // Now check nested exceptions. We get `true` only if we need to check nested exceptions
+      // (`shouldDetectNestedFatalError` is `true`) and `e` is fatal.
+      val expected = shouldDetectNestedFatalError && isFatal
+      assert(isFatalError(errorInThreadPool(e), shouldDetectNestedFatalError) == expected)
+      assert(isFatalError(errorInGuavaCache(e), shouldDetectNestedFatalError) == expected)
+      assert(isFatalError(
+        errorInThreadPool(errorInGuavaCache(e)),
+        shouldDetectNestedFatalError) == expected)
+      assert(isFatalError(
+        errorInGuavaCache(errorInThreadPool(e)),
+        shouldDetectNestedFatalError) == expected)
+      assert(isFatalError(
+        new SparkException("Task failed while writing rows.", e),
+        shouldDetectNestedFatalError) == expected)
+    }
+
+    for (shouldDetectNestedFatalError <- true :: false :: Nil) {
+      testThrowable(new OutOfMemoryError(), shouldDetectNestedFatalError, isFatal = true)
+      testThrowable(new InterruptedException(), shouldDetectNestedFatalError, isFatal = false)
+      testThrowable(new RuntimeException("test"), shouldDetectNestedFatalError, isFatal = false)
+      testThrowable(
+        new SparkOutOfMemoryError("test"),
+        shouldDetectNestedFatalError,
+        isFatal = false)
+    }
+
+    val e1 = new Exception("test1")
+    val e2 = new Exception("test2")
+    e1.initCause(e2)
+    e2.initCause(e1)
+    for (shouldDetectNestedFatalError <- true :: false :: Nil) {
+      testThrowable(e1, shouldDetectNestedFatalError, isFatal = false)
+      testThrowable(e2, shouldDetectNestedFatalError, isFatal = false)
+    }
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
