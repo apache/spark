@@ -161,10 +161,10 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
   }
 
-  protected def resolveJars(path: String): List[String] = {
-    new Path(path).toUri.getScheme match {
-      case "ivy" => Utils.resolveMavenDependencies(URI.create(path)).split(",").toList
-      case _ => path :: Nil
+  protected def resolveJars(path: URI): List[String] = {
+    path.getScheme match {
+      case "ivy" => Utils.resolveMavenDependencies(path).split(",").toList
+      case _ => path.toString :: Nil
     }
   }
 
@@ -176,7 +176,8 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    resolveJars(path).foreach { p =>
+    val uri = URI.create(path)
+    resolveJars(uri).foreach { p =>
       session.sparkContext.addJar(p)
       val uri = new Path(p).toUri
       val jarURL = if (uri.getScheme == null) {
