@@ -228,7 +228,7 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
- test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using IN expression)") {
+  test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using IN expression)") {
     testMetastorePartitionFiltering(
       attr("ds").cast(LongType).in(20170102L, 20170103L),
       20170102 to 20170103,
@@ -251,7 +251,7 @@ class HivePartitionFilteringSuite(version: String)
       })
   }
 
- test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using INSET expression")
+  test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using INSET expression)")
   {
     testMetastorePartitionFiltering(
       attr("ds").cast(LongType).in(20170102L, 20170103L),
@@ -396,7 +396,7 @@ class HivePartitionFilteringSuite(version: String)
 
   test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {
     testMetastorePartitionFiltering(
-      attr("datestr").cast(DateType) === Date.valueOf("2019-01-01"),
+      attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),
       dsValue,
       hValue,
       chunkValue,
