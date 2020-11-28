@@ -23,6 +23,11 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
 import org.apache.spark.sql.types.{ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, TimestampType}
 
+/**
+ * Estimate the number of output rows by doing the sum of output rows for each child of union,
+ * and estimate min and max stats for each column by finding the overall min and max of that
+ * column coming from its children.
+ */
 object UnionEstimation {
   import EstimationUtils._
 

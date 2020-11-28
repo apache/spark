@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Union}
-import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType}
+import org.apache.spark.sql.types.{ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, TimestampType}
 
 class UnionEstimationSuite extends StatsEstimationTestBase {
 
@@ -55,6 +55,8 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val attrByte = AttributeReference("cbyte", ByteType)()
     val attrFloat = AttributeReference("cfloat", FloatType)()
     val attrDecimal = AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)()
+    val attrDate = AttributeReference("cdate", DateType)()
+    val attrTimestamp = AttributeReference("ctimestamp", TimestampType)()
 
     val s1: Short = 1
     val s2: Short = 4
@@ -80,7 +82,9 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
         attrLong -> ColumnStat(min = Some(1L), max = Some(4L)),
         attrByte -> ColumnStat(min = Some(b1), max = Some(b2)),
         attrFloat -> ColumnStat(min = Some(1.1f), max = Some(4.1f)),
-        attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5)))))
+        attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5))),
+        attrDate -> ColumnStat(min = Some(1), max = Some(4)),
+        attrTimestamp -> ColumnStat(min = Some(1L), max = Some(4L))))
 
     val s3: Short = 2
     val s4: Short = 6
@@ -110,7 +114,11 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           max = Some(6.1f)),
         AttributeReference("cdecimal1", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(
           min = Some(Decimal(14.5)),
-          max = Some(Decimal(19.9)))))
+          max = Some(Decimal(19.9))),
+        AttributeReference("cdate1", DateType)() -> ColumnStat(min = Some(3), max = Some(6)),
+        AttributeReference("ctimestamp1", TimestampType)() -> ColumnStat(
+          min = Some(3L),
+          max = Some(6L))))
 
     val child1 = StatsTestPlan(
       outputList = columnInfo.keys.toSeq.sortWith(_.exprId.id < _.exprId.id),
@@ -137,7 +145,9 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           attrLong -> ColumnStat(min = Some(1L), max = Some(6L)),
           attrByte -> ColumnStat(min = Some(b1), max = Some(b4)),
           attrFloat -> ColumnStat(min = Some(1.1f), max = Some(6.1f)),
-          attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.9))))))
+          attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.9))),
+          attrDate -> ColumnStat(min = Some(1), max = Some(6)),
+          attrTimestamp -> ColumnStat(min = Some(1L), max = Some(6L)))))
     assert(union.stats === expectedStats)
   }
 
