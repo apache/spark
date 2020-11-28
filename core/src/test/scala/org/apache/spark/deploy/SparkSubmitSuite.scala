@@ -47,7 +47,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>

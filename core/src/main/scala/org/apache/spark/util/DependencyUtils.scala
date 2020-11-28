@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.util
 
 import java.io.File
 import java.net.URI
@@ -25,10 +25,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-private[deploy] object DependencyUtils extends Logging {
+private[spark] object DependencyUtils extends Logging {
 
   def getIvyProperties(): Seq[String] = {
     Seq(
@@ -46,7 +46,8 @@ private[deploy] object DependencyUtils extends Logging {
       Array.empty[String]
     } else {
       val mapTokens = queryString.split("&")
-      assert(mapTokens.forall(_.split("=").length == 2), "Invalid query string: " + queryString)
+      assert(mapTokens.forall(_.split("=").length == 2)
+        , "Invalid URI query string: [ " + queryString + " ]")
       mapTokens.map(_.split("=")).map(kv => (kv(0), kv(1))).filter(_._1 == queryTag).map(_._2)
     }
   }
@@ -65,7 +66,8 @@ private[deploy] object DependencyUtils extends Logging {
       .flatMap { excludeString =>
         val excludes: Array[String] = excludeString.split(",")
         assert(excludes.forall(_.split(":").length == 2),
-          "Invalid exclude string: expected 'org:module,org:module,..', found " + excludeString)
+          "Invalid exclude string: expected 'org:module,org:module,..'," +
+            " found [ " + excludeString + " ]")
         excludes
       }.mkString(":")
   }
@@ -106,7 +108,7 @@ private[deploy] object DependencyUtils extends Logging {
       uri.getAuthority,
       repositories,
       ivyRepoPath,
-      Some(ivySettingsPath)
+      Option(ivySettingsPath)
     )
   }
 

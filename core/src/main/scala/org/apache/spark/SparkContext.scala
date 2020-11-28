@@ -1923,7 +1923,7 @@ class SparkContext(config: SparkConf) extends Logging {
           case "ivy" =>
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
-            Utils.resolveMavenDependencies(URI.create(path))
+            DependencyUtils.resolveMavenDependencies(URI.create(path))
           case _ => checkRemoteJarFile(path)
         }
       }
