@@ -414,14 +414,46 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
-  test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {
+  test("getPartitionsByFilter: cast(datestr as date)=2020-01-01") {
     testMetastorePartitionFiltering(
-      attr("datestr").cast(DateType) === Date.valueOf("2019-01-01"),
+      attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),
       dsValue,
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      Seq("2020-01-01"))
+  }
+
+  test("getPartitionsByFilter: cast(datestr as date)>2020-01-01") {
+    testMetastorePartitionFiltering(
+      attr("datestr").cast(DateType) > Date.valueOf("2020-01-01"),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      Seq("2020-01-02", "2020-01-03"))
+  }
+
+  test("getPartitionsByFilter: In(cast(datestr as date), 2020-01-01, 2020-01-02)") {
+    testMetastorePartitionFiltering(
+      In(attr("datestr").cast(DateType),
+        Seq("2020-01-01", "2020-01-02").map(d => Literal(Date.valueOf(d)))),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      Seq("2020-01-01", "2020-01-02"))
+  }
+
+  test("getPartitionsByFilter: InSet(cast(datestr as date), 2020-01-01, 2020-01-02)") {
+    testMetastorePartitionFiltering(
+      InSet(attr("datestr").cast(DateType),
+        Seq("2020-01-02", "2020-01-03").map(d => Literal(Date.valueOf(d)).eval(EmptyRow)).toSet),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      Seq("2020-01-02", "2020-01-03"))
   }
 
   private def testMetastorePartitionFiltering(

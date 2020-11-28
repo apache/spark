@@ -757,6 +757,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           case attr: Attribute => Some(attr)
           case Cast(child @ IntegralType(), dt: IntegralType, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
+          case Cast(child @ StringType(), DateType, _) => unapply(child)
           case _ => None
         }
       }

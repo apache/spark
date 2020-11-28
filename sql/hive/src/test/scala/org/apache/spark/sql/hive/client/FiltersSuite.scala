@@ -100,6 +100,21 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
 
+  filterTest("string filter with date type",
+    (a("strcol", StringType).cast(DateType) > Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "strcol > 2019-01-01")
+
+  filterTest("string filter with date type with In predicate",
+    (a("strcol", StringType).cast(DateType) in
+      (Literal(Date.valueOf("2019-01-01")), Literal(Date.valueOf("2019-01-02")))) :: Nil,
+    "(strcol = 2019-01-01 or strcol = 2019-01-02)")
+
+  filterTest("string filter with date type with InSet predicate",
+    InSet(a("strcol", StringType).cast(DateType),
+      Set(Literal(Date.valueOf("2019-01-03")),
+        Literal(Date.valueOf("2019-01-04"))).map(_.eval(EmptyRow))) :: Nil,
+    "(strcol = 2019-01-03 or strcol = 2019-01-04)")
+
   filterTest("NOT: int and string filters",
     (a("intcol", IntegerType) =!= Literal(1)) :: (Literal("a") =!= a("strcol", IntegerType)) :: Nil,
     """intcol != 1 and "a" != strcol""")
@@ -176,6 +191,11 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
         InSet(a("datecol", DateType),
           Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
         "(datecol >= 1970-01-02 and datecol <= 1970-01-20)")
+
+      checkConverted(
+        InSet(a("strcol", StringType).cast(DateType),
+          Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
+        "(strcol >= 1970-01-02 and strcol <= 1970-01-20)")
     }
   }
 
