@@ -66,10 +66,10 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val viewName = "test_view"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      val errMsg = intercept[NoSuchTableException] {
+      val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains(s"Table or view '$viewName' not found"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table or permanent view"))
     }
   }
 }
@@ -84,10 +84,10 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSessio
       sql(s"""
         |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
         |$defaultUsing""".stripMargin)
-      val errMsg = intercept[NoSuchTableException] {
+      val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains(s"Table or view '$viewName' not found"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table or permanent view"))
     }
   }
 

@@ -3648,7 +3648,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
     ShowPartitions(
-      UnresolvedTableOrView(multiPart.getOrElse(Seq.empty[String])),
+      UnresolvedTableOrView(
+        multiPart.getOrElse(Seq.empty[String]),
+        "SHOW PARTITIONS",
+        allowTempView = false),
       partitionKeys)
   }
 
