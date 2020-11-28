@@ -76,21 +76,11 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0),
           avgLen = Some(4),
           maxLen = Some(4)),
-        attrShort -> ColumnStat(
-          min = Some(s1),
-          max = Some(s2)),
-        attrLong -> ColumnStat(
-          min = Some(1L),
-          max = Some(4L)),
-        attrByte -> ColumnStat(
-          min = Some(b1),
-          max = Some(b2)),
-        attrFloat -> ColumnStat(
-          min = Some(1.1f),
-          max = Some(4.1f)),
-        attrDecimal -> ColumnStat(
-          min = Some(Decimal(13.5)),
-          max = Some(Decimal(19.5)))))
+        attrShort -> ColumnStat(min = Some(s1), max = Some(s2)),
+        attrLong -> ColumnStat(min = Some(1L), max = Some(4L)),
+        attrByte -> ColumnStat(min = Some(b1), max = Some(b2)),
+        attrFloat -> ColumnStat(min = Some(1.1f), max = Some(4.1f)),
+        attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5)))))
 
     val s3: Short = 2
     val s4: Short = 6
@@ -100,7 +90,8 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
       Seq(
         AttributeReference("cint1", IntegerType)() -> ColumnStat(
           distinctCount = Some(2),
-          min = Some(3), max = Some(6),
+          min = Some(3),
+          max = Some(6),
           nullCount = Some(0),
           avgLen = Some(8),
           maxLen = Some(8)),
@@ -111,15 +102,9 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           nullCount = Some(0),
           avgLen = Some(8),
           maxLen = Some(8)),
-        AttributeReference("cshort1", ShortType)() -> ColumnStat(
-          min = Some(s3),
-          max = Some(s4)),
-        AttributeReference("clong1", LongType)() -> ColumnStat(
-          min = Some(2L),
-          max = Some(6L)),
-        AttributeReference("cbyte1", ByteType)() -> ColumnStat(
-          min = Some(b3),
-          max = Some(b4)),
+        AttributeReference("cshort1", ShortType)() -> ColumnStat(min = Some(s3), max = Some(s4)),
+        AttributeReference("clong1", LongType)() -> ColumnStat(min = Some(2L), max = Some(6L)),
+        AttributeReference("cbyte1", ByteType)() -> ColumnStat(min = Some(b3), max = Some(b4)),
         AttributeReference("cfloat1", FloatType)() -> ColumnStat(
           min = Some(2.2f),
           max = Some(6.1f)),

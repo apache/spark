@@ -61,10 +61,10 @@ object UnionEstimation {
         }
         if (validStat) {
           val dataType = output(outputIndex).dataType
-          val minStart : Option[Any] = None
-          val maxStart : Option[Any] = None
+          val minStart: Option[Any] = None
+          val maxStart: Option[Any] = None
           val result = attrs.zipWithIndex.foldLeft((minStart, maxStart)) {
-            case((minVal, maxVal), (attr, childIndex)) =>
+            case ((minVal, maxVal), (attr, childIndex)) =>
               val colStat = union.children(childIndex).stats.attributeStats(attr)
               val min = if (minVal.isEmpty || compare(colStat.min.get, minVal.get, dataType)) {
                 colStat.min

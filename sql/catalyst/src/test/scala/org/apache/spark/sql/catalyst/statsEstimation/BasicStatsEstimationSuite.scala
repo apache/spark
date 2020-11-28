@@ -29,7 +29,6 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, ByteType, IntegerType, LongType}
 
-
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
   val colStat = ColumnStat(distinctCount = Some(10), min = Some(1), max = Some(10),
@@ -124,9 +123,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range with empty output") {
     val range = Range(-10, -10, -1, None)
-    val rangeStats = Statistics(
-      sizeInBytes = 0,
-      rowCount = Some(0))
+    val rangeStats = Statistics(sizeInBytes = 0, rowCount = Some(0))
     checkStats(range, expectedStatsCboOn = rangeStats, expectedStatsCboOff = rangeStats)
   }
 
@@ -234,11 +231,11 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
     val sortOrder = SortOrder(columnInfo.keys.head, Ascending)
     val sort = Sort(order = Seq(sortOrder), global = true, child = child)
-    val expectedSortStats = Statistics(
-      sizeInBytes = expectedSize,
-      rowCount = Some(2),
-      attributeStats = columnInfo)
-    checkStats(sort, expectedStatsCboOn = expectedSortStats,
+    val expectedSortStats =
+      Statistics(sizeInBytes = expectedSize, rowCount = Some(2), attributeStats = columnInfo)
+    checkStats(
+      sort,
+      expectedStatsCboOn = expectedSortStats,
       expectedStatsCboOff = Statistics(sizeInBytes = expectedSize))
   }
 
