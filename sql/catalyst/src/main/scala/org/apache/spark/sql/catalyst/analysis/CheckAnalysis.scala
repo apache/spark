@@ -1010,10 +1010,6 @@ trait CheckAnalysis extends PredicateHelper {
 
   // Make sure that the `SHOW PARTITIONS` command is allowed for the table
   private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
-    case ShowPartitions(v: ResolvedView, _) =>
-      failAnalysis(s"SHOW PARTITIONS is not allowed on a view: ${v.identifier}")
-    case ShowPartitions(child, _) if !child.isInstanceOf[ResolvedTable] =>
-      failAnalysis(s"Cannot resolve the table for SHOW PARTITIONS")
     case ShowPartitions(rt: ResolvedTable, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")

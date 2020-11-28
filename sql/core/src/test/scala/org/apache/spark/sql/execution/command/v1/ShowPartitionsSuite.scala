@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -57,7 +56,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         val errMsg = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $view")
         }.getMessage
-        assert(errMsg.contains("is not allowed on a view"))
+        assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
       }
     }
   }
@@ -69,7 +68,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains("'SHOW PARTITIONS' expects a table or permanent view"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
 }
@@ -87,7 +86,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSessio
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains("'SHOW PARTITIONS' expects a table or permanent view"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
 
