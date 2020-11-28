@@ -1768,7 +1768,6 @@ class TaskSetManagerSuite
   }
 
   test("TaskSetManager passes task resource along") {
-    import TestUtils._
 
     sc = new SparkContext("local", "test")
     sc.conf.set(TASK_GPU_ID.amountConf, "2")

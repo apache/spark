@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.api.python.PythonException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.Sink

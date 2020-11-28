@@ -26,9 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
-import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.{GroupType, OriginalType, Type}
+import org.apache.parquet.schema.OriginalType.LIST
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -107,11 +107,15 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * }}}
  * 5 converters will be created:
  *
- * - a root [[ParquetRowConverter]] for [[MessageType]] `root`, which contains:
- *   - a [[ParquetPrimitiveConverter]] for required [[INT_32]] field `f1`, and
+ * - a root [[ParquetRowConverter]] for [[org.apache.parquet.schema.MessageType]] `root`,
+ * which contains:
+ *   - a [[ParquetPrimitiveConverter]] for required
+ *   [[org.apache.parquet.schema.OriginalType.INT_32]] field `f1`, and
  *   - a nested [[ParquetRowConverter]] for optional [[GroupType]] `f2`, which contains:
- *     - a [[ParquetPrimitiveConverter]] for required [[DOUBLE]] field `f21`, and
- *     - a [[ParquetStringConverter]] for optional [[UTF8]] string field `f22`
+ *     - a [[ParquetPrimitiveConverter]] for required
+ *     [[org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.DOUBLE]] field `f21`, and
+ *     - a [[ParquetStringConverter]] for optional [[org.apache.parquet.schema.OriginalType.UTF8]]
+ *     string field `f22`
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.

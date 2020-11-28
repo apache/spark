@@ -764,9 +764,9 @@ class SparkSession private(
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
-    SparkSession.setActiveSessionInternal(this)
+    SparkSession.setActiveSession(this)
     try block finally {
-      SparkSession.setActiveSessionInternal(old)
+      SparkSession.setActiveSession(old)
     }
   }
 }
@@ -945,7 +945,7 @@ object SparkSession extends Logging {
 
         session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
-        setActiveSessionInternal(session)
+        setActiveSession(session)
         registerContextListener(sparkContext)
       }
 
@@ -983,16 +983,7 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
-  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def setActiveSession(session: SparkSession): Unit = {
-    if (SQLConf.get.legacyAllowModifyActiveSession) {
-      setActiveSessionInternal(session)
-    } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
-    }
-  }
-
-  private[sql] def setActiveSessionInternal(session: SparkSession): Unit = {
     activeThreadSession.set(session)
   }
 
@@ -1002,16 +993,7 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
-  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def clearActiveSession(): Unit = {
-    if (SQLConf.get.legacyAllowModifyActiveSession) {
-      clearActiveSessionInternal()
-    } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
-    }
-  }
-
-  private[spark] def clearActiveSessionInternal(): Unit = {
     activeThreadSession.remove()
   }
 
@@ -1185,7 +1167,7 @@ object SparkSession extends Logging {
            |
          """.stripMargin)
       session.get.stop()
-      SparkSession.clearActiveSessionInternal()
+      SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
     }
   }

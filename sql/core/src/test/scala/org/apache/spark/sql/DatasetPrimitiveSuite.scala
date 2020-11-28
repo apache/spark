@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.collection.immutable.{HashSet => HSet}
 import scala.collection.immutable.Queue
 import scala.collection.mutable.{LinkedHashMap => LHMap}
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.test.SharedSparkSession
 

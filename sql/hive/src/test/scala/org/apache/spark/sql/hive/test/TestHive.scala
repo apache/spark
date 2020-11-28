@@ -23,7 +23,6 @@ import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -195,7 +194,7 @@ private[hive] class TestHiveSparkSession(
   }
 
   SparkSession.setDefaultSession(this)
-  SparkSession.setActiveSessionInternal(this)
+  SparkSession.setActiveSession(this)
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(

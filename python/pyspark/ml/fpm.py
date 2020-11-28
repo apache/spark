@@ -443,7 +443,7 @@ class PrefixSpan(JavaParams):
 
         Returns
         -------
-        pyspark.sql.dataframe.DataFrame
+        :py:class:`pyspark.sql.DataFrame`
             A `DataFrame` that contains columns of sequence and corresponding frequency.
             The schema of it will be:
 

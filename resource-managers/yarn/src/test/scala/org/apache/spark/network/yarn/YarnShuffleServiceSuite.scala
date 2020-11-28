@@ -34,6 +34,7 @@ import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
@@ -42,8 +43,9 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
-import org.apache.spark.network.shuffle.ShuffleTestAccessor
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
 
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
@@ -411,4 +413,27 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ))
   }
 
+  test("create default merged shuffle file manager instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+  }
+
+  test("create remote block push resolver instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[RemoteBlockPushResolver])
+  }
+
+  test("invalid class name of merge manager will use noop instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.NotExistent")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+  }
 }

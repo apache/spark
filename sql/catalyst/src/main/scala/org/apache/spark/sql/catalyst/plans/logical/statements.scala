@@ -218,30 +218,12 @@ case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
- */
-case class AlterTableAddPartitionStatement(
-    tableName: Seq[String],
-    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean) extends ParsedStatement
-
-/**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
  */
 case class AlterTableRenamePartitionStatement(
     tableName: Seq[String],
     from: TablePartitionSpec,
     to: TablePartitionSpec) extends ParsedStatement
-
-/**
- * ALTER TABLE ... DROP PARTITION command, as parsed from SQL
- */
-case class AlterTableDropPartitionStatement(
-    tableName: Seq[String],
-    specs: Seq[TablePartitionSpec],
-    ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends ParsedStatement
 
 /**
  * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
@@ -346,13 +328,6 @@ case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
- * A SHOW CREATE TABLE statement, as parsed from SQL.
- */
-case class ShowCreateTableStatement(
-    tableName: Seq[String],
-    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL

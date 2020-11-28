@@ -906,7 +906,7 @@ class Column(object):
     __bool__ = __nonzero__
 
     def __repr__(self):
-        return 'Column<%s>' % self._jc.toString().encode('utf8')
+        return "Column<'%s'>" % self._jc.toString()
 
 
 def _test():

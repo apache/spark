@@ -146,104 +146,108 @@ SELECT val, cate,
 count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
 FROM testData ORDER BY cate, val;
 
--- nth_value() over ()
+-- nth_value()/first_value() over ()
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (ORDER BY salary DESC) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary
-      RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING)
 ORDER BY salary;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 ORDER BY salary DESC;
 
 SELECT
     employee_name,
     salary,
-    nth_value(employee_name, 2) OVER (
-      ORDER BY salary DESC
-      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) second_highest_salary
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
 FROM
     basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
 ORDER BY salary DESC;
 
 SELECT
 	employee_name,
 	department,
 	salary,
-	NTH_VALUE(employee_name, 2) OVER  (
-		PARTITION BY department
-		ORDER BY salary DESC
-		RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-	) second_highest_salary
+	FIRST_VALUE(employee_name) OVER w highest_salary,
+	NTH_VALUE(employee_name, 2) OVER w second_highest_salary
 FROM
 	basic_pays
+WINDOW w AS (
+  PARTITION BY department
+  ORDER BY salary DESC
+  RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
 ORDER BY department;

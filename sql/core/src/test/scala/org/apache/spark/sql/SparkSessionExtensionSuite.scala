@@ -51,7 +51,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
   }
 

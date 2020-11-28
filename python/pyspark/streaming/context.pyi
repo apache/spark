@@ -32,7 +32,7 @@ class StreamingContext:
     def __init__(
         self,
         sparkContext: SparkContext,
-        batchDuration: Union[float, int] = ...,
+        batchDuration: int = ...,
         jssc: Optional[JavaObject] = ...,
     ) -> None: ...
     @classmethod

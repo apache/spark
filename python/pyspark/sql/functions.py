@@ -3527,7 +3527,7 @@ def schema_of_json(json, options={}):
     Parameters
     ----------
     json : :class:`Column` or str
-        a JSON string or a string literal containing a JSON string.
+        a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource
 
@@ -3564,7 +3564,7 @@ def schema_of_csv(csv, options={}):
     Parameters
     ----------
     csv : :class:`Column` or str
-        a CSV string or a string literal containing a CSV string.
+        a CSV string or a foldable string column containing a CSV string.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource
 

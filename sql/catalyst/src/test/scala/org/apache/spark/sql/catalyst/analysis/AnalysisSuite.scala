@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -771,22 +771,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
     val maxIterations = 2
-    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
-    val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
-    val plan = testRelation2.select(
-      $"a" / Literal(2) as "div1",
-      $"a" / $"b" as "div2",
-      $"a" / $"c" as "div3",
-      $"a" / $"d" as "div4",
-      $"e" / $"e" as "div5")
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
-      testAnalyzer.execute(plan)
-    }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+      val message = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
   }
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
@@ -802,7 +803,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
       withLogAppender(logAppender) {
         val testAnalyzer1 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
         val plan1 = testRelation2.select(
           UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
@@ -824,7 +825,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
         // New analyzer from new SessionState
         val testAnalyzer2 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
         val plan4 = testRelation2.select(
           UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
         testAnalyzer2.execute(plan4)
@@ -933,9 +934,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val maxIterations = 2
     val maxIterationsEnough = 5
     withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
-      val conf = SQLConf.get
       val testAnalyzer = new Analyzer(
-        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
       val plan = testRelation2.select(
         $"a" / Literal(2) as "div1",

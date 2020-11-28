@@ -1841,6 +1841,32 @@ test_that("column functions", {
   )
 })
 
+test_that("avro column functions", {
+  skip_if_not(
+    grepl("spark-avro", sparkR.conf("spark.jars", "")),
+    "spark-avro jar not present"
+  )
+
+  schema <- '{"namespace": "example.avro",
+    "type": "record",
+    "name": "User",
+    "fields": [
+      {"name": "name", "type": "string"},
+      {"name": "favorite_color", "type": ["string", "null"]}
+    ]
+  }'
+
+  c0 <- column("foo")
+  c1 <- from_avro(c0, schema)
+  expect_s4_class(c1, "Column")
+  c2 <- from_avro("foo", schema)
+  expect_s4_class(c2, "Column")
+  c3 <- to_avro(c1)
+  expect_s4_class(c3, "Column")
+  c4 <- to_avro(c1, schema)
+  expect_s4_class(c4, "Column")
+})
+
 test_that("column binary mathfunctions", {
   lines <- c("{\"a\":1, \"b\":5}",
              "{\"a\":2, \"b\":6}",

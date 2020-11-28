@@ -19,18 +19,16 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Encapsulates star-schema detection logic.
  */
-object StarSchemaDetection extends PredicateHelper {
-
-  private def conf = SQLConf.get
+object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
 
   /**
    * Star schema consists of one or more fact tables referencing a number of dimension

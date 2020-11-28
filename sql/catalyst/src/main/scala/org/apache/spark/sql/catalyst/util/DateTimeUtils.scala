@@ -736,14 +736,16 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
+    // Time zone offsets have a maximum precision of seconds (see `java.time.ZoneOffset`). Hence
+    // truncation to microsecond, millisecond, and second can be done
+    // without using time zone information. This results in a performance improvement.
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
         micros - Math.floorMod(micros, MICROS_PER_MILLIS)
       case TRUNC_TO_SECOND =>
         micros - Math.floorMod(micros, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE =>
-        micros - Math.floorMod(micros, MICROS_PER_MINUTE)
+      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ => // Try to truncate date levels
