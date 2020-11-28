@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{DependencyUtils, Utils}
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -163,7 +163,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
 
   protected def resolveJars(path: URI): List[String] = {
     path.getScheme match {
-      case "ivy" => Utils.resolveMavenDependencies(path).split(",").toList
+      case "ivy" => DependencyUtils.resolveMavenDependencies(path).split(",").toList
       case _ => path.toString :: Nil
     }
   }
