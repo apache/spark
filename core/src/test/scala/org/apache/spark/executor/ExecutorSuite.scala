@@ -429,44 +429,45 @@ class ExecutorSuite extends SparkFunSuite
     }
 
     def testThrowable(
-      e: => Throwable,
-      shouldDetectNestedFatalError: Boolean,
-      isFatal: Boolean): Unit = {
+        e: => Throwable,
+        depthToCheck: Int,
+        isFatal: Boolean): Unit = {
       import Executor.isFatalError
-      assert(isFatalError(e, shouldDetectNestedFatalError) == isFatal)
-      // Now check nested exceptions. We get `true` only if we need to check nested exceptions
-      // (`shouldDetectNestedFatalError` is `true`) and `e` is fatal.
-      val expected = shouldDetectNestedFatalError && isFatal
-      assert(isFatalError(errorInThreadPool(e), shouldDetectNestedFatalError) == expected)
-      assert(isFatalError(errorInGuavaCache(e), shouldDetectNestedFatalError) == expected)
+      // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
+      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1))
+      // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
+      assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(
+        new SparkException("foo", e),
+        depthToCheck) == (depthToCheck >= 2 && isFatal))
+      // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(
         errorInThreadPool(errorInGuavaCache(e)),
-        shouldDetectNestedFatalError) == expected)
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
       assert(isFatalError(
         errorInGuavaCache(errorInThreadPool(e)),
-        shouldDetectNestedFatalError) == expected)
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
       assert(isFatalError(
-        new SparkException("Task failed while writing rows.", e),
-        shouldDetectNestedFatalError) == expected)
+        new SparkException("foo", new SparkException("foo", e)),
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
     }
 
-    for (shouldDetectNestedFatalError <- true :: false :: Nil) {
-      testThrowable(new OutOfMemoryError(), shouldDetectNestedFatalError, isFatal = true)
-      testThrowable(new InterruptedException(), shouldDetectNestedFatalError, isFatal = false)
-      testThrowable(new RuntimeException("test"), shouldDetectNestedFatalError, isFatal = false)
-      testThrowable(
-        new SparkOutOfMemoryError("test"),
-        shouldDetectNestedFatalError,
-        isFatal = false)
+    for (depthToCheck <- 0 to 5) {
+      testThrowable(new OutOfMemoryError(), depthToCheck, isFatal = true)
+      testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
+      testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
+      testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
     }
 
+    // Verify we can handle the cycle in the exception chain
     val e1 = new Exception("test1")
     val e2 = new Exception("test2")
     e1.initCause(e2)
     e2.initCause(e1)
-    for (shouldDetectNestedFatalError <- true :: false :: Nil) {
-      testThrowable(e1, shouldDetectNestedFatalError, isFatal = false)
-      testThrowable(e2, shouldDetectNestedFatalError, isFatal = false)
+    for (depthToCheck <- 0 to 5) {
+      testThrowable(e1, depthToCheck, isFatal = false)
+      testThrowable(e2, depthToCheck, isFatal = false)
     }
   }
 

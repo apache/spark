@@ -150,7 +150,7 @@ private[spark] class Executor(
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
-  private val killOnNestedFatalError = conf.get(EXECUTOR_KILL_ON_NESTED_FATAL_ERROR)
+  private val killOnFatalErrorDepth = conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -650,7 +650,7 @@ private[spark] class Executor(
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
-        case t: Throwable if hasFetchFailure && !Executor.isFatalError(t, killOnNestedFatalError) =>
+        case t: Throwable if hasFetchFailure && !Executor.isFatalError(t, killOnFatalErrorDepth) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
@@ -713,7 +713,7 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (Executor.isFatalError(t, killOnNestedFatalError)) {
+          if (Executor.isFatalError(t, killOnFatalErrorDepth)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
@@ -1001,25 +1001,24 @@ private[spark] object Executor {
   var executorSourceLocalModeOnly: ExecutorSource = null
 
   /**
-   * Whether a `Throwable` thrown from a task is a fatal error. We use this to decide whether to
-   * kill the executor.
+   * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether
+   * to kill the executor.
    *
-   * @param shouldDetectNestedFatalError whether to go through the exception chain to check whether
-   *                                     exists a fatal error.
-   * @param depth the current depth of the recursive call. Return `false` when it's greater than 5.
-   *              This is to avoid `StackOverflowError` when hitting a cycle in the exception chain.
+   * @param depthToCheck The max depth of the exception chain we should search for a fatal error. 0
+   *                     means not checking any fatal error (in other words, return false), 1 means
+   *                     checking only the exception but not the cause, and so on. This is to avoid
+   *                     `StackOverflowError` when hitting a cycle in the exception chain.
    */
-  def isFatalError(t: Throwable, shouldDetectNestedFatalError: Boolean, depth: Int = 0): Boolean = {
-    if (depth <= 5) {
+  def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
+    if (depthToCheck <= 0) {
+      false
+    } else {
       t match {
         case _: SparkOutOfMemoryError => false
         case e if Utils.isFatalError(e) => true
-        case e if e.getCause != null && shouldDetectNestedFatalError =>
-          isFatalError(e.getCause, shouldDetectNestedFatalError, depth + 1)
+        case e if e.getCause != null => isFatalError(e.getCause, depthToCheck - 1)
         case _ => false
       }
-    } else {
-      false
     }
   }
 }
