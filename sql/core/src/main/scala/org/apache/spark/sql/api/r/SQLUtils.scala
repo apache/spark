@@ -216,15 +216,6 @@ private[sql] object SQLUtils extends Logging {
     }
   }
 
-  def getTables(sparkSession: SparkSession, databaseName: String): DataFrame = {
-    databaseName match {
-      case n: String if n != null && n.trim.nonEmpty =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(Some(n), None))
-      case _ =>
-        Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
-    }
-  }
-
   def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
     val db = databaseName match {
       case _ if databaseName != null && databaseName.trim.nonEmpty =>
