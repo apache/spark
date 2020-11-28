@@ -98,6 +98,7 @@ helm-lint
 incorrect-use-of-LoggingMixin
 insert-license
 isort
+json-schema
 language-matters
 lint-dockerfile
 lint-openapi
