@@ -58,6 +58,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("fallback storage APIs - copy/exists") {
     val conf = new SparkConf(false)
+      .set("spark.app.id", "testId")
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
@@ -106,6 +107,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
 
   test("migrate shuffle data to fallback storage") {
     val conf = new SparkConf(false)
+      .set("spark.app.id", "testId")
       .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")

@@ -39,11 +39,13 @@ import org.apache.spark.util.Utils
  * A fallback storage used by storage decommissioners.
  */
 private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
+  require(conf.contains("spark.app.id"))
   require(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined)
 
   private val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
+  private val appId = conf.getAppId
 
   // Visible for testing
   def copy(
@@ -59,13 +61,13 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
         if (indexFile.exists()) {
           fallbackFileSystem.copyFromLocalFile(
             new Path(indexFile.getAbsolutePath),
-            new Path(fallbackPath, s"$shuffleId/${indexFile.getName}"))
+            new Path(fallbackPath, s"$appId/$shuffleId/${indexFile.getName}"))
 
           val dataFile = r.getDataFile(shuffleId, mapId)
           if (dataFile.exists()) {
             fallbackFileSystem.copyFromLocalFile(
               new Path(dataFile.getAbsolutePath),
-              new Path(fallbackPath, s"$shuffleId/${dataFile.getName}"))
+              new Path(fallbackPath, s"$appId/$shuffleId/${dataFile.getName}"))
           }
 
           // Report block statuses
@@ -83,7 +85,7 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 
   def exists(shuffleId: Int, filename: String): Boolean = {
-    fallbackFileSystem.exists(new Path(fallbackPath, s"$shuffleId/$filename"))
+    fallbackFileSystem.exists(new Path(fallbackPath, s"$appId/$shuffleId/$filename"))
   }
 }
 
@@ -132,6 +134,7 @@ object FallbackStorage extends Logging {
     val fallbackPath = new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val fallbackFileSystem = FileSystem.get(fallbackPath.toUri, hadoopConf)
+    val appId = conf.getAppId
 
     val (shuffleId, mapId, startReduceId, endReduceId) = blockId match {
       case id: ShuffleBlockId =>
@@ -143,7 +146,7 @@ object FallbackStorage extends Logging {
     }
 
     val name = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
-    val indexFile = new Path(fallbackPath, s"$shuffleId/$name")
+    val indexFile = new Path(fallbackPath, s"$appId/$shuffleId/$name")
     val start = startReduceId * 8L
     val end = endReduceId * 8L
     Utils.tryWithResource(fallbackFileSystem.open(indexFile)) { inputStream =>
@@ -153,7 +156,7 @@ object FallbackStorage extends Logging {
         index.skip(end - (start + 8L))
         val nextOffset = index.readLong()
         val name = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
-        val dataFile = new Path(fallbackPath, s"$shuffleId/$name")
+        val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$name")
         val f = fallbackFileSystem.open(dataFile)
         val size = nextOffset - 1 - offset
         logDebug(s"To byte array $size")
