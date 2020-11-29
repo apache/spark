@@ -126,3 +126,19 @@ class HasTrainingSummary(Generic[S]):
     def hasSummary(self) -> bool: ...
     @property
     def summary(self) -> S: ...
+
+class MetaAlgorithmReadWrite:
+    @staticmethod
+    def isMetaEstimator(pyInstance: Any) -> bool: ...
+    @staticmethod
+    def getAllNestedPyAndJavaStages(pyInstance: Any, javaInstance) -> list: ...
+    @staticmethod
+    def meta_estimator_transfer_param_maps_to_java(
+            pyEstimator: Any,
+            javaEstimator: Any,
+            pyParamMaps: list) -> list: ...
+    @staticmethod
+    def meta_estimator_transfer_param_maps_from_java(
+            pyEstimator: Any,
+            javaEstimator: Any,
+            javaParamMaps: list) -> list: ...
