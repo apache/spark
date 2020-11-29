@@ -3718,6 +3718,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("null as a partition value") {
+    withTable("t") {
+      sql("CREATE TABLE t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+      sql("INSERT INTO TABLE t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql("SELECT * FROM t"), Row(0, null))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
