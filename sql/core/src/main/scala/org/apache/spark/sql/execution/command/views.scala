@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeRef
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -334,6 +334,18 @@ case class ShowViewsCommand(
 
 object ViewHelper {
 
+  private val configPrefixDenyList = Seq(
+    SQLConf.MAX_NESTED_VIEW_DEPTH.key,
+    "spark.sql.optimizer.",
+    "spark.sql.codegen.",
+    "spark.sql.execution.",
+    "spark.sql.shuffle.",
+    "spark.sql.adaptive.")
+
+  private def shouldCaptureConfig(key: String): Boolean = {
+    !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
+  }
+
   import CatalogTable._
 
   /**
@@ -362,10 +374,36 @@ object ViewHelper {
   }
 
   /**
+   * Convert the view SQL configs to `properties`.
+   */
+  private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
+    val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
+      conf.isModifiable(k) && shouldCaptureConfig(k)
+    }
+    val props = new mutable.HashMap[String, String]
+    for ((key, value) <- modifiedConfs) {
+      props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
+    }
+    props.toMap
+  }
+
+  /**
+   * Remove the view SQL configs in `properties`.
+   */
+  private def removeSQLConfigs(properties: Map[String, String]): Map[String, String] = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    properties.filterNot { case (key, _) =>
+      key.startsWith(VIEW_SQL_CONFIG_PREFIX)
+    }
+  }
+
+  /**
    * Generate the view properties in CatalogTable, including:
    * 1. view default database that is used to provide the default database name on view resolution.
    * 2. the output column names of the query that creates a view, this is used to map the output of
    *    the view child to the view output during view resolution.
+   * 3. the SQL configs when creating the view.
    *
    * @param properties the `properties` in CatalogTable.
    * @param session the spark session.
@@ -380,15 +418,18 @@ object ViewHelper {
     // for createViewCommand queryOutput may be different from fieldNames
     val queryOutput = analyzedPlan.schema.fieldNames
 
+    val conf = session.sessionState.conf
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
     SchemaUtils.checkColumnNameDuplication(
-      fieldNames, "in the view definition", session.sessionState.conf.resolver)
+      fieldNames, "in the view definition", conf.resolver)
 
-    // Generate the view default catalog and namespace.
+    // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
-    removeQueryColumnNames(properties) ++
+    removeSQLConfigs(removeQueryColumnNames(properties)) ++
       catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
+      sqlConfigsToProps(conf) ++
       generateQueryColumnNames(queryOutput)
   }
 

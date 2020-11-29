@@ -155,7 +155,8 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val ex = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }
-      assert(ex.getMessage.contains(s"$viewName is a temp view not table or permanent view"))
+      assert(ex.getMessage.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
     }
 
     withGlobalTempView(viewName) {
@@ -165,7 +166,8 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
         sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
       }
       assert(ex.getMessage.contains(
-        s"$globalTempViewDb.$viewName is a temp view not table or permanent view"))
+        s"$globalTempViewDb.$viewName is a temp view. " +
+          "'SHOW CREATE TABLE' expects a table or permanent view."))
     }
   }
 
