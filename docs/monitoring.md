@@ -421,7 +421,7 @@ to handle the Spark Context setup and tear down.
 
 In addition to viewing the metrics in the UI, they are also available as JSON.  This gives developers
 an easy way to create new visualizations and monitoring tools for Spark.  The JSON is available for
-both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  Eg.,
+both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  For example,
 for the history server, they would typically be accessible at `http://<server-url>:18080/api/v1`, and
 for a running application, at `http://localhost:4040/api/v1`.
 
