@@ -167,8 +167,14 @@ object ExternalCatalogUtils {
       spec1: TablePartitionSpec,
       spec2: TablePartitionSpec): Boolean = {
     spec1.forall {
+      case (partitionColumn, null | DEFAULT_PARTITION_NAME) =>
+        spec2(partitionColumn) == null || spec2(partitionColumn) == DEFAULT_PARTITION_NAME
       case (partitionColumn, value) => spec2(partitionColumn) == value
     }
+  }
+
+  def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
+    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v)
   }
 }
 
