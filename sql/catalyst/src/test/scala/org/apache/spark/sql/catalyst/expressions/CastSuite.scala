@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.DateTimeException
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
@@ -106,8 +107,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
 
-      checkCastStringToTimestamp("123", null)
-
       val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
       c.set(2015, 0, 1, 0, 0, 0)
@@ -184,15 +183,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
       checkCastStringToTimestamp("2015-03-18T12:03:17.123+7:3", new Timestamp(c.getTimeInMillis))
-
-      checkCastStringToTimestamp("2015-03-18 123142", null)
-      checkCastStringToTimestamp("2015-03-18T123123", null)
-      checkCastStringToTimestamp("2015-03-18X", null)
-      checkCastStringToTimestamp("2015/03/18", null)
-      checkCastStringToTimestamp("2015.03.18", null)
-      checkCastStringToTimestamp("20150318", null)
-      checkCastStringToTimestamp("2015-031-8", null)
-      checkCastStringToTimestamp("2015-03-18T12:03:17-0:70", null)
     }
   }
 
@@ -302,7 +292,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
@@ -961,6 +950,34 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
       "invalid input syntax for type numeric")
+  }
+
+  test("ANSI mode: cast string to timestamp with parse error") {
+    val activeConf = conf
+    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), TimestampType, Option(zid.getId)),
+          s"Cannot cast $str to TimestampType.")
+      }
+
+      SQLConf.withExistingConf(activeConf) {
+        checkCastWithParseError("123")
+        checkCastWithParseError("2015-03-18 123142")
+        checkCastWithParseError("2015-03-18T123123")
+        checkCastWithParseError("2015-03-18X")
+        checkCastWithParseError("2015/03/18")
+        checkCastWithParseError("2015.03.18")
+        checkCastWithParseError("20150318")
+        checkCastWithParseError("2015-031-8")
+        checkCastWithParseError("2015-03-18T12:03:17-0:70")
+
+        val input = "abdef"
+        checkExceptionInExpression[DateTimeException](
+          cast(input, TimestampType, Option(zid.getId)),
+          s"Cannot cast $input to TimestampType.")
+      }
+    }
   }
 }
 

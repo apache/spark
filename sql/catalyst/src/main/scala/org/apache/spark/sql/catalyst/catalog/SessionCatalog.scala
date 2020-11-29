@@ -795,14 +795,19 @@ class SessionCatalog(
 
     if (metadata.tableType == CatalogTableType.VIEW) {
       val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-      logDebug(s"'$viewText' will be used for the view($table).")
+      val viewConfigs = metadata.viewSQLConfigs
+      val viewPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs)) {
+        parser.parsePlan(viewText)
+      }
+
+      logDebug(s"'$viewText' will be used for the view($table) with configs: $viewConfigs.")
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       val child = View(
         desc = metadata,
         output = metadata.schema.toAttributes,
-        child = parser.parsePlan(viewText))
+        child = viewPlan)
       SubqueryAlias(multiParts, child)
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
