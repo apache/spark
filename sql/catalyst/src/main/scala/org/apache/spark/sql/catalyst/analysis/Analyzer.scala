@@ -1366,13 +1366,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-          case c @ Cube(groupingSets) =>
-            c.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))))
-          case r @ Rollup(groupingSets) =>
-            r.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))))
-          case gs @ GroupingSets(groupingSets, groupByExpressions) =>
-            gs.copy(groupingSets = groupingSets.map(_.map(innerResolve(_, isTopLevel = false))),
-              groupByExpressions = groupByExpressions.map(innerResolve(_, isTopLevel = false)))
+          case gs: GroupingSet =>
+            gs.withNewChildren(gs.children.map(innerResolve(_, isTopLevel = false)))
           case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
         }
       }
@@ -1476,21 +1471,16 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         val resolvedGroupingExprs = a.groupingExpressions
           .map {
-            case c @ Cube(groupingSets) =>
-              c.copy(groupingSets =
-                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
-                  .map(trimTopLevelGetStructFieldAlias)))
-            case r @ Rollup(groupingSets) =>
-              r.copy(groupingSets =
-                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
-                  .map(trimTopLevelGetStructFieldAlias)))
-            case gs @ GroupingSets(groupingSets, groupByExpressions) =>
-              gs.copy(groupingSets =
-                groupingSets.map(_.map(resolveExpressionTopDown(_, a, trimAlias = true))
-                  .map(trimTopLevelGetStructFieldAlias)),
-                groupByExpressions =
-                  groupByExpressions.map(resolveExpressionTopDown(_, a, trimAlias = true))
-                    .map(trimTopLevelGetStructFieldAlias))
+            case gs: GroupingSet =>
+              println("******")
+              println(gs)
+              val x = gs.withNewChildren(
+                gs.children
+                  .map(resolveExpressionTopDown(_, a, trimAlias = true))
+                  .map(trimTopLevelGetStructFieldAlias))
+              println("after")
+              println(x)
+              x
             case e =>
               trimTopLevelGetStructFieldAlias(resolveExpressionTopDown(e, a, trimAlias = true))
           }
@@ -1813,16 +1803,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         val resolvedGroups = groups.map {
-          case c @ Cube(groupingSets) =>
-            c.copy(groupingSets =
-              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
-          case r @ Rollup(groupingSets) =>
-            r.copy(groupingSets =
-              groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)))
-          case gs @ GroupingSets(groupingSets, groupByExpressions) =>
-            gs.copy(
-              groupingSets = groupingSets.map(mayResolveAttrByAggregateExprs(_, aggs, child)),
-              groupByExpressions = mayResolveAttrByAggregateExprs(groupByExpressions, aggs, child))
+          case gs: GroupingSet =>
+            gs.withNewChildren(mayResolveAttrByAggregateExprs(gs.children, aggs, child))
           case e => e
         }
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(resolvedGroups, aggs, child))
@@ -2039,16 +2021,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case a: Aggregate =>
         val newGroups = a.groupingExpressions.map {
-          case c @ Cube(groupingSets) =>
-            c.copy(groupingSets =
-              groupingSets.map(_.map(_.transformDown(resolveFunction))))
-          case r @ Rollup(groupingSets) =>
-            r.copy(groupingSets =
-              groupingSets.map(_.map(_.transformDown(resolveFunction))))
-          case gs @ GroupingSets(groupingSets, groupByExpressions) =>
-            gs.copy(
-              groupingSets = groupingSets.map(_.map(_.transformDown(resolveFunction))),
-              groupByExpressions = groupByExpressions.map(_.transformDown(resolveFunction)))
+          case gs: GroupingSet =>
+            gs.withNewChildren(gs.children.map(_.transformDown(resolveFunction)))
           case e => e
         }
         a.copy(groupingExpressions = newGroups) transformExpressions resolveFunction
