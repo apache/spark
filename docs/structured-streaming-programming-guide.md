@@ -1871,9 +1871,10 @@ Here are the details of all the sinks in Spark.
     <td>Append</td>
     <td>
         <code>path</code>: path to the output directory, must be specified.<br/>
-        <code>outputRetentionMs</code>: time to live (TTL) for output files. Output files which batches were
+        <code>retention</code>: time to live (TTL) for output files. Output files which batches were
         committed older than TTL will be eventually excluded in metadata log. This means reader queries which read
-        the sink's output directory may not process them. By default it's disabled.
+        the sink's output directory may not process them. You can provide the value as string format of the time. (like "12h", "7d", etc.)
+        By default it's disabled.
         <br/><br/>
         For file-format-specific options, see the related methods in DataFrameWriter
         (<a href="api/scala/org/apache/spark/sql/DataFrameWriter.html">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>/<a
