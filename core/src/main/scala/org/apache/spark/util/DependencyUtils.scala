@@ -94,9 +94,18 @@ private[spark] object DependencyUtils extends Logging {
   }
 
   /**
-   * Download Ivy URIs dependent jars.
+   * Download Ivy URIs dependency jars.
    *
-   * @param uri Ivy uri need to be downloaded.
+   * @param uri Ivy uri need to be downloaded. The URI format should be:
+   *              `ivy://group:module:version[?query]`
+   *            Ivy URI query part format should be:
+   *              `parameter=value&parameter=value...`
+   *            Note that currently ivy URI query part support two parameters:
+   *             1. transitive: whether to download dependent jars related to your ivy URL.
+   *                transitive=false or `transitive=true`, if not set, the default value is false.
+   *             2. exclude: exclusion list when download ivy URL jar and dependency jars.
+   *                The `exclude` parameter content is a ',' separated `group:module` pair string :
+   *                `exclude=group:module,group:module...`
    * @return Comma separated string list of URIs of downloaded jars
    */
   def resolveMavenDependencies(uri: URI): String = {
