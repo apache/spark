@@ -231,7 +231,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
-    "window frame" :: "must match the required frame" :: Nil)
+    "Cannot specify window frame for lead function" :: Nil)
 
   errorTest(
     "the offset of nth_value window function is negative or zero",

@@ -128,7 +128,7 @@ class InMemoryFileIndex(
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, isRootLevel = true)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -146,20 +146,17 @@ object InMemoryFileIndex extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession,
-      isRootLevel: Boolean): Seq[(Path, Seq[FileStatus])] = {
+      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
     HadoopFSUtils.parallelListLeafFiles(
       sc = sparkSession.sparkContext,
       paths = paths,
       hadoopConf = hadoopConf,
-      filter = filter,
-      isRootLevel = isRootLevel,
+      filter = new PathFilterWrapper(filter),
       ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
       ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
       parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism,
-      filterFun = Some(shouldFilterOut))
- }
+      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+  }
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
@@ -173,5 +170,11 @@ object InMemoryFileIndex extends Logging {
       pathName.startsWith(".") || pathName.endsWith("._COPYING_")
     val include = pathName.startsWith("_common_metadata") || pathName.startsWith("_metadata")
     exclude && !include
+  }
+}
+
+private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = {
+    (filter == null || filter.accept(path)) && !InMemoryFileIndex.shouldFilterOut(path.getName)
   }
 }

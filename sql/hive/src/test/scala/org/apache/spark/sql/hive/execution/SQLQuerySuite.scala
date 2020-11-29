@@ -45,7 +45,6 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -713,8 +712,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
-          "the partition columns of the target table"))
+        assert(e.contains("Partition column types may not be specified in Create Table As Select"))
       }
     }
   }

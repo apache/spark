@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{Externalizable, File, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
@@ -41,7 +41,6 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.deploy.{SimpleApplicationTest, SparkSubmitSuite}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.TestMemoryManager
@@ -53,7 +52,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, UninterruptibleThread, Utils}
+import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {

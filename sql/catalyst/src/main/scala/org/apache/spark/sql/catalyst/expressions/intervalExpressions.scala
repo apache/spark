@@ -109,25 +109,25 @@ abstract class IntervalNumOperation(
 case class MultiplyInterval(
     interval: Expression,
     num: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (checkOverflow) multiplyExact else multiply
+    if (failOnError) multiplyExact else multiply
 
-  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
+  override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
 }
 
 case class DivideInterval(
     interval: Expression,
     num: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (checkOverflow) divideExact else divide
+    if (failOnError) divideExact else divide
 
-  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+  override protected def operationName: String = if (failOnError) "divideExact" else "divide"
 }
 
 // scalastyle:off line.size.limit

@@ -40,13 +40,25 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
 
-    :param est: Estimator, the estimator to be fit.
-    :param train: DataFrame, training data set, used for fitting.
-    :param eva: Evaluator, used to compute `metric`
-    :param validation: DataFrame, validation data set, used for evaluation.
-    :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
-    :param collectSubModel: Whether to collect sub model.
-    :return: (int, float, subModel), an index into `epm` and the associated metric value.
+    Parameters
+    ----------
+    est : :py:class:`pyspark.ml.baseEstimator`
+        he estimator to be fit.
+    train : :py:class:`pyspark.sql.DataFrame`
+        DataFrame, training data set, used for fitting.
+    eva : :py:class:`pyspark.ml.evaluation.Evaluator`
+        used to compute `metric`
+    validation : :py:class:`pyspark.sql.DataFrame`
+        DataFrame, validation data set, used for evaluation.
+    epm : :py:class:`collections.abc.Sequence`
+        Sequence of ParamMap, params maps to be used during fitting & evaluation.
+    collectSubModel : bool
+        Whether to collect sub model.
+
+    Returns
+    -------
+    tuple
+        (int, float, subModel), an index into `epm` and the associated metric value.
     """
     modelIter = est.fitMultiple(train, epm)
 
@@ -62,6 +74,11 @@ class ParamGridBuilder(object):
     r"""
     Builder for a param grid used in grid search-based model selection.
 
+
+    .. versionadded:: 1.4.0
+
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> lr = LogisticRegression()
     >>> output = ParamGridBuilder() \
@@ -79,8 +96,6 @@ class ParamGridBuilder(object):
     True
     >>> all([m in expected for m in output])
     True
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
@@ -237,7 +252,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
     test set exactly once.
 
+    .. versionadded:: 1.4.0
 
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
@@ -270,8 +288,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     0.8333...
     >>> evaluator.evaluate(cvModelRead.transform(dataset))
     0.8333...
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -425,15 +441,24 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
         return datasets
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`CrossValidator`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -480,7 +505,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         """
         Transfer this instance to a Java CrossValidator. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
@@ -521,7 +549,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -530,8 +557,17 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         copies the embedded and extra parameters over.
         It does not copy the extra Params into the subModels.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`CrossValidatorModel`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -589,7 +625,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         """
         Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         sc = SparkContext._active_spark_context
@@ -648,6 +687,10 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     validation sets, and uses evaluation metric on the validation set to select the best model.
     Similar to :class:`CrossValidator`, but only splits the set once.
 
+    .. versionadded:: 2.0.0
+
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
@@ -680,9 +723,6 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     0.833...
     >>> evaluator.evaluate(tvsModelRead.transform(dataset))
     0.833...
-
-    .. versionadded:: 2.0.0
-
     """
 
     @keyword_only
@@ -791,15 +831,23 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         bestModel = est.fit(dataset, epm[bestIndex])
         return self._copyValues(TrainValidationSplitModel(bestModel, metrics, subModels))
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`TrainValidationSplit`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -844,7 +892,11 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
-        :return: Java object equivalent to this instance.
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
@@ -880,7 +932,6 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -890,8 +941,17 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         And, this creates a shallow copy of the validationMetrics.
         It does not copy the extra Params into the subModels.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`TrainValidationSplitModel`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -950,7 +1010,11 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.
-        :return: Java object equivalent to this instance.
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         sc = SparkContext._active_spark_context

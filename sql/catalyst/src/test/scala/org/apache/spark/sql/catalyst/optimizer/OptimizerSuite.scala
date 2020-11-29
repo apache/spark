@@ -58,7 +58,7 @@ class OptimizerSuite extends PlanTest {
         try {
           optimizer.execute(analyzed)
         } catch {
-          case ex: TreeNodeException[LogicalPlan]
+          case ex: TreeNodeException[_]
             if ex.getMessage.contains(SQLConf.OPTIMIZER_MAX_ITERATIONS.key) =>
               fail("optimizer.execute should not reach max iterations.")
         }

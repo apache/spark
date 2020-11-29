@@ -22,9 +22,7 @@ import java.util.{Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.collection.mutable
 import scala.util.Random
-import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
@@ -147,7 +145,13 @@ private[deploy] class Master(
     webUi.bind()
     masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
     if (reverseProxy) {
-      masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
+      val uiReverseProxyUrl = conf.get(UI_REVERSE_PROXY_URL).map(_.stripSuffix("/"))
+      if (uiReverseProxyUrl.nonEmpty) {
+        System.setProperty("spark.ui.proxyBase", uiReverseProxyUrl.get)
+        // If the master URL has a path component, it must end with a slash.
+        // Otherwise the browser generates incorrect relative links
+        masterWebUiUrl = uiReverseProxyUrl.get + "/"
+      }
       webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
@@ -245,14 +249,26 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
 
-    case WorkerDecommission(id, workerRef) =>
-      logInfo("Recording worker %s decommissioning".format(id))
+    case WorkerDecommissioning(id, workerRef) =>
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else {
         // We use foreach since get gives us an option and we can skip the failures.
         idToWorker.get(id).foreach(decommissionWorker)
       }
+
+    case DecommissionWorkers(ids) =>
+      // The caller has already checked the state when handling DecommissionWorkersOnHosts,
+      // so it should not be the STANDBY
+      assert(state != RecoveryState.STANDBY)
+      ids.foreach ( id =>
+        // We use foreach since get gives us an option and we can skip the failures.
+        idToWorker.get(id).foreach { w =>
+          decommissionWorker(w)
+          // Also send a message to the worker node to notify.
+          w.endpoint.send(DecommissionWorker)
+        }
+      )
 
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl,
@@ -891,10 +907,7 @@ private[deploy] class Master(
     logInfo(s"Decommissioning the workers with host:ports ${workersToRemoveHostPorts}")
 
     // The workers are removed async to avoid blocking the receive loop for the entire batch
-    workersToRemove.foreach(wi => {
-      logInfo(s"Sending the worker decommission to ${wi.id} and ${wi.endpoint}")
-      self.send(WorkerDecommission(wi.id, wi.endpoint))
-    })
+    self.send(DecommissionWorkers(workersToRemove.map(_.id).toSeq))
 
     // Return the count of workers actually removed
     workersToRemove.size

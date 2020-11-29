@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -361,6 +361,50 @@ NULL
 #' }
 NULL
 
+#' Avro processing functions for Column operations
+#'
+#' Avro processing functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param jsonFormatSchema character Avro schema in JSON string format
+#' @param ... additional argument(s) passed as parser options.
+#' @name column_avro_functions
+#' @rdname column_avro_functions
+#' @family avro functions
+#' @note Avro is built-in but external data source module since Spark 2.4.
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#' schema <- paste(
+#'   c(
+#'     '{"type": "record", "namespace": "example.avro", "name": "Iris", "fields": [',
+#'     '{"type": ["double", "null"], "name": "Sepal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Sepal_Width"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Width"},',
+#'     '{"type": ["string", "null"], "name": "Species"}]}'
+#'   ),
+#'   collapse="\\n"
+#' )
+#'
+#' df_serialized <- select(
+#'   df,
+#'   alias(to_avro(alias(struct(column("*")), "fields")), "payload")
+#' )
+#'
+#' df_deserialized <- select(
+#'   df_serialized,
+#'   from_avro(df_serialized$payload, schema)
+#' )
+#'
+#' head(df_deserialized)
+#' }
+NULL
+
 #' @details
 #' \code{lit}: A new Column is created to represent the literal value.
 #' If the parameter is a Column, it is returned unchanged.
@@ -408,6 +452,19 @@ setMethod("acos",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "acos", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{acosh}: Computes inverse hyperbolic cosine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases acosh acosh,Column-method
+#' @note acosh since 3.1.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
             column(jc)
           })
 
@@ -479,6 +536,19 @@ setMethod("asin",
           })
 
 #' @details
+#' \code{asinh}: Computes inverse hyperbolic sine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.1.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
@@ -489,6 +559,19 @@ setMethod("atan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "atan", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Computes inverse hyperbolic tangent of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.1.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
@@ -2835,7 +2918,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
@@ -4545,5 +4628,62 @@ setMethod("vector_to_array",
               x@jc,
               dtype
             )
+            column(jc)
+          })
+
+#' @details
+#' \code{from_avro} Converts a binary column of Avro format into its corresponding catalyst value.
+#' The specified schema must match the read data, otherwise the behavior is undefined:
+#' it may fail or return arbitrary result.
+#' To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+#' set via the option avroSchema.
+#'
+#' @rdname column_avro_functions
+#' @aliases from_avro from_avro,Column-method
+#' @note from_avro since 3.1.0
+setMethod("from_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema, ...) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic(
+              "org.apache.spark.sql.avro.functions", "from_avro",
+              x@jc,
+              jsonFormatSchema,
+              options
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{to_avro} Converts a column into binary of Avro format.
+#'
+#' @rdname column_avro_functions
+#' @aliases to_avro to_avro,Column-method
+#' @note to_avro since 3.1.0
+setMethod("to_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema = NULL) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            jc <- if (is.null(jsonFormatSchema)) {
+              callJStatic("org.apache.spark.sql.avro.functions", "to_avro", x@jc)
+            } else {
+              callJStatic(
+                "org.apache.spark.sql.avro.functions",
+                "to_avro",
+                x@jc,
+                jsonFormatSchema
+              )
+            }
             column(jc)
           })

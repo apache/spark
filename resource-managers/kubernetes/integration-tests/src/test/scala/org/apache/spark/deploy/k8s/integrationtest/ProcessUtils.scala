@@ -32,7 +32,7 @@ object ProcessUtils extends Logging {
   def executeProcess(
       fullCommand: Array[String],
       timeout: Long,
-      dumpErrors: Boolean = false): Seq[String] = {
+      dumpErrors: Boolean = true): Seq[String] = {
     val pb = new ProcessBuilder().command(fullCommand: _*)
     pb.redirectErrorStream(true)
     val proc = pb.start()
@@ -45,7 +45,7 @@ object ProcessUtils extends Logging {
     assert(proc.waitFor(timeout, TimeUnit.SECONDS),
       s"Timed out while executing ${fullCommand.mkString(" ")}")
     assert(proc.exitValue == 0,
-      s"Failed to execute ${fullCommand.mkString(" ")}" +
+      s"Failed to execute -- ${fullCommand.mkString(" ")} --" +
         s"${if (dumpErrors) "\n" + outputLines.mkString("\n")}")
     outputLines.toSeq
   }

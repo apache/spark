@@ -21,13 +21,13 @@ import threading
 import time
 import unittest
 import warnings
+from distutils.version import LooseVersion
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StructType, StringType, IntegerType, LongType, \
-    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, MapType, \
-    ArrayType
+    FloatType, DoubleType, DecimalType, DateType, TimestampType, BinaryType, StructField, ArrayType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -114,9 +114,10 @@ class ArrowTests(ReusedSQLTestCase):
         return pd.DataFrame(data=data_dict)
 
     def test_toPandas_fallback_enabled(self):
+        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
-            schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
-            df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
+            schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
+            df = self.spark.createDataFrame([([ts],)], schema=schema)
             with QuietTest(self.sc):
                 with self.warnings_lock:
                     with warnings.catch_warnings(record=True) as warns:
@@ -129,10 +130,10 @@ class ArrowTests(ReusedSQLTestCase):
                         self.assertTrue(len(user_warns) > 0)
                         self.assertTrue(
                             "Attempting non-optimization" in str(user_warns[-1]))
-                        assert_frame_equal(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
+                        assert_frame_equal(pdf, pd.DataFrame({"a": [[ts]]}))
 
     def test_toPandas_fallback_disabled(self):
-        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
+        schema = StructType([StructField("a", ArrayType(TimestampType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
@@ -336,6 +337,62 @@ class ArrowTests(ReusedSQLTestCase):
                 self.assertTrue(expected[r][e] == result_arrow[r][e] and
                                 result[r][e] == result_arrow[r][e])
 
+    def test_createDataFrame_with_map_type(self):
+        map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
+
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4], "m": map_data})
+        schema = "id long, m map<string, long>"
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema=schema)
+
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    self.spark.createDataFrame(pdf, schema=schema)
+        else:
+            df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+
+            result = df.collect()
+            result_arrow = df_arrow.collect()
+
+            self.assertEqual(len(result), len(result_arrow))
+            for row, row_arrow in zip(result, result_arrow):
+                i, m = row
+                _, m_arrow = row_arrow
+                self.assertEqual(m, map_data[i])
+                self.assertEqual(m_arrow, map_data[i])
+
+    def test_toPandas_with_map_type(self):
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3],
+                            "m": [{}, {"a": 1}, {"a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}]})
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
+
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    df.toPandas()
+        else:
+            pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow, pdf_non)
+
+    def test_toPandas_with_map_type_nulls(self):
+        pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4],
+                            "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]})
+
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            df = self.spark.createDataFrame(pdf, schema="id long, m map<string, long>")
+
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                    df.toPandas()
+        else:
+            pdf_non, pdf_arrow = self._toPandas_arrow_toggle(df)
+            assert_frame_equal(pdf_arrow, pdf_non)
+
     def test_createDataFrame_with_int_col_names(self):
         import numpy as np
         pdf = pd.DataFrame(np.random.rand(4, 2))
@@ -345,26 +402,28 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
     def test_createDataFrame_fallback_enabled(self):
+        ts = datetime.datetime(2015, 11, 1, 0, 30)
         with QuietTest(self.sc):
             with self.sql_conf({"spark.sql.execution.arrow.pyspark.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     # we want the warnings to appear even if this test is run from a subclass
                     warnings.simplefilter("always")
                     df = self.spark.createDataFrame(
-                        pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+                        pd.DataFrame({"a": [[ts]]}), "a: array<timestamp>")
                     # Catch and check the last UserWarning.
                     user_warns = [
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
                         "Attempting non-optimization" in str(user_warns[-1]))
-                    self.assertEqual(df.collect(), [Row(a={u'a': 1})])
+                    self.assertEqual(df.collect(), [Row(a=[ts])])
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
-                    pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+                    pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
+                    "a: array<timestamp>")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):

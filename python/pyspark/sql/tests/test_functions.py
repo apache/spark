@@ -116,6 +116,7 @@ class FunctionsTests(ReusedSQLTestCase):
             c = get_values(b)
             diff = [abs(v - c[k]) < 1e-6 for k, v in enumerate(a)]
             return sum(diff) == len(a)
+
         assert_close([math.cos(i) for i in range(10)],
                      df.select(functions.cos(df.a)).collect())
         assert_close([math.cos(i) for i in range(10)],
@@ -139,6 +140,21 @@ class FunctionsTests(ReusedSQLTestCase):
         assert_close([math.hypot(i, 2) for i in range(10)],
                      df.select(functions.hypot(df.a, 2)).collect())
 
+    def test_inverse_trig_functions(self):
+        from pyspark.sql import functions
+
+        funs = [
+            (functions.acosh, "ACOSH"),
+            (functions.asinh, "ASINH"),
+            (functions.atanh, "ATANH"),
+        ]
+
+        cols = ["a", functions.col("a")]
+
+        for f, alias in funs:
+            for c in cols:
+                self.assertIn(f"{alias}(a)", repr(f(c)))
+
     def test_rand_functions(self):
         df = self.df
         from pyspark.sql import functions
@@ -161,14 +177,20 @@ class FunctionsTests(ReusedSQLTestCase):
 
     def test_string_functions(self):
         from pyspark.sql import functions
-        from pyspark.sql.functions import col, lit, _string_functions
+        from pyspark.sql.functions import col, lit
+        string_functions = [
+            "upper", "lower", "ascii",
+            "base64", "unbase64",
+            "ltrim", "rtrim", "trim"
+        ]
+
         df = self.spark.createDataFrame([['nick']], schema=['name'])
         self.assertRaisesRegexp(
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
 
-        for name in _string_functions.keys():
+        for name in string_functions:
             self.assertEqual(
                 df.select(getattr(functions, name)("name")).first()[0],
                 df.select(getattr(functions, name)(col("name"))).first()[0])
@@ -258,6 +280,41 @@ class FunctionsTests(ReusedSQLTestCase):
         self.assertRaises(ValueError, lambda: df.stat.approxQuantile(123, [0.1, 0.9], 0.1))
         self.assertRaises(ValueError, lambda: df.stat.approxQuantile(("a", 123), [0.1, 0.9], 0.1))
         self.assertRaises(ValueError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
+
+    def test_sorting_functions_with_column(self):
+        from pyspark.sql import functions
+        from pyspark.sql.column import Column
+
+        funs = [
+            functions.asc_nulls_first, functions.asc_nulls_last,
+            functions.desc_nulls_first, functions.desc_nulls_last
+        ]
+        exprs = [col("x"), "x"]
+
+        for fun in funs:
+            for expr in exprs:
+                res = fun(expr)
+                self.assertIsInstance(res, Column)
+                self.assertIn(
+                    f"""'x {fun.__name__.replace("_", " ").upper()}'""",
+                    str(res)
+                )
+
+        for expr in exprs:
+            res = functions.asc(expr)
+            self.assertIsInstance(res, Column)
+            self.assertIn(
+                """'x ASC NULLS FIRST'""",
+                str(res)
+            )
+
+        for expr in exprs:
+            res = functions.desc(expr)
+            self.assertIsInstance(res, Column)
+            self.assertIn(
+                """'x DESC NULLS LAST'""",
+                str(res)
+            )
 
     def test_sort_with_nulls_order(self):
         from pyspark.sql import functions

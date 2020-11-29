@@ -386,8 +386,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
           optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+        // If the source accepts external table metadata, here we pass the schema of input query
+        // to `getTable`. This is for avoiding schema inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        val outputSchema = if (provider.supportsExternalMetadata()) {
+          Some(df.schema)
+        } else {
+          None
+        }
         val table = DataSourceV2Utils.getTableFromProvider(
-          provider, dsOptions, userSpecifiedSchema = None)
+          provider, dsOptions, userSpecifiedSchema = outputSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>

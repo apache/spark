@@ -641,8 +641,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`. The dialect that is
-   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @group basic
    * @since 1.3.0

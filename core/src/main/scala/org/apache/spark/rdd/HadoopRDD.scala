@@ -232,6 +232,10 @@ class HadoopRDD[K, V](
         logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
             s" partitions returned from this path.", e)
         Array.empty[Partition]
+      case e: IOException if e.getMessage.startsWith("Not a file:") =>
+        val path = e.getMessage.split(":").map(_.trim).apply(2)
+        throw new IOException(s"Path: ${path} is a directory, which is not supported by the " +
+          s"record reader when `mapreduce.input.fileinputformat.input.dir.recursive` is false.")
     }
   }
 

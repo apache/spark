@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -139,5 +139,46 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
     assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+  }
+
+  test("listPartitionByNames") {
+    val partCatalog = new InMemoryPartitionTableCatalog
+    partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
+    val table = partCatalog.createTable(
+      ident,
+      new StructType()
+        .add("col0", IntegerType)
+        .add("part0", IntegerType)
+        .add("part1", StringType),
+      Array(LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
+      util.Collections.emptyMap[String, String])
+    val partTable = table.asInstanceOf[InMemoryPartitionTable]
+
+    Seq(
+      InternalRow(0, "abc"),
+      InternalRow(0, "def"),
+      InternalRow(1, "abc")).foreach { partIdent =>
+      partTable.createPartition(partIdent, new util.HashMap[String, String]())
+    }
+
+    Seq(
+      (Array("part0", "part1"), InternalRow(0, "abc")) -> Set(InternalRow(0, "abc")),
+      (Array("part0"), InternalRow(0)) -> Set(InternalRow(0, "abc"), InternalRow(0, "def")),
+      (Array("part1"), InternalRow("abc")) -> Set(InternalRow(0, "abc"), InternalRow(1, "abc")),
+      (Array.empty[String], InternalRow.empty) ->
+        Set(InternalRow(0, "abc"), InternalRow(0, "def"), InternalRow(1, "abc")),
+      (Array("part0", "part1"), InternalRow(3, "xyz")) -> Set(),
+      (Array("part1"), InternalRow(3.14f)) -> Set()
+    ).foreach { case ((names, idents), expected) =>
+      assert(partTable.listPartitionByNames(names, idents).toSet === expected)
+    }
+    // Check invalid parameters
+    Seq(
+      (Array("part0", "part1"), InternalRow(0)),
+      (Array("col0", "part1"), InternalRow(0, 1)),
+      (Array("wrong"), InternalRow("invalid"))
+    ).foreach { case (names, idents) =>
+      intercept[AssertionError](partTable.listPartitionByNames(names, idents))
+    }
   }
 }

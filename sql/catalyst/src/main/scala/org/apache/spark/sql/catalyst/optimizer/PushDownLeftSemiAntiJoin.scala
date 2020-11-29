@@ -42,7 +42,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
         // No join condition, just push down the Join below Project
         p.copy(child = Join(gChild, rightOp, joinType, joinCond, hint))
       } else {
-        val aliasMap = PushPredicateThroughNonJoin.getAliasMap(p)
+        val aliasMap = getAliasMap(p)
         val newJoinCond = if (aliasMap.nonEmpty) {
           Option(replaceAlias(joinCond.get, aliasMap))
         } else {
@@ -55,7 +55,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
     case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
         if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
         !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
-      val aliasMap = PushPredicateThroughNonJoin.getAliasMap(agg)
+      val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
         predicate.references.nonEmpty &&

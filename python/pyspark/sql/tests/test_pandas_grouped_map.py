@@ -26,7 +26,7 @@ from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf
     window
 from pyspark.sql.types import IntegerType, DoubleType, ArrayType, BinaryType, ByteType, \
     LongType, DecimalType, ShortType, FloatType, StringType, BooleanType, StructType, \
-    StructField, NullType, MapType, TimestampType
+    StructField, NullType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
@@ -246,10 +246,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid return type.*grouped map Pandas UDF.*MapType'):
+                    'Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
                 pandas_udf(
                     lambda pdf: pdf,
-                    'id long, v map<int, int>',
+                    'id long, v array<timestamp>',
                     PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
@@ -276,7 +276,6 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_unsupported_types(self):
         common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
-            StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
             StructField('null', NullType()),
             StructField('struct', StructType([StructField('l', LongType())])),
@@ -485,7 +484,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                                                  col('temp0.key') == col('temp1.key'))
         self.assertEquals(res.count(), 5)
 
-    def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
+    def test_mixed_scalar_udfs_followed_by_groupby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
             .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))

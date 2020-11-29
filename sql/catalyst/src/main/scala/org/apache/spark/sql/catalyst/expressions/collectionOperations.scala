@@ -1907,10 +1907,14 @@ case class ArrayPosition(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. Returns NULL if the index exceeds the length
-      of the array.
+      accesses elements from the last to the first. The function returns NULL
+      if the index exceeds the length of the array and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws ArrayIndexOutOfBoundsException
+      for invalid indices.
 
-    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
+    _FUNC_(map, key) - Returns value for given key. The function returns NULL
+      if the key is not contained in the map and `spark.sql.ansi.enabled` is set to false.
+      If `spark.sql.ansi.enabled` is set to true, it throws NoSuchElementException instead.
   """,
   examples = """
     Examples:
@@ -1921,10 +1925,18 @@ case class ArrayPosition(left: Expression, right: Expression)
   """,
   since = "2.4.0",
   group = "map_funcs")
-case class ElementAt(left: Expression, right: Expression)
+case class ElementAt(
+    left: Expression,
+    right: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
+  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
+
+  @transient private lazy val mapValueContainsNull =
+    left.dataType.asInstanceOf[MapType].valueContainsNull
 
   @transient private lazy val arrayContainsNull = left.dataType.asInstanceOf[ArrayType].containsNull
 
@@ -1967,9 +1979,24 @@ case class ElementAt(left: Expression, right: Expression)
     }
   }
 
+  private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    if (ordinal == 0) {
+      false
+    } else if (elements.length < math.abs(ordinal)) {
+      !failOnError
+    } else {
+      if (ordinal < 0) {
+        elements(elements.length + ordinal).nullable
+      } else {
+        elements(ordinal - 1).nullable
+      }
+    }
+  }
+
   override def nullable: Boolean = left.dataType match {
-    case _: ArrayType => computeNullabilityFromArray(left, right)
-    case _: MapType => true
+    case _: ArrayType =>
+      computeNullabilityFromArray(left, right, failOnError, nullability)
+    case _: MapType => if (failOnError) mapValueContainsNull else true
   }
 
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
@@ -1980,7 +2007,12 @@ case class ElementAt(left: Expression, right: Expression)
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          null
+          if (failOnError) {
+            throw new ArrayIndexOutOfBoundsException(
+              s"Invalid index: $index, numElements: ${array.numElements()}")
+          } else {
+            null
+          }
         } else {
           val idx = if (index == 0) {
             throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
@@ -1997,7 +2029,7 @@ case class ElementAt(left: Expression, right: Expression)
         }
       }
     case _: MapType =>
-      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering)
+      (value, ordinal) => getValueEval(value, ordinal, mapKeyType, ordering, failOnError)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2014,10 +2046,20 @@ case class ElementAt(left: Expression, right: Expression)
           } else {
             ""
           }
+
+          val indexOutOfBoundBranch = if (failOnError) {
+            s"""throw new ArrayIndexOutOfBoundsException(
+               |  "Invalid index: " + $index + ", numElements: " + $eval1.numElements()
+               |);
+             """.stripMargin
+          } else {
+            s"${ev.isNull} = true;"
+          }
+
           s"""
              |int $index = (int) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
-             |  ${ev.isNull} = true;
+             |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
              |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
@@ -2034,7 +2076,7 @@ case class ElementAt(left: Expression, right: Expression)
            """.stripMargin
         })
       case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType], failOnError)
     }
   }
 

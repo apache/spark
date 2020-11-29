@@ -96,13 +96,11 @@ object PushDownUtils extends PredicateHelper {
         val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
-        if (neededOutput != relation.output) {
-          r.pruneColumns(neededOutput.toStructType)
-          val scan = r.build()
-          scan -> toOutputAttrs(scan.readSchema(), relation)
-        } else {
-          r.build() -> relation.output
-        }
+        r.pruneColumns(neededOutput.toStructType)
+        val scan = r.build()
+        // always project, in case the relation's output has been updated and doesn't match
+        // the underlying table schema
+        scan -> toOutputAttrs(scan.readSchema(), relation)
 
       case _ => scanBuilder.build() -> relation.output
     }

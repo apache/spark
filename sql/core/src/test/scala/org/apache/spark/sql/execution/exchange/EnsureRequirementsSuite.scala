@@ -39,7 +39,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // Test PartitioningCollection on the left side of join.
     val smjExec1 = SortMergeJoinExec(
       exprB :: exprA :: Nil, exprA :: exprB :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec1) match {
+    EnsureRequirements.apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>
@@ -51,7 +51,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // Test PartitioningCollection on the right side of join.
     val smjExec2 = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprB :: exprA :: Nil, Inner, None, plan2, plan1)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec2) match {
+    EnsureRequirements.apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
@@ -64,7 +64,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // and it should fall back to the right side.
     val smjExec3 = SortMergeJoinExec(
       exprA :: exprC :: Nil, exprB :: exprA :: Nil, Inner, None, plan1, plan1)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec3) match {
+    EnsureRequirements.apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
@@ -83,7 +83,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // Test fallback to the right side, which has HashPartitioning.
     val smjExec1 = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan2)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec1) match {
+    EnsureRequirements.apply(smjExec1) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: HashPartitioning, _, _), _), _) =>
@@ -97,7 +97,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       outputPartitioning = PartitioningCollection(Seq(HashPartitioning(exprB :: exprC :: Nil, 5))))
     val smjExec2 = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprC :: exprB :: Nil, Inner, None, plan1, plan3)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec2) match {
+    EnsureRequirements.apply(smjExec2) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _),
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _), _) =>
@@ -110,7 +110,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // found, and it should fall back to the left side, which has a PartitioningCollection.
     val smjExec3 = SortMergeJoinExec(
       exprC :: exprB :: Nil, exprA :: exprB :: Nil, Inner, None, plan3, plan1)
-    EnsureRequirements(spark.sessionState.conf).apply(smjExec3) match {
+    EnsureRequirements.apply(smjExec3) match {
       case SortMergeJoinExec(leftKeys, rightKeys, _, _,
         SortExec(_, _, DummySparkPlan(_, _, _: PartitioningCollection, _, _), _),
         SortExec(_, _, ShuffleExchangeExec(_: HashPartitioning, _, _), _), _) =>

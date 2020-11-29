@@ -49,6 +49,11 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
   private def constructVolumes(
     volumeSpecs: Iterable[KubernetesVolumeSpec]
   ): Iterable[(VolumeMount, Volume)] = {
+    val duplicateMountPaths = volumeSpecs.map(_.mountPath).toSeq.groupBy(identity).collect {
+      case (x, ys) if ys.length > 1 => s"'$x'"
+    }
+    require(duplicateMountPaths.isEmpty,
+      s"Found duplicated mountPath: ${duplicateMountPaths.mkString(", ")}")
     volumeSpecs.zipWithIndex.map { case (spec, i) =>
       val volumeMount = new VolumeMountBuilder()
         .withMountPath(spec.mountPath)

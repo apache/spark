@@ -80,7 +80,8 @@ case class ScalarSubquery(
   @volatile private var updated: Boolean = false
 
   def updateResult(): Unit = {
-    val rows = plan.executeCollect()
+    // Only return the first two rows as an array to avoid Driver OOM.
+    val rows = plan.executeTake(2)
     if (rows.length > 1) {
       sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
     }
@@ -199,7 +200,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
  * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
  * references.
  */
-case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
+object ReuseSubquery extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {

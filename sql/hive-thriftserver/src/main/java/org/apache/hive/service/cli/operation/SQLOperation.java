@@ -155,11 +155,12 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw toSQLException("Error while processing statement", response);
       }
     } catch (HiveSQLException e) {
-      // If the operation was cancelled by another thread,
+      // If the operation was cancelled by another thread or timed out,
       // Driver#run will return a non-zero response code.
-      // We will simply return if the operation state is CANCELED,
+      // We will simply return if the operation state is CANCELED or TIMEDOUT,
       // otherwise throw an exception
-      if (getStatus().getState() == OperationState.CANCELED) {
+      if (getStatus().getState() == OperationState.CANCELED ||
+          getStatus().getState() == OperationState.TIMEDOUT) {
         return;
       }
       else {

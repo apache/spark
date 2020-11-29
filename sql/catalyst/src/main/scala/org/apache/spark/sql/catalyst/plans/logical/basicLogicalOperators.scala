@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -365,7 +362,7 @@ case class Join(
         left.constraints
       case RightOuter =>
         right.constraints
-      case FullOuter =>
+      case _ =>
         ExpressionSet()
     }
   }
@@ -453,6 +450,22 @@ case class View(
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+  }
+}
+
+object View {
+  def effectiveSQLConf(configs: Map[String, String]): SQLConf = {
+    val activeConf = SQLConf.get
+    if (activeConf.useCurrentSQLConfigsForView) return activeConf
+
+    val sqlConf = new SQLConf()
+    for ((k, v) <- configs) {
+      sqlConf.settings.put(k, v)
+    }
+    // We should respect the current maxNestedViewDepth cause the view resolving are executed
+    // from top to down.
+    sqlConf.setConf(SQLConf.MAX_NESTED_VIEW_DEPTH, activeConf.maxNestedViewDepth)
+    sqlConf
   }
 }
 
@@ -586,7 +599,13 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    if (groupingExpressions.isEmpty) {
+      Some(1L)
+    } else {
+      child.maxRows
+    }
+  }
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
@@ -880,6 +899,12 @@ case class SubqueryAlias(
     val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
+
+  override def metadataOutput: Seq[Attribute] = {
+    val qualifierList = identifier.qualifier :+ alias
+    child.metadataOutput.map(_.withQualifier(qualifierList))
+  }
+
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -34,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+object EnsureRequirements extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution

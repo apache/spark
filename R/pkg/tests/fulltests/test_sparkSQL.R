@@ -1428,6 +1428,9 @@ test_that("column functions", {
     vector_to_array(c, "float32") + vector_to_array(c, "float64")
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
+  c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
+    desc_nulls_first(c1) + desc_nulls_last(c1)
+  c29 <- acosh(c1) + asinh(c1) + atanh(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1680,9 +1683,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_csv("Amsterdam,2018")))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
   c <- collect(select(df, schema_of_csv(lit("Amsterdam,2018"))))
-  expect_equal(c[[1]], "struct<_c0:string,_c1:int>")
+  expect_equal(c[[1]], "STRUCT<`_c0`: STRING, `_c1`: INT>")
 
   # Test to_json(), from_json(), schema_of_json()
   df <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
@@ -1715,9 +1718,9 @@ test_that("column functions", {
 
   df <- as.DataFrame(list(list("col" = "1")))
   c <- collect(select(df, schema_of_json('{"name":"Bob"}')))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
   c <- collect(select(df, schema_of_json(lit('{"name":"Bob"}'))))
-  expect_equal(c[[1]], "struct<name:string>")
+  expect_equal(c[[1]], "STRUCT<`name`: STRING>")
 
   # Test to_json() supports arrays of primitive types and arrays
   df <- sql("SELECT array(19, 42, 70) as age")
@@ -1837,6 +1840,32 @@ test_that("column functions", {
     )),
     "age"
   )
+})
+
+test_that("avro column functions", {
+  skip_if_not(
+    grepl("spark-avro", sparkR.conf("spark.jars", "")),
+    "spark-avro jar not present"
+  )
+
+  schema <- '{"namespace": "example.avro",
+    "type": "record",
+    "name": "User",
+    "fields": [
+      {"name": "name", "type": "string"},
+      {"name": "favorite_color", "type": ["string", "null"]}
+    ]
+  }'
+
+  c0 <- column("foo")
+  c1 <- from_avro(c0, schema)
+  expect_s4_class(c1, "Column")
+  c2 <- from_avro("foo", schema)
+  expect_s4_class(c2, "Column")
+  c3 <- to_avro(c1)
+  expect_s4_class(c3, "Column")
+  c4 <- to_avro(c1, schema)
+  expect_s4_class(c4, "Column")
 })
 
 test_that("column binary mathfunctions", {
@@ -2064,7 +2093,7 @@ test_that("higher order functions", {
     createDataFrame(data.frame(id = 1)),
     expr("CAST(array(1.0, 2.0, -3.0, -4.0) AS array<double>) xs"),
     expr("CAST(array(0.0, 3.0, 48.0) AS array<double>) ys"),
-    expr("array('FAILED', 'SUCCEDED') as vs"),
+    expr("array('FAILED', 'SUCCEEDED') as vs"),
     expr("map('foo', 1, 'bar', 2) as mx"),
     expr("map('foo', 42, 'bar', -1, 'baz', 0) as my")
   )
@@ -2147,7 +2176,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
-  expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
+  expect_true(is.na(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "SparkDataFrame")
@@ -2178,7 +2207,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1", ][1, 2] - 6.928203) < 1e-6)
-  expect_true(is.nan(df7_local[df7_local$name == "ID2", ][1, 2]))
+  expect_true(is.na(df7_local[df7_local$name == "ID2", ][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
@@ -3638,7 +3667,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     }
 
     # Computes the arithmetic mean of the second column by grouping
-    # on the first and third columns. Output the groupping value and the average.
+    # on the first and third columns. Output the grouping value and the average.
     schema <-  structType(structField("a", "integer"), structField("c", "string"),
                           structField("avg", "double"))
     df3 <- gapply(
@@ -3936,7 +3965,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                paste("Error in listFunctions : analysis error - Database",
                      "'zxwtyswklpf_db' does not exist"))
 
-  # recoverPartitions does not work with tempory view
+  # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
                "no such table - Table or view 'cars' not found in database 'default'")
   expect_error(refreshTable("cars"), NA)

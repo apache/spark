@@ -141,7 +141,7 @@ abstract class RemoveRedundantProjectsSuiteBase
       }
 
       // Re-apply remove redundant project rule.
-      val rule = RemoveRedundantProjects(spark.sessionState.conf)
+      val rule = RemoveRedundantProjects
       val newExecutedPlan = rule.apply(newPlan)
       // The manually added ProjectExec node shouldn't be removed.
       assert(collectWithSubqueries(newExecutedPlan) {

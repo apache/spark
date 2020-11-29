@@ -55,7 +55,7 @@ private[spark] class TaskSetManager(
     sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
-    blacklistTracker: Option[BlacklistTracker] = None,
+    healthTracker: Option[HealthTracker] = None,
     clock: Clock = new SystemClock()) extends Schedulable with Logging {
 
   private val conf = sched.sc.conf
@@ -130,9 +130,9 @@ private[spark] class TaskSetManager(
   private var totalResultSize = 0L
   private var calculatedTasks = 0
 
-  private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
-    blacklistTracker.map { _ =>
-      new TaskSetBlacklist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
+  private[scheduler] val taskSetExcludelistHelperOpt: Option[TaskSetExcludelist] = {
+    healthTracker.map { _ =>
+      new TaskSetExcludelist(sched.sc.listenerBus, conf, stageId, taskSet.stageAttemptId, clock)
     }
   }
 
@@ -294,7 +294,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!isTaskBlacklistedOnExecOrNode(index, execId, host) &&
+      if (!isTaskExcludededOnExecOrNode(index, execId, host) &&
           !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
@@ -317,10 +317,10 @@ private[spark] class TaskSetManager(
     taskAttempts(taskIndex).exists(_.host == host)
   }
 
-  private def isTaskBlacklistedOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
-    taskSetBlacklistHelperOpt.exists { blacklist =>
-      blacklist.isNodeBlacklistedForTask(host, index) ||
-        blacklist.isExecutorBlacklistedForTask(execId, index)
+  private def isTaskExcludededOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
+    taskSetExcludelistHelperOpt.exists { excludeList =>
+      excludeList.isNodeExcludedForTask(host, index) ||
+        excludeList.isExecutorExcludedForTask(execId, index)
     }
   }
 
@@ -421,11 +421,11 @@ private[spark] class TaskSetManager(
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : (Option[TaskDescription], Boolean) =
   {
-    val offerBlacklisted = taskSetBlacklistHelperOpt.exists { blacklist =>
-      blacklist.isNodeBlacklistedForTaskSet(host) ||
-        blacklist.isExecutorBlacklistedForTaskSet(execId)
+    val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
+      excludeList.isNodeExcludedForTaskSet(host) ||
+        excludeList.isExecutorExcludedForTaskSet(execId)
     }
-    if (!isZombie && !offerBlacklisted) {
+    if (!isZombie && !offerExcluded) {
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
@@ -518,10 +518,10 @@ private[spark] class TaskSetManager(
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
-        blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
+        healthTracker.foreach(_.updateExcludedForSuccessfulTaskSet(
           taskSet.stageId,
           taskSet.stageAttemptId,
-          taskSetBlacklistHelperOpt.get.execToFailures))
+          taskSetExcludelistHelperOpt.get.execToFailures))
       }
     }
   }
@@ -606,12 +606,13 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
+   * Check whether the given task set has been excluded to the point that it can't run anywhere.
    *
    * It is possible that this taskset has become impossible to schedule *anywhere* due to the
-   * blacklist.  The most common scenario would be if there are fewer executors than
-   * spark.task.maxFailures. We need to detect this so we can avoid the job from being hung.
-   * We try to acquire new executor/s by killing an existing idle blacklisted executor.
+   * failures that lead executors being excluded from the ones we can run on. The most common
+   * scenario would be if there are fewer executors than spark.task.maxFailures.
+   * We need to detect this so we can avoid the job from being hung. We try to acquire new
+   * executor/s by killing an existing idle excluded executor.
    *
    * There's a tradeoff here: we could make sure all tasks in the task set are schedulable, but that
    * would add extra time to each iteration of the scheduling loop. Here, we take the approach of
@@ -620,12 +621,12 @@ private[spark] class TaskSetManager(
    * method is faster in the typical case. In the worst case, this method can take
    * O(maxTaskFailures + numTasks) time, but it will be faster when there haven't been any task
    * failures (this is because the method picks one unscheduled task, and then iterates through each
-   * executor until it finds one that the task isn't blacklisted on).
+   * executor until it finds one that the task isn't excluded on).
    */
-  private[scheduler] def getCompletelyBlacklistedTaskIfAny(
+  private[scheduler] def getCompletelyExcludedTaskIfAny(
       hostToExecutors: HashMap[String, HashSet[String]]): Option[Int] = {
-    taskSetBlacklistHelperOpt.flatMap { taskSetBlacklist =>
-      val appBlacklist = blacklistTracker.get
+    taskSetExcludelistHelperOpt.flatMap { taskSetExcludelist =>
+      val appHealthTracker = healthTracker.get
       // Only look for unschedulable tasks when at least one executor has registered. Otherwise,
       // task sets will be (unnecessarily) aborted in cases when no executors have registered yet.
       if (hostToExecutors.nonEmpty) {
@@ -651,18 +652,18 @@ private[spark] class TaskSetManager(
           // when that unschedulable task is the last task remaining.
           hostToExecutors.forall { case (host, execsOnHost) =>
             // Check if the task can run on the node
-            val nodeBlacklisted =
-              appBlacklist.isNodeBlacklisted(host) ||
-                taskSetBlacklist.isNodeBlacklistedForTaskSet(host) ||
-                taskSetBlacklist.isNodeBlacklistedForTask(host, indexInTaskSet)
-            if (nodeBlacklisted) {
+            val nodeExcluded =
+              appHealthTracker.isNodeExcluded(host) ||
+                taskSetExcludelist.isNodeExcludedForTaskSet(host) ||
+                taskSetExcludelist.isNodeExcludedForTask(host, indexInTaskSet)
+            if (nodeExcluded) {
               true
             } else {
               // Check if the task can run on any of the executors
               execsOnHost.forall { exec =>
-                appBlacklist.isExecutorBlacklisted(exec) ||
-                  taskSetBlacklist.isExecutorBlacklistedForTaskSet(exec) ||
-                  taskSetBlacklist.isExecutorBlacklistedForTask(exec, indexInTaskSet)
+                appHealthTracker.isExecutorExcluded(exec) ||
+                  taskSetExcludelist.isExecutorExcludedForTaskSet(exec) ||
+                  taskSetExcludelist.isExecutorExcludedForTask(exec, indexInTaskSet)
               }
             }
           }
@@ -673,16 +674,16 @@ private[spark] class TaskSetManager(
     }
   }
 
-  private[scheduler] def abortSinceCompletelyBlacklisted(indexInTaskSet: Int): Unit = {
-    taskSetBlacklistHelperOpt.foreach { taskSetBlacklist =>
+  private[scheduler] def abortSinceCompletelyExcludedOnFailure(indexInTaskSet: Int): Unit = {
+    taskSetExcludelistHelperOpt.foreach { taskSetExcludelist =>
       val partition = tasks(indexInTaskSet).partitionId
       abort(s"""
          |Aborting $taskSet because task $indexInTaskSet (partition $partition)
-         |cannot run anywhere due to node and executor blacklist.
+         |cannot run anywhere due to node and executor excludeOnFailure.
          |Most recent failure:
-         |${taskSetBlacklist.getLatestFailureReason}
+         |${taskSetExcludelist.getLatestFailureReason}
          |
-         |Blacklisting behavior can be configured via spark.blacklist.*.
+         |ExcludeOnFailure behavior can be configured via spark.excludeOnFailure.*.
          |""".stripMargin)
     }
   }
@@ -821,7 +822,7 @@ private[spark] class TaskSetManager(
         isZombie = true
 
         if (fetchFailed.bmAddress != null) {
-          blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
+          healthTracker.foreach(_.updateExcludedForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
 
@@ -899,7 +900,7 @@ private[spark] class TaskSetManager(
 
     if (!isZombie && reason.countTowardsTaskFailures) {
       assert (null != failureReason)
-      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+      taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {

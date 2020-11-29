@@ -35,7 +35,7 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
-import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, NoopCache}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -49,8 +49,15 @@ class TestFileFilter extends PathFilter {
   override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
 }
 
-abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
+abstract class JsonSuite
+  extends QueryTest
+  with SharedSparkSession
+  with TestJsonData
+  with CommonFileDataSourceSuite {
+
   import testImplicits._
+
+  override protected def dataSourceFormat = "json"
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {

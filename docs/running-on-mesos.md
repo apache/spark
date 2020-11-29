@@ -735,6 +735,38 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.mesos.dispatcher.queue</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the name of the dispatcher queue to which the application is submitted.
+    The specified queue must be added to the dispatcher with <code>spark.mesos.dispatcher.queue.[QueueName]</code>.
+    If no queue is specified, then the application is submitted to the "default" queue with 0.0 priority.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.queue.[QueueName]</code></td>
+  <td><code>0.0</code></td>
+  <td>
+    Add a new queue for submitted drivers with the specified priority.
+    Higher numbers indicate higher priority.
+    The user can specify multiple queues to define a workload management policy for queued drivers in the dispatcher.
+    A driver can then be submitted to a specific queue with <code>spark.mesos.dispatcher.queue</code>.
+    By default, the dispatcher has a single queue with 0.0 priority (cannot be overridden).
+    It is possible to implement a consistent and overall workload management policy throughout the lifecycle of drivers
+    by mapping priority queues to weighted Mesos roles, and by specifying a
+    <code>spark.mesos.role</code> along with a <code>spark.mesos.dispatcher.queue</code> when submitting an application.
+    For example, with the URGENT Mesos role:
+    <pre>
+    spark.mesos.dispatcher.queue.URGENT=1.0
+
+    spark.mesos.dispatcher.queue=URGENT
+    spark.mesos.role=URGENT
+    </pre>
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.mesos.gpus.max</code></td>
   <td><code>0</code></td>
   <td>
