@@ -100,7 +100,7 @@ class FileStreamSinkLog(
 
   val retentionMs: Long = _retentionMs match {
     case Some(retention) =>
-      logInfo(s"Retention is set to ${_retentionMs.get} ms")
+      logInfo(s"Retention is set to $retention ms")
       retention
 
     case _ => Long.MaxValue
