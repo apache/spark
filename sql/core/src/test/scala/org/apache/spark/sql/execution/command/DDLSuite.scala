@@ -2846,6 +2846,27 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-33588: case sensitivity of partition spec") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (price int, qty int, year int, month int)
+        |USING $dataSource
+        |PARTITIONED BY (year, month)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+      Seq(
+        true -> "PARTITION(year = 2015, month = 1)",
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val df = sql(s"SHOW TABLE EXTENDED LIKE '$t' $partitionSpec")
+          val information = df.select("information").first().getString(0)
+          assert(information.contains("Partition Values: [year=2015, month=1]"))
+        }
+      }
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
