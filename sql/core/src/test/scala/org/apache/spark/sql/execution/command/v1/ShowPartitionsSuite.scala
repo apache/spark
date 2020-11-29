@@ -150,7 +150,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     }
   }
 
-  test("null as a partition value") {
+  test("SPARK-33591: null as a partition value") {
     val t = "part_table"
     withTable(t) {
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")

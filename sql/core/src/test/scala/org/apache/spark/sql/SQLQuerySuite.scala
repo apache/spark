@@ -3719,7 +3719,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("null as a partition value") {
+  test("SPARK-33591: null as a partition value") {
     val t = "part_table"
     withTable(t) {
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")

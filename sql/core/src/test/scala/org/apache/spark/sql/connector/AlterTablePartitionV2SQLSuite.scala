@@ -244,7 +244,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("null as a partition value") {
+  test("SPARK-33591: null as a partition value") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
