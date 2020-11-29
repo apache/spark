@@ -22,8 +22,7 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext, SparkException}
-
+import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
