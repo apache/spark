@@ -878,17 +878,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               case (_: ExpressionContext, null) =>
                 expression(expr)
               case (null, _: GroupingAnalyticsContext) =>
+                val selectedGroupByExprs = groupingAnalytics.groupingSet().asScala
+                .map(_.expression.asScala.map(e => expression(e)).toSeq)
                 if (groupingAnalytics.GROUPING() != null) {
-                  val selectedGroupByExprs = groupingAnalytics.groupingSet().asScala
-                    .map(_.expression.asScala.map(e => expression(e)).toSeq)
                   GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
                 } else if (groupingAnalytics.CUBE != null) {
-                  val selectedGroupByExprs = groupingAnalytics.groupingSet().asScala
-                    .map(_.expression.asScala.map(e => expression(e)).toSeq)
+                  // CUBE(A, B, (A, B), ()) is not supported.
+                  if (selectedGroupByExprs.exists(_.isEmpty)) {
+                    throw new ParseException("Empty set in CUBE grouping sets is not supported.",
+                      groupingAnalytics)
+                  }
                   Cube(selectedGroupByExprs)
                 } else if (groupingAnalytics.ROLLUP != null) {
-                  val selectedGroupByExprs = groupingAnalytics.groupingSet().asScala
-                    .map(_.expression.asScala.map(e => expression(e)).toSeq)
+                  // ROLLUP(A, B, (A, B), ()) is not supported.
+                  if (selectedGroupByExprs.exists(_.isEmpty)) {
+                    throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
+                      groupingAnalytics)
+                  }
                   Rollup(selectedGroupByExprs)
                 } else {
                   throw new IllegalArgumentException(
@@ -896,7 +902,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 }
               case (_, _) =>
                 throw new IllegalArgumentException("Each GROUP BY expression should be" +
-                  " a normal expression or a grouping analytics expression")
+                  " a normal expression or a grouping analytics expression.")
             }
           })
 
