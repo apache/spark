@@ -505,15 +505,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   private def convertTypedLiteralToString(literal: Literal): String = literal match {
     case Literal(data: Int, _: DateType) =>
-      UTF8String.fromString(
-        DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
-          .format(data)).toString
+      DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone)).format(data)
     case Literal(data: Long, _: TimestampType) =>
-      UTF8String.fromString(
-        TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
-          .format(data)).toString
-    case Literal(data: CalendarInterval, _: CalendarIntervalType) =>
-      UTF8String.fromString(data.toString).toString
+      TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
+        .format(data)
+    case Literal(data: CalendarInterval, _: CalendarIntervalType) => data.toString
     case Literal(data: Array[Byte], _: BinaryType) =>
       UTF8String.fromBytes(data).toString
     case Literal(_, dataType) =>

@@ -3718,6 +3718,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-33474: Support TypeConstructed partition spec value") {
+    withTable("t1", "t2", "t4") {
+      sql("CREATE TABLE t1(name STRING) PARTITIONED BY (part DATE)")
+      sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
+
+      sql("CREATE TABLE t2(name STRING) PARTITIONED BY (part TIMESTAMP)")
+      sql("INSERT INTO t2 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t2"), Row("a", "2019-01-02 11:11:11"))
+
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t3(name STRING) PARTITIONED BY (part INTERVAL)")
+      }.getMessage
+      assert(e.contains("Cannot use interval for partition column"))
+
+      sql("CREATE TABLE t4(name STRING) PARTITIONED BY (part BINARY)")
+      sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      checkAnswer(sql("SELECT name, decode(part, 'UTF-8') FROM t4"), Row("a", "Spark SQL"))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
