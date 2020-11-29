@@ -40,8 +40,7 @@ trait GroupingSet extends Expression with CodegenFallback {
   override def nullable: Boolean = true
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-
-  def splitExprs(children: Seq[Expression], index: Seq[Int]): Seq[Seq[Expression]] = {
+  protected def splitExprs(children: Seq[Expression], index: Seq[Int]): Seq[Seq[Expression]] = {
     if (index.nonEmpty) {
       val (left, right) = children.splitAt(index.head)
       Seq(left) ++ splitExprs(right, index.tail)
