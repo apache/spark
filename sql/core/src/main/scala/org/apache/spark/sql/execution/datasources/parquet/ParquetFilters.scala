@@ -33,17 +33,15 @@ import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
 class ParquetFilters(
-    sparkSchema: StructType,
-    parquetSchema: MessageType,
+    schema: MessageType,
     pushDownDate: Boolean,
     pushDownTimestamp: Boolean,
     pushDownDecimal: Boolean,
@@ -77,7 +75,7 @@ class ParquetFilters(
       }
     }
 
-    val primitiveFields = getPrimitiveFields(parquetSchema.getFields.asScala.toSeq).map { field =>
+    val primitiveFields = getPrimitiveFields(schema.getFields.asScala.toSeq).map { field =>
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
       (field.fieldNames.toSeq.quoted, field)
     }
@@ -599,26 +597,12 @@ class ParquetFilters(
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
           .map(FilterApi.not)
 
-      case sources.In(name, values) if pushDownInFilterThreshold > 0 &&
-        values.nonEmpty && canMakeFilterOn(name, values.head) =>
-        if (values.length <= pushDownInFilterThreshold) {
-          values.flatMap { v =>
-            makeEq.lift(nameToParquetField(name).fieldType)
-              .map(_(nameToParquetField(name).fieldNames, v))
-          }.reduceLeftOption(FilterApi.or)
-        } else {
-          sparkSchema.find { f =>
-            if (caseSensitive) f.name.equals(name) else f.name.equalsIgnoreCase(name)
-          }.map(_.dataType) match {
-            case Some(dataType) =>
-              val (min, max) = TypeUtils.getMinMaxValue(dataType, values)
-              createFilterHelper(
-                sources.And(sources.GreaterThanOrEqual(name, min),
-                  sources.LessThanOrEqual(name, max)),
-                canPartialPushDownConjuncts)
-            case _ => None
-          }
-        }
+      case sources.In(name, values) if values.nonEmpty && canMakeFilterOn(name, values.head) &&
+          values.distinct.length <= pushDownInFilterThreshold =>
+        values.distinct.flatMap { v =>
+          makeEq.lift(nameToParquetField(name).fieldType)
+            .map(_(nameToParquetField(name).fieldNames, v))
+        }.reduceLeftOption(FilterApi.or)
 
       case sources.StringStartsWith(name, prefix)
           if pushDownStartWith && canMakeFilterOn(name, prefix) =>
