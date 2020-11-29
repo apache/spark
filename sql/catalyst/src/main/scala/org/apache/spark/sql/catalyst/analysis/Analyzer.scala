@@ -1472,15 +1472,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         val resolvedGroupingExprs = a.groupingExpressions
           .map {
             case gs: GroupingSet =>
-              println("******")
-              println(gs)
-              val x = gs.withNewChildren(
-                gs.children
-                  .map(resolveExpressionTopDown(_, a, trimAlias = true))
-                  .map(trimTopLevelGetStructFieldAlias))
-              println("after")
-              println(x)
-              x
+              gs.withNewChildren(gs.children.map(e =>
+                trimTopLevelGetStructFieldAlias(resolveExpressionTopDown(e, a, trimAlias = true))))
             case e =>
               trimTopLevelGetStructFieldAlias(resolveExpressionTopDown(e, a, trimAlias = true))
           }
