@@ -26,8 +26,9 @@ from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
-from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader
-from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
+    MetaAlgorithmReadWrite
+from pyspark.ml.wrapper import JavaParams, JavaEstimator
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 
@@ -64,6 +65,11 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
 
     def singleTask():
         index, model = next(modelIter)
+        # TODO: duplicate evaluator to take extra params from input
+        #  Note: Supporting tuning params in evaluator need update method
+        #  `meta_estimator_transfer_param_maps_to_java` and
+        #  `meta_estimator_transfer_param_maps_from_java`
+        #  in class `MetaAlgorithmReadWrite`
         metric = eva.evaluate(model.transform(validation, epm[index]))
         return index, metric, model if collectSubModel else None
 
@@ -186,8 +192,16 @@ class _ValidatorParams(HasSeed):
         # Load information from java_stage to the instance.
         estimator = JavaParams._from_java(java_stage.getEstimator())
         evaluator = JavaParams._from_java(java_stage.getEvaluator())
-        epms = [estimator._transfer_param_map_from_java(epm)
-                for epm in java_stage.getEstimatorParamMaps()]
+        if isinstance(estimator, JavaEstimator):
+            epms = [estimator._transfer_param_map_from_java(epm)
+                    for epm in java_stage.getEstimatorParamMaps()]
+        elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
+            # Meta estimator such as Pipeline, OneVsRest
+            epms = MetaAlgorithmReadWrite.meta_estimator_transfer_param_maps_from_java(
+                estimator, java_stage.getEstimator(), java_stage.getEstimatorParamMaps())
+        else:
+            raise ValueError('Unsupported estimator used in tuning: ' + str(estimator))
+
         return estimator, epms, evaluator
 
     def _to_java_impl(self):
@@ -198,12 +212,21 @@ class _ValidatorParams(HasSeed):
         gateway = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
 
-        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
-        for idx, epm in enumerate(self.getEstimatorParamMaps()):
-            java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
-
+        py_estimator = self.getEstimator()
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()
+
+        if isinstance(py_estimator, JavaEstimator):
+            java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+            for idx, epm in enumerate(self.getEstimatorParamMaps()):
+                java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+        elif MetaAlgorithmReadWrite.isMetaEstimator(py_estimator):
+            # Meta estimator such as Pipeline, OneVsRest
+            java_epms = MetaAlgorithmReadWrite.meta_estimator_transfer_param_maps_to_java(
+                py_estimator, java_estimator, self.getEstimatorParamMaps())
+        else:
+            raise ValueError('Unsupported estimator used in tuning: ' + str(py_estimator))
+
         return java_estimator, java_epms, java_evaluator
 
 
