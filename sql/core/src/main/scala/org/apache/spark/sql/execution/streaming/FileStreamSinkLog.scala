@@ -82,7 +82,7 @@ class FileStreamSinkLog(
     metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String,
-    outputTimeToLiveMs: Option[Long] = None)
+    _retentionMs: Option[Long] = None)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
 
   private implicit val formats = Serialization.formats(NoTypeHints)
@@ -98,16 +98,34 @@ class FileStreamSinkLog(
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $defaultCompactInterval) " +
       "to a positive value.")
 
-  private val ttlMs = outputTimeToLiveMs.getOrElse(Long.MaxValue)
+  val retentionMs: Long = _retentionMs match {
+    case Some(retention) =>
+      logInfo(s"Retention is set to ${_retentionMs.get} ms")
+      retention
 
-  override def shouldRetain(log: SinkFileStatus): Boolean = {
-    val curTime = System.currentTimeMillis()
-    if (curTime - log.modificationTime > ttlMs) {
-      logDebug(s"${log.path} excluded by retention - current time: $curTime / " +
-        s"modification time: ${log.modificationTime} / TTL: $ttlMs.")
-      false
+    case _ => Long.MaxValue
+  }
+
+  override def shouldRetain(log: SinkFileStatus, context: Map[String, Any]): Boolean = {
+    if (retentionMs < Long.MaxValue) {
+      val curTime = context(FileStreamSinkLog.CONTEXT_KEY_CURRENT_TIME).asInstanceOf[Long]
+      if (curTime - log.modificationTime > retentionMs) {
+        logInfo(s"${log.path} excluded by retention - current time: $curTime / " +
+          s"modification time: ${log.modificationTime} / retention: $retentionMs ms.")
+        false
+      } else {
+        true
+      }
     } else {
       true
+    }
+  }
+
+  override def constructRetainContext(batchId: Long): Map[String, Any] = {
+    if (retentionMs < Long.MaxValue) {
+      Map(FileStreamSinkLog.CONTEXT_KEY_CURRENT_TIME -> System.currentTimeMillis())
+    } else {
+      Map.empty[String, Any]
     }
   }
 }
@@ -115,4 +133,5 @@ class FileStreamSinkLog(
 object FileStreamSinkLog {
   val VERSION = 1
   val ADD_ACTION = "add"
+  val CONTEXT_KEY_CURRENT_TIME = "currentTime"
 }

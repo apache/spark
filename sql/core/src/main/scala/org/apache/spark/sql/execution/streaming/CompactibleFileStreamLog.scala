@@ -112,7 +112,16 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * Default implementation retains all log entries. Implementations should override the method
    * to change the behavior.
    */
-  def shouldRetain(log: T): Boolean = true
+  def shouldRetain(log: T, context: Map[String, Any]): Boolean = true
+
+  /**
+   * Construct the context which will be passed to `shouldRetain`. This method will be called once
+   * for a batch of `shouldRetain` calls.
+   *
+   * Default implementation provides an empty Map. Implementations should override the method
+   * to provide additional information.
+   */
+  def constructRetainContext(batchId: Long): Map[String, Any] = Map.empty[String, Any]
 
   override def batchIdToPath(batchId: Long): Path = {
     if (isCompactionBatch(batchId, compactInterval)) {
@@ -218,8 +227,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * corresponding `batchId` file. It will delete expired files as well if enabled.
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
+    val retainContext = constructRetainContext(batchId)
     def writeEntry(entry: T, output: OutputStream): Unit = {
-      if (shouldRetain(entry)) {
+      if (shouldRetain(entry, retainContext)) {
         output.write('\n')
         serializeEntry(entry, output)
       }
@@ -258,7 +268,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         try {
           val logs =
             getAllValidBatches(latestId, compactInterval).flatMap { id =>
-              filterInBatch(id)(shouldRetain).getOrElse {
+              val retainContext = constructRetainContext(id)
+              filterInBatch(id)(shouldRetain(_, retainContext)).getOrElse {
                 throw new IllegalStateException(
                   s"${batchIdToPath(id)} doesn't exist " +
                     s"(latestId: $latestId, compactInterval: $compactInterval)")
