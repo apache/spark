@@ -239,8 +239,23 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |""".stripMargin
       sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
       assert(partTable.partitionExists(expectedPartition))
-      sql(s" ALTER TABLE $t DROP PARTITION ($partSpec)")
+      sql(s"ALTER TABLE $t DROP PARTITION ($partSpec)")
       assert(!partTable.partitionExists(expectedPartition))
+    }
+  }
+
+  test("null as a partition value") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = null)")
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      val expectedIdent = InternalRow.fromSeq(Seq(null))
+      assert(partTable.partitionExists(expectedIdent))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      assert(!partTable.partitionExists(expectedIdent))
     }
   }
 }
