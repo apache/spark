@@ -1244,11 +1244,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-    val res = client.getPartitions(db, table, partialSpec.map(toMetaStorePartitionSpec))
+    val metaStoreSpec = partialSpec.map(toMetaStorePartitionSpec)
+    val res = client.getPartitions(db, table, metaStoreSpec)
       .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
     }
 
-    partialSpec match {
+    metaStoreSpec match {
       // This might be a bug of Hive: When the partition value inside the partial partition spec
       // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
       // treats dot as matching any single character and may return more partitions than we
