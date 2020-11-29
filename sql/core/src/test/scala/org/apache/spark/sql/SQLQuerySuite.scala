@@ -22,7 +22,8 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.{AccumulatorSuite, SparkException}
+import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext, SparkException}
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
@@ -3717,6 +3718,41 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         checkAnswer(sql(statement), Row("v1"))
       }
     }
+  }
+
+  test("SPARK-33084: Add jar support ivy url in SQL") {
+    val sc = spark.sparkContext
+    // default transitive=false, only download specified jar
+    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    assert(sc.listJars()
+      .exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+
+    // test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+
+    sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+
+    val e1 = intercept[AssertionError] {
+      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
+    }.getMessage
+    assert(e1.contains("Invalid URI query string: [ foo= ]"))
+
+    val e2 = intercept[AssertionError] {
+      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
+    }.getMessage
+    assert(e2.contains("Invalid URI query string: [ bar=&baz=foo ]"))
+
+    val e3 = intercept[AssertionError] {
+      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
+    }.getMessage
+    assert(e3.contains("Invalid exclude string: expected 'org:module,org:module,..'," +
+      " found [ org.pentaho ]"))
   }
 }
 
