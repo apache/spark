@@ -110,7 +110,7 @@ class FileStreamSinkLog(
     if (retentionMs < Long.MaxValue) {
       val curTime = context(FileStreamSinkLog.CONTEXT_KEY_CURRENT_TIME).asInstanceOf[Long]
       if (curTime - log.modificationTime > retentionMs) {
-        logInfo(s"${log.path} excluded by retention - current time: $curTime / " +
+        logDebug(s"${log.path} excluded by retention - current time: $curTime / " +
           s"modification time: ${log.modificationTime} / retention: $retentionMs ms.")
         false
       } else {
@@ -123,7 +123,9 @@ class FileStreamSinkLog(
 
   override def constructRetainContext(batchId: Long): Map[String, Any] = {
     if (retentionMs < Long.MaxValue) {
-      Map(FileStreamSinkLog.CONTEXT_KEY_CURRENT_TIME -> System.currentTimeMillis())
+      val curTime = System.currentTimeMillis()
+      logInfo(s"Retention will be checked based on current time $curTime.")
+      Map(FileStreamSinkLog.CONTEXT_KEY_CURRENT_TIME -> curTime)
     } else {
       Map.empty[String, Any]
     }
