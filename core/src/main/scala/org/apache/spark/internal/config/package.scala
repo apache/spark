@@ -1952,6 +1952,7 @@ package object config {
         "error to check whether it should kill an executor. 0 means not checking any fatal " +
         "error, 1 means checking only the exception but not the cause, and so on.")
       .internal()
+      .version("3.1.0")
       .intConf
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
