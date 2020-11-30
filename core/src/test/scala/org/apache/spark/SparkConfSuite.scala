@@ -302,6 +302,33 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
+  test("SPARK-33557: Ensure the relationship between " +
+    "STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT and NETWORK_TIMEOUT") {
+    val conf = new SparkConf()
+
+    assert(!conf.contains(NETWORK_TIMEOUT))
+    assert(!conf.contains(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT))
+    assert(!conf.contains("spark.storage.blockManagerSlaveTimeoutMs"))
+
+    conf.set(NETWORK_TIMEOUT.key, "550s")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 550000L)
+
+    conf.set("spark.storage.blockManagerSlaveTimeoutMs", "350s")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 350000L)
+
+    conf.set("spark.storage.blockManagerSlaveTimeoutMs", "160000ms")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 160000L)
+
+    conf.set(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "200000ms")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 200000L)
+
+    conf.set(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "300s")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 300000L)
+
+    conf.set("spark.storage.blockManagerSlaveTimeoutMs", "160s")
+    assert(Utils.blockManagerHeartbeatTimeoutAsMs(conf) === 300000L)
+  }
+
   test("SPARK-13727") {
     val conf = new SparkConf()
     // set the conf in the deprecated way

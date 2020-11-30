@@ -42,7 +42,6 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
-
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
@@ -61,12 +60,14 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
@@ -2978,18 +2979,14 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def heartbeatTimeoutAsMs(sparkConf: SparkConf): Long = {
-    val heartbeatTimeoutMs = sparkConf.get(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
-    val netWorkTimeoutMs = timeStringAsMs(s"${sparkConf.get(Network.NETWORK_TIMEOUT)}s")
-    val defaultNetWorkTimeoutMs = timeStringAsMs(Network.NETWORK_TIMEOUT.defaultValueString)
-
-    if (heartbeatTimeoutMs != defaultNetWorkTimeoutMs) {
-      heartbeatTimeoutMs
-    } else if (netWorkTimeoutMs != defaultNetWorkTimeoutMs) {
-      defaultNetWorkTimeoutMs
-    } else {
-      defaultNetWorkTimeoutMs
-    }
+  /**
+   * Returns the default Spark timeout to use for block manager heartbeat timeout as Ms
+   * */
+  def blockManagerHeartbeatTimeoutAsMs(conf: SparkConf): Long = {
+    RpcTimeout(conf,
+      Seq(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "spark.storage.blockManagerSlaveTimeoutMs",
+        NETWORK_TIMEOUT.key), "120s")
+      .duration.toMillis
   }
 }
 

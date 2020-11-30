@@ -651,7 +651,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .registerDriverWithShuffleService(
             agent.hostname,
             externalShufflePort,
-            Utils.heartbeatTimeoutAsMs(sc.conf),
+            Utils.blockManagerHeartbeatTimeoutAsMs(sc.conf),
             sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         agent.shuffleRegistered = true
       }
