@@ -430,11 +430,12 @@ class ResolveSessionCatalog(
         ident.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitionsStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "SHOW PARTITIONS")
+    case ShowPartitions(
+        ResolvedV1TableOrViewIdentifier(ident),
+        pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowPartitionsCommand(
-        v1TableName.asTableIdentifier,
-        partitionSpec)
+        ident.asTableIdentifier,
+        pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
       val v1TableName = ident.asTableIdentifier

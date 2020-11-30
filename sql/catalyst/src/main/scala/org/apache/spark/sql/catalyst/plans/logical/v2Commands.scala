@@ -691,3 +691,18 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
+
+/**
+ * The logical plan of the SHOW PARTITIONS command.
+ */
+case class ShowPartitions(
+    child: LogicalPlan,
+    pattern: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+
+  override lazy val resolved: Boolean =
+    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("partition", StringType, nullable = false)())
+}
