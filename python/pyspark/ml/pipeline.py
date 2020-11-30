@@ -219,7 +219,7 @@ class PipelineReader(MLReader):
 
     def load(self, path):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
             return JavaMLReader(self.cls).load(path)
         else:
             uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
@@ -254,7 +254,7 @@ class PipelineModelReader(MLReader):
 
     def load(self, path):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        if not DefaultParamsReader.isPythonParamsInstance(metadata):
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
             return JavaMLReader(self.cls).load(path)
         else:
             uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)

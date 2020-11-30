@@ -290,6 +290,18 @@ class _ValidatorSharedReadWrite:
         return pyParamMaps
 
     @staticmethod
+    def is_java_convertible(instance):
+        allStages = MetaAlgorithmReadWrite.getAllNestedStages(instance.getEstimator())
+        evaluator_convertible = isinstance(instance.getEvaluator(), JavaParams)
+
+        def est_convertible(est):
+            return isinstance(est, JavaEstimator) or \
+                MetaAlgorithmReadWrite.isMetaEstimator(est)
+
+        estimator_convertible = all(map(est_convertible, allStages))
+        return estimator_convertible and evaluator_convertible
+
+    @staticmethod
     def saveImpl(path, instance, sc, extraMetadata=None):
         from pyspark.ml.classification import OneVsRest
         numParamsNotJson = 0
@@ -298,11 +310,8 @@ class _ValidatorSharedReadWrite:
             jsonParamMap = []
             for p, v in paramMap.items():
                 jsonParam = {'parent': p.parent, 'name': p.name}
-                if (isinstance(v, Estimator) and not (
-                        isinstance(v, _ValidatorParams) or
-                        isinstance(v, OneVsRest))
-                    ) or isinstance(v, Transformer) or \
-                        isinstance(v, Evaluator):
+                if (isinstance(v, Estimator) and not MetaAlgorithmReadWrite.isMetaEstimator(v)) \
+                        or isinstance(v, Transformer) or isinstance(v, Evaluator):
                     relative_path = f'epm_{p.name}{numParamsNotJson}'
                     param_path = os.path.join(path, relative_path)
                     numParamsNotJson += 1
@@ -313,7 +322,7 @@ class _ValidatorSharedReadWrite:
                     raise RuntimeError(
                         "ValidatorSharedReadWrite.saveImpl does not handle parameters of type: "
                         "MLWritable that are not Estimaor/Evaluator/Transformer, and if parameter is estimator,"
-                        "it cannot be Validator or OneVsRest")
+                        "it cannot be meta estimator such as Validator or OneVsRest")
                 else:
                     jsonParam['value'] = v
                     jsonParam['isJson'] = True
@@ -752,6 +761,8 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        if _ValidatorSharedReadWrite.is_java_convertible(self):
+            return JavaMLWriter(self)
         return CrossValidatorWriter(self)
 
     @classmethod
@@ -861,6 +872,8 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        if _ValidatorSharedReadWrite.is_java_convertible(self):
+            return JavaMLWriter(self)
         return CrossValidatorModelWriter(self)
 
     @classmethod
@@ -1238,6 +1251,8 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        if _ValidatorSharedReadWrite.is_java_convertible(self):
+            return JavaMLWriter(self)
         return TrainValidationSplitWriter(self)
 
     @classmethod
@@ -1342,6 +1357,8 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        if _ValidatorSharedReadWrite.is_java_convertible(self):
+            return JavaMLWriter(self)
         return TrainValidationSplitModelWriter(self)
 
     @classmethod

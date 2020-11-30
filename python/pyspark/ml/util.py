@@ -566,7 +566,7 @@ class DefaultParamsReader(MLReader):
 
     @staticmethod
     def isPythonParamsInstance(metadata):
-        return metadata['class'].startswith('pyspark')
+        return metadata['class'].startswith('pyspark.ml.')
 
     @staticmethod
     def loadParamsInstance(path, sc):
@@ -582,46 +582,6 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
-
-
-class MetaAlgorithmReadWrite:
-
-    @staticmethod
-    def getUidMap(instance):
-        uidList = MetaAlgorithmReadWrite.getUidMapImpl(instance)
-        uidMap = dict(uidList)
-        if len(uidList) != len(uidMap):
-            raise RuntimeError(f'{instance.__class__.__module__}.{instance.__class__.__name__}'
-                               f'.load found a compound estimator with stages with duplicate '
-                               f'UIDs. List of UIDs: {list(uidMap.keys())}.')
-        return uidMap
-
-    @staticmethod
-    def getUidMapImpl(instance):
-        from pyspark.ml import Pipeline, PipelineModel
-        from pyspark.ml.tuning import _ValidatorParams
-        from pyspark.ml.classification import OneVsRest, OneVsRestModel
-
-        # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
-        #  support pipelineModel property.
-        if isinstance(instance, Pipeline):
-            subStages = instance.getStages()
-        elif isinstance(instance, PipelineModel):
-            subStages = instance.stages
-        elif isinstance(instance, _ValidatorParams):
-            subStages = [instance.getEstimator(), instance.getEvaluator()]
-        elif isinstance(instance, OneVsRest):
-            subStages = [instance.getClassifier()]
-        elif isinstance(instance, OneVsRestModel):
-            subStages = [instance.getClassifier()] + instance.models
-        else:
-            subStages = []
-
-        subStageMaps = []
-        for subStage in subStages:
-            subStageMaps.extend(MetaAlgorithmReadWrite.getUidMapImpl(subStage))
-
-        return [(instance.uid, instance)] + subStageMaps
 
 
 @inherit_doc
@@ -687,3 +647,13 @@ class MetaAlgorithmReadWrite:
             nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
 
         return [pyInstance] + nestedStages
+
+    @staticmethod
+    def getUidMap(instance):
+        nestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance)
+        uidMap = {stage.uid: stage for stage in nestedStages}
+        if len(nestedStages) != len(uidMap):
+            raise RuntimeError(f'{instance.__class__.__module__}.{instance.__class__.__name__}'
+                               f'.load found a compound estimator with stages with duplicate '
+                               f'UIDs. List of UIDs: {list(uidMap.keys())}.')
+        return uidMap
