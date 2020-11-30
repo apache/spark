@@ -409,7 +409,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     expectedMsg = "is not supported in Update output mode")
 
-  // Full outer joins: only batch-batch is allowed
+  // Full outer joins: stream-batch/batch-stream join are not allowed,
+  // and stream-stream join is allowed 'conditionally' - see below check
   testBinaryOperationInStreamingPlan(
     "FullOuter join",
     _.join(_, joinType = FullOuter),
