@@ -215,7 +215,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       micros = Int.MaxValue)
   }
 
-  test("make interval with ansiEnabled") {
+  test("ANSI mode: make interval") {
     def check(
       years: Int = 0,
       months: Int = 0,

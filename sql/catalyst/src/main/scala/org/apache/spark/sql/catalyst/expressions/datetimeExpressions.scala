@@ -1789,34 +1789,36 @@ private case class GetTimestamp(
   """,
   group = "datetime_funcs",
   since = "3.0.0")
-case class MakeDate(year: Expression, month: Expression, day: Expression)
+case class MakeDate(year: Expression, month: Expression, day: Expression,
+  failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(year: Expression, month: Expression, day: Expression) =
+    this(year, month, day, SQLConf.get.ansiEnabled)
 
   override def children: Seq[Expression] = Seq(year, month, day)
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
   override def nullable: Boolean = true
 
-  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
-
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
     try {
       val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
       localDateToDays(ld)
     } catch {
-      case _: java.time.DateTimeException if !ansiEnabled => null
+      case _: java.time.DateTimeException if !failOnError => null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
+    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day) => {
       s"""
       try {
         ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
       } catch (java.time.DateTimeException e) {
-        $exceptionCode
+        $failOnErrorBranch
       }"""
     })
   }
@@ -1863,7 +1865,8 @@ case class MakeTimestamp(
     min: Expression,
     sec: Expression,
     timezone: Option[Expression] = None,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
     with NullIntolerant {
 
@@ -1874,7 +1877,7 @@ case class MakeTimestamp(
       hour: Expression,
       min: Expression,
       sec: Expression) = {
-    this(year, month, day, hour, min, sec, None, None)
+    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled)
   }
 
   def this(
@@ -1885,7 +1888,7 @@ case class MakeTimestamp(
       min: Expression,
       sec: Expression,
       timezone: Expression) = {
-    this(year, month, day, hour, min, sec, Some(timezone), None)
+    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled)
   }
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
@@ -1899,8 +1902,6 @@ case class MakeTimestamp(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
-
-  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
   private def toMicros(
       year: Int,
@@ -1931,7 +1932,7 @@ case class MakeTimestamp(
       }
       instantToMicros(ldt.atZone(zoneId).toInstant)
     } catch {
-      case _: DateTimeException if !ansiEnabled => null
+      case _: DateTimeException if !failOnError => null
     }
   }
 
@@ -1960,7 +1961,7 @@ case class MakeTimestamp(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
-    val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
+    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       s"""
@@ -1984,7 +1985,7 @@ case class MakeTimestamp(
         java.time.Instant instant = ldt.atZone($zoneId).toInstant();
         ${ev.value} = $dtu.instantToMicros(instant);
       } catch (java.time.DateTimeException e) {
-        $exceptionCode
+        $failOnErrorBranch
       }"""
     })
   }

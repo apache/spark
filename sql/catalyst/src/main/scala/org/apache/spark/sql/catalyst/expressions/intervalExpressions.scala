@@ -161,7 +161,8 @@ case class MakeInterval(
     days: Expression,
     hours: Expression,
     mins: Expression,
-    secs: Expression)
+    secs: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
@@ -171,7 +172,8 @@ case class MakeInterval(
       days: Expression,
       hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
+      SQLConf.get.ansiEnabled)
   }
   def this(
       years: Expression,
@@ -197,8 +199,6 @@ case class MakeInterval(
   override def dataType: DataType = CalendarIntervalType
   override def nullable: Boolean = true
 
-  val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
-
   override def nullSafeEval(
       year: Any,
       month: Any,
@@ -217,7 +217,7 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case _: ArithmeticException if !ansiEnabled => null
+      case _: ArithmeticException if !failOnError => null
     }
   }
 
@@ -225,12 +225,12 @@ case class MakeInterval(
     nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
-      val exceptionCode = if (ansiEnabled) "throw e;" else s"${ev.isNull} = true;"
+      val faileOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
       s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
         } catch (java.lang.ArithmeticException e) {
-          $exceptionCode
+          $faileOnErrorBranch
         }
       """
     })

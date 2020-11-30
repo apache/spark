@@ -1023,12 +1023,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
   }
 
-  test("creating values of DateType via make_date with ansiEnabled") {
+  test("ANSI mode: creating values of DateType via make_date") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+      // Since MakeDate is NullIntolerant, expect null output for any null input
       checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
       checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
       checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
+      // Expect Exception for invalid parameter
       checkExceptionInExpression[DateTimeException](MakeDate(Literal(Int.MaxValue), Literal(13),
         Literal(19)), EmptyRow, "Invalid value for Year")
       checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019),
@@ -1074,7 +1076,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
 
-  test("creating values of TimestampType via make_timestamp with ansiEnabled") {
+  test("ANSI mode: creating values of TimestampType via make_timestamp") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       var makeTimestampExpr = MakeTimestamp(
         Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
