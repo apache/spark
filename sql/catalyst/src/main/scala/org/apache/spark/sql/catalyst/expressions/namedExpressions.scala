@@ -211,7 +211,7 @@ case class Alias(child: Expression, name: String)(
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
       name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
-        explicitMetadata == a.explicitMetadata
+        explicitMetadata == a.explicitMetadata && deniedMetadataKeys == a.deniedMetadataKeys
     case _ => false
   }
 
