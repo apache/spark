@@ -240,6 +240,9 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
+      override def v2SourceRewriteRules: Seq[Rule[LogicalPlan]] =
+        super.v2SourceRewriteRules ++ customV2SourceRewriteRules
+
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -262,6 +265,14 @@ abstract class BaseSessionStateBuilder(
    * Note that this may NOT depend on the `optimizer` function.
    */
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Custom rules for rewriting plans for v2 tables to add to the Optimizer. Prefer overriding
+   * this instead of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customV2SourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Planner that converts optimized logical plans to physical plans.
