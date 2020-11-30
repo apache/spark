@@ -40,7 +40,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   test("shouldRetain") {
     withFileStreamSinkLog { sinkLog =>
       val log = newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION)
-      assert(sinkLog.shouldRetain(log, sinkLog.constructRetainContext(1L)))
+      assert(sinkLog.shouldRetain(log, System.currentTimeMillis()))
     }
   }
 
@@ -202,13 +202,13 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
         newFakeSinkFileStatus("/a/b/x", FileStreamSinkLog.ADD_ACTION, curTime),
         newFakeSinkFileStatus("/a/b/y", FileStreamSinkLog.ADD_ACTION, curTime),
         newFakeSinkFileStatus("/a/b/z", FileStreamSinkLog.ADD_ACTION, curTime))
-      logs.foreach { log => assert(sinkLog.shouldRetain(log, sinkLog.constructRetainContext(1L))) }
+      logs.foreach { log => assert(sinkLog.shouldRetain(log, curTime)) }
 
       val logs2 = Seq(
         newFakeSinkFileStatus("/a/b/m", FileStreamSinkLog.ADD_ACTION, curTime - 80000),
         newFakeSinkFileStatus("/a/b/n", FileStreamSinkLog.ADD_ACTION, curTime - 120000))
       logs2.foreach { log =>
-        assert(!sinkLog.shouldRetain(log, sinkLog.constructRetainContext(1L)))
+        assert(!sinkLog.shouldRetain(log, curTime))
       }
     }, Some(60000))
   }
