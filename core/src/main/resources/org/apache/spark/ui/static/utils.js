@@ -105,7 +105,7 @@ function getStandAloneAppId(cb) {
   }
   // Looks like Web UI is running in standalone mode
   // Let's get application-id using REST End Point
-  $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
+  $.getJSON(uiRoot + "/api/v1/applications", function(response, status, jqXHR) {
     if (response && response.length > 0) {
       var appId = response[0].id;
       cb(appId);
@@ -152,7 +152,7 @@ function createTemplateURI(appId, templateName) {
     var baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
     return baseURI;
   }
-  return location.origin + "/static/" + templateName + "-template.html";
+  return uiRoot + "/static/" + templateName + "-template.html";
 }
 
 function setDataTableDefaults() {
@@ -190,5 +190,5 @@ function createRESTEndPointForExecutorsPage(appId) {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
         }
     }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
+    return uiRoot + "/api/v1/applications/" + appId + "/allexecutors";
 }
