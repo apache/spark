@@ -740,18 +740,18 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
         self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
         self.assertRaisesRegex(Py4JJavaError, msg,
-                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+                               seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
         # these methods call the user function both in the driver and in the executor
         # the exception raised is different according to where the StopIteration happens
         # RuntimeError is raised if in the driver
         # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
         self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                                keyed_rdd.reduceByKeyLocally, stopit)
+                               keyed_rdd.reduceByKeyLocally, stopit)
         self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+                               seq_rdd.aggregate, 0, stopit, lambda *x: 1)
         self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+                               seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
     def test_overwritten_global_func(self):
         # Regression test for SPARK-27000
