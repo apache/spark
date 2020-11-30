@@ -196,6 +196,7 @@ ML Functions
 .. autosummary::
     :toctree: api/
 
+    array_to_vector
     vector_to_array
 
 
