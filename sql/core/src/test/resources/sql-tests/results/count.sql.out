@@ -125,4 +125,4 @@ SELECT count() FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-requirement failed: count requires at least one argument.; line 1 pos 7
+cannot resolve 'count()' due to data type mismatch: count requires at least one argument.; line 1 pos 7
