@@ -1799,7 +1799,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression,
   override def children: Seq[Expression] = Seq(year, month, day)
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
     try {
@@ -1898,7 +1898,7 @@ case class MakeTimestamp(
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
     timezone.map(_ => StringType)
   override def dataType: DataType = TimestampType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
