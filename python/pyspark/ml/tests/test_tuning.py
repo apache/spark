@@ -429,7 +429,7 @@ class CrossValidatorTests(SparkSessionTestCase):
                                    evaluator=MulticlassClassificationEvaluator(),
                                    numFolds=2)  # use 3+ folds in practice
         cv2Path = temp_path + "/cv2"
-        crossval2.save(cvPath)
+        crossval2.save(cv2Path)
         loadedCV2 = CrossValidator.load(cv2Path)
         self.assertEqual(len(loadedCV2.getEstimatorParamMaps()), len(paramGrid))
         self.assertEqual(loadedCV2.getEstimator().uid, crossval2.getEstimator().uid)

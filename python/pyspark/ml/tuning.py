@@ -28,7 +28,7 @@ from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
 from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
     MetaAlgorithmReadWrite
-from pyspark.ml.wrapper import JavaParams, JavaEstimator
+from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 
@@ -69,7 +69,7 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
         #  Note: Supporting tuning params in evaluator need update method
         #  `meta_estimator_transfer_param_maps_to_java` and
         #  `meta_estimator_transfer_param_maps_from_java`
-        #  in class `MetaAlgorithmReadWrite`
+        #  in class `_ValidatorSharedReadWrite`
         metric = eva.evaluate(model.transform(validation, epm[index]))
         return index, metric, model if collectSubModel else None
 
@@ -197,8 +197,8 @@ class _ValidatorParams(HasSeed):
                     for epm in java_stage.getEstimatorParamMaps()]
         elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
             # Meta estimator such as Pipeline, OneVsRest
-            epms = MetaAlgorithmReadWrite.meta_estimator_transfer_param_maps_from_java(
-                estimator, java_stage.getEstimator(), java_stage.getEstimatorParamMaps())
+            epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_from_java(
+                estimator, java_stage.getEstimatorParamMaps())
         else:
             raise ValueError('Unsupported estimator used in tuning: ' + str(estimator))
 
@@ -213,21 +213,78 @@ class _ValidatorParams(HasSeed):
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
 
         py_estimator = self.getEstimator()
-        java_estimator = self.getEstimator()._to_java()
-        java_evaluator = self.getEvaluator()._to_java()
-
         if isinstance(py_estimator, JavaEstimator):
             java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
             for idx, epm in enumerate(self.getEstimatorParamMaps()):
                 java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
         elif MetaAlgorithmReadWrite.isMetaEstimator(py_estimator):
             # Meta estimator such as Pipeline, OneVsRest
-            java_epms = MetaAlgorithmReadWrite.meta_estimator_transfer_param_maps_to_java(
-                py_estimator, java_estimator, self.getEstimatorParamMaps())
+            java_epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_to_java(
+                py_estimator, self.getEstimatorParamMaps())
         else:
             raise ValueError('Unsupported estimator used in tuning: ' + str(py_estimator))
 
+        java_estimator = self.getEstimator()._to_java()
+        java_evaluator = self.getEvaluator()._to_java()
         return java_estimator, java_epms, java_evaluator
+
+
+class _ValidatorSharedReadWrite:
+    @staticmethod
+    def meta_estimator_transfer_param_maps_to_java(pyEstimator, pyParamMaps):
+        pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
+        stagePairs = list(map(lambda stage: (stage, stage._to_java()), pyStages))
+        sc = SparkContext._active_spark_context
+
+        paramMapCls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+        javaParamMaps = SparkContext._gateway.new_array(paramMapCls, len(pyParamMaps))
+
+        for idx, pyParamMap in enumerate(pyParamMaps):
+            javaParamMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+            for pyParam, pyValue in pyParamMap.items():
+                javaParam = None
+                for pyStage, javaStage in stagePairs:
+                    if pyStage._testOwnParam(pyParam.parent, pyParam.name):
+                        javaParam = javaStage.getParam(pyParam.name)
+                        break
+                if javaParam is None:
+                    continue
+                if isinstance(pyValue, Params) and hasattr(pyValue, "_to_java"):
+                    javaValue = pyValue._to_java()
+                else:
+                    javaValue = _py2java(sc, pyValue)
+                pair = javaParam.w(javaValue)
+                javaParamMap.put([pair])
+            javaParamMaps[idx] = javaParamMap
+        return javaParamMaps
+
+    @staticmethod
+    def meta_estimator_transfer_param_maps_from_java(pyEstimator, javaParamMaps):
+        pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
+        stagePairs = list(map(lambda stage: (stage, stage._to_java()), pyStages))
+        sc = SparkContext._active_spark_context
+        pyParamMaps = []
+        for javaParamMap in javaParamMaps:
+            pyParamMap = dict()
+            for javaPair in javaParamMap.toList():
+                javaParam = javaPair.param()
+                pyParam = None
+                for pyStage, javaStage in stagePairs:
+                    if pyStage._testOwnParam(javaParam.parent(), javaParam.name()):
+                        pyParam = pyStage.getParam(javaParam.name())
+                if pyParam is None:
+                    continue
+                javaValue = javaPair.value()
+                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(javaValue):
+                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
+                    # and Estimator/Transformer class which implements `_from_java` static method
+                    # (such as OneVsRest, Pipeline class).
+                    pyValue = JavaParams._from_java(javaValue)
+                else:
+                    pyValue = _java2py(sc, javaValue)
+                pyParamMap[pyParam] = pyValue
+            pyParamMaps.append(pyParamMap)
+        return pyParamMaps
 
 
 class _CrossValidatorParams(_ValidatorParams):

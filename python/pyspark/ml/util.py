@@ -605,7 +605,7 @@ class MetaAlgorithmReadWrite:
             (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
 
     @staticmethod
-    def getAllNestedPyAndJavaStages(pyInstance, javaInstance):
+    def getAllNestedStages(pyInstance):
         from pyspark.ml import Pipeline, PipelineModel
         from pyspark.ml.tuning import _ValidatorParams
         from pyspark.ml.classification import OneVsRest, OneVsRestModel
@@ -614,89 +614,19 @@ class MetaAlgorithmReadWrite:
         #  support pipelineModel property.
         if isinstance(pyInstance, Pipeline):
             pySubStages = pyInstance.getStages()
-            javaSubStages = list(javaInstance.getStages())
         elif isinstance(pyInstance, PipelineModel):
             pySubStages = pyInstance.stages
-            javaSubStages = list(javaInstance.stages())
         elif isinstance(pyInstance, _ValidatorParams):
-            pySubStages = [pyInstance.getEstimator()]
-            javaSubStages = [javaInstance.getEstimator()]
+            raise ValueError('PySpark does not support nested validator.')
         elif isinstance(pyInstance, OneVsRest):
             pySubStages = [pyInstance.getClassifier()]
-            javaSubStages = [javaInstance.getClassifier()]
         elif isinstance(pyInstance, OneVsRestModel):
             pySubStages = [pyInstance.getClassifier()] + pyInstance.models
-            javaSubStages = [javaInstance.getClassifier()] + list(javaInstance.models())
         else:
             pySubStages = []
-            javaSubStages = []
 
-        subStagePairList = []
-        for pySubStage, javaSubStage in zip(pySubStages, javaSubStages):
-            subStagePairList.extend(
-                MetaAlgorithmReadWrite.getAllNestedPyAndJavaStages(pySubStage, javaSubStage))
+        nestedStages = []
+        for pySubStage in pySubStages:
+            nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
 
-        return [(pyInstance, javaInstance)] + subStagePairList
-
-    @staticmethod
-    def meta_estimator_transfer_param_maps_to_java(pyEstimator, javaEstimator, pyParamMaps):
-        # import here to avoid recurrent importing
-        from pyspark.ml.wrapper import JavaWrapper
-        from pyspark.ml.common import _py2java
-        from pyspark.ml.param import Params
-        stagePairs = MetaAlgorithmReadWrite \
-            .getAllNestedPyAndJavaStages(pyEstimator, javaEstimator)
-        sc = SparkContext._active_spark_context
-
-        paramMapCls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
-        javaParamMaps = SparkContext._gateway.new_array(paramMapCls, len(pyParamMaps))
-
-        for idx, pyParamMap in enumerate(pyParamMaps):
-            javaParamMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
-            for pyParam, pyValue in pyParamMap.items():
-                javaParam = None
-                for pyStage, javaStage in stagePairs:
-                    if pyStage._testOwnParam(pyParam.parent, pyParam.name):
-                        javaParam = javaStage.getParam(pyParam.name)
-                        break
-                if javaParam is None:
-                    continue
-                if isinstance(pyValue, Params) and hasattr(pyValue, "_to_java"):
-                    javaValue = pyValue._to_java()
-                else:
-                    javaValue = _py2java(sc, pyValue)
-                pair = javaParam.w(javaValue)
-                javaParamMap.put([pair])
-            javaParamMaps[idx] = javaParamMap
-        return javaParamMaps
-
-    @staticmethod
-    def meta_estimator_transfer_param_maps_from_java(pyEstimator, javaEstimator, javaParamMaps):
-        # import here to avoid recurrent importing
-        from pyspark.ml.wrapper import JavaParams
-        from pyspark.ml.common import _java2py
-        stagePairs = MetaAlgorithmReadWrite \
-            .getAllNestedPyAndJavaStages(pyEstimator, javaEstimator)
-        sc = SparkContext._active_spark_context
-        pyParamMaps = []
-        for javaParamMap in javaParamMaps:
-            pyParamMap = dict()
-            for javaPair in javaParamMap.toList():
-                javaParam = javaPair.param()
-                pyParam = None
-                for pyStage, javaStage in stagePairs:
-                    if pyStage._testOwnParam(javaParam.parent(), javaParam.name()):
-                        pyParam = pyStage.getParam(javaParam.name())
-                if pyParam is None:
-                    continue
-                javaValue = javaPair.value()
-                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(javaValue):
-                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
-                    # and Estimator/Transformer class which implements `_from_java` static method
-                    # (such as OneVsRest, Pipeline class).
-                    pyValue = JavaParams._from_java(javaValue)
-                else:
-                    pyValue = _java2py(sc, javaValue)
-                pyParamMap[pyParam] = pyValue
-            pyParamMaps.append(pyParamMap)
-        return pyParamMaps
+        return [pyInstance] + nestedStages
