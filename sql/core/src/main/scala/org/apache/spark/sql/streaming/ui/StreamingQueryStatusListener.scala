@@ -144,12 +144,10 @@ private[sql] case class StreamingQueryUIData(
 }
 
 private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
-  @KVIndexParam("batchId") val batchId: Long = progress.batchId
-  @KVIndexParam("runId") val runId: String = progress.runId.toString
+  @JsonIgnore @KVIndex("runId")
+  private def runId: String = progress.runId.toString
   @JsonIgnore @KVIndex("timestamp")
   private def timestampIndex: Long = parseProgressTimestamp(progress.timestamp)
-  @JsonIgnore @KVIndex
-  def uniqueId: String = getUniqueId(progress.runId, progress.batchId, progress.timestamp)
 }
 
 private[sql] object StreamingQueryProgressWrapper {
