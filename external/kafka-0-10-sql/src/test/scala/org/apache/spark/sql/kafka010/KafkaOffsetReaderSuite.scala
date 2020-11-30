@@ -101,92 +101,97 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
     assert(reader.isolationLevel === isolationLevel)
   }
 
-  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using specific offsets") {
+  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
+    "using specific offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (0 until 10).map(_.toString).toArray, Some(0))
+    val tp = new TopicPartition(topic, 0)
+    val reader = createKafkaReader(topic, minPartitions = Some(3))
+    val startingOffsets = SpecificOffsetRangeLimit(Map(tp -> 1))
+    val endingOffsets = SpecificOffsetRangeLimit(Map(tp -> 4))
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
+      endingOffsets)
+    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+      KafkaOffsetRange(tp, 1, 2, None),
+      KafkaOffsetRange(tp, 2, 3, None),
+      KafkaOffsetRange(tp, 3, 4, None)).sortBy(_.topicPartition.toString))
+  }
+
+  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
+    "using special offsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+    testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(0))
+    val tp = new TopicPartition(topic, 0)
+    val reader = createKafkaReader(topic, minPartitions = Some(3))
+    val startingOffsets = EarliestOffsetRangeLimit
+    val endingOffsets = LatestOffsetRangeLimit
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
+      endingOffsets)
+    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+      KafkaOffsetRange(tp, EARLIEST, 1, None),
+      KafkaOffsetRange(tp, 1, 2, None),
+      KafkaOffsetRange(tp, 2, LATEST, None)).sortBy(_.topicPartition.toString))
+  }
+
+  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - " +
+    "multiple topic partitions") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
+    val tp1 = new TopicPartition(topic, 0)
+    val tp2 = new TopicPartition(topic, 1)
+    val reader = createKafkaReader(topic, minPartitions = Some(3))
+
+    val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
+    val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
+    val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
+      endingOffsets)
+    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+      KafkaOffsetRange(tp2, EARLIEST, 3, None),
+      KafkaOffsetRange(tp1, EARLIEST, 33, None),
+      KafkaOffsetRange(tp1, 33, 66, None),
+      KafkaOffsetRange(tp1, 66, LATEST, None)).sortBy(_.topicPartition.toString))
+  }
+
+  testWithAllOffsetFetchingSQLConf("SPARK-30656: getOffsetRangesFromResolvedOffsets") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
+    testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
+    val tp1 = new TopicPartition(topic, 0)
+    val tp2 = new TopicPartition(topic, 1)
+    val reader = createKafkaReader(topic, minPartitions = Some(3))
+
+    val fromPartitionOffsets = Map(tp1 -> 0L, tp2 -> 0L)
+    val untilPartitionOffsets = Map(tp1 -> 100L, tp2 -> 3L)
+    val offsetRanges = reader.getOffsetRangesFromResolvedOffsets(
+      fromPartitionOffsets,
+      untilPartitionOffsets,
+      _ => {})
+    assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
+      KafkaOffsetRange(tp1, 0, 33, None),
+      KafkaOffsetRange(tp1, 33, 66, None),
+      KafkaOffsetRange(tp1, 66, 100, None),
+      KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
+  }
+
+  private def testWithAllOffsetFetchingSQLConf(name: String)(func: => Any): Unit = {
     Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
-      withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
-        val topic = newTopic()
-        testUtils.createTopic(topic, partitions = 1)
-        testUtils.sendMessages(topic, (0 until 10).map(_.toString).toArray, Some(0))
-        val tp = new TopicPartition(topic, 0)
-        val reader = createKafkaReader(topic, minPartitions = Some(3))
-        val startingOffsets = SpecificOffsetRangeLimit(Map(tp -> 1))
-        val endingOffsets = SpecificOffsetRangeLimit(Map(tp -> 4))
-        val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-          endingOffsets)
-        assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
-          KafkaOffsetRange(tp, 1, 2, None),
-          KafkaOffsetRange(tp, 2, 3, None),
-          KafkaOffsetRange(tp, 3, 4, None)).sortBy(_.topicPartition.toString))
-      }
+      val testName = s"$name with useDeprecatedOffsetFetching $useDeprecatedOffsetFetching"
+      executeFuncWithSQLConf(testName, useDeprecatedOffsetFetching, func)
     }
   }
 
-  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - using special offsets") {
-    Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
+  private def executeFuncWithSQLConf(
+      name: String,
+      useDeprecatedOffsetFetching: String,
+      func: => Any): Unit = {
+    test(name) {
       withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
-        val topic = newTopic()
-        testUtils.createTopic(topic, partitions = 1)
-        testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(0))
-        val tp = new TopicPartition(topic, 0)
-        val reader = createKafkaReader(topic, minPartitions = Some(3))
-        val startingOffsets = EarliestOffsetRangeLimit
-        val endingOffsets = LatestOffsetRangeLimit
-        val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-          endingOffsets)
-        assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
-          KafkaOffsetRange(tp, EARLIEST, 1, None),
-          KafkaOffsetRange(tp, 1, 2, None),
-          KafkaOffsetRange(tp, 2, LATEST, None)).sortBy(_.topicPartition.toString))
-      }
-    }
-  }
-
-  test("SPARK-30656: getOffsetRangesFromUnresolvedOffsets - multiple topic partitions") {
-    Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
-      withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
-        val topic = newTopic()
-        testUtils.createTopic(topic, partitions = 2)
-        testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
-        testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
-        val tp1 = new TopicPartition(topic, 0)
-        val tp2 = new TopicPartition(topic, 1)
-        val reader = createKafkaReader(topic, minPartitions = Some(3))
-
-        val startingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> EARLIEST, tp2 -> EARLIEST))
-        val endingOffsets = SpecificOffsetRangeLimit(Map(tp1 -> LATEST, tp2 -> 3))
-        val offsetRanges = reader.getOffsetRangesFromUnresolvedOffsets(startingOffsets,
-          endingOffsets)
-        assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
-          KafkaOffsetRange(tp2, EARLIEST, 3, None),
-          KafkaOffsetRange(tp1, EARLIEST, 33, None),
-          KafkaOffsetRange(tp1, 33, 66, None),
-          KafkaOffsetRange(tp1, 66, LATEST, None)).sortBy(_.topicPartition.toString))
-      }
-    }
-  }
-
-  test("SPARK-30656: getOffsetRangesFromResolvedOffsets") {
-    Seq("true", "false").foreach { useDeprecatedOffsetFetching =>
-      withSQLConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key -> useDeprecatedOffsetFetching) {
-        val topic = newTopic()
-        testUtils.createTopic(topic, partitions = 2)
-        testUtils.sendMessages(topic, (0 until 100).map(_.toString).toArray, Some(0))
-        testUtils.sendMessages(topic, (0 until 4).map(_.toString).toArray, Some(1))
-        val tp1 = new TopicPartition(topic, 0)
-        val tp2 = new TopicPartition(topic, 1)
-        val reader = createKafkaReader(topic, minPartitions = Some(3))
-
-        val fromPartitionOffsets = Map(tp1 -> 0L, tp2 -> 0L)
-        val untilPartitionOffsets = Map(tp1 -> 100L, tp2 -> 3L)
-        val offsetRanges = reader.getOffsetRangesFromResolvedOffsets(
-          fromPartitionOffsets,
-          untilPartitionOffsets,
-          _ => {})
-        assert(offsetRanges.sortBy(_.topicPartition.toString) === Seq(
-          KafkaOffsetRange(tp1, 0, 33, None),
-          KafkaOffsetRange(tp1, 33, 66, None),
-          KafkaOffsetRange(tp1, 66, 100, None),
-          KafkaOffsetRange(tp2, 0, 3, None)).sortBy(_.topicPartition.toString))
+        func
       }
     }
   }
