@@ -21,8 +21,8 @@ from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
     DefaultParamsReader, DefaultParamsWriter, MLWriter, MLReader, JavaMLWritable
-from pyspark.ml.wrapper import JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc

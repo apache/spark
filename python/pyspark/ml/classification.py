@@ -36,7 +36,7 @@ from pyspark.ml.base import _PredictorParams
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable, HasTrainingSummary
 from pyspark.ml.wrapper import JavaParams, \
     JavaPredictor, JavaPredictionModel, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when

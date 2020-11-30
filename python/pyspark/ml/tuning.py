@@ -248,7 +248,7 @@ class _ValidatorSharedReadWrite:
                         javaParam = javaStage.getParam(pyParam.name)
                         break
                 if javaParam is None:
-                    continue
+                    raise ValueError('Resolve param in estimatorParamMaps failed: ' + str(pyParam))
                 if isinstance(pyValue, Params) and hasattr(pyValue, "_to_java"):
                     javaValue = pyValue._to_java()
                 else:
@@ -273,7 +273,8 @@ class _ValidatorSharedReadWrite:
                     if pyStage._testOwnParam(javaParam.parent(), javaParam.name()):
                         pyParam = pyStage.getParam(javaParam.name())
                 if pyParam is None:
-                    continue
+                    raise ValueError('Resolve param in estimatorParamMaps failed: ' +
+                                     javaParam.parent() + '.' + javaParam.name())
                 javaValue = javaPair.value()
                 if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(javaValue):
                     # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
