@@ -152,6 +152,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         val batchTimestamp = parseProgressTimestamp(p.timestamp)
         val watermarkValueOpt = Option(p.eventTime.get("watermark")).map(parseProgressTimestamp)
         if (watermarkValueOpt.nonEmpty && watermarkValueOpt.get > 0L) {
+          // seconds
           watermarkValueOpt.map { e => (batchTimestamp, (batchTimestamp - e) / 1000.0) }
         } else {
           None
