@@ -1906,7 +1906,7 @@ class SparkContext(config: SparkConf) extends Logging {
     } else {
       val keys = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        addLocalJarFile(new File(path))
+        Array(addLocalJarFile(new File(path)))
       } else {
         val uri = new Path(path).toUri
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -1915,21 +1915,22 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
-            addLocalJarFile(new File(uri.getPath))
+            Array(addLocalJarFile(new File(uri.getPath)))
           // A JAR file which exists only on the driver node
-          case "file" => addLocalJarFile(new File(uri.getPath))
+          case "file" => Array(addLocalJarFile(new File(uri.getPath)))
           // A JAR file which exists locally on every worker node
-          case "local" => "file:" + uri.getPath
+          case "local" => Array("file:" + uri.getPath)
           case "ivy" =>
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
             DependencyUtils.resolveMavenDependencies(URI.create(path))
-          case _ => checkRemoteJarFile(path)
+              .split(",")
+          case _ => Array(checkRemoteJarFile(path))
         }
       }
       if (keys != null) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        keys.split(",").foreach { key =>
+        keys.foreach { key =>
           if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
             logInfo(s"Added JAR $path at $key with timestamp $timestamp")
             postEnvironmentUpdate()
