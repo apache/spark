@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{MalformedURLException, URI}
+import java.net.{MalformedURLException, URI, URISyntaxException}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
@@ -975,21 +975,32 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
 
-    val e1 = intercept[AssertionError] {
+    val e1 = intercept[IllegalArgumentException] {
+      sc.addJar("ivy://")
+    }.getMessage
+    assert(e1.contains("Expected authority at index 6: ivy://"))
+
+    val e2 = intercept[URISyntaxException] {
+      sc.addJar("ivy://org.apache.hive:hive-contrib")
+    }.getMessage
+    assert(e2.contains("Invalid url: Expected 'org:module:version'," +
+      " found org.apache.hive:hive-contrib"))
+
+    val e3 = intercept[URISyntaxException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
     }.getMessage
-    assert(e1.contains("Invalid URI query string: [ foo= ]"))
+    assert(e3.contains("Invalid query string: foo="))
 
-    val e2 = intercept[AssertionError] {
+    val e4 = intercept[URISyntaxException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
     }.getMessage
-    assert(e2.contains("Invalid URI query string: [ bar=&baz=foo ]"))
+    assert(e4.contains("Invalid query string: bar=&baz=foo"))
 
-    val e3 = intercept[AssertionError] {
+    val e5 = intercept[URISyntaxException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
     }.getMessage
-    assert(e3.contains("Invalid exclude string: expected 'org:module,org:module,..'," +
-      " found [ org.pentaho ]"))
+    assert(e5.contains(
+      "Invalid exclude string: expected 'org:module,org:module,..', found org.pentaho"))
   }
 }
 

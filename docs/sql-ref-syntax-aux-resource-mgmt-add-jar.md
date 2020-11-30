@@ -34,17 +34,17 @@ ADD JAR file_name
 * **file_name**
 
     The name of the JAR file to be added. It could be either on a local file system or a distributed file system or an ivy URL.
-    Apache Ivy is a popular dependency manager focusing on flexibility and simplicity. Now we support two parameter in URL query  string:
+    Apache Ivy is a popular dependency manager focusing on flexibility and simplicity. Now we support two parameter in URL query string:
 
-      1. transitive: whether to download dependent jars related to your ivy URL.
-      2. exclude: exclusion list when download ivy URL jar and dependent jars.
+     * transitive: whether to download dependent jars related to your ivy URL.
+     * exclude: exclusion list when download ivy URL jar and dependent jars.
 
     User can write ivy URL such as:
 
-      1. ivy://group:module:version
-      2. ivy://group:module:version?transitive=true
-      3. ivy://group:module:version?exclude=group:module,group:module
-      4. ivy://group:module:version?exclude=group:module,group:module&transitive=false
+      ivy://group:module:version
+      ivy://group:module:version?transitive=true
+      ivy://group:module:version?exclude=group:module,group:module
+      ivy://group:module:version?exclude=group:module,group:module&transitive=false
         
 ### Examples
 

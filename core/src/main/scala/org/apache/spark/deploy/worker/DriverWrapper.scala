@@ -83,8 +83,7 @@ object DriverWrapper extends Logging {
       DependencyUtils.getIvyProperties()
 
     val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
-      true, packagesExclusions,
-      packages, repositories, ivyRepoPath, Option(ivySettingsPath))
+      true, packagesExclusions, packages, repositories, ivyRepoPath, Option(ivySettingsPath))
     val jars = {
       val jarsProp = sys.props.get(config.JARS.key).orNull
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {

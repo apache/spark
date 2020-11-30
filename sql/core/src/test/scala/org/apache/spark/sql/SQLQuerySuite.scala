@@ -3736,22 +3736,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
-
-    val e1 = intercept[AssertionError] {
-      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
-    }.getMessage
-    assert(e1.contains("Invalid URI query string: [ foo= ]"))
-
-    val e2 = intercept[AssertionError] {
-      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
-    }.getMessage
-    assert(e2.contains("Invalid URI query string: [ bar=&baz=foo ]"))
-
-    val e3 = intercept[AssertionError] {
-      sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
-    }.getMessage
-    assert(e3.contains("Invalid exclude string: expected 'org:module,org:module,..'," +
-      " found [ org.pentaho ]"))
   }
 }
 
