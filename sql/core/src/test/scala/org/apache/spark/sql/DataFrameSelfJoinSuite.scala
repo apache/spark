@@ -236,4 +236,16 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertAmbiguousSelfJoin(emp1.join(emp3, emp1.col("key") === emp3.col("key"),
       "left_outer").select(emp1.col("*"), emp3.col("key").as("e2")))
   }
+
+  test("df.show() should also not change dataset_id of LogicalPlan") {
+    val df = Seq[TestData](
+      TestData(1, "sales"),
+      TestData(2, "personnel"),
+      TestData(3, "develop"),
+      TestData(4, "IT")).toDF()
+    val ds_id1 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    df.show(0)
+    val ds_id2 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    assert(ds_id1 === ds_id2)
+  }
 }
