@@ -2982,7 +2982,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Returns the default Spark timeout to use for block manager heartbeat timeout as Ms
-   * */
+   */
   def blockManagerHeartbeatTimeoutAsMs(conf: SparkConf): Long = {
     RpcTimeout(conf,
       Seq(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "spark.storage.blockManagerSlaveTimeoutMs",
