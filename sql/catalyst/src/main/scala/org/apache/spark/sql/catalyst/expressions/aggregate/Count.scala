@@ -43,6 +43,9 @@ import org.apache.spark.sql.types._
   since = "1.0.0")
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
+
+  require(children.nonEmpty, s"$prettyName requires at least one argument.")
+
   override def nullable: Boolean = false
 
   // Return data type.
