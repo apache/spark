@@ -220,7 +220,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 struct<>
 -- !query 18 output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (a, d) must match the partition spec (c, d) defined in table '`showdb`.`show_t1`';
+a is not a valid partition column in table `showdb`.`show_t1`.;
 
 
 -- !query 19
