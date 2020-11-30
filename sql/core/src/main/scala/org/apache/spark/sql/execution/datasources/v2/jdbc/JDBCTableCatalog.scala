@@ -128,6 +128,8 @@ class JDBCTableCatalog extends TableCatalog with Logging {
           case "comment" => tableComment = v
           // ToDo: have a follow up to fail provider once unify create table syntax PR is merged
           case "provider" =>
+            throw new AnalysisException("CREATE TABLE ... USING ... is not supported in" +
+              " JDBC catalog.")
           case "owner" => // owner is ignored. It is default to current user name.
           case "location" =>
             throw new AnalysisException("CREATE TABLE ... LOCATION ... is not supported in" +
