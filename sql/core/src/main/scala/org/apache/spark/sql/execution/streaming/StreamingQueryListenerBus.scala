@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.collection.mutable
 
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerEvent}
-import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.util.ListenerBus
 
@@ -37,9 +36,9 @@ import org.apache.spark.util.ListenerBus
  * those queries that were started in the associated SparkSession.
  *
  * Note 2: To rebuild Structured Streaming UI in SHS, this bus will be registered into
- * [[ReplayListenerBus]]. We check `sparkListenerBus` defined or not to determine how to process
- * [[StreamingQueryListener.Event]]. If false, it means this bus is used to replay all streaming
- * query event from eventLog.
+ * [[org.apache.spark.scheduler.ReplayListenerBus]]. We check `sparkListenerBus` defined or not to
+ * determine how to process [[StreamingQueryListener.Event]]. If false, it means this bus is used to
+ * replay all streaming query event from eventLog.
  */
 class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
   extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
