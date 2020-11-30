@@ -685,7 +685,7 @@ private[spark] class Executor(
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,
           // spurious failures may occur and can result in improper accounting in the driver (e.g.
-          // the task failure would not be ignored if the shutdown happened because of premption,
+          // the task failure would not be ignored if the shutdown happened because of preemption,
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
@@ -744,7 +744,7 @@ private[spark] class Executor(
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
    *
    * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
-   * may not be interruptable or may not respond to their "killed" flags being set. If a significant
+   * may not be interruptible or may not respond to their "killed" flags being set. If a significant
    * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
    * remain running then this can lead to a situation where new jobs and tasks are starved of
    * resources that are being used by these zombie tasks.
