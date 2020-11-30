@@ -1860,7 +1860,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    def addLocalJarFile(file: File): String = {
+    def addLocalJarFile(file: File): Array[String] = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1869,15 +1869,15 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
-        env.rpcEnv.fileServer.addJar(file)
+        Array(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
           logError(s"Failed to add $path to Spark environment", e)
-          null
+          Array.empty
       }
     }
 
-    def checkRemoteJarFile(path: String): String = {
+    def checkRemoteJarFile(path: String): Array[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
@@ -1890,14 +1890,14 @@ class SparkContext(config: SparkConf) extends Logging {
             throw new IllegalArgumentException(
               s"Directory ${path} is not allowed for addJar")
           }
-          path
+          Array(path)
         } catch {
           case NonFatal(e) =>
             logError(s"Failed to add $path to Spark environment", e)
-            null
+            Array.empty
         }
       } else {
-        path
+        Array(path)
       }
     }
 
@@ -1919,17 +1919,17 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" => "file:" + uri.getPath
+          case "local" => Array("file:" + uri.getPath)
           case "ivy" =>
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
-            DependencyUtils.resolveMavenDependencies(URI.create(path))
+            DependencyUtils.resolveMavenDependencies(URI.create(path)).split(",")
           case _ => checkRemoteJarFile(path)
         }
       }
-      if (keys != null) {
+      if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        keys.split(",").foreach { key =>
+        keys.foreach { key =>
           if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
             logInfo(s"Added JAR $path at $key with timestamp $timestamp")
             postEnvironmentUpdate()

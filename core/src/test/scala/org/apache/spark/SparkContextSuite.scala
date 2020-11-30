@@ -366,6 +366,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("add jar local path with comma") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.addJar("file://Test,UDTF.jar")
+    assert(!sc.listJars().exists(_.contains("UDTF.jar")))
+  }
+
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
     withTempDir { dir =>
       val tmpDir = new File(dir, "host%3A443")
