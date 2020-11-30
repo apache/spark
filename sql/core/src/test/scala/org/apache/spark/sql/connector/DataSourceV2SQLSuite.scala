@@ -266,8 +266,7 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
-  ignore("CreateTable: without USING clause") {
+  test("CreateTable: without USING clause") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val testCatalog = catalog("testcat").asTableCatalog

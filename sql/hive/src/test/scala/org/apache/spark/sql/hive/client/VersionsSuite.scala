@@ -798,6 +798,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         versionSpark.sql(
           """
             |CREATE TABLE tbl(c1 string)
+            |USING hive
             |PARTITIONED BY (ds STRING)
           """.stripMargin)
         versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")

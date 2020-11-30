@@ -1588,7 +1588,7 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("b", StringType)
       )
     )
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
       createTable(
         table = "my_tab",
@@ -1616,7 +1616,7 @@ class PlanResolutionSuite extends AnalysisTest {
     )
     // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
     // rule in `AnalyzeCreateTable`.
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
       createTable(
         table = "my_tab",
@@ -1890,7 +1890,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
+    val s3 = """CREATE TABLE page_view STORED AS textfile AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
     assert(desc.identifier.database == Some("default"))
@@ -1967,11 +1967,9 @@ class PlanResolutionSuite extends AnalysisTest {
     assert(desc.viewText.isEmpty)
     assert(desc.viewQueryColumnNames.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
-    assert(desc.storage.inputFormat ==
-        Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-        Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
     assert(desc.storage.properties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
