@@ -627,7 +627,16 @@ private[spark] class BlockManager(
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      try {
+        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      } catch {
+        case e: IOException =>
+          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+            FallbackStorage.read(conf, blockId)
+          } else {
+            throw e
+          }
+      }
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -1580,7 +1589,12 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      cachedPeers
+      if (cachedPeers.isEmpty &&
+          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      } else {
+        cachedPeers
+      }
     }
   }
 
