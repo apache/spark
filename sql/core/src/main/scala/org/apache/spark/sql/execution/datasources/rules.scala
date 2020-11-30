@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTra
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -335,7 +335,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
-      case _: AtomicType => // OK
+      case dataType: AtomicType if !dataType.isInstanceOf[BinaryType] => // OK
       case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 

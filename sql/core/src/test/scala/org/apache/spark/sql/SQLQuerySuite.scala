@@ -3718,6 +3718,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-33594: Forbid binary type as partition column") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE t1(name STRING, part BINARY) USING PARQUET PARTITIONED BY (part)")
+    }.getMessage
+    assert(e.contains("Cannot use binary for partition column"))
+  }
 }
 
 case class Foo(bar: Option[String])
