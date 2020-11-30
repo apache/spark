@@ -3733,6 +3733,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
       assert(e.contains("Cannot use interval for partition column"))
+
+      sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
+      sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", "Spark SQL"))
     }
   }
 }
