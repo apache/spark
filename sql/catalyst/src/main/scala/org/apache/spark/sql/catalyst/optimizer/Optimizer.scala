@@ -872,7 +872,7 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     case generate @ Generate(e, _, _, _, _, _)
       if !e.deterministic || e.children.forall(_.foldable) => generate
 
-    case generate@Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
       // Exclude child's constraints to guarantee idempotency
       val inferredFilters = ExpressionSet(
         Seq(

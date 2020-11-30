@@ -441,6 +441,7 @@ object SimplifyBinaryComparison
         case a GreaterThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) =>
           TrueLiteral
         case a LessThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
+
         // False with inequality
         case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
