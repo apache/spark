@@ -88,7 +88,7 @@ class FunctionsSuite extends MLTest {
       s"Unsupported dtype: float16. Valid values: float64, float32."))
   }
 
-  test("test vector_to_array") {
+  test("test array_to_vector") {
     val df1 = Seq(Tuple1(Array(0.5, 1.5))).toDF("c1")
     val resultVec = df1.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
     assert(resultVec === Vectors.dense(Array(0.5, 1.5)))
