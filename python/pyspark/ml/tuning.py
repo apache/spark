@@ -67,9 +67,8 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
         index, model = next(modelIter)
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
-        #  `meta_estimator_transfer_param_maps_to_java` and
-        #  `meta_estimator_transfer_param_maps_from_java`
-        #  in class `_ValidatorSharedReadWrite`
+        #  `MetaAlgorithmReadWrite.getAllNestedStages`, make it return
+        #  all nested stages and evaluators
         metric = eva.evaluate(model.transform(validation, epm[index]))
         return index, metric, model if collectSubModel else None
 
