@@ -357,6 +357,7 @@ case class DropViewStatement(
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
+ * @param userSpecifiedCols    the user specified list of columns that belong to the table.
  * @param query                the logical plan representing data to write to.
  * @param overwrite            overwrite existing table or partitions.
  * @param partitionSpec        a map from the partition key to the partition value (optional).
@@ -371,6 +372,7 @@ case class DropViewStatement(
 case class InsertIntoStatement(
     table: LogicalPlan,
     partitionSpec: Map[String, Option[String]],
+    userSpecifiedCols: Seq[String],
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean) extends ParsedStatement {
