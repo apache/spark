@@ -256,8 +256,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
     val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
-    val logFilePattern =
-      raw"""(?s).+\sDriver Logs \(<NAME>\): http://.+/<NAME>(\?start=[-0-9]+)?\s.+"""
+    val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
   }
