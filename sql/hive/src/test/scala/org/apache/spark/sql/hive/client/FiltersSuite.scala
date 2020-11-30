@@ -100,6 +100,14 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
 
+  filterTest("NOT: int and string filters",
+    (a("intcol", IntegerType) =!= Literal(1)) :: (Literal("a") =!= a("strcol", IntegerType)) :: Nil,
+    """intcol != 1 and "a" != strcol""")
+
+  filterTest("NOT: date filter",
+    (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "datecol != 2019-01-01")
+
   filterTest("string filter with date type",
     (a("strcol", StringType).cast(DateType) > Literal(Date.valueOf("2019-01-01"))) :: Nil,
     "strcol > 2019-01-01")

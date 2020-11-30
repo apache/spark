@@ -536,6 +536,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
+        Nil,
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifPartitionNotExists = false)

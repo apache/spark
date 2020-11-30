@@ -1946,6 +1946,17 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
+    ConfigBuilder("spark.executor.killOnFatalError.depth")
+      .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
+        "error to check whether it should kill an executor. 0 means not checking any fatal " +
+        "error, 1 means checking only the exception but not the cause, and so on.")
+      .internal()
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(5)
+
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")
       .doc("Set to 'true' to enable push-based shuffle on the client side and this works in " +

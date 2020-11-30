@@ -38,10 +38,10 @@ case class AppendDataExecV1(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    v2Relation: DataSourceV2Relation) extends V1FallbackWriters {
+    refreshCache: () => Unit) extends V1FallbackWriters {
 
   override protected def run(): Seq[InternalRow] = {
-    writeWithV1(newWriteBuilder().buildForV1Write(), Some(v2Relation))
+    writeWithV1(newWriteBuilder().buildForV1Write(), refreshCache = refreshCache)
   }
 }
 
@@ -61,7 +61,7 @@ case class OverwriteByExpressionExecV1(
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan,
-    v2Relation: DataSourceV2Relation) extends V1FallbackWriters {
+    refreshCache: () => Unit) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -70,10 +70,11 @@ case class OverwriteByExpressionExecV1(
   override protected def run(): Seq[InternalRow] = {
     newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Builder.buildForV1Write(), Some(v2Relation))
+        writeWithV1(builder.truncate().asV1Builder.buildForV1Write(), refreshCache = refreshCache)
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write(), Some(v2Relation))
+        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write(),
+          refreshCache = refreshCache)
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -116,11 +117,11 @@ trait SupportsV1Write extends SparkPlan {
 
   protected def writeWithV1(
       relation: InsertableRelation,
-      v2Relation: Option[DataSourceV2Relation] = None): Seq[InternalRow] = {
+      refreshCache: () => Unit = () => ()): Seq[InternalRow] = {
     val session = sqlContext.sparkSession
     // The `plan` is already optimized, we should not analyze and optimize it again.
     relation.insert(AlreadyOptimized.dataFrame(session, plan), overwrite = false)
-    v2Relation.foreach(r => session.sharedState.cacheManager.recacheByPlan(session, r))
+    refreshCache()
 
     Nil
   }

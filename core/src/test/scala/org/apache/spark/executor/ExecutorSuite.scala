@@ -28,6 +28,7 @@ import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
 
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -43,7 +44,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.memory.TestMemoryManager
+import org.apache.spark.memory.{SparkOutOfMemoryError, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceInformation
@@ -52,7 +53,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
+import org.apache.spark.util.{LongAccumulator, ThreadUtils, UninterruptibleThread}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -402,6 +403,74 @@ class ExecutorSuite extends SparkFunSuite
     assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
   }
 
+  test("SPARK-33587: isFatalError") {
+    def errorInThreadPool(e: => Throwable): Throwable = {
+      intercept[Throwable] {
+        val taskPool = ThreadUtils.newDaemonFixedThreadPool(1, "test")
+        try {
+          val f = taskPool.submit(new java.util.concurrent.Callable[String] {
+            override def call(): String = throw e
+          })
+          f.get()
+        } finally {
+          taskPool.shutdown()
+        }
+      }
+    }
+
+    def errorInGuavaCache(e: => Throwable): Throwable = {
+      val cache = CacheBuilder.newBuilder()
+        .build(new CacheLoader[String, String] {
+          override def load(key: String): String = throw e
+        })
+      intercept[Throwable] {
+        cache.get("test")
+      }
+    }
+
+    def testThrowable(
+        e: => Throwable,
+        depthToCheck: Int,
+        isFatal: Boolean): Unit = {
+      import Executor.isFatalError
+      // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
+      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
+      // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
+      assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
+      assert(isFatalError(
+        new SparkException("foo", e),
+        depthToCheck) == (depthToCheck >= 2 && isFatal))
+      // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
+      assert(isFatalError(
+        errorInThreadPool(errorInGuavaCache(e)),
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
+      assert(isFatalError(
+        errorInGuavaCache(errorInThreadPool(e)),
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
+      assert(isFatalError(
+        new SparkException("foo", new SparkException("foo", e)),
+        depthToCheck) == (depthToCheck >= 3 && isFatal))
+    }
+
+    for (depthToCheck <- 0 to 5) {
+      testThrowable(new OutOfMemoryError(), depthToCheck, isFatal = true)
+      testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
+      testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
+      testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
+    }
+
+    // Verify we can handle the cycle in the exception chain
+    val e1 = new Exception("test1")
+    val e2 = new Exception("test2")
+    e1.initCause(e2)
+    e2.initCause(e1)
+    for (depthToCheck <- 0 to 5) {
+      testThrowable(e1, depthToCheck, isFatal = false)
+      testThrowable(e2, depthToCheck, isFatal = false)
+    }
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
@@ -483,7 +552,7 @@ class ExecutorSuite extends SparkFunSuite
               if (poll) {
                 executor.metricsPoller.poll()
               }
-              executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
+              executor.killAllTasks(true, "Killed task, e.g. because of speculative execution")
             } else {
               timedOut.set(true)
             }

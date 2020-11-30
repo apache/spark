@@ -243,9 +243,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   /**
    * Parameters used for writing query to a table:
-   *   (multipartIdentifier, partitionKeys, ifPartitionNotExists).
+   *   (multipartIdentifier, tableColumnList, partitionKeys, ifPartitionNotExists).
    */
-  type InsertTableParams = (Seq[String], Map[String, Option[String]], Boolean)
+  type InsertTableParams = (Seq[String], Seq[String], Map[String, Option[String]], Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -255,8 +255,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   /**
    * Add an
    * {{{
-   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]?
-   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]
+   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
+   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]  [identifierList]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -267,18 +267,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
       case table: InsertIntoTableContext =>
-        val (tableIdent, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
+        val (tableIdent, cols, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
         InsertIntoStatement(
           UnresolvedRelation(tableIdent),
           partition,
+          cols,
           query,
           overwrite = false,
           ifPartitionNotExists)
       case table: InsertOverwriteTableContext =>
-        val (tableIdent, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
+        val (tableIdent, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
         InsertIntoStatement(
           UnresolvedRelation(tableIdent),
           partition,
+          cols,
           query,
           overwrite = true,
           ifPartitionNotExists)
@@ -299,13 +301,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitInsertIntoTable(
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
     val tableIdent = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     if (ctx.EXISTS != null) {
       operationNotAllowed("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (tableIdent, partitionKeys, false)
+    (tableIdent, cols, partitionKeys, false)
   }
 
   /**
@@ -315,6 +318,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
     assert(ctx.OVERWRITE() != null)
     val tableIdent = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
@@ -323,7 +327,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (tableIdent, partitionKeys, ctx.EXISTS() != null)
+    (tableIdent, cols, partitionKeys, ctx.EXISTS() != null)
   }
 
   /**
@@ -3584,37 +3588,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "SHOW CREATE TABLE",
         allowTempView = false),
       ctx.SERDE != null)
-  }
-
-  /**
-   * Create a [[CacheTableStatement]].
-   *
-   * For example:
-   * {{{
-   *   CACHE [LAZY] TABLE multi_part_name
-   *   [OPTIONS tablePropertyList] [[AS] query]
-   * }}}
-   */
-  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    val query = Option(ctx.query).map(plan)
-    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (query.isDefined && tableName.length > 1) {
-      val catalogAndNamespace = tableName.init
-      throw new ParseException("It is not allowed to add catalog/namespace " +
-        s"prefix ${catalogAndNamespace.quoted} to " +
-        "the table name in CACHE TABLE AS SELECT", ctx)
-    }
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTableStatement(tableName, query, ctx.LAZY != null, options)
-  }
-
-  /**
-   * Create an [[UncacheTableStatement]] logical plan.
-   */
-  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier), ctx.EXISTS != null)
   }
 
   /**

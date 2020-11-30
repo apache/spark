@@ -446,20 +446,6 @@ class ResolveSessionCatalog(
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    case CacheTableStatement(tbl, plan, isLazy, options) =>
-      val name = if (plan.isDefined) {
-        // CACHE TABLE ... AS SELECT creates a temp view with the input query.
-        // Temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-        tbl
-      } else {
-        parseTempViewOrV1Table(tbl, "CACHE TABLE")
-      }
-      CacheTableCommand(name.asTableIdentifier, plan, isLazy, options)
-
-    case UncacheTableStatement(tbl, ifExists) =>
-      val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
-      UncacheTableCommand(name.asTableIdentifier, ifExists)
-
     case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
@@ -561,11 +547,8 @@ class ResolveSessionCatalog(
             "SHOW VIEWS, only SessionCatalog supports this command.")
       }
 
-    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey) =>
+    case ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
-
-    case ShowTableProperties(r: ResolvedView, propertyKey) =>
-      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)

@@ -150,6 +150,8 @@ private[spark] class Executor(
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
 
+  private val killOnFatalErrorDepth = conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
+
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
   private val urlClassLoader = createClassLoader()
@@ -648,7 +650,7 @@ private[spark] class Executor(
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
-        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+        case t: Throwable if hasFetchFailure && !Executor.isFatalError(t, killOnFatalErrorDepth) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
@@ -683,7 +685,7 @@ private[spark] class Executor(
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,
           // spurious failures may occur and can result in improper accounting in the driver (e.g.
-          // the task failure would not be ignored if the shutdown happened because of premption,
+          // the task failure would not be ignored if the shutdown happened because of preemption,
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
@@ -711,7 +713,7 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
+          if (Executor.isFatalError(t, killOnFatalErrorDepth)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
@@ -742,7 +744,7 @@ private[spark] class Executor(
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
    *
    * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
-   * may not be interruptable or may not respond to their "killed" flags being set. If a significant
+   * may not be interruptible or may not respond to their "killed" flags being set. If a significant
    * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
    * remain running then this can lead to a situation where new jobs and tasks are starved of
    * resources that are being used by these zombie tasks.
@@ -997,4 +999,26 @@ private[spark] object Executor {
 
   // Used to store executorSource, for local mode only
   var executorSourceLocalModeOnly: ExecutorSource = null
+
+  /**
+   * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether
+   * to kill the executor.
+   *
+   * @param depthToCheck The max depth of the exception chain we should search for a fatal error. 0
+   *                     means not checking any fatal error (in other words, return false), 1 means
+   *                     checking only the exception but not the cause, and so on. This is to avoid
+   *                     `StackOverflowError` when hitting a cycle in the exception chain.
+   */
+  def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
+    if (depthToCheck <= 0) {
+      false
+    } else {
+      t match {
+        case _: SparkOutOfMemoryError => false
+        case e if Utils.isFatalError(e) => true
+        case e if e.getCause != null => isFatalError(e.getCause, depthToCheck - 1)
+        case _ => false
+      }
+    }
+  }
 }

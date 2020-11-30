@@ -15,25 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.SQLInsertTestSuite
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-case class RefreshTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    invalidateCache: () => Unit) extends V2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    catalog.invalidateTable(ident)
-
-    // invalidate all caches referencing the given table
-    // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
-    invalidateCache()
-
-    Seq.empty
-  }
-
-  override def output: Seq[Attribute] = Seq.empty
+class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
+  override def format: String = "hive OPTIONS(fileFormat='parquet')"
 }
