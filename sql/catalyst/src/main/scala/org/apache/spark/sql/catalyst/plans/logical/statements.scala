@@ -420,13 +420,6 @@ case class TruncateTableStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * A SHOW PARTITIONS statement, as parsed from SQL
- */
-case class ShowPartitionsStatement(
-    tableName: Seq[String],
-    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement

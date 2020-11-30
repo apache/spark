@@ -1085,7 +1085,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
             val viewStr = if (v.isTemp) "temp view" else "view"
-            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.'")
+            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.")
           case table => table
         }.getOrElse(u)
 
