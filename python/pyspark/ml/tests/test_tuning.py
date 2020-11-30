@@ -73,7 +73,21 @@ class ParamGridBuilderTests(SparkSessionTestCase):
                     .build())
 
 
-class CrossValidatorTests(SparkSessionTestCase):
+class ValidatorTestUtilsMixin:
+    def assert_param_maps_equal(self, paramMaps1, paramMaps2):
+        self.assertEqual(len(paramMaps1), len(paramMaps2))
+        for paramMap1, paramMap2 in zip(paramMaps1, paramMaps2):
+            self.assertEqual(set(paramMap1.keys()), set(paramMap2.keys()))
+            for param in paramMap1.keys():
+                v1 = paramMap1[param]
+                v2 = paramMap2[param]
+                if isinstance(v1, Params):
+                    self.assertEqual(v1.uid, v2.uid)
+                else:
+                    self.assertEqual(v1, v2)
+
+
+class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
@@ -256,7 +270,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedCV = CrossValidator.load(cvPath)
         self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
         self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
-        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        self.assert_param_maps_equal(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
 
         # test save/load of CrossValidatorModel
         cvModelPath = temp_path + "/cvModel"
@@ -351,7 +365,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvPath = temp_path + "/cv"
         cv.save(cvPath)
         loadedCV = CrossValidator.load(cvPath)
-        self.assertEqual(len(loadedCV.getEstimatorParamMaps()), len(grid))
+        self.assert_param_maps_equal(loadedCV.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
         self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
 
@@ -368,7 +382,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvModelPath = temp_path + "/cvModel"
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
-        self.assertEqual(len(loadedModel.getEstimatorParamMaps()), len(grid))
+        self.assert_param_maps_equal(loadedModel.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
     def test_save_load_pipeline_estimator(self):
@@ -406,7 +420,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvPath = temp_path + "/cv"
         crossval.save(cvPath)
         loadedCV = CrossValidator.load(cvPath)
-        self.assertEqual(len(loadedCV.getEstimatorParamMaps()), len(paramGrid))
+        self.assert_param_maps_equal(loadedCV.getEstimatorParamMaps(), paramGrid)
         self.assertEqual(loadedCV.getEstimator().uid, crossval.getEstimator().uid)
 
         # Run cross-validation, and choose the best set of parameters.
@@ -431,7 +445,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cv2Path = temp_path + "/cv2"
         crossval2.save(cv2Path)
         loadedCV2 = CrossValidator.load(cv2Path)
-        self.assertEqual(len(loadedCV2.getEstimatorParamMaps()), len(paramGrid))
+        self.assert_param_maps_equal(loadedCV2.getEstimatorParamMaps(), paramGrid)
         self.assertEqual(loadedCV2.getEstimator().uid, crossval2.getEstimator().uid)
 
         # Run cross-validation, and choose the best set of parameters.
@@ -523,7 +537,7 @@ class CrossValidatorTests(SparkSessionTestCase):
             cv.fit(dataset_with_folds)
 
 
-class TrainValidationSplitTests(SparkSessionTestCase):
+class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -644,7 +658,8 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedTvs = TrainValidationSplit.load(tvsPath)
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
         self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
-        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        self.assert_param_maps_equal(
+            loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
 
         tvsModelPath = temp_path + "/tvsModel"
         tvsModel.save(tvsModelPath)
@@ -725,7 +740,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsPath = temp_path + "/tvs"
         tvs.save(tvsPath)
         loadedTvs = TrainValidationSplit.load(tvsPath)
-        self.assertEqual(len(loadedTvs.getEstimatorParamMaps()), len(grid))
+        self.assert_param_maps_equal(loadedTvs.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
         self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
 
@@ -741,7 +756,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModelPath = temp_path + "/tvsModel"
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
-        self.assertEqual(len(loadedModel.getEstimatorParamMaps()), len(grid))
+        self.assert_param_maps_equal(loadedModel.getEstimatorParamMaps(), grid)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
     def test_save_load_pipeline_estimator(self):
@@ -778,7 +793,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsPath = temp_path + "/tvs"
         tvs.save(tvsPath)
         loadedTvs = TrainValidationSplit.load(tvsPath)
-        self.assertEqual(len(loadedTvs.getEstimatorParamMaps()), len(paramGrid))
+        self.assert_param_maps_equal(loadedTvs.getEstimatorParamMaps(), paramGrid)
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
 
         # Run train validation split, and choose the best set of parameters.
@@ -802,7 +817,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvs2Path = temp_path + "/tvs2"
         tvs2.save(tvs2Path)
         loadedTvs2 = TrainValidationSplit.load(tvs2Path)
-        self.assertEqual(len(loadedTvs2.getEstimatorParamMaps()), len(paramGrid))
+        self.assert_param_maps_equal(loadedTvs2.getEstimatorParamMaps(), paramGrid)
         self.assertEqual(loadedTvs2.getEstimator().uid, tvs2.getEstimator().uid)
 
         # Run train validation split, and choose the best set of parameters.
