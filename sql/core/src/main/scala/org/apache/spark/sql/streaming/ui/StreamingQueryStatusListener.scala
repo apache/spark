@@ -75,7 +75,6 @@ private[sql] class StreamingQueryStatusListener(
       event.name,
       event.id,
       event.runId,
-      Array.empty[String],
       startTimestamp,
       isActive = true,
       None
@@ -105,7 +104,6 @@ private[sql] class StreamingQueryStatusListener(
       querySummary.name,
       querySummary.id,
       querySummary.runId,
-      querySummary.progressIds,
       querySummary.startTimestamp,
       isActive = false,
       querySummary.exception
@@ -118,7 +116,6 @@ private[sql] class StreamingQueryData(
     val name: String,
     val id: UUID,
     @KVIndexParam val runId: UUID,
-    val progressIds: Array[String],
     val startTimestamp: Long,
     val isActive: Boolean,
     val exception: Option[String]) {
@@ -144,10 +141,11 @@ private[sql] case class StreamingQueryUIData(
 }
 
 private[sql] class StreamingQueryProgressWrapper(val progress: StreamingQueryProgress) {
+  @JsonIgnore @KVIndex
+  private val uniqueId: String = getUniqueId(progress.runId, progress.batchId, progress.timestamp)
+
   @JsonIgnore @KVIndex("runId")
-  private def runId: String = progress.runId.toString
-  @JsonIgnore @KVIndex("timestamp")
-  private def timestampIndex: Long = parseProgressTimestamp(progress.timestamp)
+  private def runIdIndex: String = progress.runId.toString
 }
 
 private[sql] object StreamingQueryProgressWrapper {
