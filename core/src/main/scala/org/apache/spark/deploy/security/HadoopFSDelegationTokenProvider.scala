@@ -148,7 +148,6 @@ private[deploy] class HadoopFSDelegationTokenProvider
     } else if (issueDate > 0L) {
       issueDate
     } else {
-      val now = System.currentTimeMillis()
       logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
         s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
         "the behavior.")
