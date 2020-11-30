@@ -352,6 +352,26 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
+  test("getPartitionsByFilter: ds<>20170101") {
+    testMetastorePartitionFiltering(
+      attr("ds") =!= 20170101,
+      20170102 to 20170103,
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue)
+  }
+
+  test("getPartitionsByFilter: h<>0 and chunk<>ab and d<>2019-01-01") {
+    testMetastorePartitionFiltering(
+      attr("h") =!= 0 && attr("chunk") =!= "ab" && attr("d") =!= Date.valueOf("2019-01-01"),
+      dsValue,
+      1 to 4,
+      Seq("aa", "ba", "bb"),
+      Seq("2019-01-02", "2019-01-03"),
+      dateStrValue)
+  }
+
   test("getPartitionsByFilter: d=2019-01-01") {
     testMetastorePartitionFiltering(
       attr("d") === Date.valueOf("2019-01-01"),

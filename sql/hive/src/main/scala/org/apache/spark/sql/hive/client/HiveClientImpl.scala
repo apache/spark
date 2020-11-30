@@ -978,19 +978,14 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = if (c.metadata.contains(HIVE_TYPE_STRING)) {
-      c.metadata.getString(HIVE_TYPE_STRING)
-    } else {
-      // replace NullType to HiveVoidType since Hive parse void not null.
-      HiveVoidType.replaceVoidType(c.dataType).catalogString
-    }
+    val typeString = HiveVoidType.replaceVoidType(c.dataType).catalogString
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
-      CatalystSqlParser.parseDataType(hc.getType)
+      CatalystSqlParser.parseRawDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException(
@@ -1001,18 +996,10 @@ private[hive] object HiveClientImpl extends Logging {
   /** Builds the native StructField from Hive's FieldSchema. */
   def fromHiveColumn(hc: FieldSchema): StructField = {
     val columnType = getSparkSQLDataType(hc)
-    val replacedVoidType = HiveVoidType.replaceVoidType(columnType)
-    val metadata = if (hc.getType != replacedVoidType.catalogString) {
-      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
-    } else {
-      Metadata.empty
-    }
-
     val field = StructField(
       name = hc.getName,
       dataType = columnType,
-      nullable = true,
-      metadata = metadata)
+      nullable = true)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
   }
 

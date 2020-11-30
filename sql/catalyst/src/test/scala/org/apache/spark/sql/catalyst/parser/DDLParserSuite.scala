@@ -1172,6 +1172,22 @@ class DDLParserSuite extends AnalysisTest {
         InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false, ifPartitionNotExists = false))
+    }
+  }
+
+  test("insert table: basic append with a column list") {
+    Seq(
+      "INSERT INTO TABLE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source",
+      "INSERT INTO testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
           overwrite = false, ifPartitionNotExists = false))
     }
@@ -1182,6 +1198,7 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map.empty,
+        Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testcat2", "db", "tbl"))),
         overwrite = false, ifPartitionNotExists = false))
   }
@@ -1196,6 +1213,22 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
+        Nil,
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = false, ifPartitionNotExists = false))
+  }
+
+  test("insert table: append with partition and a column list") {
+    parseCompare(
+      """
+        |INSERT INTO testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
+        |SELECT * FROM source
+      """.stripMargin,
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = false, ifPartitionNotExists = false))
   }
@@ -1209,6 +1242,22 @@ class DDLParserSuite extends AnalysisTest {
         InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true, ifPartitionNotExists = false))
+    }
+  }
+
+  test("insert table: overwrite with column list") {
+    Seq(
+      "INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source",
+      "INSERT OVERWRITE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
           overwrite = true, ifPartitionNotExists = false))
     }
@@ -1224,6 +1273,22 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
+        Nil,
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true, ifPartitionNotExists = false))
+  }
+
+  test("insert table: overwrite with partition and column list") {
+    parseCompare(
+      """
+        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
+        |SELECT * FROM source
+      """.stripMargin,
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = true, ifPartitionNotExists = false))
   }
@@ -1238,6 +1303,7 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3")),
+        Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = true, ifPartitionNotExists = true))
   }
@@ -1916,33 +1982,6 @@ class DDLParserSuite extends AnalysisTest {
       ShowCreateTable(
         UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false),
         asSerde = true))
-  }
-
-  test("CACHE TABLE") {
-    comparePlans(
-      parsePlan("CACHE TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
-
-    comparePlans(
-      parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
-
-    comparePlans(
-      parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
-
-    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/namespace prefix a.b")
-  }
-
-  test("UNCACHE TABLE") {
-    comparePlans(
-      parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
-
-    comparePlans(
-      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
   }
 
   test("TRUNCATE table") {

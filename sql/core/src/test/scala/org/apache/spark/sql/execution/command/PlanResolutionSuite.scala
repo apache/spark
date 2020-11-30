@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -1090,9 +1090,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     val sql = s"ALTER TABLE v1HiveTable ALTER COLUMN i TYPE char(1)"
-    val builder = new MetadataBuilder
-    builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
-    val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+    val newColumnWithCleanedType = StructField("i", CharType(1), true)
     val expected = AlterTableChangeColumnCommand(
       TableIdentifier("v1HiveTable", Some("default")), "i", newColumnWithCleanedType)
     val parsed = parseAndResolve(sql)
@@ -1185,7 +1183,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
+        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _) =>
           assert(r.catalog.exists(_ == catlogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>
@@ -1531,44 +1529,6 @@ class PlanResolutionSuite extends AnalysisTest {
 
       case l => fail("Expected unresolved MergeIntoTable, but got:\n" + l.treeString)
     }
-  }
-
-  test("SPARK-31147: forbid CHAR type in non-Hive tables") {
-    def checkFailure(t: String, provider: String): Unit = {
-      val types = Seq(
-        "CHAR(2)",
-        "ARRAY<CHAR(2)>",
-        "MAP<INT, CHAR(2)>",
-        "MAP<CHAR(2), INT>",
-        "STRUCT<s: CHAR(2)>")
-      types.foreach { tpe =>
-        intercept[AnalysisException] {
-          parseAndResolve(s"CREATE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"REPLACE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"CREATE OR REPLACE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ALTER COLUMN col TYPE $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t REPLACE COLUMNS (col $tpe)")
-        }
-      }
-    }
-
-    checkFailure("v1Table", v1Format)
-    checkFailure("v2Table", v2Format)
-    checkFailure("testcat.tab", "foo")
   }
 
   private def compareNormalized(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {

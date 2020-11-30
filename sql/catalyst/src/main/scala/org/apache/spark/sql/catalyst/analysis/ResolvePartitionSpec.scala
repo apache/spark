@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
@@ -69,11 +70,13 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
     }
 
   private def convertToPartIdent(
-      spec: TablePartitionSpec,
+      tableName: String,
+      partitionSpec: TablePartitionSpec,
       schema: Seq[StructField]): InternalRow = {
     val partValues = schema.map { part =>
-      val raw = spec.get(part.name).orNull
-      Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
+      val raw = partitionSpec.get(part.name).orNull
+      val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
+      Cast(Literal.create(raw, StringType), dt, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }
