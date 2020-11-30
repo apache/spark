@@ -147,7 +147,8 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifier: Seq[String] = Seq.empty,
-    val explicitMetadata: Option[Metadata] = None)
+    val explicitMetadata: Option[Metadata] = None,
+    val deniedMetadataKeys: Seq[String] = Seq.empty)
   extends UnaryExpression with NamedExpression {
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
@@ -167,7 +168,12 @@ case class Alias(child: Expression, name: String)(
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
       child match {
-        case named: NamedExpression => named.metadata
+        case named: NamedExpression =>
+          new MetadataBuilder()
+            .withMetadata(named.metadata)
+            .remove(deniedMetadataKeys: _*)
+            .build()
+
         case _ => Metadata.empty
       }
     }
@@ -194,7 +200,7 @@ case class Alias(child: Expression, name: String)(
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
-    exprId :: qualifier :: explicitMetadata :: Nil
+    exprId :: qualifier :: explicitMetadata :: deniedMetadataKeys :: Nil
   }
 
   override def hashCode(): Int = {

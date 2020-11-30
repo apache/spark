@@ -1164,7 +1164,7 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    Alias(expr, alias)()
+    Alias(expr, alias)(deniedMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
   }
 
   /**
