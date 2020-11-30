@@ -26,101 +26,55 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * This class is just a wrapper for the subsequent implementations
+ * Base trait to fetch offsets from Kafka. The implementations are
  * [[KafkaOffsetReaderConsumer]] and [[KafkaOffsetReaderAdmin]].
  * Please see the documentation and API description there.
  */
-private[kafka010] class KafkaOffsetReader(
-    consumerStrategy: ConsumerStrategy,
-    override val driverKafkaParams: ju.Map[String, Object],
-    readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String)
-  extends KafkaOffsetReaderBase(
-    consumerStrategy,
-    driverKafkaParams,
-    readerOptions,
-    driverGroupIdPrefix) with Logging {
-
-  protected override val impl = if (SQLConf.get.useDeprecatedKafkaOffsetFetching) {
-    logDebug("Creating old and deprecated Consumer based offset reader")
-    new KafkaOffsetReaderConsumer(consumerStrategy, driverKafkaParams, readerOptions,
-      driverGroupIdPrefix)
-  } else {
-    logDebug("Creating new Admin based offset reader")
-    new KafkaOffsetReaderAdmin(consumerStrategy, driverKafkaParams, readerOptions,
-      driverGroupIdPrefix)
-  }
-}
-
-private[kafka010] abstract class KafkaOffsetReaderBase(
-    consumerStrategy: ConsumerStrategy,
-    val driverKafkaParams: ju.Map[String, Object],
-    readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String) extends Logging {
-
-  // This is a super ugly construct but the other option would be to duplicate the API in
-  // KafkaOffsetReader
-  protected val impl: KafkaOffsetReaderBase = null
+private[kafka010] trait KafkaOffsetReader {
 
   // These are needed here because of KafkaSourceProviderSuite
+  private[kafka010] val maxOffsetFetchAttempts: Int
+  private[kafka010] val offsetFetchAttemptIntervalMs: Long
 
-  private[kafka010] val maxOffsetFetchAttempts =
-    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
+  // This is needed here because of KafkaContinuousStream
+  val driverKafkaParams: ju.Map[String, Object]
 
-  private[kafka010] val offsetFetchAttemptIntervalMs =
-    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
-
-  override def toString(): String = consumerStrategy.toString
-
-  def close(): Unit = {
-    impl.close()
-  }
-
-  def fetchTopicPartitions(): Set[TopicPartition] = {
-    impl.fetchTopicPartitions()
-  }
-
+  def close(): Unit
   def fetchPartitionOffsets(
       offsetRangeLimit: KafkaOffsetRangeLimit,
-      isStartingOffsets: Boolean): Map[TopicPartition, Long] = {
-    impl.fetchPartitionOffsets(offsetRangeLimit, isStartingOffsets)
-  }
-
+      isStartingOffsets: Boolean): Map[TopicPartition, Long]
   def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
-      reportDataLoss: String => Unit): KafkaSourceOffset = {
-    impl.fetchSpecificOffsets(partitionOffsets, reportDataLoss)
-  }
-
+      reportDataLoss: String => Unit): KafkaSourceOffset
   def fetchSpecificTimestampBasedOffsets(
       partitionTimestamps: Map[TopicPartition, Long],
-      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset = {
-    impl.fetchSpecificTimestampBasedOffsets(partitionTimestamps, failsOnNoMatchingOffset)
-  }
-
-  def fetchEarliestOffsets(): Map[TopicPartition, Long] = {
-    impl.fetchEarliestOffsets()
-  }
-
-  def fetchLatestOffsets(knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap = {
-    impl.fetchLatestOffsets(knownOffsets)
-  }
-
-  def fetchEarliestOffsets(newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long] = {
-    impl.fetchEarliestOffsets(newPartitions)
-  }
-
+      failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+  def fetchEarliestOffsets(): Map[TopicPartition, Long]
+  def fetchLatestOffsets(knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap
+  def fetchEarliestOffsets(newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long]
   def getOffsetRangesFromUnresolvedOffsets(
       startingOffsets: KafkaOffsetRangeLimit,
-      endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange] = {
-    impl.getOffsetRangesFromUnresolvedOffsets(startingOffsets, endingOffsets)
-  }
-
+      endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange]
   def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,
-      reportDataLoss: String => Unit): Seq[KafkaOffsetRange] = {
-    impl.getOffsetRangesFromResolvedOffsets(fromPartitionOffsets, untilPartitionOffsets,
-      reportDataLoss)
+      reportDataLoss: String => Unit): Seq[KafkaOffsetRange]
+}
+
+private[kafka010] object KafkaOffsetReader extends Logging {
+  def build(
+      consumerStrategy: ConsumerStrategy,
+      driverKafkaParams: ju.Map[String, Object],
+      readerOptions: CaseInsensitiveMap[String],
+      driverGroupIdPrefix: String): KafkaOffsetReader = {
+    if (SQLConf.get.useDeprecatedKafkaOffsetFetching) {
+      logDebug("Creating old and deprecated Consumer based offset reader")
+      new KafkaOffsetReaderConsumer(consumerStrategy, driverKafkaParams, readerOptions,
+        driverGroupIdPrefix)
+    } else {
+      logDebug("Creating new Admin based offset reader")
+      new KafkaOffsetReaderAdmin(consumerStrategy, driverKafkaParams, readerOptions,
+        driverGroupIdPrefix)
+    }
   }
 }

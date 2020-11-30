@@ -57,7 +57,7 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
   }
 
   private def createKafkaReader(topic: String, minPartitions: Option[Int]): KafkaOffsetReader = {
-    new KafkaOffsetReader(
+    KafkaOffsetReader.build(
       SubscribeStrategy(Seq(topic)),
       KafkaSourceProvider.kafkaParamsForDriver(
         Map(

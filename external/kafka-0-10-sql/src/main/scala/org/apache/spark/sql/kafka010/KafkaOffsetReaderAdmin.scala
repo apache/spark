@@ -50,15 +50,16 @@ private[kafka010] class KafkaOffsetReaderAdmin(
     consumerStrategy: ConsumerStrategy,
     override val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String)
-  extends KafkaOffsetReaderBase(
-    consumerStrategy,
-    driverKafkaParams,
-    readerOptions,
-    driverGroupIdPrefix) with Logging {
+    driverGroupIdPrefix: String) extends KafkaOffsetReader with Logging {
+
+  private[kafka010] val maxOffsetFetchAttempts =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
+
+  private[kafka010] val offsetFetchAttemptIntervalMs =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   /**
-   * [[UninterruptibleThreadRunner]] ensures that all [[KafkaConsumer]] communication called in an
+   * [[UninterruptibleThreadRunner]] ensures that all [[Admin]] communication called in an
    * [[UninterruptibleThread]]. In the case of streaming queries, we are already running in an
    * [[UninterruptibleThread]], however for batch mode this is not the case.
    */

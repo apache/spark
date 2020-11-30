@@ -49,12 +49,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     consumerStrategy: ConsumerStrategy,
     override val driverKafkaParams: ju.Map[String, Object],
     readerOptions: CaseInsensitiveMap[String],
-    driverGroupIdPrefix: String)
-  extends KafkaOffsetReaderBase(
-    consumerStrategy,
-    driverKafkaParams,
-    readerOptions,
-    driverGroupIdPrefix) with Logging {
+    driverGroupIdPrefix: String) extends KafkaOffsetReader with Logging {
 
   /**
    * [[UninterruptibleThreadRunner]] ensures that all
@@ -89,6 +84,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     _consumer
   }
 
+  private[kafka010] val maxOffsetFetchAttempts =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
+
   /**
    * Number of partitions to read from Kafka. If this value is greater than the number of Kafka
    * topicPartitions, we will split up  the read tasks of the skewed partitions to multiple Spark
@@ -99,6 +97,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+
+  private[kafka010] val offsetFetchAttemptIntervalMs =
+    readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
@@ -126,7 +127,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
   /**
    * @return The Set of TopicPartitions for a given topic
    */
-  override def fetchTopicPartitions(): Set[TopicPartition] =
+  private def fetchTopicPartitions(): Set[TopicPartition] =
     uninterruptibleThreadRunner.runUninterruptibly {
       assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
       // Poll to get the latest assigned partitions
