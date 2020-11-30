@@ -213,15 +213,14 @@ case class AtomicReplaceTableAsSelectExec(
  * Rows in the output data set are appended.
  */
 case class AppendDataExec(
-    session: SparkSession,
     table: SupportsWrite,
-    relation: DataSourceV2Relation,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan,
+    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(newWriteBuilder().buildForBatch())
-    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    refreshCache()
     writtenRows
   }
 }
@@ -237,12 +236,11 @@ case class AppendDataExec(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExec(
-    session: SparkSession,
     table: SupportsWrite,
-    relation: DataSourceV2Relation,
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan,
+    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -259,7 +257,7 @@ case class OverwriteByExpressionExec(
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
     }
-    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    refreshCache()
     writtenRows
   }
 }
@@ -275,11 +273,10 @@ case class OverwriteByExpressionExec(
  * are not modified.
  */
 case class OverwritePartitionsDynamicExec(
-    session: SparkSession,
     table: SupportsWrite,
-    relation: DataSourceV2Relation,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan,
+    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = newWriteBuilder() match {
@@ -289,7 +286,7 @@ case class OverwritePartitionsDynamicExec(
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
-    session.sharedState.cacheManager.recacheByPlan(session, relation)
+    refreshCache()
     writtenRows
   }
 }
