@@ -58,9 +58,14 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>${hadoop-client-api.artifact}</artifactId>
       <version>${hadoop.version}</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <version>${hadoop.version}</version>
     </dependency>
     <!--
       the AWS module pulls in jackson; its transitive dependencies can create

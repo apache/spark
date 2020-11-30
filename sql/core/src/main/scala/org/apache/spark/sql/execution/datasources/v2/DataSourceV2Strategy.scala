@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -50,6 +50,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     } else {
       withFilter
     }
+  }
+
+  private def refreshCache(r: DataSourceV2Relation)(): Unit = {
+    session.sharedState.cacheManager.recacheByPlan(session, r)
+  }
+
+  private def invalidateCache(r: ResolvedTable)(): Unit = {
+    val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -127,8 +136,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             propsWithOwner, writeOptions, ifNotExists) :: Nil
       }
 
-    case RefreshTable(catalog, ident) =>
-      RefreshTableExec(catalog, ident) :: Nil
+    case RefreshTable(r: ResolvedTable) =>
+      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -147,6 +156,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
+            session,
             staging,
             ident,
             parts,
@@ -157,6 +167,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             orCreate = orCreate) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
+            session,
             catalog,
             ident,
             parts,
@@ -170,9 +181,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AppendData(r: DataSourceV2Relation, query, writeOptions, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, writeOptions.asOptions, query) :: Nil
+          AppendDataExecV1(v1, writeOptions.asOptions, query, refreshCache(r)) :: Nil
         case v2 =>
-          AppendDataExec(v2, writeOptions.asOptions, planLater(query)) :: Nil
+          AppendDataExec(v2, writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, writeOptions, _) =>
@@ -184,14 +195,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions, query) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, writeOptions.asOptions,
+            query, refreshCache(r)) :: Nil
         case v2 =>
-          OverwriteByExpressionExec(v2, filters, writeOptions.asOptions, planLater(query)) :: Nil
+          OverwriteByExpressionExec(v2, filters,
+            writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _) =>
       OverwritePartitionsDynamicExec(
-        r.table.asWritable, writeOptions.asOptions, planLater(query)) :: Nil
+        r.table.asWritable, writeOptions.asOptions, planLater(query), refreshCache(r)) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -225,8 +238,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
-    case DropTable(catalog, ident, ifExists) =>
-      DropTableExec(catalog, ident, ifExists) :: Nil
+    case DescribeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("Describing columns is not supported for v2 tables.")
+
+    case DropTable(r: ResolvedTable, ifExists, purge) =>
+      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
+
+    case _: NoopDropTable =>
+      LocalTableScanExec(Nil, Nil) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
@@ -273,6 +292,31 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
       ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+
+    case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
+      throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
+
+    case AlterTableAddPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists) =>
+      AlterTableAddPartitionExec(
+        table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
+
+    case AlterTableDropPartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
+      AlterTableDropPartitionExec(
+        table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+
+    case LoadData(_: ResolvedTable, _, _, _, _) =>
+      throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
+
+    case ShowCreateTable(_: ResolvedTable, _) =>
+      throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
+
+    case TruncateTable(_: ResolvedTable, _) =>
+      throw new AnalysisException("TRUNCATE TABLE is not supported for v2 tables.")
+
+    case ShowColumns(_: ResolvedTable, _) =>
+      throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")
 
     case _ => Nil
   }

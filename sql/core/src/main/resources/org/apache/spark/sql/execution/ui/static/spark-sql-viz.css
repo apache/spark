@@ -52,3 +52,8 @@
 .tooltip-inner {
   word-wrap:break-word;
 }
+
+/* Breaks the long job url list when showing Details for Query in SQL */
+.job-url {
+  word-wrap: break-word;
+}

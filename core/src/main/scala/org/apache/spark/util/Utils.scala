@@ -28,7 +28,7 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Arrays, Locale, Properties, Random, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
@@ -50,7 +50,7 @@ import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileUtil, Path, Trash}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -270,29 +270,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true, else
-   * delete the data permanently. If move data to trash failed fallback to hard deletion.
-   */
-  def moveToTrashOrDelete(
-      fs: FileSystem,
-      partitionPath: Path,
-      isTrashEnabled: Boolean,
-      hadoopConf: Configuration): Boolean = {
-    if (isTrashEnabled) {
-      logDebug(s"Try to move data ${partitionPath.toString} to trash")
-      val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
-      if (!isSuccess) {
-        logWarning(s"Failed to move data ${partitionPath.toString} to trash. " +
-          "Fallback to hard deletion")
-        return fs.delete(partitionPath, true)
-      }
-      isSuccess
-    } else {
-      fs.delete(partitionPath, true)
-    }
-  }
-
-  /**
    * Create a directory given the abstract pathname
    * @return true, if the directory is successfully created; otherwise, return false.
    */
@@ -399,7 +376,7 @@ private[spark] object Utils extends Logging {
    * This returns a new InputStream which contains the same data as the original input stream.
    * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
    * continue to read from the original stream. The only real use of this is if the original input
-   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * stream will potentially detect corruption while the data is being read (e.g. from compression).
    * This allows for an eager check of corruption in the first maxSize bytes of data.
    *
    * @return An InputStream which includes all data from the original stream (combining buffered
@@ -1090,20 +1067,20 @@ private[spark] object Utils extends Logging {
     }
     // checks if the hostport contains IPV6 ip and parses the host, port
     if (hostPort != null && hostPort.split(":").length > 2) {
-      val indx: Int = hostPort.lastIndexOf("]:")
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf("]:")
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 2).trim()
-      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 2).trim()
+      val retval = (hostPort.substring(0, index + 1).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     } else {
-      val indx: Int = hostPort.lastIndexOf(':')
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf(':')
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 1).trim()
-      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 1).trim()
+      val retval = (hostPort.substring(0, index).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
@@ -2542,6 +2519,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
@@ -2869,11 +2854,11 @@ private[spark] object Utils extends Logging {
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
       if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an intepreter
+        // The name does not have dollar sign or is not an interpreter
         // generated class, so we should return the full string
         s
       } else {
-        // The class name is intepreter generated,
+        // The class name is interpreter generated,
         // return the part after the last dollar sign
         // This is the same behavior as getClass.getSimpleName
         s.substring(lastDollarIndex + 1)
@@ -2970,6 +2955,27 @@ private[spark] object Utils extends Logging {
     }
     metadata.append("]")
     metadata.toString
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
+    }
   }
 }
 

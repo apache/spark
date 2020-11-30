@@ -61,6 +61,27 @@ Spark SQL has three kinds of type conversions: explicit casting, type coercion, 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
 
+The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)"](https://www.iso.org/standard/53682.html), except it specially allows the following
+ straightforward type conversions which are disallowed as per the ANSI standard:
+* NumericType <=> BooleanType
+* StringType <=> BinaryType
+
+ The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
+“Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
+    
+| From\To   | NumericType | StringType | DateType | TimestampType | IntervalType | BooleanType | BinaryType | ArrayType | MapType | StructType |
+|-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
+| NumericType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| StringType    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
+| DateType      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| TimestampType | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| IntervalType  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| BooleanType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| BinaryType    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| ArrayType     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
+| MapType       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
+| StructType    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
+
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
 
@@ -110,7 +131,22 @@ SELECT * FROM t;
 ### SQL Functions
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
-  - `size`: This function returns null for null input under ANSI mode.
+  - `size`: This function returns null for null input.
+  - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices. 
+  - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
+  - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+  - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
+  - `to_date` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+
+### SQL Operators
+
+The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
+  - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+  - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
+  - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
 
 ### SQL Keywords
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -89,11 +90,16 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       case expressions.In(a: Attribute, list)
         if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
         getBucketSetFromIterable(a, list.map(e => e.eval(EmptyRow)))
-      case expressions.InSet(a: Attribute, hset)
-        if hset.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
-        getBucketSetFromIterable(a, hset.map(e => expressions.Literal(e).eval(EmptyRow)))
+      case expressions.InSet(a: Attribute, hset) if a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, hset)
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
         getBucketSetFromValue(a, null)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == FloatType =>
+        getBucketSetFromValue(a, Float.NaN)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == DoubleType =>
+        getBucketSetFromValue(a, Double.NaN)
       case expressions.And(left, right) =>
         getExpressionBuckets(left, bucketColumnName, numBuckets) &
           getExpressionBuckets(right, bucketColumnName, numBuckets)
@@ -154,15 +160,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
-      val partitionKeyFilters = if (partitionColumns.isEmpty) {
-        ExpressionSet(Nil)
-      } else {
-        val predicates = ExpressionSet(normalizedFilters
-          .filter(_.references.subsetOf(partitionSet)))
-        logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
-        predicates
-      }
 
+      // this partitionKeyFilters should be the same with the ones being executed in
+      // PruneFileSourcePartitions
+      val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(partitionColumns,
+        normalizedFilters)
 
       // subquery expressions are filtered out because they can't be used to prune buckets or pushed
       // down as data filters, yet they would be executed

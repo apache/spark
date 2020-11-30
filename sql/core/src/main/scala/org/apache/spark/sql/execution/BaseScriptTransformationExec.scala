@@ -111,15 +111,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
-        // In schema less mode, hive default serde will choose first two output column as output
-        // if output column size less then 2, it will throw ArrayIndexOutOfBoundsException.
-        // Here we change spark's behavior same as hive's default serde.
-        // But in hive, TRANSFORM with schema less behavior like origin spark, we will fix this
-        // to keep spark and hive behavior same in SPARK-32388
+        // In schema less mode, hive will choose first two output column as output.
+        // If output column size less then 2, it will return NULL for columns with missing values.
+        // Here we split row string and choose first 2 values, if values's size less then 2,
+        // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            prevLine.split(outputRowFormat).slice(0, 2)
+            prevLine.split(outputRowFormat).slice(0, 2).padTo(2, null)
               .map(kvWriter))
       }
 

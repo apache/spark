@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.ScroogeLikeExample
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1924,6 +1924,35 @@ class DatasetSuite extends QueryTest
         val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
         checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
       }
+    }
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    checkDataset(
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+
+    // test null
+    checkDataset(
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    checkAnswer(df.where($"zoo" === Array('a', 'a')), Seq(Row("aa")))
+    checkAnswer(
+      df.where($"zoo".contains(Array('a', 'b'))),
+      Seq(Row("abc")))
+  }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val df = Seq(1).toDF("c")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+      assert(timezone == "Asia/Shanghai")
     }
   }
 }

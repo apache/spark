@@ -56,12 +56,14 @@ if __name__ == "__main__":
     # We may alternatively specify parameters using a Python dictionary as a paramMap
     paramMap = {lr.maxIter: 20}
     paramMap[lr.maxIter] = 30  # Specify 1 Param, overwriting the original maxIter.
-    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})  # Specify multiple Params.
+    # Specify multiple Params.
+    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})  # type: ignore
 
     # You can combine paramMaps, which are python dictionaries.
-    paramMap2 = {lr.probabilityCol: "myProbability"}  # Change output column name
+    # Change output column name
+    paramMap2 = {lr.probabilityCol: "myProbability"}  # type: ignore
     paramMapCombined = paramMap.copy()
-    paramMapCombined.update(paramMap2)
+    paramMapCombined.update(paramMap2)  # type: ignore
 
     # Now learn a new model using the paramMapCombined parameters.
     # paramMapCombined overrides all parameters set earlier via lr.set* methods.

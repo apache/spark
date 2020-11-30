@@ -16,7 +16,7 @@
 #
 
 """
-Used to test shipping of code depenencies with SparkContext.addPyFile().
+Used to test shipping of code dependencies with SparkContext.addPyFile().
 """
 
 

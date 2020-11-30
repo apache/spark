@@ -229,7 +229,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
-            if (!isPlanIntegral(result)) {
+            if (effective && !isPlanIntegral(result)) {
               val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
                 "the structural integrity of the plan is broken."
               throw new TreeNodeException(result, message, null)

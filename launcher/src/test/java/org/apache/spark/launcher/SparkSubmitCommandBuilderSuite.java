@@ -259,8 +259,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
             findArgValue(cmd, parser.CLASS));
     assertEquals("cluster", findArgValue(cmd, parser.DEPLOY_MODE));
     String primaryResource = cmd.get(cmd.size() - 2);
-    assertTrue(new File(primaryResource).getName().startsWith("spark-examples"));
-    assertFalse(cmd.contains(SparkLauncher.NO_RESOURCE));
+    assertTrue(primaryResource.equals(SparkLauncher.NO_RESOURCE)
+            || new File(primaryResource).getName().startsWith("spark-examples"));
   }
 
   @Test(expected = IllegalArgumentException.class)

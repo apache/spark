@@ -72,6 +72,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
+        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
@@ -158,7 +160,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.6", "python3.8", "pypy3"] if which(x)]
+    python_execs = [x for x in ["python3.6", "pypy3"] if which(x)]
 
     if "python3.6" not in python_execs:
         p = which("python3")

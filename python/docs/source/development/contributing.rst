@@ -77,6 +77,50 @@ There are a couple of additional notes to keep in mind when contributing to code
 * Be Pythonic.
 * APIs are matched with Scala and Java sides in general.
 * PySpark specific APIs can still be considered as long as they are Pythonic and do not conflict with other existent APIs, for example, decorator usage of UDFs.
+* If you extend or modify public API, please adjust corresponding type hints. See `Contributing and Maintaining Type Hints`_ for details.
+
+Contributing and Maintaining Type Hints
+----------------------------------------
+
+PySpark type hints are provided using stub files, placed in the same directory as the annotated module, with exception to ``# type: ignore`` in modules which don't have their own stubs (tests, examples and non-public API).
+As a rule of thumb, only public API is annotated.
+
+Annotations should, when possible:
+
+* Reflect expectations of the underlying JVM API, to help avoid type related failures outside Python interpreter.
+* In case of conflict between too broad (``Any``) and too narrow argument annotations, prefer the latter as one, as long as it is covering most of the typical use cases.
+* Indicate nonsensical combinations of arguments using ``@overload``  annotations. For example, to indicate that ``*Col`` and ``*Cols`` arguments are mutually exclusive:
+
+  .. code-block:: python
+
+    @overload
+    def __init__(
+        self,
+        *,
+        threshold: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        thresholds: Optional[List[float]] = ...,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...
+    ) -> None: ...
+
+* Be compatible with the current stable MyPy release.
+
+
+Complex supporting type definitions, should be placed in dedicated ``_typing.pyi`` stubs. See for example `pyspark.sql._typing.pyi <https://github.com/apache/spark/blob/master/python/pyspark/sql/_typing.pyi>`_.
+
+Annotations can be validated using ``dev/lint-python`` script or by invoking mypy directly:
+
+.. code-block:: bash
+
+    mypy --config python/mypy.ini python/pyspark
+
 
 
 Code Style Guide
@@ -90,4 +134,3 @@ the APIs were inspired by Java. PySpark also follows `camelCase` for exposed API
 There is an exception ``functions.py`` that uses `snake_case`. It was in order to make APIs SQL (and Python) friendly.
 
 PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `flake8 <https://flake8.pycqa.org/en/latest/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
-

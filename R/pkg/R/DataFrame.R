@@ -2772,7 +2772,7 @@ setMethod("merge",
 #' Creates a list of columns by replacing the intersected ones with aliases
 #'
 #' Creates a list of columns by replacing the intersected ones with aliases.
-#' The name of the alias column is formed by concatanating the original column name and a suffix.
+#' The name of the alias column is formed by concatenating the original column name and a suffix.
 #'
 #' @param x a SparkDataFrame
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
@@ -2863,11 +2863,18 @@ setMethod("unionAll",
 #' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
 #' into account. Input SparkDataFrames can have different data types in the schema.
 #'
+#' When the parameter allowMissingColumns is `TRUE`, the set of column names
+#' in x and y can differ; missing columns will be filled as null.
+#' Further, the missing columns of x will be added at the end
+#' in the schema of the union result.
+#'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #' This function resolves columns by name (not by position).
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
+#' @param allowMissingColumns logical
+#' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @rdname unionByName
@@ -2880,12 +2887,15 @@ setMethod("unionAll",
 #' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
 #' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
 #' head(unionByName(df1, df2))
+#'
+#' df3 <- select(createDataFrame(mtcars), "carb")
+#' head(unionByName(df1, df3, allowMissingColumns = TRUE))
 #' }
 #' @note unionByName since 2.3.0
 setMethod("unionByName",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
-          function(x, y) {
-            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+          function(x, y, allowMissingColumns=FALSE) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf, allowMissingColumns)
             dataFrame(unioned)
           })
 
@@ -3221,7 +3231,7 @@ setMethod("describe",
 #' \item stddev
 #' \item min
 #' \item max
-#' \item arbitrary approximate percentiles specified as a percentage (eg, "75\%")
+#' \item arbitrary approximate percentiles specified as a percentage (e.g., "75\%")
 #' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
 #' approximate quartiles (percentiles at 25\%, 50\%, and 75\%), and max.
@@ -3733,7 +3743,7 @@ setMethod("histogram",
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
-#' @param tableName yhe name of the table in the external database.
+#' @param tableName the name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.

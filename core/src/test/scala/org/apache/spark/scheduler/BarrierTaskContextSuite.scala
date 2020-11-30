@@ -25,7 +25,6 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -189,7 +188,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
     initLocalClusterSparkContext()
-    sc.conf.set("spark.barrier.sync.timeout", "1")
+    sc.conf.set("spark.barrier.sync.timeout", "5")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -212,7 +211,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1 second(s)"))
+    assert(error.contains("within 5 second(s)"))
   }
 
   def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {

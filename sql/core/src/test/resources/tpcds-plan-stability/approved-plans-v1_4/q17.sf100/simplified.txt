@@ -69,7 +69,11 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                           Exchange [sr_customer_sk,sr_item_sk,sr_ticket_number] #8
                                             WholeStageCodegen (10)
                                               Project [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
-                                                BroadcastHashJoin [d_date_sk,sr_returned_date_sk]
+                                                BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
+                                                  Filter [sr_customer_sk,sr_item_sk,sr_ticket_number,sr_returned_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                                                   InputAdapter
                                                     BroadcastExchange #9
                                                       WholeStageCodegen (9)
@@ -78,10 +82,6 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date_sk,d_quarter_name]
-                                                  Filter [sr_customer_sk,sr_item_sk,sr_ticket_number,sr_returned_date_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.store_returns [sr_returned_date_sk,sr_item_sk,sr_customer_sk,sr_ticket_number,sr_return_quantity]
                   InputAdapter
                     WholeStageCodegen (16)
                       Sort [cs_bill_customer_sk,cs_item_sk]

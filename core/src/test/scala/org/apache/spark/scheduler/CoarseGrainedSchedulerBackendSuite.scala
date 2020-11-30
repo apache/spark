@@ -188,7 +188,6 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("extra resources from executor") {
-    import TestUtils._
 
     val execCores = 3
     val conf = new SparkConf()
@@ -300,7 +299,7 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
     when(ts.applicationId()).thenReturn("appid1")
     when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
     when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
-    when(ts.nodeBlacklist()).thenReturn(Set.empty[String])
+    when(ts.excludedNodes()).thenReturn(Set.empty[String])
     ts
   }
 

@@ -1,5 +1,5 @@
 == Physical Plan ==
-TakeOrderedAndProject (34)
+* Sort (34)
 +- * HashAggregate (33)
    +- Exchange (32)
       +- * HashAggregate (31)
@@ -190,7 +190,7 @@ Functions [1]: [sum(UnscaledValue(ws_ext_discount_amt#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_discount_amt#3))#22]
 Results [1]: [MakeDecimal(sum(UnscaledValue(ws_ext_discount_amt#3))#22,17,2) AS Excess Discount Amount #23]
 
-(34) TakeOrderedAndProject
+(34) Sort [codegen id : 7]
 Input [1]: [Excess Discount Amount #23]
-Arguments: 100, [Excess Discount Amount #23 ASC NULLS FIRST], [Excess Discount Amount #23]
+Arguments: [Excess Discount Amount #23 ASC NULLS FIRST], true, 0
 

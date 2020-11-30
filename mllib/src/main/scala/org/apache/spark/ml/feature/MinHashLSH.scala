@@ -224,7 +224,7 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("randCoefficients").head()
-      val randCoefficients = data.getAs[Seq[Int]](0).grouped(2)
+      val randCoefficients = data.getSeq[Int](0).grouped(2)
         .map(tuple => (tuple(0), tuple(1))).toArray
       val model = new MinHashLSHModel(metadata.uid, randCoefficients)
 

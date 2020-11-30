@@ -70,6 +70,7 @@ case class ExecutorProcessLost(
  *
  * This is used by the task scheduler to remove state associated with the executor, but
  * not yet fail any tasks that were running in the executor before the executor is "fully" lost.
+ * If you update this code make sure to re-run the K8s integration tests.
  *
  * @param workerHost it is defined when the worker is decommissioned too
  */

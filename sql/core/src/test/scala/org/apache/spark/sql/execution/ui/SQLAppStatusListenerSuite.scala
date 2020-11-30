@@ -680,7 +680,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(sparkPlanInfo.nodeName === "WholeStageCodegen (2)")
   }
 
-  test("SPARK-32615: SQLMetrics validation after sparkPlanInfo updated in AQE") {
+  test("SPARK-32615,SPARK-33016: SQLMetrics validation after sparkPlanInfo updated in AQE") {
     val statusStore = createStatusStore()
     val listener = statusStore.listener.get
 
@@ -755,7 +755,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
         .allNodes.flatMap(_.metrics.map(_.accumulatorId))
 
     // Assume that AQE update sparkPlanInfo with newPlan
-    // ExecutionMetrics will be replaced using newPlan's SQLMetrics
+    // ExecutionMetrics will be appended using newPlan's SQLMetrics
     listener.onOtherEvent(SparkListenerSQLAdaptiveExecutionUpdate(
       executionId,
       "test",
@@ -770,8 +770,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(1, 0)))
     listener.onTaskStart(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0)))
 
-    // live metrics will be override, and ExecutionMetrics should be empty as the newPlan updated.
-    assert(statusStore.executionMetrics(executionId).isEmpty)
+    // historical metrics will be kept despite of the newPlan updated.
+    assert(statusStore.executionMetrics(executionId).size == 2)
 
     // update new metrics with Id 4 & 5, since 3 is timing metrics,
     // timing metrics has a complicated string presentation so we don't test it here.
@@ -780,9 +780,9 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       (0L, 1, 0, createAccumulatorInfos(newMetricsValueMap))
     )))
 
-    assert(statusStore.executionMetrics(executionId).size == 2)
+    assert(statusStore.executionMetrics(executionId).size == 4)
     statusStore.executionMetrics(executionId).foreach { m =>
-      assert(m._2 == "500")
+      assert(m._2 == "100" || m._2 == "500")
     }
 
     listener.onTaskEnd(SparkListenerTaskEnd(
@@ -802,10 +802,10 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       JobSucceeded
     ))
 
-    // aggregateMetrics should ignore metrics from job 0
+    // aggregateMetrics should contains all metrics from job 0 and job 1
     val aggregateMetrics = listener.liveExecutionMetrics(executionId)
     if (aggregateMetrics.isDefined) {
-      oldAccumulatorIds.foreach(id => assert(!aggregateMetrics.get.contains(id)))
+      assert(aggregateMetrics.get.keySet.size == 4)
     }
 
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(

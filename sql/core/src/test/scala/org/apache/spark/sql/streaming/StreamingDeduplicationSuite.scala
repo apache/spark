@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -294,4 +291,45 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     testWithFlag(true)
     testWithFlag(false)
   }
+
+  test("SPARK-29438: ensure UNION doesn't lead streaming deduplication to use" +
+    " shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input2 = MemoryStream[Int]
+      val df1 = input1.toDF().select($"value")
+      val df2 = input2.toDF().dropDuplicates("value")
+
+      // Unioned DF would have columns as (Int)
+      (input1, input2, df1.union(df2))
+    }
+
+    withTempDir { checkpointDir =>
+      val (input1, input2, unionDf) = constructUnionDf(2)
+      testStream(unionDf, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 11, 12)(input2, 21, 22),
+        CheckNewAnswer(11, 12, 21, 22),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
+      // TaskContext.partitionId()). This test will verify streaming deduplication doesn't have
+      // such issue.
+
+      val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData(11, 12)
+      newInput2.addData(21, 22)
+
+      testStream(newUnionDf, Append)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(newInput1, 13, 14)(newInput2, 22, 23),
+        CheckNewAnswer(13, 14, 23)
+      )
+    }
+  }
+
 }

@@ -26,7 +26,6 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.resource.ExecutorResourceRequest
 import org.apache.spark.util.Utils
@@ -38,7 +37,6 @@ object YarnSparkHadoopUtil {
   // the common cases. Memory overhead tends to grow with container size.
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
 
@@ -185,32 +183,11 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
-   */
-  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
-    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
-    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
-  }
-
-  /**
    * Get offHeap memory size from [[ExecutorResourceRequest]]
    * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
   def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
     execRequest: ExecutorResourceRequest): Long = {
-    checkOffHeapEnabled(sparkConf, execRequest.amount)
-  }
-
-  /**
-   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
-   */
-  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
-    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      require(offHeapSize > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      offHeapSize
-    } else {
-      0
-    }
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
   }
 }

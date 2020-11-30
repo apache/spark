@@ -21,7 +21,7 @@ import org.apache.spark.sql.{AnalysisException, ShowCreateTableSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.HiveSerDe
 
 class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSingleton {
 

@@ -770,9 +770,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("Dialect unregister") {
-    JdbcDialects.registerDialect(testH2Dialect)
-    JdbcDialects.unregisterDialect(testH2Dialect)
-    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    } finally {
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("Aggregated dialects") {

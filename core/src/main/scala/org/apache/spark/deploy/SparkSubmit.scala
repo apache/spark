@@ -311,7 +311,7 @@ private[spark] class SparkSubmit extends Logging {
         // In K8s client mode, when in the driver, add resolved jars early as we might need
         // them at the submit time for artifact downloading.
         // For example we might use the dependencies for downloading
-        // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
+        // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
         // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
         if (isKubernetesClusterModeDriver) {
           val loader = getSubmitClassLoader(sparkConf)
@@ -391,6 +391,7 @@ private[spark] class SparkSubmit extends Logging {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
         args.files = renameResourcesToLocalFS(args.files, localFiles)
+        args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }
 
@@ -1160,13 +1161,16 @@ private[spark] object SparkSubmitUtils {
     val br: IBiblioResolver = new IBiblioResolver
     br.setM2compatible(true)
     br.setUsepoms(true)
+    val defaultInternalRepo : Option[String] = sys.env.get("DEFAULT_ARTIFACT_REPOSITORY")
+    br.setRoot(defaultInternalRepo.getOrElse("https://repo1.maven.org/maven2/"))
     br.setName("central")
     cr.add(br)
 
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
+    sp.setRoot(sys.env.getOrElse(
+      "DEFAULT_ARTIFACT_REPOSITORY", "https://dl.bintray.com/spark-packages/maven"))
     sp.setName("spark-packages")
     cr.add(sp)
     cr
@@ -1184,8 +1188,14 @@ private[spark] object SparkSubmitUtils {
       cacheDirectory: File): String = {
     artifacts.map { artifactInfo =>
       val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+      val classifier = if (extraAttrs.containsKey("classifier")) {
+        "-" + extraAttrs.get("classifier")
+      } else {
+        ""
+      }
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}$classifier.jar"
     }.mkString(",")
   }
 
