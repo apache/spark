@@ -459,7 +459,7 @@ class UDFTests(ReusedSQLTestCase):
 
         self.assertTupleEqual(expected, actual)
 
-    def test_udf_shouldnt_accept_noncallable_object(self):
+    def test_udf_should_not_accept_noncallable_object(self):
         non_callable = None
         self.assertRaises(TypeError, UserDefinedFunction, non_callable, StringType())
 
@@ -683,7 +683,7 @@ class UDFInitializationTests(unittest.TestCase):
         if SparkContext._active_spark_context is not None:
             SparkContext._active_spark_context.stop()
 
-    def test_udf_init_shouldnt_initialize_context(self):
+    def test_udf_init_should_not_initialize_context(self):
         UserDefinedFunction(lambda x: x, StringType())
 
         self.assertIsNone(
