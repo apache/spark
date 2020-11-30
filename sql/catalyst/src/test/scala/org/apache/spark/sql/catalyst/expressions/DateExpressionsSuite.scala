@@ -1048,7 +1048,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(true, false).foreach { ansi =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-        val makeTimestampExpr = MakeTimestamp(
+        var makeTimestampExpr = MakeTimestamp(
           Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
           Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
         checkEvaluation(makeTimestampExpr, expected)
@@ -1059,56 +1059,37 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
         checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
         checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
-      }
-    }
 
-    // ansi test
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val makeTimestampExpr = MakeTimestamp(
-        Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
-        Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
-      checkExceptionInExpression[DateTimeException](
-        makeTimestampExpr.copy(year = Literal(Int.MaxValue)), EmptyRow, "Invalid value for Year")
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(month = Literal(13)),
-        EmptyRow, "Invalid value for Month")
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(day = Literal(32)),
-        EmptyRow, "Invalid value for Day")
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(hour = Literal(25)),
-        EmptyRow, "Invalid value for Hour")
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(min = Literal(65)),
-        EmptyRow, "Invalid value for Min")
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(Decimal(
-        BigDecimal(70.0), 8, 6))), EmptyRow, "Invalid value for Second")
-    }
+        Seq(
+          (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null,
+            "Invalid value for Year"),
+          (makeTimestampExpr.copy(month = Literal(13)), null, "Invalid value for Month"),
+          (makeTimestampExpr.copy(day = Literal(32)), null, "Invalid value for Day"),
+          (makeTimestampExpr.copy(hour = Literal(25)), null, "Invalid value for Hour"),
+          (makeTimestampExpr.copy(min = Literal(65)), null, "Invalid value for Min"),
+          (makeTimestampExpr.copy(sec = Literal(Decimal(
+            BigDecimal(70.0), 8, 6))), null, "Invalid value for Second")
+        ).foreach { entry =>
+          if (ansi) {
+            checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._3)
+          } else {
+            checkEvaluation(entry._1, entry._2)
+          }
+        }
 
-    // non-ansi test
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val makeTimestampExpr = MakeTimestamp(
-        Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
-        Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
-      checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
-      checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
-      checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
-      checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
-      checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
-      checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
-      checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
-    }
-
-    Seq(true, false).foreach { ansi =>
-      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-        val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
           Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
-      }
-    }
+        if (ansi) {
+          checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
+            Decimal(BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+        } else {
+          checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+        }
 
-    // ansi test
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-        Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-      checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(Decimal(
-        BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12), Literal(0),
+          Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+      }
     }
 
     // non-ansi test
