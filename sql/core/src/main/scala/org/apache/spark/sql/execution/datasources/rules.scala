@@ -434,7 +434,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -512,7 +512,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, _, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
@@ -534,7 +534,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoStatement(t, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||

@@ -311,7 +311,7 @@ private[spark] class SparkSubmit extends Logging {
         // In K8s client mode, when in the driver, add resolved jars early as we might need
         // them at the submit time for artifact downloading.
         // For example we might use the dependencies for downloading
-        // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
+        // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
         // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
         if (isKubernetesClusterModeDriver) {
           val loader = getSubmitClassLoader(sparkConf)
@@ -1186,12 +1186,16 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { ai =>
-      val artifactInfo = ai.asInstanceOf[Artifact]
-      val artifact = artifactInfo.getModuleRevisionId
-      val testSuffix = if (artifactInfo.getType == "test-jar") "-tests" else ""
+    artifacts.map { artifactInfo =>
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+      val classifier = if (extraAttrs.containsKey("classifier")) {
+        "-" + extraAttrs.get("classifier")
+      } else {
+        ""
+      }
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}${testSuffix}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}$classifier.jar"
     }.mkString(",")
   }
 

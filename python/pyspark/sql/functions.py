@@ -1300,7 +1300,7 @@ def spark_partition_id():
 
     Notes
     -----
-    This is indeterministic because it depends on data partitioning and task scheduling.
+    This is non deterministic because it depends on data partitioning and task scheduling.
 
     Examples
     --------
@@ -4110,7 +4110,7 @@ def _get_lambda_parameters(f):
     # We should exclude functions that use
     # variable args and keyword argnames
     # as well as keyword only args
-    supported_parmeter_types = {
+    supported_parameter_types = {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.POSITIONAL_ONLY,
     }
@@ -4125,7 +4125,7 @@ def _get_lambda_parameters(f):
         )
 
     # and all arguments can be used as positional
-    if not all(p.kind in supported_parmeter_types for p in parameters):
+    if not all(p.kind in supported_parameter_types for p in parameters):
         raise ValueError(
             "f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
         )
@@ -4640,7 +4640,7 @@ def years(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4664,7 +4664,7 @@ def months(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4688,7 +4688,7 @@ def days(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4712,7 +4712,7 @@ def hours(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 

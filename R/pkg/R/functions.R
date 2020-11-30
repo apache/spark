@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -2918,7 +2918,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions

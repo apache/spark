@@ -484,7 +484,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                                                  col('temp0.key') == col('temp1.key'))
         self.assertEquals(res.count(), 5)
 
-    def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
+    def test_mixed_scalar_udfs_followed_by_groupby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
             .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))

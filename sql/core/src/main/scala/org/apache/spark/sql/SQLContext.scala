@@ -661,7 +661,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the current database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
@@ -673,7 +673,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the given database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops

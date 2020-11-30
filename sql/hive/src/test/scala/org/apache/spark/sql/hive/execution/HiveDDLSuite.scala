@@ -2251,8 +2251,8 @@ class HiveDDLSuite
         )
 
         sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
-        assert(spark.table("tab").schema.find(_.name == "c5")
-          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
+        assert(spark.sharedState.externalCatalog.getTable("default", "tab")
+          .schema.find(_.name == "c5").get.dataType == CharType(10))
       }
     }
   }

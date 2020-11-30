@@ -596,7 +596,7 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl.asTableIdentifier :: Nil
       case _ => Nil
     }
 

@@ -376,7 +376,7 @@ private[spark] object Utils extends Logging {
    * This returns a new InputStream which contains the same data as the original input stream.
    * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
    * continue to read from the original stream. The only real use of this is if the original input
-   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * stream will potentially detect corruption while the data is being read (e.g. from compression).
    * This allows for an eager check of corruption in the first maxSize bytes of data.
    *
    * @return An InputStream which includes all data from the original stream (combining buffered
@@ -1067,20 +1067,20 @@ private[spark] object Utils extends Logging {
     }
     // checks if the hostport contains IPV6 ip and parses the host, port
     if (hostPort != null && hostPort.split(":").length > 2) {
-      val indx: Int = hostPort.lastIndexOf("]:")
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf("]:")
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 2).trim()
-      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 2).trim()
+      val retval = (hostPort.substring(0, index + 1).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     } else {
-      val indx: Int = hostPort.lastIndexOf(':')
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf(':')
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 1).trim()
-      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 1).trim()
+      val retval = (hostPort.substring(0, index).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
@@ -2854,11 +2854,11 @@ private[spark] object Utils extends Logging {
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
       if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an intepreter
+        // The name does not have dollar sign or is not an interpreter
         // generated class, so we should return the full string
         s
       } else {
-        // The class name is intepreter generated,
+        // The class name is interpreter generated,
         // return the part after the last dollar sign
         // This is the same behavior as getClass.getSimpleName
         s.substring(lastDollarIndex + 1)

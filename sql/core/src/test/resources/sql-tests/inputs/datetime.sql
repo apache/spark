@@ -153,3 +153,14 @@ select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat'
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- Timestamp type parse error
+select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select cast("Unparseable" as timestamp)

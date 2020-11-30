@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
@@ -66,7 +67,8 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
     val partValues = partSchema.map { part =>
       val raw = normalizedSpec.get(part.name).orNull
-      Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
+      val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
+      Cast(Literal.create(raw, StringType), dt, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }

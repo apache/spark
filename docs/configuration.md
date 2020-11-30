@@ -2170,7 +2170,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
-    TaskSet which is unschedulable because all executors are exluded due to task failures.
+    TaskSet which is unschedulable because all executors are excluded due to task failures.
   </td>
   <td>2.4.1</td>
 </tr>

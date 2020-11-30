@@ -178,7 +178,7 @@ class Statistics(object):
         """
         If `observed` is Vector, conduct Pearson's chi-squared goodness
         of fit test of the observed data against the expected distribution,
-        or againt the uniform distribution (by default), with each category
+        or against the uniform distribution (by default), with each category
         having an expected frequency of `1 / len(observed)`.
 
         If `observed` is matrix, conduct Pearson's independence test on the

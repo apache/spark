@@ -98,7 +98,7 @@ public class TransportFrameDecoderSuite {
             writtenBytes += pieceBytes;
           }
           logger.info("Writing 300MiB frame buf with consolidation of threshold " + threshold
-              + " took " + totalTime + " milis");
+              + " took " + totalTime + " millis");
         } finally {
           for (ByteBuf buf : retained) {
             release(buf);
