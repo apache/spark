@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,7 +52,57 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
-    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
+    limitedRDD(child.execute(), limit)
+  }
+
+  override def executeToIterator(): Iterator[InternalRow] = {
+    new Iterator[InternalRow] {
+
+      private val childRDD = child.execute()
+      private val totalParts = childRDD.partitions.length
+      private var partsScanned = 0
+      private var rowCount = 0
+      private var rows: Iterator[InternalRow] = Iterator.empty
+
+      override def hasNext: Boolean = {
+        if (rowCount < limit && rows.isEmpty && partsScanned < totalParts) {
+          // The number of partitions to try in this iteration. It is ok for this number to be
+          // greater than totalParts because we actually cap it at totalParts in runJob.
+          var numPartsToTry = 1L
+          val left = limit - rowCount
+          if (partsScanned > 0) {
+            // If we didn't find any rows after the previous iteration, quadruple and retry.
+            // Otherwise, interpolate the number of partitions we need to try, but overestimate
+            // it by 50%. We also cap the estimation in the end.
+            val limitScaleUpFactor = Math.max(sqlContext.conf.limitScaleUpFactor, 2)
+            if (rowCount == 0) {
+              numPartsToTry = partsScanned * limitScaleUpFactor
+            } else {
+              // As left > 0, numPartsToTry is always >= 1
+              numPartsToTry = Math.ceil(1.5 * left * partsScanned / rowCount).toInt
+              numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
+            }
+          }
+
+          val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
+          val res = SparkPlan.toByteArrayRDD(
+            limitedRDD(PartitionPruningRDD.create(childRDD, p.contains), left)).take(1)
+              .headOption.getOrElse((0L, Array.emptyByteArray))
+          rows = SparkPlan.decodeUnsafeRows(res._2, child.schema.length)
+          rowCount += res._1.toInt
+          partsScanned += p.size
+        }
+        rows.hasNext
+      }
+
+      override def next(): InternalRow = {
+        rows.next()
+      }
+    }
+  }
+
+  private def limitedRDD(rdd: RDD[InternalRow], limit: Int): RDD[InternalRow] = {
+    val locallyLimited = rdd.mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
         locallyLimited,

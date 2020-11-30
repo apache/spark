@@ -48,6 +48,80 @@ object SparkPlan {
 
   /** Register a new SparkPlan, returning its SparkPlan ID */
   private[execution] def newPlanId(): Int = nextPlanId.getAndIncrement()
+
+  /**
+   * Packing the UnsafeRows into byte array for faster serialization.
+   * The byte arrays are in the following format:
+   * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+   *
+   * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+   * compressed.
+   */
+  private[execution] def toByteArrayRDD(
+    rdd: RDD[InternalRow],
+    n: Int = -1,
+    takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
+    rdd.mapPartitionsInternal { iter =>
+      var count = 0
+      val buffer = new Array[Byte](4 << 10)  // 4K
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bos = new ByteArrayOutputStream()
+      val out = new DataOutputStream(codec.compressedOutputStream(bos))
+
+      if (takeFromEnd && n > 0) {
+        // To collect n from the last, we should anyway read everything with keeping the n.
+        // Otherwise, we don't know where is the last from the iterator.
+        var last: Seq[UnsafeRow] = Seq.empty[UnsafeRow]
+        val slidingIter = iter.map(_.copy()).sliding(n)
+        while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
+        var i = 0
+        count = last.length
+        while (i < count) {
+          val row = last(i)
+          out.writeInt(row.getSizeInBytes)
+          row.writeToStream(out, buffer)
+          i += 1
+        }
+      } else {
+        // `iter.hasNext` may produce one row and buffer it, we should only call it when the
+        // limit is not hit.
+        while ((n < 0 || count < n) && iter.hasNext) {
+          val row = iter.next().asInstanceOf[UnsafeRow]
+          out.writeInt(row.getSizeInBytes)
+          row.writeToStream(out, buffer)
+          count += 1
+        }
+      }
+      out.writeInt(-1)
+      out.flush()
+      out.close()
+      Iterator((count, bos.toByteArray))
+    }
+  }
+
+  /**
+   * Decodes the byte arrays back to UnsafeRows and put them into buffer.
+   */
+  private[execution] def decodeUnsafeRows(
+    bytes: Array[Byte],
+    nFields: Int): Iterator[InternalRow] = {
+    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(codec.compressedInputStream(bis))
+
+    new Iterator[InternalRow] {
+      private var sizeOfNextRow = ins.readInt()
+      override def hasNext: Boolean = sizeOfNextRow >= 0
+      override def next(): InternalRow = {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(nFields)
+        row.pointTo(bs, sizeOfNextRow)
+        sizeOfNextRow = ins.readInt()
+        row
+      }
+    }
+  }
 }
 
 /**
@@ -318,66 +392,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, Array[Byte])] = {
-    execute().mapPartitionsInternal { iter =>
-      var count = 0
-      val buffer = new Array[Byte](4 << 10)  // 4K
-      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-      val bos = new ByteArrayOutputStream()
-      val out = new DataOutputStream(codec.compressedOutputStream(bos))
-
-      if (takeFromEnd && n > 0) {
-        // To collect n from the last, we should anyway read everything with keeping the n.
-        // Otherwise, we don't know where is the last from the iterator.
-        var last: Seq[UnsafeRow] = Seq.empty[UnsafeRow]
-        val slidingIter = iter.map(_.copy()).sliding(n)
-        while (slidingIter.hasNext) { last = slidingIter.next().asInstanceOf[Seq[UnsafeRow]] }
-        var i = 0
-        count = last.length
-        while (i < count) {
-          val row = last(i)
-          out.writeInt(row.getSizeInBytes)
-          row.writeToStream(out, buffer)
-          i += 1
-        }
-      } else {
-        // `iter.hasNext` may produce one row and buffer it, we should only call it when the
-        // limit is not hit.
-        while ((n < 0 || count < n) && iter.hasNext) {
-          val row = iter.next().asInstanceOf[UnsafeRow]
-          out.writeInt(row.getSizeInBytes)
-          row.writeToStream(out, buffer)
-          count += 1
-        }
-      }
-      out.writeInt(-1)
-      out.flush()
-      out.close()
-      Iterator((count, bos.toByteArray))
-    }
+    SparkPlan.toByteArrayRDD(execute(), n, takeFromEnd)
   }
 
   /**
    * Decodes the byte arrays back to UnsafeRows and put them into buffer.
    */
   private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
-    val nFields = schema.length
-
-    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-    val bis = new ByteArrayInputStream(bytes)
-    val ins = new DataInputStream(codec.compressedInputStream(bis))
-
-    new Iterator[InternalRow] {
-      private var sizeOfNextRow = ins.readInt()
-      override def hasNext: Boolean = sizeOfNextRow >= 0
-      override def next(): InternalRow = {
-        val bs = new Array[Byte](sizeOfNextRow)
-        ins.readFully(bs)
-        val row = new UnsafeRow(nFields)
-        row.pointTo(bs, sizeOfNextRow)
-        sizeOfNextRow = ins.readInt()
-        row
-      }
-    }
+    SparkPlan.decodeUnsafeRows(bytes, schema.length)
   }
 
   /**
