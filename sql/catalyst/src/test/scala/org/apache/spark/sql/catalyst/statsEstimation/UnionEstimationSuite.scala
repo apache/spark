@@ -27,7 +27,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
   test("test row size estimation") {
     val attrInt = AttributeReference("cint", IntegerType)()
 
-    val sz: Option[BigInt] = Some(1024)
+    val sz = Some(BigInt(1024))
     val child1 = StatsTestPlan(
       outputList = Seq(attrInt),
       rowCount = 2,
@@ -46,7 +46,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("col stats estimation") {
-    val sz: Option[BigInt] = Some(1024)
+    val sz = Some(BigInt(1024))
 
     val attrInt = AttributeReference("cint", IntegerType)()
     val attrDouble = AttributeReference("cdouble", DoubleType)()
@@ -58,10 +58,10 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val attrDate = AttributeReference("cdate", DateType)()
     val attrTimestamp = AttributeReference("ctimestamp", TimestampType)()
 
-    val s1: Short = 1
-    val s2: Short = 4
-    val b1: Byte = 1
-    val b2: Byte = 4
+    val s1 = 1.toShort
+    val s2 = 4.toShort
+    val b1 = 1.toByte
+    val b2 = 4.toByte
     val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
       Seq(
         attrInt -> ColumnStat(
@@ -86,10 +86,10 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
         attrDate -> ColumnStat(min = Some(1), max = Some(4)),
         attrTimestamp -> ColumnStat(min = Some(1L), max = Some(4L))))
 
-    val s3: Short = 2
-    val s4: Short = 6
-    val b3: Byte = 2
-    val b4: Byte = 6
+    val s3 = 2.toShort
+    val s4 = 6.toShort
+    val b3 = 2.toByte
+    val b4 = 6.toByte
     val columnInfo1: AttributeMap[ColumnStat] = AttributeMap(
       Seq(
         AttributeReference("cint1", IntegerType)() -> ColumnStat(
@@ -152,7 +152,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
   }
 
   test("col stats estimation when min max stats not present for one child") {
-    val sz: Option[BigInt] = Some(1024)
+    val sz = Some(BigInt(1024))
 
     val attrInt = AttributeReference("cint", IntegerType)()
 
