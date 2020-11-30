@@ -372,7 +372,6 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
-
   test("handles standalone cluster mode") {
     testStandaloneCluster(useRest = true)
   }
