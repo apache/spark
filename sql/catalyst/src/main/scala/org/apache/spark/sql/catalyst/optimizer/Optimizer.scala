@@ -872,32 +872,25 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
     case generate @ Generate(e, _, _, _, _, _)
       if !e.deterministic || e.children.forall(_.foldable) => generate
 
-    case generate @ Generate(g, _, false, _, _, _) if canInferFilters(g) =>
-      assert(g.children.length == 1)
-      g.children.head match {
-        case _: CreateNonNullCollection =>
-          // we don't need to add filters when creating an array because we know its size
-          // is > 0 and its not null
-          generate
-        case _ =>
-          // Exclude child's constraints to guarantee idempotency
-          val inferredFilters = ExpressionSet(
-            Seq(
-              GreaterThan(Size(g.children.head), Literal(0)),
-              IsNotNull(g.children.head)
-            )
-          ) -- generate.child.constraints
+    case generate@Generate(g, _, false, _, _, _) if canInferFilters(g) =>
+      // Exclude child's constraints to guarantee idempotency
+      val inferredFilters = ExpressionSet(
+        Seq(
+          GreaterThan(Size(g.children.head), Literal(0)),
+          IsNotNull(g.children.head)
+        )
+      ) -- generate.child.constraints
 
-          if (inferredFilters.nonEmpty) {
-            generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
-          } else {
-            generate
-          }
+      if (inferredFilters.nonEmpty) {
+        generate.copy(child = Filter(inferredFilters.reduce(And), generate.child))
+      } else {
+        generate
       }
   }
 
   private def canInferFilters(g: Generator): Boolean = g match {
-    case _: CollectionGenerator => true
+    case _: ExplodeBase => true
+    case _: Inline => true
     case _ => false
   }
 }

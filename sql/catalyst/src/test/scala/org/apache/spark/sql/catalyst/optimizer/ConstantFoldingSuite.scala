@@ -263,4 +263,23 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Constant folding test: createarray") {
+    val originalQuery =
+      testRelation
+        .select("*", "explode(array('b, 'c))")
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          Literal(9) as Symbol("2+3+4"),
+          Literal(10) as Symbol("2*3+4"),
+          Literal(14) as Symbol("2*(3+4)"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }

@@ -31,13 +31,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * This trait is to indicate that this is an expression that creates a collection
- * that will not be null.
- * Note that it will be foldable if it doesn't contain children.
- */
-trait CreateNonNullCollection
-
-/**
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
@@ -49,7 +42,7 @@ trait CreateNonNullCollection
   """,
   since = "1.1.0")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression with CreateNonNullCollection {
+  extends Expression {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -167,7 +160,7 @@ private [sql] object GenArrayData {
   """,
   since = "2.0.0")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression with CreateNonNullCollection {
+  extends Expression {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))

@@ -48,6 +48,9 @@ object ConstantFolding extends Rule[LogicalPlan] {
       // object and running eval unnecessarily.
       case l: Literal => l
 
+      case Size(c: CreateArray, _) => Literal(c.children.length)
+      case Size(c: CreateMap, _) => Literal(c.children.length / 2)
+
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     }
@@ -438,7 +441,6 @@ object SimplifyBinaryComparison
         case a GreaterThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) =>
           TrueLiteral
         case a LessThanOrEqual b if canSimplifyComparison(a, b, notNullExpressions) => TrueLiteral
-
         // False with inequality
         case a GreaterThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
         case a LessThan b if canSimplifyComparison(a, b, notNullExpressions) => FalseLiteral
