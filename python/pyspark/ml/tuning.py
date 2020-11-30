@@ -212,17 +212,17 @@ class _ValidatorParams(HasSeed):
         gateway = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
 
-        py_estimator = self.getEstimator()
-        if isinstance(py_estimator, JavaEstimator):
+        estimator = self.getEstimator()
+        if isinstance(estimator, JavaEstimator):
             java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
             for idx, epm in enumerate(self.getEstimatorParamMaps()):
                 java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
-        elif MetaAlgorithmReadWrite.isMetaEstimator(py_estimator):
+        elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
             # Meta estimator such as Pipeline, OneVsRest
             java_epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_to_java(
-                py_estimator, self.getEstimatorParamMaps())
+                estimator, self.getEstimatorParamMaps())
         else:
-            raise ValueError('Unsupported estimator used in tuning: ' + str(py_estimator))
+            raise ValueError('Unsupported estimator used in tuning: ' + str(estimator))
 
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()

@@ -17,11 +17,10 @@
 
 import unittest
 
-from pyspark.ml import Pipeline, PipelineModel
-from pyspark.ml.classification import LogisticRegression, OneVsRest, OneVsRestModel
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.linalg import Vectors
-from pyspark.ml.tuning import CrossValidator, TrainValidationSplit
 from pyspark.ml.util import MetaAlgorithmReadWrite
 from pyspark.testing.mlutils import SparkSessionTestCase
 
