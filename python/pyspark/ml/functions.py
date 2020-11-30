@@ -71,7 +71,7 @@ def vector_to_array(col, dtype="float64"):
 
 def array_to_vector(col):
     """
-    Converts a column of array<NumericType> type into a column of MLlib dense vectors
+    Converts a column of array of numeric type into a column of dense vectors in MLlib
 
     .. versionadded:: 3.1.0
 
