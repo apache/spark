@@ -197,7 +197,7 @@ case class MakeInterval(
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
     IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def nullSafeEval(
       year: Any,
