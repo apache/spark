@@ -463,6 +463,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a10 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
     val a11 = Literal.create(Seq(1, 3), ArrayType(IntegerType))
     val a12 = Literal.create(Seq(1, 4), ArrayType(IntegerType))
+    val a13 = Literal.create(Seq(2, 3, 3), ArrayType(IntegerType))
+    val a14 = Literal.create(Seq(2, 3, 1, 3), ArrayType(IntegerType))
     val emptyIntArray = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
 
     checkEvaluation(ArrayContainsArray(a0, a1), true)
@@ -486,6 +488,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContainsArray(a9, a10), true)
     checkEvaluation(ArrayContainsArray(a9, a11), true)
     checkEvaluation(ArrayContainsArray(a9, a12), false)
+    checkEvaluation(ArrayContainsArray(a9, a13), true)
+    checkEvaluation(ArrayContainsArray(a9, a14), true)
 
     // arrays of binaries
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),

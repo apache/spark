@@ -3962,10 +3962,15 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
  * Checks if the array (left) has the array (right)
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array1, array2) - Returns true if the array1 contains the array2.",
+  usage = "_FUNC_(array1, array2) - Returns true if array1 contains all element in array2." +
+    " Ignore duplicates and element order in array.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2));
+       true
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 2, 2));
+       true
+      > SELECT _FUNC_(array(1, 2, null), array(null));
        true
   """,
   group = "array_funcs",
