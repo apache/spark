@@ -427,11 +427,11 @@ class DataFrameTests(ReusedSQLTestCase):
 
         # number of fields must match.
         self.assertRaisesRegex(Exception, "Length of object",
-                                lambda: rdd.toDF("key: int").collect())
+                               lambda: rdd.toDF("key: int").collect())
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(Exception, "FloatType can not accept",
-                                lambda: rdd.toDF("key: float, value: string").collect())
+                               lambda: rdd.toDF("key: float, value: string").collect())
 
         # flat schema values will be wrapped into row.
         df = rdd.map(lambda row: row.key).toDF("int")

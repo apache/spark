@@ -386,17 +386,17 @@ class UDFTests(ReusedSQLTestCase):
     def test_non_existed_udf(self):
         spark = self.spark
         self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udf",
-                                lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
+                               lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
         sqlContext = spark._wrapped
         self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udf",
-                                lambda: sqlContext.registerJavaFunction("udf1", "non_existed_udf"))
+                               lambda: sqlContext.registerJavaFunction("udf1", "non_existed_udf"))
 
     def test_non_existed_udaf(self):
         spark = self.spark
         self.assertRaisesRegex(AnalysisException, "Can not load class non_existed_udaf",
-                                lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
+                               lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_udf_with_input_file_name(self):
         from pyspark.sql.functions import input_file_name

@@ -211,7 +211,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         with self.sql_conf({
                 "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegex(Exception,
-                                         "Exception thrown when converting pandas.Series"):
+                                        "Exception thrown when converting pandas.Series"):
                 df.select(['A']).withColumn('udf', udf('A')).collect()
 
         # Disabling Arrow safe type check.
@@ -232,7 +232,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         with self.sql_conf({
                 "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
             with self.assertRaisesRegex(Exception,
-                                         "Exception thrown when converting pandas.Series"):
+                                        "Exception thrown when converting pandas.Series"):
                 df.withColumn('udf', udf('id')).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.

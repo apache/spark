@@ -38,16 +38,15 @@ class UtilsTests(ReusedSQLTestCase):
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegex(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
-                                lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
+                               lambda: self.spark.sql("SET mapred.reduce.tasks=-1"))
         df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegex(IllegalArgumentException, "1024 is not in the permitted values",
-                                lambda: df.select(sha2(df.a, 1024)).collect())
+                               lambda: df.select(sha2(df.a, 1024)).collect())
         try:
             df.select(sha2(df.a, 1024)).collect()
         except IllegalArgumentException as e:
             self.assertRegex(e.desc, "1024 is not in the permitted values")
-            self.assertRegex(e.stackTrace,
-                                     "org.apache.spark.sql.functions")
+            self.assertRegex(e.stackTrace, "org.apache.spark.sql.functions")
 
 
 if __name__ == "__main__":
