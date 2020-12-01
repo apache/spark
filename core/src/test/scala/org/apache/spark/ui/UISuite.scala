@@ -216,13 +216,21 @@ class UISuite extends SparkFunSuite {
     assert(rewrittenURI === null)
   }
 
-  test("Decode query parameters of proxy rewrittenURI if it is double-encoded") {
+  test("Decode proxy rewrittenURI if it is percent-encoded twice") {
     val prefix = "/worker-id"
     val target = "http://localhost:8081"
     val path = "/worker-id/json"
-    val rewrittenURI =
+    var rewrittenURI =
       JettyUtils.createProxyURI(prefix, target, path, "order%255B0%255D%255Bcolumn%255D=0")
-    assert(rewrittenURI.getQuery() === "order%5B0%5D%5Bcolumn%5D=0")
+    assert(rewrittenURI.getQuery === "order%5B0%5D%5Bcolumn%5D=0")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-id/test%255B0%255D", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/test%5B0%5D")
+
+    // If the URL is not percent-encoded twice, return the URL as it is
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, "order%5B0%5D%5Bcolumn%5D=0")
+    assert(rewrittenURI.getQuery === "order%5B0%5D%5Bcolumn%5D=0")
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-id/test%255B0%255D", null)
+    assert(rewrittenURI.toString() === "http://localhost:8081/test%5B0%5D")
   }
 
   test("verify rewriting location header for reverse proxy") {
