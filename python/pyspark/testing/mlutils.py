@@ -17,9 +17,13 @@
 
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Transformer, UnaryTransformer
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
+from pyspark.ml.param.shared import HasMaxIter, HasRegParam
+from pyspark.ml.classification import Classifier, ClassificationModel
+from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable, \
+    MLReadable, MLReader, MLWritable, MLWriter
 from pyspark.ml.wrapper import _java2py  # type: ignore
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType
@@ -161,3 +165,48 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+# This is a dummy LogisticRegression used in test for python backend estimator/model
+class DummyLogisticRegression(Classifier, HasMaxIter, HasRegParam, DefaultParamsReadable,
+                              DefaultParamsWritable):
+    @keyword_only
+    def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, rawPredictionCol="rawPrediction"):
+        super(DummyLogisticRegression, self).__init__()
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, rawPredictionCol="rawPrediction"):
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+        return self
+
+    def _fit(self, dataset):
+        # Do nothing but create a dummy model
+        return self._copyValues(DummyLogisticRegressionModel())
+
+
+class DummyLogisticRegressionModel(ClassificationModel, HasMaxIter, HasRegParam,
+                                   DefaultParamsReadable, DefaultParamsWritable):
+
+    def __init__(self):
+        super(DummyLogisticRegressionModel, self).__init__()
+
+    # This class only used in test. The following methods are not used in tests.
+    def _transform(self, dataset):
+        raise NotImplementedError()
+
+    def numClasses(self):
+        raise NotImplementedError()
+
+    def predictRaw(self, value):
+        raise NotImplementedError()
+
+    def numFeatures(self):
+        raise NotImplementedError()
+
+    def predict(self, value):
+        raise NotImplementedError()

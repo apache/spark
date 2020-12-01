@@ -385,6 +385,13 @@ class DefaultParamsWriter(MLWriter):
         DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
 
     @staticmethod
+    def extractJsonParams(instance, skipParams):
+        paramMap = instance.extractParamMap()
+        jsonParams = {param.name: value for param, value in paramMap.items()
+                      if param.name not in skipParams}
+        return jsonParams
+
+    @staticmethod
     def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"

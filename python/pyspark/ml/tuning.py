@@ -330,12 +330,7 @@ class _ValidatorSharedReadWrite:
             jsonEstimatorParamMaps.append(jsonParamMap)
 
         skipParams = ['estimator', 'evaluator', 'estimatorParamMaps']
-
-        jsonParams = {}
-        for param in instance.params:
-            if param.name not in skipParams:
-                jsonParams[param.name] = instance.getOrDefault(param)
-
+        jsonParams = DefaultParamsWriter.extractJsonParams(instance, skipParams)
         jsonParams['estimatorParamMaps'] = jsonEstimatorParamMaps
 
         DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, jsonParams)
