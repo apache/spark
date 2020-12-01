@@ -403,18 +403,13 @@ private[spark] object JettyUtils extends Logging {
       uri.append(rest)
     }
 
-    val rewrittenURI = URI.create(uri.toString()).normalize()
-    if (query != null) {
-      val decodedQuery = decodeURL(query, defaultUrlEncoding)
-      return new URI(
-          rewrittenURI.getScheme(),
-          rewrittenURI.getAuthority(),
-          rewrittenURI.getPath(),
-          decodedQuery,
-          rewrittenURI.getFragment()
-        )
+    val queryString = if (query == null) {
+      ""
+    } else {
+      s"?$query"
     }
-    rewrittenURI.normalize()
+    // SPARK-33611: use method `URI.create` to avoid percent-encoding twice on the query string.
+    URI.create(uri.toString() + queryString).normalize()
   }
 
   def createProxyLocationHeader(
@@ -442,7 +437,7 @@ private[spark] object JettyUtils extends Logging {
     handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
   }
 
-  private def decodeURL(url: String, encoding: String): String = {
+  private def decodeURL(url: String, encoding: String = defaultUrlEncoding): String = {
     if (url == null) {
       null
     } else {
