@@ -1822,7 +1822,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val newOrders = orders map {
           case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering, Set.empty)
+              SortOrder(child.output(index - 1), direction, nullOrdering, Seq.empty)
             } else {
               s.failAnalysis(
                 s"ORDER BY position $index is not in select list " +

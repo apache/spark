@@ -1090,6 +1090,32 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("sort order doesn't have repeated expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t12.id, t1.id
+            | FROM (SELECT t1.id FROM t1, t2 WHERE t1.id * 2 = t2.id) t12, t1
+            | where 2 * t12.id = t1.id
+        """.stripMargin).queryExecution.executedPlan
+
+        // t12 is already sorted on `t1.id * 2`. and we need to sort it on `2 * t12.id`
+        // for 2nd join. So sorting on t12 can be avoided
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val outputOrdering = planned.outputOrdering
+        assert(outputOrdering.size == 1)
+        // Sort order should have 3 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
+        assert(outputOrdering.head.children.size == 3)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 2)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
+      }
+    }
+  }
+
   test("aliases to expressions should not be replaced") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("df1", "df2") {
