@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, SQLException}
+import java.sql.{Connection, SQLException, SQLFeatureNotSupportedException}
 import java.util
 
 import scala.collection.JavaConverters._
@@ -184,12 +184,18 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def listNamespaces(): Array[Array[String]] = {
     withConnection { conn =>
       val catalogs = conn.getMetaData.getCatalogs()
-      catalogs.next()
-      val catalog = catalogs.getString(1)
+      val catalogBuilder = ArrayBuilder.make[String]
+      while (catalogs.next()) {
+        val catalog = catalogs.getString(1)
+        catalogBuilder += catalog
+      }
+      val catalogArray = catalogBuilder.result;
       val schemaBuilder = ArrayBuilder.make[Array[String]]
-      val result = conn.getMetaData.getSchemas(catalog, null)
-      while(result.next()) {
-        schemaBuilder += Array(result.getString(1))
+      for (catalog <- catalogArray) {
+        val result = conn.getMetaData.getSchemas(catalog, null)
+        while (result.next()) {
+          schemaBuilder += Array(result.getString(1))
+        }
       }
       schemaBuilder.result
     }
@@ -208,7 +214,8 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
     namespace match {
-      case Array(_) =>
+      case Array(db) =>
+        if (!listNamespaces.exists (_(0) == db)) throw new NoSuchNamespaceException(db)
         mutable.HashMap[String, String]().asJava
 
       case _ =>
@@ -227,7 +234,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             case "comment" => comment = v
             case "owner" => // ignore
             case "location" =>
-              throw new AnalysisException("CREATE CATALOG ... LOCATION ... is not supported in" +
+              throw new AnalysisException("CREATE NAMESPACE ... LOCATION ... is not supported in" +
                 " JDBC catalog.")
             case _ => // ignore all the other properties for now
           }
@@ -267,6 +274,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             }
 
           case _ =>
+            throw new SQLFeatureNotSupportedException(s"Unsupported NamespaceChange $changes")
         }
 
       case _ =>
