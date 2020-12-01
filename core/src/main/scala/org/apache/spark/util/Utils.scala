@@ -2977,14 +2977,6 @@ private[spark] object Utils extends Logging {
       0
     }
   }
-
-  /**
-   * Returns blockmanager heartbeat timeout as milliseconds.
-   */
-  def blockManagerHeartbeatTimeoutAsMs(conf: SparkConf): Long = {
-    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
-      .getOrElse(conf.getTimeAsMs(Network.NETWORK_TIMEOUT.key))
-  }
 }
 
 private[util] object CallerContext extends Logging {
