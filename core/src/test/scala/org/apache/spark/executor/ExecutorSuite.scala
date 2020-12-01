@@ -519,6 +519,7 @@ class ExecutorSuite extends SparkFunSuite
       partitionId = 0,
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
+      addedArchives = Map[String, Long](),
       properties = new Properties,
       resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
