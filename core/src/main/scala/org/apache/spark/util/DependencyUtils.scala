@@ -40,7 +40,7 @@ private[spark] object DependencyUtils extends Logging {
     ).map(sys.props.get(_).orNull)
   }
 
-  def parseQueryParams(uriQuery: String): (Boolean, String) = {
+  private def parseQueryParams(uriQuery: String): (Boolean, String) = {
     if (uriQuery == null) {
       (false, "")
     } else {
@@ -56,13 +56,10 @@ private[spark] object DependencyUtils extends Logging {
           logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
             " If there are multiple `transitive` parameter, we will select the last one")
         }
-        params.map(_._2).foreach(value => {
-          if (value == "true") {
-            transitive = true
-          } else if (value == "false") {
-            transitive = false
-          }
-        })
+        params.map(_._2).foreach {
+          case "true" => transitive = true
+          case _ => transitive = false
+        }
       }
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
       // in an ivy URL. When download ivy URL jar, Spark won't download transitive jar
