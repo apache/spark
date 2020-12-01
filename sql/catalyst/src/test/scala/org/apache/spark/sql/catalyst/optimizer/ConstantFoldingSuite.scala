@@ -263,4 +263,19 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Constant folding test with sideaffects") {
+    val originalQuery =
+      testRelation
+        .select("size(array(assert_true(false)))")
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select("size(array(assert_true(false)))")
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
