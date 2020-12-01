@@ -129,12 +129,12 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     if (!properties.isEmpty) {
       properties.asScala.map {
         case (k, v) => k match {
-          case "comment" => tableComment = v
-          case "provider" =>
+          case TableCatalog.PROP_COMMENT => tableComment = v
+          case TableCatalog.PROP_PROVIDER =>
             throw new AnalysisException("CREATE TABLE ... USING ... is not supported in" +
               " JDBC catalog.")
-          case "owner" => // owner is ignored. It is default to current user name.
-          case "location" =>
+          case TableCatalog.PROP_OWNER => // owner is ignored. It is default to current user name.
+          case TableCatalog.PROP_LOCATION =>
             throw new AnalysisException("CREATE TABLE ... LOCATION ... is not supported in" +
               " JDBC catalog.")
           case _ => tableProperties = tableProperties + " " + s"$k $v"
@@ -177,25 +177,22 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
   override def namespaceExists(namespace: Array[String]): Boolean = namespace match {
     case Array(db) =>
-      listNamespaces.exists (_(0) == db)
+      withConnection { conn =>
+        val rs = conn.getMetaData.getSchemas(null, db)
+        while (rs.next()) {
+          if (rs.getString(1) == db) return true;
+        }
+        false
+      }
     case _ => false
   }
 
   override def listNamespaces(): Array[Array[String]] = {
     withConnection { conn =>
-      val catalogs = conn.getMetaData.getCatalogs()
-      val catalogBuilder = ArrayBuilder.make[String]
-      while (catalogs.next()) {
-        val catalog = catalogs.getString(1)
-        catalogBuilder += catalog
-      }
-      val catalogArray = catalogBuilder.result;
       val schemaBuilder = ArrayBuilder.make[Array[String]]
-      for (catalog <- catalogArray) {
-        val result = conn.getMetaData.getSchemas(catalog, null)
-        while (result.next()) {
-          schemaBuilder += Array(result.getString(1))
-        }
+      val rs = conn.getMetaData.getSchemas()
+      while (rs.next()) {
+        schemaBuilder += Array(rs.getString(1))
       }
       schemaBuilder.result
     }
@@ -205,7 +202,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     namespace match {
       case Array() =>
         listNamespaces()
-      case Array(db) if listNamespaces.exists (_(0) == db) =>
+      case Array(db) if namespaceExists(namespace) =>
         Array()
       case _ =>
         throw new NoSuchNamespaceException(namespace)
@@ -215,7 +212,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
     namespace match {
       case Array(db) =>
-        if (!listNamespaces.exists (_(0) == db)) throw new NoSuchNamespaceException(db)
+        if (!namespaceExists(namespace)) throw new NoSuchNamespaceException(db)
         mutable.HashMap[String, String]().asJava
 
       case _ =>
@@ -226,14 +223,14 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = namespace match {
-    case Array(db) if !listNamespaces.exists (_(0) == db) =>
+    case Array(db) if !namespaceExists(namespace) =>
       var comment = ""
       if (!metadata.isEmpty) {
         metadata.asScala.map {
           case (k, v) => k match {
-            case "comment" => comment = v
-            case "owner" => // ignore
-            case "location" =>
+            case SupportsNamespaces.PROP_COMMENT => comment = v
+            case SupportsNamespaces.PROP_OWNER => // ignore
+            case SupportsNamespaces.PROP_LOCATION =>
               throw new AnalysisException("CREATE NAMESPACE ... LOCATION ... is not supported in" +
                 " JDBC catalog.")
             case _ => // ignore all the other properties for now
@@ -259,7 +256,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
         changes.foreach {
           case set: NamespaceChange.SetProperty =>
             // ignore changes other than comments
-            if (set.property() == "comment") {
+            if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               withConnection { conn =>
                 JdbcUtils.createNamespaceComment(conn, options, db, set.value)
               }
@@ -267,7 +264,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
 
           case unset: NamespaceChange.RemoveProperty =>
             // ignore changes other than comments
-            if (unset.property() == "comment") {
+            if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               withConnection { conn =>
                 JdbcUtils.removeNamespaceComment(conn, options, db)
               }
@@ -283,7 +280,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   }
 
   override def dropNamespace(namespace: Array[String]): Boolean = namespace match {
-    case Array(db) if listNamespaces.exists (_(0) == db) =>
+    case Array(db) if namespaceExists(namespace) =>
       if (listTables(Array(db)).nonEmpty) {
         throw new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
       }
