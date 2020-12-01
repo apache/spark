@@ -53,16 +53,6 @@ private[spark] object JettyUtils extends Logging {
   val REDIRECT_CONNECTOR_NAME = "HttpsRedirect"
   // By default decoding the URI as "UTF-8" should be enough for SparkUI
   val defaultUrlEncoding = "UTF-8"
-  // As per https://en.wikipedia.org/wiki/Percent-encoding:
-  // "Percent-encoding a reserved character involves converting the character to its corresponding
-  // byte value in ASCII and then representing that value as a pair of hexadecimal digits.
-  // The digits, preceded by a percent sign (%) which is used as an escape character,
-  // are then used in the URI in place of the reserved character."
-  //
-  // If a URL with a "reserved character" is encoded once, there will be "%[0-9a-fA-F]{2}" in
-  // the encoded result. After encoded again, the character "%" will become "%25", thus, there will
-  // "%25[0-9a-fA-F]{2}" in the second encoded result.
-  val urlWithReservedCharacterEncodedTwicePattern = "%25[0-9a-fA-F]{2}".r
 
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
@@ -398,19 +388,6 @@ private[spark] object JettyUtils extends Logging {
     redirectHandler
   }
 
-  /**
-   * Check if the input url is percent-encoded twice.
-   * If yes, decode the url once(assuming handler functions will decode again on parsing it).
-   * Otherwise, return the URL as it is.
-   */
-  def decodeURLIfEncodedTwice(url: String): String = {
-    if (urlWithReservedCharacterEncodedTwicePattern.findFirstMatchIn(url).isDefined) {
-      decodeURL(url, defaultUrlEncoding)
-    } else {
-      url
-    }
-  }
-
   def createProxyURI(prefix: String, target: String, path: String, query: String): URI = {
     if (!path.startsWith(prefix)) {
       return null
@@ -426,22 +403,16 @@ private[spark] object JettyUtils extends Logging {
       uri.append(rest)
     }
 
-    // When running Spark behind a reverse proxy(e.g. Nginx, Apache HTTP Server), the request URL
-    // on Spark can be encoded twice: one from the browser and another one from the reverse proxy.
-    // In general, the problem can be resolved by configuring the reverse proxy properly. However,
-    // we can detect whether the URL is percent-encoded twice and decode it if yes. This makes
-    // the setup of reverse proxy easier.
-    val decodedUri = decodeURLIfEncodedTwice(uri.toString())
-    val rewrittenURI = URI.create(decodedUri)
+    val rewrittenURI = URI.create(uri.toString()).normalize()
     if (query != null) {
-      val decodedQuery = decodeURLIfEncodedTwice(query)
+      val decodedQuery = decodeURL(query, defaultUrlEncoding)
       return new URI(
           rewrittenURI.getScheme(),
           rewrittenURI.getAuthority(),
           rewrittenURI.getPath(),
           decodedQuery,
           rewrittenURI.getFragment()
-        ).normalize()
+        )
     }
     rewrittenURI.normalize()
   }
