@@ -177,9 +177,9 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
-    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
+    checkException(checkEvaluationWithMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
+      checkException(checkEvaluationWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
   }
 

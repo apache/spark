@@ -1789,8 +1789,11 @@ private case class GetTimestamp(
   """,
   group = "datetime_funcs",
   since = "3.0.0")
-case class MakeDate(year: Expression, month: Expression, day: Expression,
-  failOnError: Boolean = SQLConf.get.ansiEnabled)
+case class MakeDate(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(year: Expression, month: Expression, day: Expression) =

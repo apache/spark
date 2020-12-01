@@ -217,15 +217,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ANSI mode: make interval") {
     def check(
-      years: Int = 0,
-      months: Int = 0,
-      weeks: Int = 0,
-      days: Int = 0,
-      hours: Int = 0,
-      minutes: Int = 0,
-      seconds: Int = 0,
-      millis: Int = 0,
-      micros: Int = 0): Unit = {
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes),
@@ -238,15 +238,15 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     def checkException(
-      years: Int = 0,
-      months: Int = 0,
-      weeks: Int = 0,
-      days: Int = 0,
-      hours: Int = 0,
-      minutes: Int = 0,
-      seconds: Int = 0,
-      millis: Int = 0,
-      micros: Int = 0): Unit = {
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes),
