@@ -280,7 +280,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         Seq(4, 5, 6).toDF("value").write.format("parquet")
           .option("path", dir.getCanonicalPath).saveAsTable(tableName)
 
-        checkForStreamTable(Some(dir), tableName, createByStream = false)
+        checkForStreamTable(Some(dir), tableName)
       }
     }
   }
@@ -293,7 +293,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       // using HDFS API.
       Seq(4, 5, 6).toDF("value").write.format("parquet").saveAsTable(tableName)
 
-      checkForStreamTable(None, tableName, createByStream = false)
+      checkForStreamTable(None, tableName)
     }
   }
 
@@ -312,10 +312,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  private def checkForStreamTable(
-      dir: Option[File],
-      tableName: String,
-      createByStream: Boolean = true): Unit = {
+  private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")
     dir.foreach { output =>
@@ -335,9 +332,6 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       dir.get
     } else {
       new File(catalogTable.location)
-    }
-    if (createByStream) {
-      assert(catalogTable.storage.properties("createBy") === "DataStreamWriterAPI")
     }
     checkDataset(
       spark.read.format("parquet").load(path.getCanonicalPath).as[Int],

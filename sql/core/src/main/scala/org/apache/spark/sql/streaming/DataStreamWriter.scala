@@ -334,7 +334,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         None,
         Map.empty[String, String],
         Some(source),
-        Map("createBy" -> "DataStreamWriterAPI"),
+        Map.empty[String, String],
         extraOptions.get("path"),
         None,
         None,
