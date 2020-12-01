@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -43,10 +44,19 @@ import org.apache.spark.sql.types._
   since = "1.0.0")
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
+
   override def nullable: Boolean = false
 
   // Return data type.
   override def dataType: DataType = LongType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least one argument.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   protected lazy val count = AttributeReference("count", LongType, nullable = false)()
 

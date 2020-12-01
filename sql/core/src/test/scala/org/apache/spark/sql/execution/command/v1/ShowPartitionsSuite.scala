@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -26,104 +25,27 @@ import org.apache.spark.sql.test.SharedSparkSession
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultNamespace: Seq[String] = Seq("default")
   override def defaultUsing: String = "USING parquet"
 
-  private def createDateTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (price int, qty int, year int, month int)
-      |$defaultUsing
-      |partitioned by (year, month)""".stripMargin)
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
-    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 2) SELECT 3, 3")
-    sql(s"INSERT INTO $table PARTITION(year = 2016, month = 3) SELECT 3, 3")
+  override protected def wrongPartitionColumnsError(columns: String*): String = {
+    s"Non-partitioning column(s) ${columns.mkString("[", ", ", "]")} are specified"
   }
 
-  test("show everything") {
+  test("show everything in the default database") {
     val table = "dateTable"
     withTable(table) {
       createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions $table"),
+      runShowPartitionsSql(
+        s"show partitions default.$table",
         Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
-
-      checkAnswer(
-        sql(s"show partitions default.$table"),
-        Row("year=2015/month=1") ::
-          Row("year=2015/month=2") ::
-          Row("year=2016/month=2") ::
-          Row("year=2016/month=3") :: Nil)
-    }
-  }
-
-  test("filter by partitions") {
-    val table = "dateTable"
-    withTable(table) {
-      createDateTable(table)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(year=2015)"),
-        Row("year=2015/month=1") ::
-          Row("year=2015/month=2") :: Nil)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(year=2015, month=1)"),
-        Row("year=2015/month=1") :: Nil)
-      checkAnswer(
-        sql(s"show partitions default.$table PARTITION(month=2)"),
         Row("year=2015/month=2") ::
-          Row("year=2016/month=2") :: Nil)
+        Row("year=2016/month=2") ::
+        Row("year=2016/month=3") :: Nil)
     }
   }
 
-  test("show everything more than 5 part keys") {
-    val table = "wideTable"
-    withTable(table) {
-      sql(s"""
-        |CREATE TABLE $table (
-        |  price int, qty int,
-        |  year int, month int, hour int, minute int, sec int, extra int)
-        |$defaultUsing
-        |PARTITIONED BY (year, month, hour, minute, sec, extra)""".stripMargin)
-      sql(s"""
-        |INSERT INTO $table
-        |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-      sql(s"""
-        |INSERT INTO $table
-        |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      """.stripMargin)
-      checkAnswer(
-        sql(s"show partitions $table"),
-        Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
-          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
-    }
-  }
-
-  test("non-partitioning columns") {
-    val table = "dateTable"
-    withTable(table) {
-      createDateTable(table)
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
-      }.getMessage
-      assert(errMsg.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
-    }
-  }
-
-  test("show partitions of non-partitioned table") {
-    val table = "not_partitioned_table"
-    withTable(table) {
-      sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"SHOW PARTITIONS $table")
-      }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned"))
-    }
-  }
-
+  // The test fails for V2 Table Catalogs with the exception:
+  // org.apache.spark.sql.AnalysisException: CREATE VIEW is only supported with v1 tables.
   test("show partitions of a view") {
     val table = "dateTable"
     withTable(table) {
@@ -134,7 +56,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         val errMsg = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $view")
         }.getMessage
-        assert(errMsg.contains("is not allowed on a view"))
+        assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
       }
     }
   }
@@ -143,10 +65,10 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
     val viewName = "test_view"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      val errMsg = intercept[NoSuchTableException] {
+      val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains(s"Table or view '$viewName' not found"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
 }
@@ -159,12 +81,12 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSessio
     val viewName = "test_view"
     withTempView(viewName) {
       sql(s"""
-             |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
-             |$defaultUsing""".stripMargin)
-      val errMsg = intercept[NoSuchTableException] {
+        |CREATE TEMPORARY VIEW $viewName (c1 INT, c2 STRING)
+        |$defaultUsing""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $viewName")
       }.getMessage
-      assert(errMsg.contains(s"Table or view '$viewName' not found"))
+      assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
 

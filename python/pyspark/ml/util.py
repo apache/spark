@@ -592,3 +592,41 @@ class HasTrainingSummary(object):
         no summary exists.
         """
         return (self._call_java("summary"))
+
+
+class MetaAlgorithmReadWrite:
+
+    @staticmethod
+    def isMetaEstimator(pyInstance):
+        from pyspark.ml import Estimator, Pipeline
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest
+        return isinstance(pyInstance, Pipeline) or isinstance(pyInstance, OneVsRest) or \
+            (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
+
+    @staticmethod
+    def getAllNestedStages(pyInstance):
+        from pyspark.ml import Pipeline, PipelineModel
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest, OneVsRestModel
+
+        # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
+        #  support pipelineModel property.
+        if isinstance(pyInstance, Pipeline):
+            pySubStages = pyInstance.getStages()
+        elif isinstance(pyInstance, PipelineModel):
+            pySubStages = pyInstance.stages
+        elif isinstance(pyInstance, _ValidatorParams):
+            raise ValueError('PySpark does not support nested validator.')
+        elif isinstance(pyInstance, OneVsRest):
+            pySubStages = [pyInstance.getClassifier()]
+        elif isinstance(pyInstance, OneVsRestModel):
+            pySubStages = [pyInstance.getClassifier()] + pyInstance.models
+        else:
+            pySubStages = []
+
+        nestedStages = []
+        for pySubStage in pySubStages:
+            nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
+
+        return [pyInstance] + nestedStages

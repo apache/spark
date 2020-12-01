@@ -124,13 +124,15 @@ abstract class DataType extends AbstractDataType {
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
+  private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
+  private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
       ddl,
       CatalystSqlParser.parseDataType,
       "Cannot parse the data type: ",
-      fallbackParser = CatalystSqlParser.parseTableSchema)
+      fallbackParser = str => CatalystSqlParser.parseTableSchema(str))
   }
 
   /**
@@ -166,7 +168,7 @@ object DataType {
 
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
-  private val nonDecimalNameToType = {
+  private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
       DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
       .map(t => t.typeName -> t).toMap
@@ -177,7 +179,9 @@ object DataType {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case other => nonDecimalNameToType.getOrElse(
+      case CHAR_TYPE(length) => CharType(length.toInt)
+      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(
           s"Failed to convert the JSON string '$name' to a data type."))

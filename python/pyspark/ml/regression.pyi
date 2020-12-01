@@ -477,7 +477,7 @@ class GBTRegressor(
         maxIter: int = ...,
         stepSize: float = ...,
         seed: Optional[int] = ...,
-        impuriy: str = ...,
+        impurity: str = ...,
         featureSubsetStrategy: str = ...,
         validationTol: float = ...,
         validationIndicatorCol: Optional[str] = ...,
