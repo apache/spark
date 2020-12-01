@@ -107,6 +107,10 @@ package object dsl {
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def notLikeAll(others: Expression*): Expression =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def likeAny(others: Expression*): Expression =
+      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAny(others: Expression*): Expression =
+      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)
