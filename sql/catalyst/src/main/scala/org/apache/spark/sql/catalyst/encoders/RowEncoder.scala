@@ -286,10 +286,21 @@ object RowEncoder {
     case StringType => createDeserializerForString(input, returnNullable = false)
 
     case ArrayType(et, nullable) =>
+      def arrayCreationFuncName: String = et match {
+        case _ if nullable => "array"
+        case _: LongType => "toLongArray"
+        case _: IntegerType => "toIntArray"
+        case _: DoubleType => "toDoubleArray"
+        case _: BooleanType => "toBooleanArray"
+        case _: ByteType => "toByteArray"
+        case _: ShortType => "toShortArray"
+        case _: FloatType => "toFloatArray"
+        case _ => "array"
+      }
       val arrayData =
         Invoke(
-          MapObjects(deserializerFor(_), input, et),
-          "array",
+          MapObjects(deserializerFor(_), input, et, nullable),
+          arrayCreationFuncName,
           ObjectType(classOf[Array[_]]), returnNullable = false)
       // TODO should use `scala.collection.immutable.ArrayDeq.unsafeMake` method to create
       //  `immutable.Seq` in Scala 2.13 when Scala version compatibility is no longer required.

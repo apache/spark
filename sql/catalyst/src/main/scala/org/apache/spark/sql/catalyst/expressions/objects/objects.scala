@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -823,7 +823,14 @@ case class MapObjects private(
     val convertedArray = ctx.freshName("convertedArray")
     val loopIndex = ctx.freshName("loopIndex")
 
-    val convertedType = CodeGenerator.boxedType(lambdaFunction.dataType)
+    val usePrimitiveArray = !lambdaFunction.nullable &&
+      CodeGenerator.isPrimitiveType(lambdaFunction.dataType)
+
+    val convertedType = if (usePrimitiveArray) {
+      CodeGenerator.javaType(lambdaFunction.dataType)
+    } else {
+      CodeGenerator.boxedType(lambdaFunction.dataType)
+    }
 
     // Because of the way Java defines nested arrays, we have to handle the syntax specially.
     // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
@@ -983,13 +990,24 @@ case class MapObjects private(
           )
         case _ =>
           // array
+          def arrayInitializer(genValue: String) = genValue match {
+            case "null" if usePrimitiveArray => ""
+            case _ => s"$convertedArray[$loopIndex] = $genValue;"
+          }
+
+          val arrayDataConstructor = if (usePrimitiveArray) {
+            s"${classOf[PrimitiveArrayData[_]].getName}$$.MODULE$$.create"
+          } else {
+            s"new ${classOf[GenericArrayData].getName}"
+          }
+
           (
             s"""
                $convertedType[] $convertedArray = null;
                $convertedArray = $arrayConstructor;
              """,
-            (genValue: String) => s"$convertedArray[$loopIndex] = $genValue;",
-            s"new ${classOf[GenericArrayData].getName}($convertedArray);"
+            arrayInitializer _,
+            s"$arrayDataConstructor($convertedArray);"
           )
       }
 
