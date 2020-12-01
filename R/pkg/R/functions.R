@@ -4616,6 +4616,24 @@ setMethod("timestamp_seconds",
           })
 
 #' @details
+#' \code{array_to_vector} Converts a column of array of numeric type into
+#' a column of dense vectors in MLlib
+#'
+#' @rdname column_ml_functions
+#' @aliases array_to_vector array_to_vector,Column-method
+#' @note array_to_vector since 3.1.0
+setMethod("array_to_vector",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "array_to_vector",
+              x@jc
+            )
+            column(jc)
+          })
+
+#' @details
 #' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
 #' a column of dense arrays.
 #'
@@ -4691,23 +4709,5 @@ setMethod("to_avro",
                 jsonFormatSchema
               )
             }
-            column(jc)
-          })
-
-#' @details
-#' \code{array_to_vector}  Converts a column of array of numeric type into
-#' a column of dense vectors in MLlib
-#'
-#' @rdname column_ml_functions
-#' @aliases array_to_vector array_to_vector,Column-method
-#' @note array_to_vector since 3.1.0
-setMethod("array_to_vector",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic(
-              "org.apache.spark.ml.functions",
-              "array_to_vector",
-              x@jc
-            )
             column(jc)
           })
