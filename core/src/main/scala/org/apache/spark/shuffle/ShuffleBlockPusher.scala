@@ -45,21 +45,13 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * When push shuffle is enabled, it is created after the shuffle writer finishes writing the shuffle
  * file and initiates the block push process.
  *
- * @param dataFile         mapper generated shuffle data file
- * @param partitionLengths array of shuffle block size so we can tell shuffle block
- *                         boundaries within the shuffle file
- * @param dep              shuffle dependency to get shuffle ID and the location of remote shuffle
- *                         services to push local shuffle blocks
- * @param partitionId      map index of the shuffle map task
- * @param conf             spark configuration
+ * @param conf spark configuration
  */
 @Since("3.1.0")
 private[spark] class ShuffleBlockPusher(
-    dataFile: File,
-    partitionLengths: Array[Long],
-    dep: ShuffleDependency[_, _, _],
-    partitionId: Int,
     conf: SparkConf) extends Logging {
+  private[this] var maxBlockSizeToPush = 0L
+  private[this] var maxBlockBatchSize = 0L
   private[this] var maxBytesInFlight = 0L
   private[this] var maxReqsInFlight = 0
   private[this] var maxBlocksInFlightPerAddress = 0
@@ -71,6 +63,17 @@ private[spark] class ShuffleBlockPusher(
   private[this] val errorHandler = createErrorHandler()
   // VisibleForTesting
   private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
+  private[this] var stopPushing = false
+
+  initialize()
+
+  private def initialize(): Unit = {
+    maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
+    maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH) * 1024 * 1024
+    maxBytesInFlight = conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
+    maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
+    maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
+  }
 
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
@@ -85,20 +88,26 @@ private[spark] class ShuffleBlockPusher(
     }
   }
 
-  private[shuffle] def initiateBlockPush(): Unit = {
+  /**
+   * Initiates the block push.
+   *
+   * @param dataFile         mapper generated shuffle data file
+   * @param partitionLengths array of shuffle block size so we can tell shuffle block
+   * @param dep              shuffle dependency to get shuffle ID and the location of remote shuffle
+   *                         services to push local shuffle blocks
+   * @param partitionId      map index of the shuffle map task
+   */
+  private[shuffle] def initiateBlockPush(
+      dataFile: File,
+      partitionLengths: Array[Long],
+      dep: ShuffleDependency[_, _, _],
+      partitionId: Int
+  ): Unit = {
     val numPartitions = dep.partitioner.numPartitions
-    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
-
-    val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
-    val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH) * 1024 * 1024
     val mergerLocs = dep.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
-
-    maxBytesInFlight = conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
-    maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
-    maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
-
+    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
     val requests = prepareBlockPushRequests(numPartitions, partitionId, dep.shuffleId, dataFile,
-      partitionLengths, mergerLocs, transportConf, maxBlockSizeToPush, maxBlockBatchSize)
+      partitionLengths, mergerLocs, transportConf)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -133,7 +142,7 @@ private[spark] class ShuffleBlockPusher(
     if (deferredPushRequests.nonEmpty) {
       for ((remoteAddress, defReqQueue) <- deferredPushRequests) {
         while (isRemoteBlockPushable(defReqQueue) &&
-          !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front)) {
+          !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front) && !stopPushing) {
           val request = defReqQueue.dequeue()
           logDebug(s"Processing deferred push request for $remoteAddress with "
             + s"${request.blocks.length} blocks")
@@ -146,7 +155,7 @@ private[spark] class ShuffleBlockPusher(
     }
 
     // Process any regular push requests if possible.
-    while (isRemoteBlockPushable(pushRequests)) {
+    while (isRemoteBlockPushable(pushRequests) && !stopPushing) {
       val request = pushRequests.dequeue()
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
@@ -307,6 +316,7 @@ private[spark] class ShuffleBlockPusher(
     }
     if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
       logDebug(s"Received after merge is finalized from $address. Not pushing any more blocks.")
+      stopPushing = true
       return false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
@@ -322,29 +332,25 @@ private[spark] class ShuffleBlockPusher(
    * manner to make sure each target location receives shuffle blocks belonging to the same set
    * of partition ranges. 0-length blocks and blocks that are large enough will be skipped.
    *
-   * @param numPartitions Number of shuffle partitions in the shuffle file
+   * @param numPartitions sumber of shuffle partitions in the shuffle file
    * @param partitionId map index of the current mapper
-   * @param shuffleId ShuffleId of current shuffle
-   * @param dataFile Shuffle data file
+   * @param shuffleId shuffleId of current shuffle
+   * @param dataFile shuffle data file
    * @param partitionLengths array of sizes of blocks in the shuffle data file
-   * @param mergerLocs Target locations to push blocks to
-   * @param transportConf TransportConf used to create FileSegmentManagedBuffer
-   * @param maxBlockSizeToPush Max size of individual blocks that will be pushed. Blocks larger
-   *                           than this threshold will be skipped.
-   * @param maxBlockBatchSize Max size of a batch of shuffle blocks to be grouped into a single
-   *                          request
+   * @param mergerLocs target locations to push blocks to
+   * @param transportConf transportConf used to create FileSegmentManagedBuffer
    * @return List of the PushRequest, randomly shuffled.
+   *
+   * VisibleForTesting
    */
-  private def prepareBlockPushRequests(
+  private[shuffle] def prepareBlockPushRequests(
       numPartitions: Int,
       partitionId: Int,
       shuffleId: Int,
       dataFile: File,
       partitionLengths: Array[Long],
       mergerLocs: Seq[BlockManagerId],
-      transportConf: TransportConf,
-      maxBlockSizeToPush: Long,
-      maxBlockBatchSize: Long): Seq[PushRequest] = {
+      transportConf: TransportConf): Seq[PushRequest] = {
     var offset = 0L
     var currentReqSize = 0L
     var currentReqOffset = 0L
@@ -426,7 +432,7 @@ private[spark] object ShuffleBlockPusher {
    * @param reqBuffer a chunk of data in the shuffle data file corresponding to the continuous
    *                  blocks represented in this request
    */
-  private case class PushRequest(
+  private[spark] case class PushRequest(
     address: BlockManagerId,
     blocks: Seq[(BlockId, Long)],
     reqBuffer: ManagedBuffer) {
