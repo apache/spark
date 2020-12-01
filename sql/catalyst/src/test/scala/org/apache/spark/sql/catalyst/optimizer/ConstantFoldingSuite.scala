@@ -267,13 +267,34 @@ class ConstantFoldingSuite extends PlanTest {
   test("Constant folding test with sideaffects") {
     val originalQuery =
       testRelation
-        .select("size(array(assert_true(false)))")
+        .select('a)
+        .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
+  object OptimizeForCreate extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("ConstantFolding", FixedPoint(4),
+        OptimizeIn,
+        ConstantFolding,
+        PruneFilters) :: Nil
+  }
+
+  test("Constant folding test CreateArray") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .where(Size(CreateArray(Seq('a))) > 0)
+
+    val optimized = OptimizeForCreate.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select("size(array(assert_true(false)))")
+        .select('a)
         .analyze
 
     comparePlans(optimized, correctAnswer)
