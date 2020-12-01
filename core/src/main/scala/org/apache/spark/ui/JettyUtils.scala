@@ -399,7 +399,7 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /**
-   * Check if the input url is percent-encoded twice.
+   * Check if the input url contains reserved characters and it is percent-encoded twice.
    * If yes, decode the url once(assuming handler functions will decode again on parsing it).
    * Otherwise, return the URL as it is.
    */
