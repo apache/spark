@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.util.UUID
+
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper, StreamingQueryUIData}
 import org.apache.spark.status.KVUtils
 import org.apache.spark.util.kvstore.KVStore
@@ -31,6 +33,13 @@ class StreamingQueryStatusStore(store: KVStore) {
   def allQueryUIData: Seq[StreamingQueryUIData] = {
     val view = store.view(classOf[StreamingQueryData]).index("startTimestamp").first(0L)
     KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(makeUIData)
+  }
+
+  // visible for test
+  private[sql] def getQueryProgressData(runId: UUID): Seq[StreamingQueryProgressWrapper] = {
+    val view = store.view(classOf[StreamingQueryProgressWrapper])
+      .index("runId").first(runId.toString).last(runId.toString)
+    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
   }
 
   private def makeUIData(summary: StreamingQueryData): StreamingQueryUIData = {
