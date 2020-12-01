@@ -1953,7 +1953,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
 
-    def resolveFunction(): PartialFunction[Expression, Expression] = {
+    def resolveFunction(expr: Expression): Expression = expr match {
       case u if !u.childrenResolved => u // Skip until children are resolved.
       case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
         withPosition(u) {
@@ -2004,6 +2004,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               other
           }
         }
+      case e => e
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -2011,17 +2012,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
-
-      case a: Aggregate =>
-        val newGroups = a.groupingExpressions.map {
-          case gs: GroupingSet =>
-            gs.withNewChildren(gs.children.map(_.transformDown(resolveFunction)))
-          case e => e
-        }
-        a.copy(groupingExpressions = newGroups) transformExpressions resolveFunction
-
+        
       case q: LogicalPlan =>
-        q transformExpressions resolveFunction
+        q transformExpressions {
+          case gs: GroupingSet =>
+            gs.withNewChildren(gs.children.map(_.transformDown { case e => resolveFunction(e) }))
+          case e => resolveFunction(e)
+        }
     }
   }
 
