@@ -185,13 +185,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    // This batch rewrites plans and should be run after the operator
+    // optimization batch and before any batches that depend on stats.
+    Batch("Rewrite Rules", Once, rewriteRules: _*) :+
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
     Batch("Early Filter and Projection Push-Down", Once, earlyScanPushDownRules: _*) :+
-    // This batch rewrites plans for v2 tables. It should be run after the operator
-    // optimization batch and before any batches that depend on stats.
-    Batch("V2 Source Rewrite Rules", Once, v2SourceRewriteRules: _*) :+
     // Since join costs in AQP can change between multiple runs, there is no reason that we have an
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
@@ -293,9 +293,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Override to provide additional rules for rewriting plans for v2 data sources.
+   * Override to provide additional rules for rewriting plans. Such rules will be executed
+   * after operator optimization rules and before any rules that depend on stats.
    */
-  def v2SourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
+  def rewriteRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
