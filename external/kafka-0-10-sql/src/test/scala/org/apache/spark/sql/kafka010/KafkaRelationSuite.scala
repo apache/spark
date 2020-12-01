@@ -21,13 +21,10 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.annotation.tailrec
-
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.{DataFrameReader, QueryTest}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -270,7 +267,9 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   test("no matched offset for timestamp - startingOffsets") {
     val (topic, timestamps) = prepareTimestampRelatedUnitTest
 
-    val e = intercept[SparkException] {
+    // KafkaOffsetReaderConsumer and KafkaOffsetReaderAdmin both throws AssertionError
+    // but the UninterruptibleThread used by KafkaOffsetReaderConsumer wraps it with SparkException
+    val e = intercept[Throwable] {
       verifyTimestampRelatedQueryResult({ df =>
         // partition 2 will make query fail
         val startTopicTimestamps = Map(
@@ -283,19 +282,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       }, topic, Seq.empty)
     }
 
-    @tailrec
-    def assertionErrorInExceptionChain(e: Throwable): Boolean = {
-      if (e.isInstanceOf[AssertionError]) {
-        true
-      } else if (e.getCause == null) {
-        false
-      } else {
-        assertionErrorInExceptionChain(e.getCause)
-      }
-    }
-
-    assert(assertionErrorInExceptionChain(e),
-      "Cannot find expected AssertionError in chained exceptions")
+    TestUtils.assertExceptionMsg(e, "No offset matched from request")
   }
 
   test("no matched offset for timestamp - endingOffsets") {
