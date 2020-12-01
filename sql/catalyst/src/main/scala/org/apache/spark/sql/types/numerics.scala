@@ -145,7 +145,7 @@ private[sql] object FloatExactNumeric extends FloatIsFractional {
     if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
-      overflowException(x, "int")
+      overflowException(x, "long")
     }
   }
 

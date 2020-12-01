@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -49,21 +51,44 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  @tailrec
+  private def checkError(e: Expression): Unit = e match {
+    case _: Literal =>
+    case Alias(c, _) => checkError(c)
+    case e if e.foldable => e.eval(EmptyRow)
+    case _ =>
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
-      // Skip redundant folding of literals. This rule is technically not necessary. Placing this
-      // here avoids running the next rule for Literal values, which would create a new Literal
-      // object and running eval unnecessarily.
-      case l: Literal => l
+    case q: LogicalPlan =>
+      val newPlan = q transformExpressionsDown {
+        // Skip redundant folding of literals. This rule is technically not necessary. Placing this
+        // here avoids running the next rule for Literal values, which would create a new Literal
+        // object and running eval unnecessarily.
+        case l: Literal => l
 
-      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
-        Literal(c.children.length)
-      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
-        Literal(c.children.length / 2)
+        case c @ Cast(RaiseError(_, _), _, _) => c
+        case r: RaiseError => r
 
-      // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-    }
+        case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+          Literal(c.children.length)
+        case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+          Literal(c.children.length / 2)
+
+        // Fold expressions that are foldable.
+        case e if e.foldable =>
+          val constant = try {
+            scala.util.Right(e.eval(EmptyRow))
+          } catch {
+            case NonFatal(error) => scala.util.Left(error)
+          }
+          constant match {
+            case scala.util.Right(value) => Literal.create(value, e.dataType)
+            case scala.util.Left(error) => Cast(RaiseError(error), e.dataType)
+          }
+      }
+      newPlan.expressions.foreach(checkError)
+      newPlan
   }
 }
 

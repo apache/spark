@@ -43,6 +43,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def children: Seq[Expression] = predicate :: trueValue :: falseValue :: Nil
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
+  override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
@@ -126,6 +127,7 @@ case class CaseWhen(
   extends ComplexTypeMergingExpression with Serializable {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
+  override def foldable: Boolean = children.forall(_.foldable)
 
   // both then and else expressions should be considered.
   @transient

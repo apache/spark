@@ -64,9 +64,12 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        custom error message
   """,
   since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+case class RaiseError(child: Expression, error: Option[Throwable] = None)
+  extends UnaryExpression with ImplicitCastInputTypes {
 
-  override def foldable: Boolean = false
+  def this(child: Expression) = this(child, None)
+
+  override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
@@ -74,27 +77,50 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
   override def prettyName: String = "raise_error"
 
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      throw new RuntimeException()
+    error match {
+      case Some(err) => throw err
+      case None =>
+        val value = child.eval(input)
+        if (value == null) {
+          throw new RuntimeException()
+        }
+        throw new RuntimeException(value.toString)
     }
-    throw new RuntimeException(value.toString)
   }
 
-  // if (true) is to avoid codegen compilation exception that statement is unreachable
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
+    val block = error match {
+      case Some(err) => genCodeWithError(ctx, err)
+      case None => genCodeWithMessage(ctx)
+    }
     ExprCode(
-      code = code"""${eval.code}
-        |if (true) {
-        |  if (${eval.isNull}) {
-        |    throw new RuntimeException();
-        |  }
-        |  throw new RuntimeException(${eval.value}.toString());
-        |}""".stripMargin,
+      code = block,
       isNull = TrueLiteral,
       value = JavaCode.defaultLiteral(dataType)
     )
+  }
+
+  // if (true) is to avoid codegen compilation exception that statement is unreachable
+  private def genCodeWithError(ctx: CodegenContext, error: Throwable): Block = {
+    val errorTerm = ctx.addReferenceObj("error", error)
+    code"""if (true) throw $errorTerm;"""
+  }
+
+  private def genCodeWithMessage(ctx: CodegenContext): Block = {
+    val eval = child.genCode(ctx)
+    code"""${eval.code}
+      |if (true) {
+      |  if (${eval.isNull}) {
+      |    throw new RuntimeException();
+      |  }
+      |  throw new RuntimeException(${eval.value}.toString());
+      |}""".stripMargin
+  }
+}
+
+object RaiseError {
+  def apply(error: Throwable): RaiseError = {
+    RaiseError(Literal.create(error.getMessage, StringType), Some(error))
   }
 }
 
@@ -250,6 +276,6 @@ case class TypeOf(child: Expression) extends UnaryExpression {
   override def eval(input: InternalRow): Any = UTF8String.fromString(child.dataType.catalogString)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
+    defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString("${child.dataType.catalogString}")""")
   }
 }

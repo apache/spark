@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ConstantFoldingSuite extends PlanTest {
@@ -298,5 +299,37 @@ class ConstantFoldingSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33614: Constant folding test with exceptions") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = intercept[ArithmeticException] {
+        Optimize.execute(testRelation.select(Literal(2) + Literal(3) / Literal(0) as 'c1).analyze)
+      }.getMessage
+      assert(e1.contains("divide by zero"))
+
+      val e2 = intercept[ArithmeticException] {
+        Optimize.execute(
+          testRelation
+            .select(
+              If(Literal(2) < Literal(3),
+                Literal(3) / Literal(0),
+                Literal(3) + Literal(0)) as 'c1).analyze)
+      }.getMessage
+      assert(e2.contains("divide by zero"))
+
+      val originalQuery =
+        testRelation
+          .select(
+            If(Literal(2) > Literal(3),
+              Literal(3) / Literal(0),
+              Literal(3) + Literal(0)) as 'c1)
+      val optimized = OptimizeForCreate.execute(originalQuery.analyze)
+      val correctAnswer =
+        testRelation
+          .select(Literal(3.0) as 'c1)
+          .analyze
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }
