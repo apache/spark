@@ -564,6 +564,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_stat",
         "pyspark.ml.tests.test_training_summary",
         "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
     ],
     excluded_python_implementations=[
