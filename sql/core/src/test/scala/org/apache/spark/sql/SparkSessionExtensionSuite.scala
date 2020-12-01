@@ -88,6 +88,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("inject data source rewrite rule") {
+    withSession(Seq(_.injectDataSourceRewriteRule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.dataSourceRewriteRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))

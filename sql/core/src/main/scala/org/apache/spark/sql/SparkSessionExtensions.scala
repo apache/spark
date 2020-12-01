@@ -199,6 +199,21 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
+  private[this] val dataSourceRewriteRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildDataSourceRewriteRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    dataSourceRewriteRules.map(_.apply(session))
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder that rewrites data source plans into the [[SparkSession]].
+   * The injected rules will be executed after the operator optimization batch and before rules
+   * that depend on stats.
+   */
+  def injectDataSourceRewriteRule(builder: RuleBuilder): Unit = {
+    dataSourceRewriteRules += builder
+  }
+
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
 
   private[sql] def buildPlannerStrategies(session: SparkSession): Seq[Strategy] = {
