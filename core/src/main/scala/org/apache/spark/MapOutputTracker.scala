@@ -1502,7 +1502,7 @@ private[spark] object MapOutputTracker extends Logging {
       // Important arr(0) is the tag == DIRECT, ignore that while deserializing !
       // arr is a nested Array so that it can handle over 2GB serialized data
       val arr = chunkedByteBuf.getChunks().map(_.array())
-      val bcast = broadcastManager.newBroadcast(arr, isLocal)
+      val bcast = broadcastManager.newBroadcast(arr, isLocal, null)
       // Using `org.apache.commons.io.output.ByteArrayOutputStream` instead of the standard one
       // This implementation doesn't reallocate the whole memory block but allocates
       // additional buffers. This way no buffers need to be garbage collected and

@@ -18,8 +18,10 @@
 package org.apache.spark.broadcast
 
 import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 
 import org.apache.commons.collections4.map.AbstractReferenceMap.ReferenceStrength
@@ -32,8 +34,11 @@ import org.apache.spark.internal.Logging
 private[spark] class BroadcastManager(
     val isDriver: Boolean, conf: SparkConf) extends Logging {
 
+  val cleanQueryBroadcast = conf.getBoolean("spark.broadcast.autoClean.enabled", false)
+
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  var cachedBroadcast = new ConcurrentHashMap[String, ListBuffer[Long]]()
 
   initialize()
 
@@ -54,14 +59,33 @@ private[spark] class BroadcastManager(
 
   private val nextBroadcastId = new AtomicLong(0)
 
+  private[spark] def currentBroadcastId: Long = nextBroadcastId.get()
+
   private[broadcast] val cachedValues =
     Collections.synchronizedMap(
       new ReferenceMap(ReferenceStrength.HARD, ReferenceStrength.WEAK)
         .asInstanceOf[java.util.Map[Any, Any]]
     )
 
-  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
+  def cleanBroadCast(executionId: String): Unit = {
+    if (cachedBroadcast.containsKey(executionId)) {
+      cachedBroadcast.get(executionId)
+        .foreach(broadcastId => unbroadcast(broadcastId, true, false))
+      cachedBroadcast.remove(executionId)
+    }
+  }
+
+  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, executionId: String): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()
+    if (executionId != null && cleanQueryBroadcast) {
+      if (cachedBroadcast.containsKey(executionId)) {
+        cachedBroadcast.get(executionId) += bid
+      } else {
+        val list = new scala.collection.mutable.ListBuffer[Long]
+        list += bid
+        cachedBroadcast.put(executionId, list)
+      }
+    }
     value_ match {
       case pb: PythonBroadcast =>
         // SPARK-28486: attach this new broadcast variable's id to the PythonBroadcast,

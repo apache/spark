@@ -908,6 +908,8 @@ private[spark] class DAGScheduler(
       return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
 
+    val executionId = sc.getLocalProperty("spark.sql.execution.id")
+    logInfo(s"submit job : $jobId, executionId is $executionId")
     assert(partitions.nonEmpty)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
@@ -1403,6 +1405,7 @@ private[spark] class DAGScheduler(
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
+    logInfo(s"submit stage ${stage.id} with jobId: $jobId")
 
     // Before find missing partition, do the intermediate state clean work first.
     // The operation here can make sure for the partially completed intermediate stage,

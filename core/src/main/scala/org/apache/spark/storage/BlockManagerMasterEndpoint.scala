@@ -385,6 +385,12 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
+    val blocksToRemove = blockLocations.keySet().asScala
+      .collect {
+        case broadcastId@BroadcastBlockId(`broadcastId`, _) =>
+          broadcastId
+      }
+    blocksToRemove.foreach(blockLocations.remove)
     Future.sequence(futures)
   }
 

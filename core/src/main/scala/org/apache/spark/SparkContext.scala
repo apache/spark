@@ -1526,10 +1526,13 @@ class SparkContext(config: SparkConf) extends Logging {
     assertNotStopped()
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val executionId = getLocalProperty("spark.sql.execution.id")
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal, executionId)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
-    cleaner.foreach(_.registerBroadcastForCleanup(bc))
+    if (executionId == null) {
+      cleaner.foreach(_.registerBroadcastForCleanup(bc))
+    }
     bc
   }
 
