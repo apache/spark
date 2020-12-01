@@ -51,8 +51,6 @@ private[spark] object JettyUtils extends Logging {
 
   val SPARK_CONNECTOR_NAME = "Spark"
   val REDIRECT_CONNECTOR_NAME = "HttpsRedirect"
-  // By default decoding the URI as "UTF-8" should be enough for SparkUI
-  val defaultUrlEncoding = "UTF-8"
 
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
@@ -437,7 +435,7 @@ private[spark] object JettyUtils extends Logging {
     handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
   }
 
-  private def decodeURL(url: String, encoding: String = defaultUrlEncoding): String = {
+  private def decodeURL(url: String, encoding: String): String = {
     if (url == null) {
       null
     } else {
@@ -457,7 +455,8 @@ private[spark] object JettyUtils extends Logging {
     val queryEncoding = if (request.getQueryEncoding != null) {
       request.getQueryEncoding
     } else {
-      defaultUrlEncoding
+      // By default decoding the URI as "UTF-8" should be enough for SparkUI
+      "UTF-8"
     }
     // The request URL can be raw or encoded here. To avoid the request URL being
     // encoded twice, let's decode it here.
