@@ -216,18 +216,6 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD =
-    buildConf("spark.sql.optimizer.likeAllConversionThreshold")
-      .internal()
-      .doc("Configure the maximum size of the pattern sequence in like all. Spark will convert " +
-        "the logical combination of like to avoid StackOverflowError. 200 is an empirical value " +
-        "that will not cause StackOverflowError.")
-      .version("3.1.0")
-      .intConf
-      .checkValue(threshold => threshold >= 0, "The maximum size of pattern sequence " +
-        "in like all must be non-negative")
-      .createWithDefault(200)
-
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -1412,6 +1400,17 @@ object SQLConf {
       .doc("When true, the logical plan for streaming query will be checked for unsupported" +
         " operations.")
       .version("2.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val USE_DEPRECATED_KAFKA_OFFSET_FETCHING =
+    buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
+      .internal()
+      .doc("When true, the deprecated Consumer based offset fetching used which could cause " +
+        "infinite wait in Spark queries. Such cases query restart is the only workaround. " +
+        "For further details please see Offset Fetching chapter of Structured Streaming Kafka " +
+        "Integration Guide.")
+      .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3037,8 +3036,6 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
-
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
@@ -3064,6 +3061,8 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)

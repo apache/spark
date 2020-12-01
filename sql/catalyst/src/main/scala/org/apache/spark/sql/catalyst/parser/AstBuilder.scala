@@ -1396,14 +1396,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case other => Seq(other)
     }
 
-    def getLikeQuantifierExprs(expressions: java.util.List[ExpressionContext]): Seq[Expression] = {
-      if (expressions.isEmpty) {
-        throw new ParseException("Expected something between '(' and ')'.", ctx)
-      } else {
-        expressions.asScala.map(expression).map(p => invertIfNotDefined(new Like(e, p))).toSeq
-      }
-    }
-
     // Create the predicate.
     ctx.kind.getType match {
       case SqlBaseParser.BETWEEN =>
@@ -1418,12 +1410,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case SqlBaseParser.LIKE =>
         Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
-            getLikeQuantifierExprs(ctx.expression).reduceLeft(Or)
+            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            val expressions = expressionList(ctx.expression)
+            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+              // If there are many pattern expressions, will throw StackOverflowError.
+              // So we use LikeAny or NotLikeAny instead.
+              val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
+              ctx.NOT match {
+                case null => LikeAny(e, patterns.toSeq)
+                case _ => NotLikeAny(e, patterns.toSeq)
+              }
+            } else {
+              ctx.expression.asScala.map(expression)
+                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(Or)
+            }
           case Some(SqlBaseParser.ALL) =>
             validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
-            val expressions = ctx.expression.asScala.map(expression)
-            if (expressions.size > SQLConf.get.optimizerLikeAllConversionThreshold &&
-              expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
+            val expressions = expressionList(ctx.expression)
+            if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
               // If there are many pattern expressions, will throw StackOverflowError.
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
@@ -1432,7 +1436,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 case _ => NotLikeAll(e, patterns.toSeq)
               }
             } else {
-              getLikeQuantifierExprs(ctx.expression).reduceLeft(And)
+              ctx.expression.asScala.map(expression)
+                .map(p => invertIfNotDefined(new Like(e, p))).toSeq.reduceLeft(And)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
@@ -1905,7 +1910,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       direction.defaultNullOrdering
     }
-    SortOrder(expression(ctx.expression), direction, nullOrdering, Set.empty)
+    SortOrder(expression(ctx.expression), direction, nullOrdering, Seq.empty)
   }
 
   /**
