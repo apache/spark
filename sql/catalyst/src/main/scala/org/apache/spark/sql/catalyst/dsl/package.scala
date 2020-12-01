@@ -431,7 +431,7 @@ package object dsl {
           partition: Map[String, Option[String]] = Map.empty,
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
-        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
+        InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 

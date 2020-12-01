@@ -971,11 +971,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         checkCastWithParseError("20150318")
         checkCastWithParseError("2015-031-8")
         checkCastWithParseError("2015-03-18T12:03:17-0:70")
-
-        val input = "abdef"
-        checkExceptionInExpression[DateTimeException](
-          cast(input, TimestampType, Option(zid.getId)),
-          s"Cannot cast $input to TimestampType.")
+        checkCastWithParseError("abdef")
       }
     }
   }

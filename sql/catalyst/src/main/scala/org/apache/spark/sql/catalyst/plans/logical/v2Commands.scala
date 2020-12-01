@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, Res
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -45,9 +46,10 @@ trait V2WriteCommand extends Command {
     table.skipSchemaResolution || (query.output.size == table.output.size &&
       query.output.zip(table.output).forall {
         case (inAttr, outAttr) =>
+          val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
           // names and types must match, nullability must be compatible
           inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
             (outAttr.nullable || !inAttr.nullable)
       })
   }
@@ -689,3 +691,18 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
+
+/**
+ * The logical plan of the SHOW PARTITIONS command.
+ */
+case class ShowPartitions(
+    child: LogicalPlan,
+    pattern: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+
+  override lazy val resolved: Boolean =
+    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("partition", StringType, nullable = false)())
+}

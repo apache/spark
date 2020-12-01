@@ -357,6 +357,7 @@ case class DropViewStatement(
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
+ * @param userSpecifiedCols    the user specified list of columns that belong to the table.
  * @param query                the logical plan representing data to write to.
  * @param overwrite            overwrite existing table or partitions.
  * @param partitionSpec        a map from the partition key to the partition value (optional).
@@ -371,6 +372,7 @@ case class DropViewStatement(
 case class InsertIntoStatement(
     table: LogicalPlan,
     partitionSpec: Map[String, Option[String]],
+    userSpecifiedCols: Seq[String],
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean) extends ParsedStatement {
@@ -411,32 +413,9 @@ case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
- * A CACHE TABLE statement, as parsed from SQL
- */
-case class CacheTableStatement(
-    tableName: Seq[String],
-    plan: Option[LogicalPlan],
-    isLazy: Boolean,
-    options: Map[String, String]) extends ParsedStatement
-
-/**
- * An UNCACHE TABLE statement, as parsed from SQL
- */
-case class UncacheTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * A TRUNCATE TABLE statement, as parsed from SQL
  */
 case class TruncateTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
- * A SHOW PARTITIONS statement, as parsed from SQL
- */
-case class ShowPartitionsStatement(
     tableName: Seq[String],
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 

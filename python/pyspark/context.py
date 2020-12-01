@@ -260,7 +260,7 @@ class SparkContext(object):
                         sys.path.insert(1, filepath)
                 except Exception:
                     warnings.warn(
-                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Failed to add file [%s] specified in 'spark.submit.pyFiles' to "
                         "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
                         RuntimeWarning)
 
@@ -603,7 +603,7 @@ class SparkContext(object):
                     tempFile.close()
                 return reader_func(tempFile.name)
             finally:
-                # we eagerily reads the file so we can delete right after.
+                # we eagerly reads the file so we can delete right after.
                 os.unlink(tempFile.name)
 
     def pickleFile(self, name, minPartitions=None):

@@ -185,7 +185,7 @@ class FunctionsTests(ReusedSQLTestCase):
         ]
 
         df = self.spark.createDataFrame([['nick']], schema=['name'])
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "must be the same type",
             lambda: df.select(col('name').substr(0, lit(1))))
@@ -321,16 +321,16 @@ class FunctionsTests(ReusedSQLTestCase):
 
         df = self.spark.createDataFrame(
             [('Tom', 80), (None, 60), ('Alice', 50)], ["name", "height"])
-        self.assertEquals(
+        self.assertEqual(
             df.select(df.name).orderBy(functions.asc_nulls_first('name')).collect(),
             [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')])
-        self.assertEquals(
+        self.assertEqual(
             df.select(df.name).orderBy(functions.asc_nulls_last('name')).collect(),
             [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)])
-        self.assertEquals(
+        self.assertEqual(
             df.select(df.name).orderBy(functions.desc_nulls_first('name')).collect(),
             [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')])
-        self.assertEquals(
+        self.assertEqual(
             df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
@@ -354,7 +354,7 @@ class FunctionsTests(ReusedSQLTestCase):
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
 
-        self.assertEquals(
+        self.assertEqual(
             df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
             df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
         )
@@ -364,7 +364,7 @@ class FunctionsTests(ReusedSQLTestCase):
 
         df = self.spark.range(1)
 
-        self.assertEquals(
+        self.assertEqual(
             df.select(array_repeat("id", 3)).toDF("val").collect(),
             df.select(array_repeat("id", lit(3))).toDF("val").collect(),
         )
@@ -580,14 +580,14 @@ class FunctionsTests(ReusedSQLTestCase):
         from datetime import date
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
-        self.assertEquals(date(2017, 1, 22), parse_result['to_date(dateCol)'])
+        self.assertEqual(date(2017, 1, 22), parse_result['to_date(dateCol)'])
 
     def test_assert_true(self):
         from pyspark.sql.functions import assert_true
 
         df = self.spark.range(3)
 
-        self.assertEquals(
+        self.assertEqual(
             df.select(assert_true(df.id < 3)).toDF("val").collect(),
             [Row(val=None), Row(val=None), Row(val=None)],
         )
@@ -604,7 +604,7 @@ class FunctionsTests(ReusedSQLTestCase):
 
         with self.assertRaises(TypeError) as cm:
             df.select(assert_true(df.id < 2, 5))
-        self.assertEquals(
+        self.assertEqual(
             "errMsg should be a Column or a str, got <class 'int'>",
             str(cm.exception)
         )
@@ -626,7 +626,7 @@ class FunctionsTests(ReusedSQLTestCase):
 
         with self.assertRaises(TypeError) as cm:
             df.select(raise_error(None))
-        self.assertEquals(
+        self.assertEqual(
             "errMsg should be a Column or a str, got <class 'NoneType'>",
             str(cm.exception)
         )

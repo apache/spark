@@ -42,7 +42,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
   }
 
-  test("Mounts pesistentVolumeClaims") {
+  test("Mounts persistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",
