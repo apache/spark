@@ -1419,7 +1419,9 @@ object SQLConf {
     buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
       .internal()
       .doc("When true, the deprecated Consumer based offset fetching used which could cause " +
-        "infinite wait in Spark queries. Such cases query restart is the only workaround.")
+        "infinite wait in Spark queries. Such cases query restart is the only workaround. " +
+        "For further details please see Offset Fetching chapter of Structured Streaming Kafka " +
+        "Integration Guide.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
