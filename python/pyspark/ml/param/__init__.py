@@ -426,6 +426,12 @@ class Params(Identifiable):
         else:
             raise ValueError("Cannot resolve %r as a param." % param)
 
+    def _testOwnParam(self, param_parent, param_name):
+        """
+        Test the ownership. Return True or False
+        """
+        return self.uid == param_parent and self.hasParam(param_name)
+
     @staticmethod
     def _dummy():
         """
