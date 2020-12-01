@@ -250,6 +250,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * Returns all files except the deleted ones.
    */
   def allFiles(): Array[T] = {
+    val curTime = System.currentTimeMillis()
     var latestId = getLatestBatchId().getOrElse(-1L)
     // There is a race condition when `FileStreamSink` is deleting old files and `StreamFileIndex`
     // is calling this method. This loop will retry the reading to deal with the
@@ -259,7 +260,6 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
         try {
           val logs =
             getAllValidBatches(latestId, compactInterval).flatMap { id =>
-              val curTime = System.currentTimeMillis()
               filterInBatch(id)(shouldRetain(_, curTime)).getOrElse {
                 throw new IllegalStateException(
                   s"${batchIdToPath(id)} doesn't exist " +
