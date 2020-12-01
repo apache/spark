@@ -54,8 +54,6 @@ license: |
   
   - In Spark 3.1, creating or altering a view will capture runtime SQL configs and store them as view properties. These configs will be applied during the parsing and analysis phases of the view resolution. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.useCurrentConfigsForView` to `true`.
 
-  - In Spark 3.1, `CREATE TABLE` without a specific table provider uses the value of `spark.sql.sources.default` as its table provider. In Spark version 3.0 and below, it was Hive. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.createHiveTableByDefault.enabled` to `true`.
-
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.

@@ -2929,7 +2929,7 @@ object SQLConf {
         s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key} as the table provider.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
