@@ -30,8 +30,11 @@ from typing import (
 )
 import datetime
 from pyspark.rdd import RDD
+import pyspark.serializers
 from pyspark.storagelevel import StorageLevel
 import pyspark.streaming.context
+
+from py4j.java_gateway import JavaObject
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -42,7 +45,12 @@ V = TypeVar("V")
 class DStream(Generic[T]):
     is_cached: bool
     is_checkpointed: bool
-    def __init__(self, jdstream, ssc, jrdd_deserializer) -> None: ...
+    def __init__(
+        self,
+        jdstream: JavaObject,
+        ssc: pyspark.streaming.context.StreamingContext,
+        jrdd_deserializer: pyspark.serializers.Serializer,
+    ) -> None: ...
     def context(self) -> pyspark.streaming.context.StreamingContext: ...
     def count(self) -> DStream[int]: ...
     def filter(self, f: Callable[[T], bool]) -> DStream[T]: ...

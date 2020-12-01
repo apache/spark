@@ -169,7 +169,7 @@ class FeatureTests(SparkSessionTestCase):
 
         # Test an empty vocabulary
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
                 CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform

@@ -51,6 +51,7 @@ case class UnresolvedTable(
  */
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
+    commandName: String,
     allowTempView: Boolean = true) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
@@ -88,7 +89,8 @@ case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: T
 }
 
 case class ResolvedPartitionSpec(
-    spec: InternalRow,
+    names: Seq[String],
+    ident: InternalRow,
     location: Option[String] = None) extends PartitionSpec
 
 /**

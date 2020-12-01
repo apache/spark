@@ -36,7 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * doing a single iteration of the standard k-means algorithm.
  *
  * The update algorithm uses the "mini-batch" KMeans rule,
- * generalized to incorporate forgetfullness (i.e. decay).
+ * generalized to incorporate forgetfulness (i.e. decay).
  * The update rule (for each cluster) is:
  *
  * <blockquote>

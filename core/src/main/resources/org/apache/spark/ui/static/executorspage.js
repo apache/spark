@@ -608,15 +608,15 @@ $(document).ready(function () {
                     "Show Additional Metrics" +
                     "</a></div>" +
                     "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
-                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
-                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
-                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
-                    "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7'>Peak JVM Memory OnHeap / OffHeap</div>" +
-                    "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8'>Peak Execution Memory OnHeap / OffHeap</div>" +
-                    "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'>Peak Storage Memory OnHeap / OffHeap</div>" +
-                    "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'>Peak Pool Memory Direct / Mapped</div>" +
-                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'>Resources</div>" +
-                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'>Resource Profile Id</div>" +
+                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'> Select All</div>" +
+                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'> On Heap Memory</div>" +
+                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'> Off Heap Memory</div>" +
+                    "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7'> Peak JVM Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8'> Peak Execution Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'> Peak Storage Memory OnHeap / OffHeap</div>" +
+                    "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
+                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
                     "</div>");
 
                 reselectCheckboxesBasedOnTaskTableState();

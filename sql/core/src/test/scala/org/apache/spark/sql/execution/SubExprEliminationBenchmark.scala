@@ -100,7 +100,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
         // We only benchmark subexpression performance under codegen/non-codegen, so disabling
         // json optimization.
         val caseName = s"subExprElimination $subExprEliminationEnabled, codegen: $codegenEnabled"
-        benchmark.addCase("subexpressionElimination off, codegen on", numIters) { _ =>
+        benchmark.addCase(caseName, numIters) { _ =>
           withSQLConf(
             SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> subExprEliminationEnabled,
             SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled,

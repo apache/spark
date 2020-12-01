@@ -135,7 +135,7 @@ createMethods()
 #' @rdname alias
 #' @name alias
 #' @aliases alias,Column-method
-#' @family colum_func
+#' @family column_func
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(iris)
@@ -161,7 +161,7 @@ setMethod("alias",
 #'
 #' @rdname substr
 #' @name substr
-#' @family colum_func
+#' @family column_func
 #' @aliases substr,Column-method
 #'
 #' @param x a Column.
@@ -187,7 +187,7 @@ setMethod("substr", signature(x = "Column"),
 #'
 #' @rdname startsWith
 #' @name startsWith
-#' @family colum_func
+#' @family column_func
 #' @aliases startsWith,Column-method
 #'
 #' @param x vector of character string whose "starts" are considered
@@ -206,7 +206,7 @@ setMethod("startsWith", signature(x = "Column"),
 #'
 #' @rdname endsWith
 #' @name endsWith
-#' @family colum_func
+#' @family column_func
 #' @aliases endsWith,Column-method
 #'
 #' @param x vector of character string whose "ends" are considered
@@ -224,7 +224,7 @@ setMethod("endsWith", signature(x = "Column"),
 #'
 #' @rdname between
 #' @name between
-#' @family colum_func
+#' @family column_func
 #' @aliases between,Column-method
 #'
 #' @param x a Column
@@ -251,7 +251,7 @@ setMethod("between", signature(x = "Column"),
 # nolint end
 #' @rdname cast
 #' @name cast
-#' @family colum_func
+#' @family column_func
 #' @aliases cast,Column-method
 #'
 #' @examples
@@ -300,7 +300,7 @@ setMethod("%in%",
 #'              Can be a single value or a Column.
 #' @rdname otherwise
 #' @name otherwise
-#' @family colum_func
+#' @family column_func
 #' @aliases otherwise,Column-method
 #' @note otherwise since 1.5.0
 setMethod("otherwise",
@@ -440,7 +440,7 @@ setMethod("withField",
 #' )
 #'
 #' # However, if you are going to add/replace multiple nested fields,
-#' # it is preffered to extract out the nested struct before
+#' # it is preferred to extract out the nested struct before
 #' # adding/replacing multiple fields e.g.
 #' head(
 #'   withColumn(

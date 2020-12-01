@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -432,7 +433,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
-        s" USING foo OPTIONS (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -465,7 +466,7 @@ class DataSourceV2SQLSuite
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
-        s" USING foo OPTIONS (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
+        s" USING foo TBLPROPERTIES (`${InMemoryTable.SIMULATE_FAILED_WRITE_OPTION}=true)" +
         s" AS SELECT id FROM source")
     }
 
@@ -729,7 +730,7 @@ class DataSourceV2SQLSuite
     val ex = intercept[AnalysisException] {
       sql("DROP TABLE testcat.db.notbl")
     }
-    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
+    assert(ex.getMessage.contains("Table or view not found for 'DROP TABLE': testcat.db.notbl"))
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
@@ -1986,8 +1987,8 @@ class DataSourceV2SQLSuite
            |PARTITIONED BY (id)
          """.stripMargin)
 
-      testV1Command("TRUNCATE TABLE", t)
-      testV1Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
+      testNotSupportedV2Command("TRUNCATE TABLE", t)
+      testNotSupportedV2Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
     }
   }
 
@@ -2018,28 +2019,29 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CACHE TABLE") {
+  test("CACHE/UNCACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testV1CommandSupportingTempView("CACHE TABLE", t)
-
-      val e = intercept[AnalysisException] {
-        sql(s"CACHE LAZY TABLE $t")
+      def isCached(table: String): Boolean = {
+        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
       }
-      assert(e.message.contains("CACHE TABLE is only supported with temp views or v1 tables"))
-    }
-  }
 
-  test("UNCACHE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"CACHE TABLE $t")
+      assert(isCached(t))
 
-      testV1CommandSupportingTempView("UNCACHE TABLE", t)
-      testV1CommandSupportingTempView("UNCACHE TABLE", s"IF EXISTS $t")
+      sql(s"UNCACHE TABLE $t")
+      assert(!isCached(t))
     }
+
+    // Test a scenario where a table does not exist.
+    val e = intercept[AnalysisException] {
+      sql(s"UNCACHE TABLE $t")
+    }
+    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+
+    // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
+    sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
   test("SHOW COLUMNS") {
@@ -2047,14 +2049,9 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
 
-      testV1CommandSupportingTempView("SHOW COLUMNS", s"FROM $t")
-      testV1CommandSupportingTempView("SHOW COLUMNS", s"IN $t")
-
-      val e3 = intercept[AnalysisException] {
-        sql(s"SHOW COLUMNS FROM tbl IN testcat.ns1.ns2")
-      }
-      assert(e3.message.contains("Namespace name should have " +
-        "only one part if specified: testcat.ns1.ns2"))
+      testNotSupportedV2Command("SHOW COLUMNS", s"FROM $t")
+      testNotSupportedV2Command("SHOW COLUMNS", s"IN $t")
+      testNotSupportedV2Command("SHOW COLUMNS", "FROM tbl IN testcat.ns1.ns2")
     }
   }
 
@@ -2287,7 +2284,6 @@ class DataSourceV2SQLSuite
         verify(s"CACHE TABLE $t")
         verify(s"UNCACHE TABLE $t")
         verify(s"TRUNCATE TABLE $t")
-        verify(s"SHOW PARTITIONS $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
@@ -2560,11 +2556,15 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      sqlCommandInMessage: Option[String] = None): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
+    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
+    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

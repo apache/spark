@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -456,6 +456,19 @@ setMethod("acos",
           })
 
 #' @details
+#' \code{acosh}: Computes inverse hyperbolic cosine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases acosh acosh,Column-method
+#' @note acosh since 3.1.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{approx_count_distinct}: Returns the approximate number of distinct items in a group.
 #'
 #' @rdname column_aggregate_functions
@@ -523,6 +536,19 @@ setMethod("asin",
           })
 
 #' @details
+#' \code{asinh}: Computes inverse hyperbolic sine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.1.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
@@ -533,6 +559,19 @@ setMethod("atan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "atan", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Computes inverse hyperbolic tangent of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.1.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
@@ -2879,7 +2918,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions

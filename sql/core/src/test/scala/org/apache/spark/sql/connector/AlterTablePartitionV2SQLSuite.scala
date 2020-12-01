@@ -141,7 +141,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+      assert(
+        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
     }
   }
 
@@ -161,7 +162,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       spark.sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+      assert(
+        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
     }
   }
 

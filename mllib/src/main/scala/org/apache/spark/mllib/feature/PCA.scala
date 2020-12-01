@@ -48,11 +48,11 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     val mat = if (numFeatures > 65535) {
       val summary = Statistics.colStats(sources.map((_, 1.0)), Seq("mean"))
       val mean = Vectors.fromML(summary.mean)
-      val meanCentredRdd = sources.map { row =>
+      val meanCenteredRdd = sources.map { row =>
         BLAS.axpy(-1, mean, row)
         row
       }
-      new RowMatrix(meanCentredRdd)
+      new RowMatrix(meanCenteredRdd)
     } else {
       require(PCAUtil.memoryCost(k, numFeatures) < Int.MaxValue,
         "The param k and numFeatures is too large for SVD computation. " +
