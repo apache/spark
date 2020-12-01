@@ -36,7 +36,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
   val b = testRelation.output(1)
   val c = testRelation.output(2)
 
-  test("replace first(col) by nth_value(col, 1)") {
+  test("replace first by nth_value if frame is UNBOUNDED PRECEDING AND CURRENT ROW") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
@@ -52,7 +52,34 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     assert(optimized == correctAnswer)
   }
 
-  test("can't replace first(col) by nth_value(col, 1) if the window frame type is range") {
+  test("replace first by nth_value if frame is UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING") {
+    val inputPlan = testRelation.select(
+      WindowExpression(
+        First(a, false).toAggregateExpression(),
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))))
+    val correctAnswer = testRelation.select(
+      WindowExpression(
+        NthValue(a, Literal(1), false),
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
+          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing))))
+
+    val optimized = Optimize.execute(inputPlan)
+    assert(optimized == correctAnswer)
+  }
+
+  test("can't replace first by nth_value if frame is not suitable") {
+    val inputPlan = testRelation.select(
+      WindowExpression(
+        First(a, false).toAggregateExpression(),
+        WindowSpecDefinition(b :: Nil, c.asc :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(1), CurrentRow))))
+
+    val optimized = Optimize.execute(inputPlan)
+    assert(optimized == inputPlan)
+  }
+
+  test("can't replace first by nth_value if the window frame type is range") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),
@@ -63,7 +90,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
     assert(optimized == inputPlan)
   }
 
-  test("can't replace first(col) by nth_value(col, 1) if the window frame isn't ordered") {
+  test("can't replace first by nth_value if the window frame isn't ordered") {
     val inputPlan = testRelation.select(
       WindowExpression(
         First(a, false).toAggregateExpression(),

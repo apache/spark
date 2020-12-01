@@ -229,7 +229,7 @@
       declared in the projects that build assemblies.
 
       For other projects the scope should remain as "compile", otherwise they are not available
-      during compilation if the dependency is transivite (e.g. "graphx/" depending on "core/" and
+      during compilation if the dependency is transitive (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
     <hadoop.deps.scope>compile</hadoop.deps.scope>
@@ -1758,7 +1758,7 @@
         <scope>${hive.deps.scope}</scope>
         <exclusions>
 
-          <!-- pull this in when needed; the explicit definition culls the surplis-->
+          <!-- pull this in when needed; the explicit definition culls the surplus-->
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-metastore</artifactId>
@@ -2088,7 +2088,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>${hive.version}</version>
+        <version>3.1.2</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>
@@ -3264,7 +3264,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.3</scala.version>
+        <scala.version>2.13.4</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <dependencyManagement>

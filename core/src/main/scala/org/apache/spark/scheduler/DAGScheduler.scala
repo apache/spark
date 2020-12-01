@@ -409,9 +409,9 @@ private[spark] class DAGScheduler(
   /**
    * Check to make sure we don't launch a barrier stage with unsupported RDD chain pattern. The
    * following patterns are not supported:
-   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (eg.
+   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (e.g.
    * union()/coalesce()/first()/take()/PartitionPruningRDD);
-   * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
+   * 2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
    */
   private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numTasksInStage: Int): Unit = {
     if (rdd.isBarrier() &&
@@ -459,7 +459,7 @@ private[spark] class DAGScheduler(
 
   /**
    * We don't support run a barrier stage with dynamic resource allocation enabled, it shall lead
-   * to some confusing behaviors (eg. with dynamic resource allocation enabled, it may happen that
+   * to some confusing behaviors (e.g. with dynamic resource allocation enabled, it may happen that
    * we acquire some executors (but not enough to launch all the tasks in a barrier stage) and
    * later release them due to executor idle time expire, and then acquire again).
    *
@@ -1555,7 +1555,7 @@ private[spark] class DAGScheduler(
       event.reason)
 
     if (!stageIdToStage.contains(task.stageId)) {
-      // The stage may have already finished when we get this event -- eg. maybe it was a
+      // The stage may have already finished when we get this event -- e.g. maybe it was a
       // speculative task. It is important that we send the TaskEnd event in any case, so listeners
       // are properly notified and can chose to handle it. For instance, some listeners are
       // doing their own accounting and if they don't get the task end event they think

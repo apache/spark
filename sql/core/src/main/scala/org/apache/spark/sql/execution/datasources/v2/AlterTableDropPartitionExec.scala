@@ -35,7 +35,7 @@ case class AlterTableDropPartitionExec(
 
   override protected def run(): Seq[InternalRow] = {
     val (existsPartIdents, notExistsPartIdents) =
-      partSpecs.map(_.spec).partition(table.partitionExists)
+      partSpecs.map(_.ident).partition(table.partitionExists)
 
     if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
       throw new NoSuchPartitionsException(

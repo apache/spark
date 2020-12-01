@@ -136,12 +136,17 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
+  - `to_date` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
 
 ### SQL Operators
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
+  - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
 
 ### SQL Keywords
 
