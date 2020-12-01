@@ -167,9 +167,17 @@ class MockModel(MockTransformer, Model, HasFake):
     pass
 
 
+class _DummyLogisticRegressionParams(HasMaxIter, HasRegParam):
+    def setMaxIter(self, value):
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value):
+        return self._set(regParam=value)
+
+
 # This is a dummy LogisticRegression used in test for python backend estimator/model
-class DummyLogisticRegression(Classifier, HasMaxIter, HasRegParam, DefaultParamsReadable,
-                              DefaultParamsWritable):
+class DummyLogisticRegression(Classifier, _DummyLogisticRegressionParams,
+                              DefaultParamsReadable, DefaultParamsWritable):
     @keyword_only
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, rawPredictionCol="rawPrediction"):
@@ -189,17 +197,38 @@ class DummyLogisticRegression(Classifier, HasMaxIter, HasRegParam, DefaultParams
         return self._copyValues(DummyLogisticRegressionModel())
 
 
-class DummyLogisticRegressionModel(ClassificationModel, HasMaxIter, HasRegParam,
+class DummyLogisticRegressionModel(ClassificationModel, _DummyLogisticRegressionParams,
                                    DefaultParamsReadable, DefaultParamsWritable):
 
     def __init__(self):
         super(DummyLogisticRegressionModel, self).__init__()
 
-    # This class only used in test. The following methods are not used in tests.
     def _transform(self, dataset):
-        raise NotImplementedError()
+        # A dummy transform method which always predict label 1
+        from pyspark.sql.functions import array, lit
+        from pyspark.ml.functions import array_to_vector
+        rawPredCol = self.getRawPredictionCol()
+        if rawPredCol:
+            dataset = dataset.withColumn(
+                rawPredCol, array_to_vector(array(lit(-100.0), lit(100.0))))
+        predCol = self.getPredictionCol()
+        if predCol:
+            dataset = dataset.withColumn(predCol, lit(1.0))
 
+        return dataset
+
+    @property
     def numClasses(self):
+        return 2
+
+    @property
+    def intercept(self):
+        return 0.0
+
+    # This class only used in test. The following methods/properties are not used in tests.
+
+    @property
+    def coefficients(self):
         raise NotImplementedError()
 
     def predictRaw(self, value):

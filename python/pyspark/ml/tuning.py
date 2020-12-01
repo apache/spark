@@ -321,8 +321,8 @@ class _ValidatorSharedReadWrite:
                 elif isinstance(v, MLWritable):
                     raise RuntimeError(
                         "ValidatorSharedReadWrite.saveImpl does not handle parameters of type: "
-                        "MLWritable that are not Estimaor/Evaluator/Transformer, and if parameter is estimator,"
-                        "it cannot be meta estimator such as Validator or OneVsRest")
+                        "MLWritable that are not Estimaor/Evaluator/Transformer, and if parameter "
+                        "is estimator, it cannot be meta estimator such as Validator or OneVsRest")
                 else:
                     jsonParam['value'] = v
                     jsonParam['isJson'] = True
@@ -459,7 +459,8 @@ class CrossValidatorModelReader(MLReader):
             cvModel.set(cvModel.estimator, estimator)
             cvModel.set(cvModel.estimatorParamMaps, estimatorParamMaps)
             cvModel.set(cvModel.evaluator, evaluator)
-            DefaultParamsReader.getAndSetParams(cvModel, metadata, skipParams=['estimatorParamMaps'])
+            DefaultParamsReader.getAndSetParams(
+                cvModel, metadata, skipParams=['estimatorParamMaps'])
             return cvModel
 
 
@@ -1012,7 +1013,8 @@ class TrainValidationSplitModelReader(MLReader):
             tvsModel.set(tvsModel.estimator, estimator)
             tvsModel.set(tvsModel.estimatorParamMaps, estimatorParamMaps)
             tvsModel.set(tvsModel.evaluator, evaluator)
-            DefaultParamsReader.getAndSetParams(tvsModel, metadata, skipParams=['estimatorParamMaps'])
+            DefaultParamsReader.getAndSetParams(
+                tvsModel, metadata, skipParams=['estimatorParamMaps'])
             return tvsModel
 
 
