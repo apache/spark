@@ -42,9 +42,9 @@ ADD JAR file_name
     User can write ivy URL such as:
 
       ivy://group:module:version
-      ivy://group:module:version?transitive=true
+      ivy://group:module:version?transitive=[true|false]
       ivy://group:module:version?exclude=group:module,group:module
-      ivy://group:module:version?exclude=group:module,group:module&transitive=false
+      ivy://group:module:version?exclude=group:module,group:module&transitive=[true|false]
         
 ### Examples
 

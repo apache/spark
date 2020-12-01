@@ -1860,7 +1860,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    def addLocalJarFile(file: File): Array[String] = {
+    def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1869,15 +1869,15 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
-        Array(env.rpcEnv.fileServer.addJar(file))
+        Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
           logError(s"Failed to add $path to Spark environment", e)
-          Array.empty
+          Nil
       }
     }
 
-    def checkRemoteJarFile(path: String): Array[String] = {
+    def checkRemoteJarFile(path: String): Seq[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
@@ -1890,14 +1890,14 @@ class SparkContext(config: SparkConf) extends Logging {
             throw new IllegalArgumentException(
               s"Directory ${path} is not allowed for addJar")
           }
-          Array(path)
+          Seq(path)
         } catch {
           case NonFatal(e) =>
             logError(s"Failed to add $path to Spark environment", e)
-            Array.empty
+            Nil
         }
       } else {
-        Array(path)
+        Seq(path)
       }
     }
 
@@ -1919,11 +1919,11 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" => Array("file:" + uri.getPath)
+          case "local" => Seq("file:" + uri.getPath)
           case "ivy" =>
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
-            DependencyUtils.resolveMavenDependencies(URI.create(path)).split(",")
+            DependencyUtils.resolveMavenDependencies(URI.create(path))
           case _ => checkRemoteJarFile(path)
         }
       }

@@ -40,43 +40,45 @@ private[spark] object DependencyUtils extends Logging {
     ).map(sys.props.get(_).orNull)
   }
 
-  /**
-   * Parse excluded list in ivy URL. When download ivy URL jar, Spark won't download transitive jar
-   * in excluded list.
-   *
-   * @param queryString Ivy URI query part string.
-   * @return Exclude list which contains grape parameters of exclude.
-   *         Example: Input:  exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
-   *         Output:  [org.mortbay.jetty:jetty, org.eclipse.jetty:jetty-http]
-   */
-  private def parseExcludeList(excludes: Array[String]): String = {
-    excludes.flatMap { excludeString =>
-      val excludes: Array[String] = excludeString.split(",")
-      if (excludes.exists(_.split(":").length != 2)) {
-        throw new URISyntaxException(excludeString,
-          "Invalid exclude string: expected 'org:module,org:module,..', found " + excludeString)
-      }
-      excludes
-    }.mkString(":")
-  }
-
-  /**
-   * Parse transitive parameter in ivy URL, default value is false.
-   *
-   * @param queryString Ivy URI query part string.
-   * @return Exclude list which contains grape parameters of transitive.
-   *         Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
-   *         Output:  true
-   */
-  private def parseTransitive(transitives: Array[String]): Boolean = {
-    if (transitives.isEmpty) {
-      false
+  def parseQueryParams(uriQuery: String): (Boolean, String) = {
+    if (uriQuery == null) {
+      (false, "")
     } else {
-      if (transitives.length > 1) {
-        logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
-          " If there are multiple `transitive` parameter, we will select the last one")
+      val mapTokens = uriQuery.split("&").map(_.split("="))
+      if (mapTokens.exists(_.length != 2)) {
+        throw new URISyntaxException(uriQuery, s"Invalid query string: $uriQuery")
       }
-      transitives.last.toBoolean
+      val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
+      // Parse transitive parameters (e.g., transitive=true) in an ivy URL, default value is false
+      var transitive = false
+      groupedParams.get("transitive").foreach { params =>
+        if (params.length > 1) {
+          logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
+            " If there are multiple `transitive` parameter, we will select the last one")
+        }
+        params.map(_._2).foreach(value => {
+          if (value == "true") {
+            transitive = true
+          } else if (value == "false") {
+            transitive = false
+          }
+        })
+      }
+      // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
+      // in an ivy URL. When download ivy URL jar, Spark won't download transitive jar
+      // in a excluded list.
+      val exclusionList = groupedParams.get("exclude").map { params =>
+        params.flatMap { case (_, excludeString) =>
+          val excludes = excludeString.split(",")
+          if (excludes.exists(_.split(":").length != 2)) {
+            throw new URISyntaxException(excludeString, "Invalid exclude string: " +
+              "expected 'org:module,org:module,..', found " + excludeString)
+          }
+          excludes
+        }.mkString(",")
+      }.getOrElse("")
+
+      (transitive, exclusionList)
     }
   }
 
@@ -95,7 +97,7 @@ private[spark] object DependencyUtils extends Logging {
    *                `exclude=group:module,group:module...`
    * @return Comma separated string list of URIs of downloaded jars
    */
-  def resolveMavenDependencies(uri: URI): String = {
+  def resolveMavenDependencies(uri: URI): Seq[String] = {
     val Seq(_, _, repositories, ivyRepoPath, ivySettingsPath) =
       DependencyUtils.getIvyProperties()
     val authority = uri.getAuthority
@@ -108,25 +110,16 @@ private[spark] object DependencyUtils extends Logging {
         authority, "Invalid url: Expected 'org:module:version', found " + authority)
     }
 
-    val uriQuery = uri.getQuery
-    val queryParams: Array[(String, String)] = if (uriQuery == null) {
-      Array.empty[(String, String)]
-    } else {
-      val mapTokens = uriQuery.split("&").map(_.split("="))
-      if (mapTokens.exists(_.length != 2)) {
-        throw new URISyntaxException(uriQuery, s"Invalid query string: $uriQuery")
-      }
-      mapTokens.map(kv => (kv(0), kv(1)))
-    }
+    val (transitive, exclusionList) = parseQueryParams(uri.getQuery)
 
     resolveMavenDependencies(
-      parseTransitive(queryParams.filter(_._1.equals("transitive")).map(_._2)),
-      parseExcludeList(queryParams.filter(_._1.equals("exclude")).map(_._2)),
+      transitive,
+      exclusionList,
       authority,
       repositories,
       ivyRepoPath,
       Option(ivySettingsPath)
-    )
+    ).split(",")
   }
 
   def resolveMavenDependencies(

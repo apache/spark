@@ -366,10 +366,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("add jar local path with comma") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-    sc.addJar("file://Test,UDTF.jar")
-    assert(!sc.listJars().exists(_.contains("UDTF.jar")))
+  test("add jar when path contains comma") {
+    withTempDir { tmpDir =>
+      val tmpJar = File.createTempFile("Test,UDTF", ".jar", tmpDir)
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(tmpJar.getAbsolutePath)
+      assert(sc.listJars().exists(_.contains("Test,UDTF")))
+
+      val jarPath = "hdfs:///no/path/to/Test,UDTF1.jar"
+      sc.addJar(jarPath)
+      // Add jar failed since file not exists
+      assert(!sc.listJars().exists(_.contains("/no/path/to/Test,UDTF.jar")))
+
+      Seq("http", "https", "ftp").foreach { scheme =>
+        val badURL = s"$scheme://user:pwd/path/Test,UDTF_${scheme}.jar"
+        val e1 = intercept[MalformedURLException] {
+          sc.addJar(badURL)
+        }
+        assert(e1.getMessage.contains(badURL))
+        assert(!sc.listJars().exists(_.contains(s"Test,UDTF_${scheme}.jar")))
+      }
+    }
   }
 
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
@@ -965,18 +982,25 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-33084: Add jar support ivy url") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
-    // default transitive=false, only download specified jar
+    // Default transitive=false, only download specified jar
     sc.addJar("ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
     assert(
       sc.listJars().exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+
+    // Invalid transitive value, will use default value `false`
+    sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=foo")
+    assert(!sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
     // test download ivy URL jar return multiple jars
     sc.addJar("ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
     assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
+    // test multiple transitive params of false, invalid value and finally true
     sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7" +
-      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm" +
+      "&transitive=false&transitive=foo&transitive=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
