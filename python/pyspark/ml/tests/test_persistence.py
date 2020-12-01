@@ -442,7 +442,7 @@ class PersistenceTest(SparkSessionTestCase):
         del metadata['defaultParamMap']
         metadataStr = json.dumps(metadata, separators=[',',  ':'])
         loadedMetadata = reader._parseMetaData(metadataStr, )
-        with self.assertRaisesRegexp(AssertionError, "`defaultParamMap` section not found"):
+        with self.assertRaisesRegex(AssertionError, "`defaultParamMap` section not found"):
             reader.getAndSetParams(lr, loadedMetadata)
 
         # Prior to 2.4.0, metadata doesn't have `defaultParamMap`.

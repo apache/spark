@@ -102,7 +102,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
    *
    * @param prop the flat list of properties to "unflatten" based on prefixes
    * @param regex the regex that the prefix has to comply with
-   * @return an unflatted map, mapping prefix with sub-properties under that prefix
+   * @return an unflattened map, mapping prefix with sub-properties under that prefix
    */
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
     val subProperties = new mutable.HashMap[String, Properties]

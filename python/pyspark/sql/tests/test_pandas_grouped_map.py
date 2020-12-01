@@ -33,7 +33,7 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401
@@ -160,7 +160,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_register_grouped_map_udf(self):
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     ValueError,
                     'f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
@@ -244,7 +244,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     NotImplementedError,
                     'Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
                 pandas_udf(
@@ -256,20 +256,20 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         df = self.data
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(lambda x: x)
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(udf(lambda x: x, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(sum(df.v))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(df.v + 1)
-            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+            with self.assertRaisesRegex(ValueError, 'Invalid function'):
                 df.groupby('id').apply(
                     pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(pandas_udf(lambda x, y: x, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf.*GROUPED_MAP'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf.*GROUPED_MAP'):
                 df.groupby('id').apply(
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
@@ -284,7 +284,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         for unsupported_type in unsupported_types:
             schema = StructType([StructField('id', LongType(), True), unsupported_type])
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
+                with self.assertRaisesRegex(NotImplementedError, common_err_msg):
                     pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
@@ -451,9 +451,9 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
+                with self.assertRaisesRegex(Exception, "KeyError: 'id'"):
                     grouped_df.apply(column_name_typo).collect()
-                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
@@ -482,7 +482,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
                                                  col('temp0.key') == col('temp1.key'))
-        self.assertEquals(res.count(), 5)
+        self.assertEqual(res.count(), 5)
 
     def test_mixed_scalar_udfs_followed_by_groupby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
@@ -494,7 +494,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                               'sum int',
                               PandasUDFType.GROUPED_MAP))
 
-        self.assertEquals(result.collect()[0]['sum'], 165)
+        self.assertEqual(result.collect()[0]['sum'], 165)
 
     def test_grouped_with_empty_partition(self):
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
@@ -604,7 +604,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
         row = df.groupby('COLUMN').applyInPandas(
             my_pandas_udf, schema="column integer, score float").first()
-        self.assertEquals(row.asDict(), Row(column=1, score=0.5).asDict())
+        self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
 
 if __name__ == "__main__":

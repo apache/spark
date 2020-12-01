@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
@@ -82,6 +83,30 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       assert(df.schema === schema)
       assert(resultWithoutInfo === expected)
       result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
+    }
+  }
+
+  test("case sensitivity of partition spec") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val t = s"$catalog.ns.part_table"
+      withTable(t) {
+        sql(s"""
+          |CREATE TABLE $t (price int, qty int, year int, month int)
+          |$defaultUsing
+          |partitioned by (year, month)""".stripMargin)
+        sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+        Seq(
+          true -> "PARTITION(year = 2015, month = 1)",
+          false -> "PARTITION(YEAR = 2015, Month = 1)"
+        ).foreach { case (caseSensitive, partitionSpec) =>
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+            val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+            val information = df.select("information").first().getString(0)
+            assert(information.contains("Partition Values: [year=2015, month=1]"))
+          }
+        }
+      }
     }
   }
 }

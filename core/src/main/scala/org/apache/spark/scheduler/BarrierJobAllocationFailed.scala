@@ -45,10 +45,10 @@ private[spark] object BarrierJobAllocationFailed {
   val ERROR_MESSAGE_RUN_BARRIER_WITH_UNSUPPORTED_RDD_CHAIN_PATTERN =
     "[SPARK-24820][SPARK-24821]: Barrier execution mode does not allow the following pattern of " +
       "RDD chain within a barrier stage:\n1. Ancestor RDDs that have different number of " +
-      "partitions from the resulting RDD (eg. union()/coalesce()/first()/take()/" +
+      "partitions from the resulting RDD (e.g. union()/coalesce()/first()/take()/" +
       "PartitionPruningRDD). A workaround for first()/take() can be barrierRdd.collect().head " +
       "(scala) or barrierRdd.collect()[0] (python).\n" +
-      "2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2))."
+      "2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2))."
 
   // Error message when running a barrier stage with dynamic resource allocation enabled.
   val ERROR_MESSAGE_RUN_BARRIER_WITH_DYN_ALLOCATION =

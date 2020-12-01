@@ -878,12 +878,17 @@ case class ShowTablesCommand(
       //
       // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
       // should have been thrown by the sql parser.
-      val tableIdent = TableIdentifier(tableIdentifierPattern.get, Some(db))
-      val table = catalog.getTableMetadata(tableIdent).identifier
-      val partition = catalog.getPartition(tableIdent, partitionSpec.get)
-      val database = table.database.getOrElse("")
-      val tableName = table.table
-      val isTemp = catalog.isTemporaryTable(table)
+      val table = catalog.getTableMetadata(TableIdentifier(tableIdentifierPattern.get, Some(db)))
+      val tableIdent = table.identifier
+      val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
+        partitionSpec.get,
+        table.partitionColumnNames,
+        tableIdent.quotedString,
+        sparkSession.sessionState.conf.resolver)
+      val partition = catalog.getPartition(tableIdent, normalizedSpec)
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
+      val isTemp = catalog.isTemporaryTable(tableIdent)
       val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }

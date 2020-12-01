@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 /**
@@ -218,6 +218,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveTableValuedFunctions ::
       ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
+      ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
@@ -846,7 +847,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _, isStreaming) =>
         lookupTempView(ident, isStreaming).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
@@ -961,7 +962,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
           if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier, u.options, false)
           .map(v2Relation => i.copy(table = v2Relation))
@@ -1045,7 +1046,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u @ UnresolvedRelation(_, _, false) =>
             lookupRelation(u.multipartIdentifier, u.options, false).getOrElse(u)
@@ -1084,7 +1085,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
             val viewStr = if (v.isTemp) "temp view" else "view"
-            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.'")
+            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.")
           case table => table
         }.getOrElse(u)
 
@@ -1160,7 +1161,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _)
+          if i.query.resolved && i.userSpecifiedCols.isEmpty =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
@@ -3100,10 +3102,55 @@ class Analyzer(override val catalogManager: CatalogManager)
         val projection = TableOutputResolver.resolveOutputColumns(
           v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
         if (projection != v2Write.query) {
-          v2Write.withNewQuery(projection)
+          val cleanedTable = v2Write.table match {
+            case r: DataSourceV2Relation =>
+              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+            case other => other
+          }
+          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
         } else {
           v2Write
         }
+    }
+  }
+
+  object ResolveUserSpecifiedColumns extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case i: InsertIntoStatement if i.table.resolved && i.query.resolved &&
+          i.userSpecifiedCols.nonEmpty =>
+        val resolved = resolveUserSpecifiedColumns(i)
+        val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
+        i.copy(userSpecifiedCols = Nil, query = projection)
+    }
+
+    private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
+      SchemaUtils.checkColumnNameDuplication(
+        i.userSpecifiedCols, "in the column list", resolver)
+
+      i.userSpecifiedCols.map { col =>
+          i.table.resolve(Seq(col), resolver)
+            .getOrElse(i.table.failAnalysis(s"Cannot resolve column name $col"))
+      }
+    }
+
+    private def addColumnListOnQuery(
+        tableOutput: Seq[Attribute],
+        cols: Seq[NamedExpression],
+        query: LogicalPlan): LogicalPlan = {
+      if (cols.size != query.output.size) {
+        query.failAnalysis(
+          s"Cannot write to table due to mismatched user specified column size(${cols.size}) and" +
+            s" data column size(${query.output.size})")
+      }
+      val nameToQueryExpr = cols.zip(query.output).toMap
+      // Static partition columns in the table output should not appear in the column list
+      // they will be handled in another rule ResolveInsertInto
+      val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
+      if (reordered == query.output) {
+        query
+      } else {
+        Project(reordered, query)
+      }
     }
   }
 

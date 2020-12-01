@@ -36,8 +36,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -99,7 +99,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
-    withOrigin(ctx)(StructType(visitColTypeList(ctx.colTypeList)))
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+      StructType(visitColTypeList(ctx.colTypeList)))
+    withOrigin(ctx)(schema)
   }
 
   def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
@@ -243,9 +245,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
   /**
    * Parameters used for writing query to a table:
-   *   (multipartIdentifier, partitionKeys, ifPartitionNotExists).
+   *   (multipartIdentifier, tableColumnList, partitionKeys, ifPartitionNotExists).
    */
-  type InsertTableParams = (Seq[String], Map[String, Option[String]], Boolean)
+  type InsertTableParams = (Seq[String], Seq[String], Map[String, Option[String]], Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -255,8 +257,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   /**
    * Add an
    * {{{
-   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]?
-   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]
+   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
+   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]  [identifierList]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -267,18 +269,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
       case table: InsertIntoTableContext =>
-        val (tableIdent, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
+        val (tableIdent, cols, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
         InsertIntoStatement(
           UnresolvedRelation(tableIdent),
           partition,
+          cols,
           query,
           overwrite = false,
           ifPartitionNotExists)
       case table: InsertOverwriteTableContext =>
-        val (tableIdent, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
+        val (tableIdent, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
         InsertIntoStatement(
           UnresolvedRelation(tableIdent),
           partition,
+          cols,
           query,
           overwrite = true,
           ifPartitionNotExists)
@@ -299,13 +303,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitInsertIntoTable(
       ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
     val tableIdent = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     if (ctx.EXISTS != null) {
       operationNotAllowed("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (tableIdent, partitionKeys, false)
+    (tableIdent, cols, partitionKeys, false)
   }
 
   /**
@@ -315,6 +320,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
     assert(ctx.OVERWRITE() != null)
     val tableIdent = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val cols = Option(ctx.identifierList()).map(visitIdentifierList).getOrElse(Nil)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
     val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
@@ -323,7 +329,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (tableIdent, partitionKeys, ctx.EXISTS() != null)
+    (tableIdent, cols, partitionKeys, ctx.EXISTS() != null)
   }
 
   /**
@@ -2222,7 +2228,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a Spark DataType.
    */
   private def visitSparkDataType(ctx: DataTypeContext): DataType = {
-    HiveStringType.replaceCharType(typedVisit(ctx))
+    CharVarcharUtils.replaceCharVarcharWithString(typedVisit(ctx))
   }
 
   /**
@@ -2297,16 +2303,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       builder.putString("comment", _)
     }
 
-    // Add Hive type string to metadata.
-    val rawDataType = typedVisit[DataType](ctx.dataType)
-    val cleanedDataType = HiveStringType.replaceCharType(rawDataType)
-    if (rawDataType != cleanedDataType) {
-      builder.putString(HIVE_TYPE_STRING, rawDataType.catalogString)
-    }
-
     StructField(
       name = colName.getText,
-      dataType = cleanedDataType,
+      dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())
   }
@@ -3587,37 +3586,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CacheTableStatement]].
-   *
-   * For example:
-   * {{{
-   *   CACHE [LAZY] TABLE multi_part_name
-   *   [OPTIONS tablePropertyList] [[AS] query]
-   * }}}
-   */
-  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    val query = Option(ctx.query).map(plan)
-    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (query.isDefined && tableName.length > 1) {
-      val catalogAndNamespace = tableName.init
-      throw new ParseException("It is not allowed to add catalog/namespace " +
-        s"prefix ${catalogAndNamespace.quoted} to " +
-        "the table name in CACHE TABLE AS SELECT", ctx)
-    }
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTableStatement(tableName, query, ctx.LAZY != null, options)
-  }
-
-  /**
-   * Create an [[UncacheTableStatement]] logical plan.
-   */
-  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier), ctx.EXISTS != null)
-  }
-
-  /**
    * Create a [[TruncateTable]] command.
    *
    * For example:
@@ -3643,9 +3611,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    val table = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    ShowPartitionsStatement(table, partitionKeys)
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    ShowPartitions(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "SHOW PARTITIONS"),
+      partitionKeys)
   }
 
   /**

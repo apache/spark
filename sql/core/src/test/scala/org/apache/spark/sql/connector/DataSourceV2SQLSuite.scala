@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -2018,28 +2019,29 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CACHE TABLE") {
+  test("CACHE/UNCACHE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-
-      testV1CommandSupportingTempView("CACHE TABLE", t)
-
-      val e = intercept[AnalysisException] {
-        sql(s"CACHE LAZY TABLE $t")
+      def isCached(table: String): Boolean = {
+        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
       }
-      assert(e.message.contains("CACHE TABLE is only supported with temp views or v1 tables"))
-    }
-  }
 
-  test("UNCACHE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
+      sql(s"CACHE TABLE $t")
+      assert(isCached(t))
 
-      testV1CommandSupportingTempView("UNCACHE TABLE", t)
-      testV1CommandSupportingTempView("UNCACHE TABLE", s"IF EXISTS $t")
+      sql(s"UNCACHE TABLE $t")
+      assert(!isCached(t))
     }
+
+    // Test a scenario where a table does not exist.
+    val e = intercept[AnalysisException] {
+      sql(s"UNCACHE TABLE $t")
+    }
+    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+
+    // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
+    sql(s"UNCACHE TABLE IF EXISTS $t")
   }
 
   test("SHOW COLUMNS") {
@@ -2282,7 +2284,6 @@ class DataSourceV2SQLSuite
         verify(s"CACHE TABLE $t")
         verify(s"UNCACHE TABLE $t")
         verify(s"TRUNCATE TABLE $t")
-        verify(s"SHOW PARTITIONS $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
@@ -2555,11 +2556,15 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(
+      sqlCommand: String,
+      sqlParams: String,
+      sqlCommandInMessage: Option[String] = None): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
+    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
+    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {

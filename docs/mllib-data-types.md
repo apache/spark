@@ -643,7 +643,7 @@ entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), Matrix
 #   - or using (long, long, float) tuples:
 entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 
-# Create an CoordinateMatrix from an RDD of MatrixEntries.
+# Create a CoordinateMatrix from an RDD of MatrixEntries.
 mat = CoordinateMatrix(entries)
 
 # Get its size.

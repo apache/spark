@@ -525,7 +525,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
                             evaluator=evaluator,
                             numFolds=2,
                             foldCol="fold")
-        with self.assertRaisesRegexp(Exception, "Fold number must be in range"):
+        with self.assertRaisesRegex(Exception, "Fold number must be in range"):
             cv.fit(dataset_with_folds)
 
         cv = CrossValidator(estimator=lr,
@@ -533,7 +533,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
                             evaluator=evaluator,
                             numFolds=4,
                             foldCol="fold")
-        with self.assertRaisesRegexp(Exception, "The validation data at fold 3 is empty"):
+        with self.assertRaisesRegex(Exception, "The validation data at fold 3 is empty"):
             cv.fit(dataset_with_folds)
 
 

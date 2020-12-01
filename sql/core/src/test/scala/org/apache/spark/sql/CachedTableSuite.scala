@@ -25,6 +25,7 @@ import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
@@ -137,6 +138,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql("CACHE TABLE tempTable AS SELECT key FROM testData")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
       uncacheTable("tempTable")
+    }
+  }
+
+  test("cache table as select - existing temp view") {
+    withTempView("tempView") {
+      sql("CREATE TEMPORARY VIEW tempView as SELECT 1")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CACHE TABLE tempView AS SELECT 1")
+      }
+      assert(e.getMessage.contains("Temporary view 'tempView' already exists"))
     }
   }
 

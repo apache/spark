@@ -216,7 +216,7 @@ private[spark] class TaskSetManager(
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
    * the set of currently available executors.  This is updated as executors are added and removed.
-   * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
+   * This allows a performance optimization, of skipping levels that aren't relevant (e.g., skip
    * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
    */
   private[scheduler] var myLocalityLevels = computeValidLocalityLevels()
