@@ -1061,19 +1061,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
         Seq(
-          (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null,
-            "Invalid value for Year"),
-          (makeTimestampExpr.copy(month = Literal(13)), null, "Invalid value for Month"),
-          (makeTimestampExpr.copy(day = Literal(32)), null, "Invalid value for Day"),
-          (makeTimestampExpr.copy(hour = Literal(25)), null, "Invalid value for Hour"),
-          (makeTimestampExpr.copy(min = Literal(65)), null, "Invalid value for Min"),
+          (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), "Invalid value for Year"),
+          (makeTimestampExpr.copy(month = Literal(13)), "Invalid value for Month"),
+          (makeTimestampExpr.copy(day = Literal(32)), "Invalid value for Day"),
+          (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
+          (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
           (makeTimestampExpr.copy(sec = Literal(Decimal(
-            BigDecimal(70.0), 8, 6))), null, "Invalid value for Second")
+            BigDecimal(70.0), 8, 6))), "Invalid value for Second")
         ).foreach { entry =>
           if (ansi) {
-            checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._3)
+            checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
           } else {
-            checkEvaluation(entry._1, entry._2)
+            checkEvaluation(entry._1, null)
           }
         }
 
