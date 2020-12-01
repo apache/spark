@@ -2012,13 +2012,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
-        
-      case q: LogicalPlan =>
-        q transformExpressions {
-          case gs: GroupingSet =>
-            gs.withNewChildren(gs.children.map(_.transformDown { case e => resolveFunction(e) }))
-          case e => resolveFunction(e)
-        }
+
+      case q: LogicalPlan => q transformExpressions {
+        case gs: GroupingSet =>
+          gs.withNewChildren(gs.children.map(_.transformDown { case e => resolveFunction(e) }))
+        case e => resolveFunction(e)
+      }
     }
   }
 
