@@ -1929,14 +1929,16 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        keys.foreach { key =>
-          if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
-            logInfo(s"Added JAR $path at $key with timestamp $timestamp")
-            postEnvironmentUpdate()
-          } else {
-            logWarning(s"The jar $path has been added already. Overwriting of added jars " +
-              "is not supported in the current version.")
-          }
+        val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
+        if (added.nonEmpty) {
+          logInfo(s"Added jar or dependency jars of ivy URI with $path" +
+            s" at ${added.mkString(",")} with timestamp $timestamp")
+          postEnvironmentUpdate()
+        }
+        if (existed.nonEmpty) {
+          logWarning(s"The jar or dependency jars of ivy URI with $path at" +
+            s" ${existed.mkString(",")} has been added already." +
+            s" Overwriting of added jars is not supported in the current version.")
         }
       }
     }
