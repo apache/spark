@@ -570,6 +570,15 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
+  test("SPARK-33617: spark.sql.files.minPartitionNum effective for LocalTableScan") {
+    Seq(1, 4).foreach { minPartitionNum =>
+      withSQLConf(SQLConf.FILES_MIN_PARTITION_NUM.key -> minPartitionNum.toString) {
+        val df = spark.sql("SELECT * FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8)")
+        assert(df.rdd.partitions.length === minPartitionNum)
+      }
+    }
+  }
+
   test("SPARK-32352: Partially push down support data filter if it mixed in partition filters") {
     val table =
       createTable(
