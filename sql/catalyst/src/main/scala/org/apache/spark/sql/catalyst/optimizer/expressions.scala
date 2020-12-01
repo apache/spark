@@ -56,8 +56,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
       // object and running eval unnecessarily.
       case l: Literal => l
 
-      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) => Literal(c.children.length)
-      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) => Literal(c.children.length / 2)
+      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length)
+      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length / 2)
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
