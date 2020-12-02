@@ -998,11 +998,33 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-33084: Add jar support ivy url -- transitive=true will download dependency jars") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-    assert(sc.listJars().exists(_.contains("org.slf4j_slf4j-api-1.7.10.jar")))
-    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+    val logAppender = new LogAppender("transitive=true will download dependency jars")
+    withLogAppender(logAppender) {
+      sc = new SparkContext(
+        new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+      val dependencyJars = Array(
+        "org.apache.hive_hive-storage-api-2.7.0.jar",
+        "org.slf4j_slf4j-api-1.7.10.jar",
+        "commons-lang_commons-lang-2.6.jar")
+
+      dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
+
+      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
+        "Added dependency jars of ivy uri" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+
+      // test dependency jars exist
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
+        "The dependency jars of ivy URI with" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
+        "The dependency jars of ivy URI with" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+        .head.getRenderedMessage
+      dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+    }
   }
 
   test("SPARK-33084: Add jar support ivy url -- test exclude param when transitive=true") {
@@ -1023,9 +1045,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-33084: Add jar support ivy url -- test invalid param") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?invalidParam=foo")
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    val logAppender = new LogAppender("test log when have invalid parameter")
+    withLogAppender(logAppender) {
+      sc = new SparkContext(
+        new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
+        "invalidParam1=foo&invalidParam2=boo")
+      assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+      assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
+        "Invalid parameters `invalidParam1,invalidParam2` found in URI query" +
+          " `invalidParam1=foo&invalidParam2=boo`")))
+    }
   }
 
   test("SPARK-33084: Add jar support ivy url -- test multiple transitive params") {

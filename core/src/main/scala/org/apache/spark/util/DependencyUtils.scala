@@ -103,11 +103,12 @@ private[spark] object DependencyUtils extends Logging {
         }.mkString(",")
       }.getOrElse("")
 
-      val invalidParams =
-        groupedParams.filter(entry => Seq("transitive", "exclude").contains(entry._1)).keys
+      val invalidParams = groupedParams
+        .filter(entry => !Seq("transitive", "exclude").contains(entry._1))
+        .keys.toArray.sorted
       if (invalidParams.nonEmpty) {
         logWarning(
-          s"Invalid parameters ${invalidParams.mkString(",")} found in URI query $uriQuery.")
+          s"Invalid parameters `${invalidParams.mkString(",")}` found in URI query `$uriQuery`.")
       }
 
       groupedParams.foreach { case (key: String, values: Array[(String, String)]) =>
