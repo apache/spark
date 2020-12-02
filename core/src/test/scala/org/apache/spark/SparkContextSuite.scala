@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{MalformedURLException, URI, URISyntaxException}
+import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
@@ -380,10 +380,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
       Seq("http", "https", "ftp").foreach { scheme =>
         val badURL = s"$scheme://user:pwd/path/Test,UDTF_${scheme}.jar"
-        val e1 = intercept[MalformedURLException] {
+        val e = intercept[MalformedURLException] {
           sc.addJar(badURL)
         }
-        assert(e1.getMessage.contains(badURL))
+        assert(e.getMessage.contains(badURL))
         assert(!sc.listJars().exists(_.contains(s"Test,UDTF_${scheme}.jar")))
       }
     }
@@ -1017,8 +1017,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-33084: Add jar support ivy url -- test different version") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0")
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.6.0")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.6.0.jar")))
   }
 
@@ -1030,11 +1030,13 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-33084: Add jar support ivy url -- test multiple transitive params") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    // transitive=invalidValue will win and treated as false
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
       "transitive=true&transitive=false&transitive=invalidValue")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 
+    // transitive=true will win
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
       "transitive=false&transitive=invalidValue&transitive=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
@@ -1063,7 +1065,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-
   test("SPARK-33084: Add jar support ivy url -- test invalid ivy URI") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     val e1 = intercept[IllegalArgumentException] {
@@ -1071,23 +1072,23 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage
     assert(e1.contains("Expected authority at index 6: ivy://"))
 
-    val e2 = intercept[URISyntaxException] {
+    val e2 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib")
     }.getMessage
     assert(e2.contains("Invalid url: Expected 'org:module:version'," +
       " found org.apache.hive:hive-contrib"))
 
-    val e3 = intercept[URISyntaxException] {
+    val e3 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
     }.getMessage
     assert(e3.contains("Invalid query string: foo="))
 
-    val e4 = intercept[URISyntaxException] {
+    val e4 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
     }.getMessage
     assert(e4.contains("Invalid query string: bar=&baz=foo"))
 
-    val e5 = intercept[URISyntaxException] {
+    val e5 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
     }.getMessage
     assert(e5.contains(
