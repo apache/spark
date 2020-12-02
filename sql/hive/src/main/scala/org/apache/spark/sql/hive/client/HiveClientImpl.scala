@@ -617,7 +617,7 @@ private[hive] class HiveClientImpl(
         // The provided spec here can be a partial spec, i.e. it will match all partitions
         // whose specs are supersets of this partial spec. E.g. If a table has partitions
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-        val parts = client.getPartitions(hiveTable, s.asJava).asScala
+        val parts = client.getPartitionsByNames(hiveTable, s.asJava).asScala
         if (parts.isEmpty && !ignoreIfNotExists) {
           throw new AnalysisException(
             s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
@@ -726,7 +726,8 @@ private[hive] class HiveClientImpl(
         assert(s.values.forall(_.nonEmpty), s"partition spec '$s' is invalid")
         s
     }
-    val parts = client.getPartitions(hiveTable, partSpec.asJava).asScala.map(fromHivePartition)
+    val parts = client.getPartitionsByNames(hiveTable, partSpec.asJava).asScala
+      .map(fromHivePartition)
     HiveCatalogMetrics.incrementFetchedPartitions(parts.length)
     parts.toSeq
   }
