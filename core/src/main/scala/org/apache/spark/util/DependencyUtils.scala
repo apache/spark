@@ -48,7 +48,7 @@ private[spark] object DependencyUtils extends Logging {
     IvyProperties(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath)
   }
 
-  private def checkInvalidQueryString(tokens: Array[String]): Boolean = {
+  private def isInvalidQueryString(tokens: Array[String]): Boolean = {
     tokens.length != 2 || StringUtils.isBlank(tokens(0)) || StringUtils.isBlank(tokens(1))
   }
 
@@ -75,7 +75,7 @@ private[spark] object DependencyUtils extends Logging {
       (false, "")
     } else {
       val mapTokens = uriQuery.split("&").map(_.split("="))
-      if (mapTokens.exists(checkInvalidQueryString)) {
+      if (mapTokens.exists(isInvalidQueryString)) {
         throw new IllegalArgumentException(
           s"Invalid query string in ivy uri ${uri.toString}: $uriQuery")
       }
@@ -98,7 +98,7 @@ private[spark] object DependencyUtils extends Logging {
       val exclusionList = groupedParams.get("exclude").map { params =>
         params.map(_._2).flatMap { excludeString =>
           val excludes = excludeString.split(",")
-          if (excludes.map(_.split(":")).exists(checkInvalidQueryString)) {
+          if (excludes.map(_.split(":")).exists(isInvalidQueryString)) {
             throw new IllegalArgumentException(
               s"Invalid exclude string in ivy uri ${uri.toString}:" +
                 s" expected 'org:module,org:module,..', found " + excludeString)
