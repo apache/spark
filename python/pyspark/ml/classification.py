@@ -3005,7 +3005,7 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
             return OneVsRestWriter(self)
 
 
-class OneVsRestSharedReadWrite:
+class _OneVsRestSharedReadWrite:
     @staticmethod
     def saveImpl(instance, sc, path, extraMetadata=None):
         skipParams = ['classifier']
@@ -3021,6 +3021,7 @@ class OneVsRestSharedReadWrite:
         return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
 
 
+@inherit_doc
 class OneVsRestReader(MLReader):
     def __init__(self, cls):
         super(OneVsRestReader, self).__init__()
@@ -3031,19 +3032,20 @@ class OneVsRestReader(MLReader):
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)
         else:
-            classifier = OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
             ova = OneVsRest(classifier=classifier)._resetUid(metadata['uid'])
             DefaultParamsReader.getAndSetParams(ova, metadata, skipParams=['classifier'])
             return ova
 
 
+@inherit_doc
 class OneVsRestWriter(MLWriter):
     def __init__(self, instance):
         super(OneVsRestWriter, self).__init__()
         self.instance = instance
 
     def saveImpl(self, path):
-        OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
+        _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
 
 
 class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
@@ -3228,6 +3230,7 @@ class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
             return OneVsRestModelWriter(self)
 
 
+@inherit_doc
 class OneVsRestModelReader(MLReader):
     def __init__(self, cls):
         super(OneVsRestModelReader, self).__init__()
@@ -3238,7 +3241,7 @@ class OneVsRestModelReader(MLReader):
         if not DefaultParamsReader.isPythonParamsInstance(metadata):
             return JavaMLReader(self.cls).load(path)
         else:
-            classifier = OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
+            classifier = _OneVsRestSharedReadWrite.loadClassifier(path, self.sc)
             numClasses = metadata['numClasses']
             subModels = [None] * numClasses
             for idx in range(numClasses):
@@ -3250,6 +3253,7 @@ class OneVsRestModelReader(MLReader):
             return ovaModel
 
 
+@inherit_doc
 class OneVsRestModelWriter(MLWriter):
     def __init__(self, instance):
         super(OneVsRestModelWriter, self).__init__()
@@ -3259,7 +3263,7 @@ class OneVsRestModelWriter(MLWriter):
         instance = self.instance
         numClasses = len(instance.models)
         extraMetadata = {'numClasses': numClasses}
-        OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
+        _OneVsRestSharedReadWrite.saveImpl(instance, self.sc, path, extraMetadata=extraMetadata)
         for idx in range(numClasses):
             subModelPath = os.path.join(path, f'model_{idx}')
             instance.models[idx].save(subModelPath)

@@ -303,7 +303,6 @@ class _ValidatorSharedReadWrite:
 
     @staticmethod
     def saveImpl(path, instance, sc, extraMetadata=None):
-        from pyspark.ml.classification import OneVsRest
         numParamsNotJson = 0
         jsonEstimatorParamMaps = []
         for paramMap in instance.getEstimatorParamMaps():
