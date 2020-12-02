@@ -291,14 +291,9 @@ class _ValidatorSharedReadWrite:
 
     @staticmethod
     def is_java_convertible(instance):
-        allStages = MetaAlgorithmReadWrite.getAllNestedStages(instance.getEstimator())
+        allNestedStages = MetaAlgorithmReadWrite.getAllNestedStages(instance.getEstimator())
         evaluator_convertible = isinstance(instance.getEvaluator(), JavaParams)
-
-        def est_convertible(est):
-            return isinstance(est, JavaEstimator) or \
-                MetaAlgorithmReadWrite.isMetaEstimator(est)
-
-        estimator_convertible = all(map(est_convertible, allStages))
+        estimator_convertible = all(map(lambda stage: hasattr(stage, '_to_java'), allNestedStages))
         return estimator_convertible and evaluator_convertible
 
     @staticmethod
@@ -366,6 +361,25 @@ class _ValidatorSharedReadWrite:
             estimatorParamMaps.append(paramMap)
 
         return metadata, estimator, evaluator, estimatorParamMaps
+
+    @staticmethod
+    def validateParams(instance):
+        estiamtor = instance.getEstimator()
+        evaluator = instance.getEvaluator()
+        uidMap = MetaAlgorithmReadWrite.getUidMap(estiamtor)
+
+        for elem in [evaluator] + list(uidMap.values()):
+            if not isinstance(elem, MLWritable):
+                raise ValueError(f'Validator write will fail because it contains {elem.uid} '
+                                 f'which is not writable.')
+
+        estimatorParamMaps = instance.getEstimatorParamMaps()
+        paramErr = 'Validator save requires all Params in estimatorParamMaps to apply to ' \
+                   f'its Estimator, An extraneous Param was found: '
+        for paramMap in estimatorParamMaps:
+            for param in paramMap:
+                if param.parent not in uidMap:
+                    raise ValueError(paramErr + repr(param))
 
     @staticmethod
     def getValidatorModelWriterPersistSubModelsParam(writer):
@@ -756,6 +770,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return CrossValidatorWriter(self)
@@ -867,6 +882,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return CrossValidatorModelWriter(self)
@@ -1247,6 +1263,7 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return TrainValidationSplitWriter(self)
@@ -1353,6 +1370,7 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
+        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return TrainValidationSplitModelWriter(self)

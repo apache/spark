@@ -2999,6 +2999,7 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
         return OneVsRestReader(cls)
 
     def write(self):
+        _OneVsRestSharedReadWrite.validateParams(self)
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)
         else:
@@ -3019,6 +3020,17 @@ class _OneVsRestSharedReadWrite:
     def loadClassifier(path, sc):
         classifierPath = os.path.join(path, 'classifier')
         return DefaultParamsReader.loadParamsInstance(classifierPath, sc)
+
+    @staticmethod
+    def validateParams(instance):
+        elems_to_check = [instance.getClassifier()]
+        if isinstance(instance, OneVsRestModel):
+            elems_to_check.extend(instance.models)
+
+        for elem in elems_to_check:
+            if not isinstance(elem, MLWritable):
+                raise ValueError(f'OneVsRest write will fail because it contains {elem.uid} '
+                                 f'which is not writable.')
 
 
 @inherit_doc
@@ -3224,6 +3236,7 @@ class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
         return OneVsRestModelReader(cls)
 
     def write(self):
+        _OneVsRestSharedReadWrite.validateParams(self)
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)
         else:
