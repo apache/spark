@@ -143,6 +143,8 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
  *                  fully qualified way. Consider the examples tableName.name, subQueryAlias.name.
  *                  tableName and subQueryAlias are possible qualifiers.
  * @param explicitMetadata Explicit metadata associated with this alias that overwrites child's.
+ * @param deniedMetadataKeys Keys of metadata entries that are supposed to be removed when
+ *                           inheriting the metadata from the child.
  */
 case class Alias(child: Expression, name: String)(
     val exprId: ExprId = NamedExpression.newExprId,

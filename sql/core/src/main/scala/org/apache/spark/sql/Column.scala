@@ -1164,6 +1164,10 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
+    // SPARK-33536: The Alias shouldn't be considered as a column reference after
+    // converting to an attribute. These denied metadata keys help the Alias to
+    // clean up the column reference related metadata. So it won't be caught as a
+    // column reference in DetectAmbiguousSelfJoin.
     Alias(expr, alias)(deniedMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
   }
 
