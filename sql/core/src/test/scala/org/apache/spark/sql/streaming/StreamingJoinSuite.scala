@@ -76,7 +76,7 @@ abstract class StreamingJoinSuite
     (input1, input2, select)
   }
 
-  protected def setupJoinWithLeftCondition(joinType: String)
+  protected def setupWindowedJoinWithLeftCondition(joinType: String)
     : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
 
     val (leftInput, df1) = setupStream("left", 2)
@@ -106,7 +106,7 @@ abstract class StreamingJoinSuite
     (leftInput, rightInput, select)
   }
 
-  protected def setupJoinWithRightCondition(joinType: String)
+  protected def setupWindowedJoinWithRightCondition(joinType: String)
     : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
 
     val (leftInput, df1) = setupStream("left", 2)
@@ -642,7 +642,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   import org.apache.spark.sql.functions._
 
   test("left outer early state exclusion on left") {
-    val (leftInput, rightInput, joined) = setupJoinWithLeftCondition("left_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
@@ -659,7 +659,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("left outer early state exclusion on right") {
-    val (leftInput, rightInput, joined) = setupJoinWithRightCondition("left_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
@@ -676,7 +676,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("right outer early state exclusion on left") {
-    val (leftInput, rightInput, joined) = setupJoinWithLeftCondition("right_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("right_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
@@ -693,7 +693,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("right outer early state exclusion on right") {
-    val (leftInput, rightInput, joined) = setupJoinWithRightCondition("right_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("right_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
@@ -1123,7 +1123,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("full outer early state exclusion on left") {
-    val (leftInput, rightInput, joined) = setupJoinWithLeftCondition("full_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("full_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
@@ -1156,7 +1156,7 @@ class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("full outer early state exclusion on right") {
-    val (leftInput, rightInput, joined) = setupJoinWithRightCondition("full_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("full_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
@@ -1330,7 +1330,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
   }
 
   test("left semi early state exclusion on left") {
-    val (leftInput, rightInput, joined) = setupJoinWithLeftCondition("left_semi")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("left_semi")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
@@ -1362,7 +1362,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
   }
 
   test("left semi early state exclusion on right") {
-    val (leftInput, rightInput, joined) = setupJoinWithRightCondition("left_semi")
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("left_semi")
 
     testStream(joined)(
       MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
