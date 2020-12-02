@@ -534,14 +534,14 @@ abstract class TimestampToLongBase extends UnaryExpression
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Any = {
-    input.asInstanceOf[Number].longValue() / scaleFactor
+    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (scaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"$c / ${scaleFactor}L")
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
     }
   }
 }

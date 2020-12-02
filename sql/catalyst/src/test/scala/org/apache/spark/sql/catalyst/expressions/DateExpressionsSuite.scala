@@ -1205,11 +1205,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(UnixSeconds(timestamp), 1L)
     timestamp = Literal(new Timestamp(-1000L))
     checkEvaluation(UnixSeconds(timestamp), -1L)
+    // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+    timestamp = Literal(new Timestamp(-1L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
     // Truncates higher levels of precision
     timestamp = Literal(new Timestamp(1999L))
     checkEvaluation(UnixSeconds(timestamp), 1L)
-    timestamp = Literal(new Timestamp(-1001L))
-    checkEvaluation(UnixSeconds(timestamp), -1L)
   }
 
   test("UNIX_MILLIS") {
