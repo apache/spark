@@ -524,6 +524,79 @@ case class MicrosToTimestamp(child: Expression)
   override def prettyName: String = "timestamp_micros"
 }
 
+abstract class TimestampToLongBase extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
+
+  protected def scaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = LongType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (scaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixSeconds(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "unix_seconds"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1000
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixMillis(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = MICROS_PER_MILLIS
+
+  override def prettyName: String = "unix_millis"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1000000
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixMicros(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = 1L
+
+  override def prettyName: String = "unix_micros"
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   examples = """
