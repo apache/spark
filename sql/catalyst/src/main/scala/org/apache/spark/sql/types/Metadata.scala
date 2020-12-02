@@ -289,6 +289,11 @@ class MetadataBuilder {
     this
   }
 
+  def remove(key: String): this.type = {
+    map.remove(key)
+    this
+  }
+
   def remove(keys: String*): this.type = {
     keys.foreach(map.remove)
     this
