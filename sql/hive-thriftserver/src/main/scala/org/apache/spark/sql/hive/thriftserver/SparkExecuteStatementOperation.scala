@@ -69,13 +69,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   private var result: DataFrame = _
 
-  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
-  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
-  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
-  private var resultList: Option[Array[SparkRow]] = _
-  private var previousFetchEndOffset: Long = 0
-  private var previousFetchStartOffset: Long = 0
-  private var iter: Iterator[SparkRow] = _
+  private var iter: IteratorWithFetch[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
   private lazy val resultSchema: TableSchema = {
@@ -149,42 +143,11 @@ private[hive] class SparkExecuteStatementOperation(
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter when FETCH_FIRST or FETCH_PRIOR
-    if ((order.equals(FetchOrientation.FETCH_FIRST) ||
-        order.equals(FetchOrientation.FETCH_PRIOR)) && previousFetchEndOffset != 0) {
-      // Reset the iterator to the beginning of the query.
-      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
-        resultList = None
-        result.toLocalIterator.asScala
-      } else {
-        if (resultList.isEmpty) {
-          resultList = Some(result.collect())
-        }
-        resultList.get.iterator
-      }
-    }
-
-    var resultOffset = {
-      if (order.equals(FetchOrientation.FETCH_FIRST)) {
-        logInfo(s"FETCH_FIRST request with $statementId. Resetting to resultOffset=0")
-        0
-      } else if (order.equals(FetchOrientation.FETCH_PRIOR)) {
-        // TODO: FETCH_PRIOR should be handled more efficiently than rewinding to beginning and
-        // reiterating.
-        val targetOffset = math.max(previousFetchStartOffset - maxRowsL, 0)
-        logInfo(s"FETCH_PRIOR request with $statementId. Resetting to resultOffset=$targetOffset")
-        var off = 0
-        while (off < targetOffset && iter.hasNext) {
-          iter.next()
-          off += 1
-        }
-        off
-      } else { // FETCH_NEXT
-        previousFetchEndOffset
-      }
-    }
-
-    resultRowSet.setStartOffset(resultOffset)
-    previousFetchStartOffset = resultOffset
+    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.fetchFirst()
+    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.fetchPrior(maxRowsL)
+    else iter.fetchNext()
+    resultRowSet.setStartOffset(iter.getPosition)
+    val fetchStartOffset = iter.getPosition
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -206,11 +169,10 @@ private[hive] class SparkExecuteStatementOperation(
         }
         resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
-        resultOffset += 1
       }
-      previousFetchEndOffset = resultOffset
+      val fetchEndOffset = iter.getPosition
       log.info(s"Returning result set with ${curRow} rows from offsets " +
-        s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
+        s"[$fetchStartOffset, $fetchEndOffset) with $statementId")
       resultRowSet
     }
   }
@@ -326,14 +288,12 @@ private[hive] class SparkExecuteStatementOperation(
       logDebug(result.queryExecution.toString())
       HiveThriftServer2.eventManager.onStatementParsed(statementId,
         result.queryExecution.toString())
-      iter = {
-        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
-          resultList = None
-          result.toLocalIterator.asScala
-        } else {
-          resultList = Some(result.collect())
-          resultList.get.iterator
-        }
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+        new IterableIteratorWithFetch[SparkRow](new Iterable[SparkRow] {
+          override def iterator: Iterator[SparkRow] = result.toLocalIterator.asScala
+        })
+      } else {
+        new ArrayIteratorWithFetch[SparkRow](result.collect())
       }
       dataTypes = result.schema.fields.map(_.dataType)
     } catch {
@@ -419,5 +379,78 @@ object SparkExecuteStatementOperation {
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
     }
     new TableSchema(schema.asJava)
+  }
+}
+
+private[hive] sealed trait IteratorWithFetch[A] extends Iterator[A] {
+  def fetchNext(): Unit
+
+  def fetchPrior(size: Long): Unit
+
+  def fetchFirst(): Unit
+
+  def getPosition: Long
+}
+
+private[hive] class ArrayIteratorWithFetch[A](src: Array[A]) extends IteratorWithFetch[A] {
+  private var fetchStart: Long = 0
+
+  private var position: Long = 0
+
+  override def fetchNext(): Unit = fetchStart = position
+
+  override def fetchPrior(size: Long): Unit = {
+    position = (fetchStart - size max 0) min src.length
+    fetchStart = position
+  }
+
+  override def fetchFirst(): Unit = {
+    fetchStart = 0
+    position = 0
+  }
+
+  override def getPosition: Long = position
+
+  override def hasNext: Boolean = position < src.length
+
+  override def next(): A = {
+    position += 1
+    src(position.toInt - 1)
+  }
+}
+
+private[hive] class IterableIteratorWithFetch[A](
+    iterable: Iterable[A]
+) extends IteratorWithFetch[A] {
+  private var iter: Iterator[A] = iterable.iterator
+
+  private var fetchStart: Long = 0
+
+  private var position: Long = 0
+
+  override def fetchNext(): Unit = fetchStart = position
+
+  override def fetchPrior(size: Long): Unit = {
+    val newPos = fetchStart - size max 0
+    if (newPos < position) fetchFirst()
+    while (position < newPos && hasNext) next()
+    fetchStart = position
+  }
+
+  override def fetchFirst(): Unit = {
+    if (position != 0) {
+      iter = iterable.iterator
+      position = 0
+      fetchStart = 0
+    }
+  }
+
+  override def getPosition: Long = position
+
+  override def hasNext: Boolean = iter.hasNext
+
+  override def next(): A = {
+    position += 1
+    iter.next()
   }
 }
