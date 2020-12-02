@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -160,9 +159,19 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       expectedErrMsg: String): Unit = {
 
     def checkException(eval: => Unit, testMode: String): Unit = {
+      val modes = if (testMode == "non-codegen mode") {
+        Seq(CodegenObjectFactoryMode.NO_CODEGEN)
+      } else {
+        Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+      }
+
       withClue(s"($testMode)") {
         val errMsg = intercept[T] {
-          eval
+          for (fallbackMode <- modes) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+              eval
+            }
+          }
         }.getMessage
         if (errMsg == null) {
           if (expectedErrMsg != null) {
@@ -177,9 +186,9 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     // Make it as method to obtain fresh expression everytime.
     def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
-    checkException(checkEvaluationWithMutableProjection(expr, inputRow), "codegen mode")
+    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkException(checkEvaluationWithUnsafeProjection(expr, inputRow), "unsafe mode")
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
   }
 
@@ -195,17 +204,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   protected def generateProject(
       generator: => Projection,
       expression: Expression): Projection = {
-    try {
-      generator
-    } catch {
-      case e: Throwable =>
-        fail(
-          s"""
-            |Code generation of $expression failed:
-            |$e
-            |${Utils.exceptionString(e)}
-          """.stripMargin)
-    }
+    generator
   }
 
   protected def checkEvaluationWithoutCodegen(
