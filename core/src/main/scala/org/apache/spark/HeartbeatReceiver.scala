@@ -80,9 +80,9 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new HashMap[String, Long]
 
-  private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
-    .getOrElse(sc.conf.getTimeAsMs(Network.NETWORK_TIMEOUT.key,
-      Network.NETWORK_TIMEOUT.defaultValueString))
+  private val executorTimeoutMs = sc.conf.get(
+    config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT
+  ).getOrElse(Utils.timeStringAsMs(s"${sc.conf.get(Network.NETWORK_TIMEOUT)}s"))
 
   private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
 
