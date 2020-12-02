@@ -36,7 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, MergeStatus, OutputStatus}
+import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util._
@@ -396,7 +396,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
-      logInfo(s"Asked to send map output locations for shuffle ${shuffleId} to ${hostPort}")
+      logInfo(s"Asked to send map output locations for shuffle $shuffleId to $hostPort")
       tracker.post(GetOutputStatusesMessage(shuffleId, fetchMapOutput = true, context))
 
     case GetMergeResultStatuses(shuffleId: Int) =>
@@ -729,7 +729,8 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)
   }
 
-  def getNumAvailableMergeResults(shuffleId: Int): Int = {
+  /** VisibleForTest. Invoked in test only. */
+  private[spark] def getNumAvailableMergeResults(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMergeResults).getOrElse(0)
   }
 
@@ -1171,7 +1172,7 @@ private[spark] object MapOutputTracker extends Logging {
   // Serialize an array of map/merge output locations into an efficient byte format so that we can
   // send it to reduce tasks. We do this by compressing the serialized bytes using Zstd. They will
   // generally be pretty compressible because many outputs will be on the same hostname.
-  def serializeOutputStatuses[T <: OutputStatus](
+  def serializeOutputStatuses[T <: ShuffleOutputStatus](
       statuses: Array[T],
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
@@ -1216,7 +1217,7 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   // Opposite of serializeOutputStatuses.
-  def deserializeOutputStatuses[T <: OutputStatus](
+  def deserializeOutputStatuses[T <: ShuffleOutputStatus](
       bytes: Array[Byte], conf: SparkConf): Array[T] = {
     assert (bytes.length > 0)
 
@@ -1293,7 +1294,7 @@ private[spark] object MapOutputTracker extends Logging {
       val numMaps = mapStatuses.length
       mergeStatuses.get.zipWithIndex.slice(startPartition, endPartition).foreach {
         case (mergeStatus, partId) =>
-          val remainingMapStatuses = if (mergeStatus != null) {
+          val remainingMapStatuses = if (mergeStatus != null && mergeStatus.totalSize > 0) {
             // If MergeStatus is available for the given partition, add location of the
             // pre-merged shuffle partition for this partition ID. Here we create a
             // ShuffleBlockId with mapId being -1 to indicate this is a merged shuffle block.
@@ -1369,7 +1370,7 @@ private[spark] object MapOutputTracker extends Logging {
     splitsByAddress.mapValues(_.toSeq).iterator
   }
 
-  def validateStatus(status: OutputStatus, shuffleId: Int, partition: Int) : Unit = {
+  def validateStatus(status: ShuffleOutputStatus, shuffleId: Int, partition: Int) : Unit = {
     if (status == null) {
       val errorMessage = s"Missing an output location for shuffle $shuffleId partition $partition"
       logError(errorMessage)

@@ -45,7 +45,7 @@ private[spark] class MergeStatus(
     private[this] var loc: BlockManagerId,
     private[this] var mapTracker: RoaringBitmap,
     private[this] var size: Long)
-  extends Externalizable with OutputStatus {
+  extends Externalizable with ShuffleOutputStatus {
 
   protected def this() = this(null, null, -1) // For deserialization only
 
