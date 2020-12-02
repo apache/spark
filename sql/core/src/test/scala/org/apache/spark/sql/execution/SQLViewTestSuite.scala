@@ -31,7 +31,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
   def testView(viewName: String, columnNames: Seq[String], sqlText: String)(f: => Unit): Unit
 
-  def formatViewName(viewName: String): String = viewName
+  def formatViewName(viewName: String): String
 
   test("change SQLConf should not change view behavior - caseSensitiveAnalysis") {
     withTable("t") {
@@ -147,6 +147,8 @@ class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       f
     }
   }
+
+  override def formatViewName(viewName: String): String = viewName
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
@@ -181,4 +183,6 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       f
     }
   }
+
+  override def formatViewName(viewName: String): String = s"default.$viewName"
 }
