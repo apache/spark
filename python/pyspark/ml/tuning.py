@@ -433,6 +433,7 @@ class CrossValidatorWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _ValidatorSharedReadWrite.validateParams(self.instance)
         _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
 
 
@@ -485,6 +486,7 @@ class CrossValidatorModelWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _ValidatorSharedReadWrite.validateParams(self.instance)
         instance = self.instance
         persistSubModels = _ValidatorSharedReadWrite \
             .getValidatorModelWriterPersistSubModelsParam(self)
@@ -770,7 +772,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return CrossValidatorWriter(self)
@@ -882,7 +883,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return CrossValidatorModelWriter(self)
@@ -991,6 +991,7 @@ class TrainValidationSplitWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _ValidatorSharedReadWrite.validateParams(self.instance)
         _ValidatorSharedReadWrite.saveImpl(path, self.instance, self.sc)
 
 
@@ -1041,6 +1042,7 @@ class TrainValidationSplitModelWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _ValidatorSharedReadWrite.validateParams(self.instance)
         instance = self.instance
         persistSubModels = _ValidatorSharedReadWrite \
             .getValidatorModelWriterPersistSubModelsParam(self)
@@ -1263,7 +1265,6 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return TrainValidationSplitWriter(self)
@@ -1370,7 +1371,6 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     @since("2.3.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        _ValidatorSharedReadWrite.validateParams(self)
         if _ValidatorSharedReadWrite.is_java_convertible(self):
             return JavaMLWriter(self)
         return TrainValidationSplitModelWriter(self)

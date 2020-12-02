@@ -2999,7 +2999,6 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
         return OneVsRestReader(cls)
 
     def write(self):
-        _OneVsRestSharedReadWrite.validateParams(self)
         if isinstance(self.getClassifier(), JavaMLWritable):
             return JavaMLWriter(self)
         else:
@@ -3057,6 +3056,7 @@ class OneVsRestWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
         _OneVsRestSharedReadWrite.saveImpl(self.instance, self.sc, path)
 
 
@@ -3236,8 +3236,8 @@ class OneVsRestModel(Model, _OneVsRestParams, MLReadable, MLWritable):
         return OneVsRestModelReader(cls)
 
     def write(self):
-        _OneVsRestSharedReadWrite.validateParams(self)
-        if isinstance(self.getClassifier(), JavaMLWritable):
+        if all(map(lambda elem: isinstance(elem, JavaMLWritable),
+                   [self.getClassifier()] + self.models)):
             return JavaMLWriter(self)
         else:
             return OneVsRestModelWriter(self)
@@ -3273,6 +3273,7 @@ class OneVsRestModelWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
+        _OneVsRestSharedReadWrite.validateParams(self.instance)
         instance = self.instance
         numClasses = len(instance.models)
         extraMetadata = {'numClasses': numClasses}
