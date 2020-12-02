@@ -534,14 +534,14 @@ abstract class TimestampToLongBase extends UnaryExpression
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
+    input.asInstanceOf[Number].longValue() / scaleFactor
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (scaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
+      defineCodeGen(ctx, ev, c => s"$c / ${scaleFactor}L")
     }
   }
 }
@@ -582,7 +582,7 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
   examples = """
     Examples:
       > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01'));

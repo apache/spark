@@ -1198,20 +1198,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("UNIX_SECONDS") {
+    checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
     var timestamp = Literal(new Timestamp(0L))
     checkEvaluation(UnixSeconds(timestamp), 0L)
     timestamp = Literal(new Timestamp(1000L))
     checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
     // Truncates higher levels of precision
     timestamp = Literal(new Timestamp(1999L))
     checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1001L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
   }
 
   test("UNIX_MILLIS") {
+    checkEvaluation(UnixMillis(Literal(null, TimestampType)), null)
     var timestamp = Literal(new Timestamp(0L))
     checkEvaluation(UnixMillis(timestamp), 0L)
     timestamp = Literal(new Timestamp(1000L))
     checkEvaluation(UnixMillis(timestamp), 1000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMillis(timestamp), -1000L)
     // Truncates higher levels of precision
     val timestampWithNanos = new Timestamp(1000L)
     timestampWithNanos.setNanos(999999)
@@ -1219,14 +1227,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("UNIX_MICROS") {
+    checkEvaluation(UnixMicros(Literal(null, TimestampType)), null)
     var timestamp = Literal(new Timestamp(0L))
     checkEvaluation(UnixMicros(timestamp), 0L)
     timestamp = Literal(new Timestamp(1000L))
     checkEvaluation(UnixMicros(timestamp), 1000000L)
-    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMicros(timestamp), -1000000L)
     val timestampWithNanos = new Timestamp(1000L)
-    timestampWithNanos.setNanos(999999)
-    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000999L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
   }
 
   test("TIMESTAMP_SECONDS") {
