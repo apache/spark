@@ -52,4 +52,10 @@ class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNames
   catalog.initialize("postgresql", map)
 
   override def dataPreparation(conn: Connection): Unit = {}
+
+  override def testListNamespaces: Unit = {
+    assert(catalog.listNamespaces() ===
+      Array(Array("foo"), Array("information_schema"), Array("pg_catalog"), Array("public")))
+  }
+
 }

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.sql.{Connection, SQLException, SQLFeatureNotSupportedException}
+import java.sql.{Connection, SQLException}
 import java.util
 
 import scala.collection.JavaConverters._
@@ -202,7 +202,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
     namespace match {
       case Array() =>
         listNamespaces()
-      case Array(db) if namespaceExists(namespace) =>
+      case Array(_) if namespaceExists(namespace) =>
         Array()
       case _ =>
         throw new NoSuchNamespaceException(namespace)
@@ -233,7 +233,9 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
             case SupportsNamespaces.PROP_LOCATION =>
               throw new AnalysisException("CREATE NAMESPACE ... LOCATION ... is not supported in" +
                 " JDBC catalog.")
-            case _ => // ignore all the other properties for now
+            case _ =>
+              throw new AnalysisException(s"CREATE NAMESPACE with property $k is not supported in" +
+                " JDBC catalog.")
           }
         }
       }
@@ -255,23 +257,27 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       case Array(db) =>
         changes.foreach {
           case set: NamespaceChange.SetProperty =>
-            // ignore changes other than comments
             if (set.property() == SupportsNamespaces.PROP_COMMENT) {
               withConnection { conn =>
                 JdbcUtils.createNamespaceComment(conn, options, db, set.value)
               }
+            } else {
+              throw new AnalysisException(s"SET NAMESPACE with property ${set.property} " +
+                "is not supported in JDBC catalog.")
             }
 
           case unset: NamespaceChange.RemoveProperty =>
-            // ignore changes other than comments
             if (unset.property() == SupportsNamespaces.PROP_COMMENT) {
               withConnection { conn =>
                 JdbcUtils.removeNamespaceComment(conn, options, db)
               }
+            } else {
+              throw new AnalysisException(s"Remove NAMESPACE property ${unset.property} " +
+                "is not supported in JDBC catalog.")
             }
 
           case _ =>
-            throw new SQLFeatureNotSupportedException(s"Unsupported NamespaceChange $changes")
+            throw new AnalysisException(s"Unsupported NamespaceChange $changes in JDBC catalog.")
         }
 
       case _ =>
@@ -290,10 +296,6 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
           true
         }
       }
-
-    case Array(_) =>
-      // exists returned false
-      false
 
     case _ =>
       throw new NoSuchNamespaceException(namespace)

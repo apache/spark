@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, SQLFeatureNotSupportedException, Timestamp}
+import java.sql.{Connection, Date, Timestamp}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -232,7 +232,7 @@ abstract class JdbcDialect extends Serializable with Logging{
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
+          throw new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
       }
     }
     updateClause.result()
