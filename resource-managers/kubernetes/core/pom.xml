@@ -64,6 +64,10 @@
           <artifactId>*</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>com.fasterxml.jackson.module</groupId>
+          <artifactId>jackson-module-jaxb-annotations</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>com.fasterxml.jackson.dataformat</groupId>
           <artifactId>jackson-dataformat-yaml</artifactId>
         </exclusion>
