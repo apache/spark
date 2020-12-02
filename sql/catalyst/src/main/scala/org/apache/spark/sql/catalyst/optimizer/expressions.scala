@@ -41,12 +41,25 @@ import org.apache.spark.sql.types._
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
+
+  private def hasNoSideEffect(e: Expression): Boolean = e match {
+    case _: Attribute => true
+    case _: Literal => true
+    case _: NoSideEffect => e.children.forall(hasNoSideEffect)
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
       case l: Literal => l
+
+      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length)
+      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length / 2)
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)

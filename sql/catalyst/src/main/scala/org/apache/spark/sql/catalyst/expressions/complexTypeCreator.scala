@@ -31,6 +31,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
+ * Trait to indicate the expression doesn't have any side effects. This can be used
+ * to indicate its ok to optimize it out under certain circumstances.
+ */
+trait NoSideEffect
+
+/**
  * Returns an Array containing the evaluation of all children expressions.
  */
 @ExpressionDescription(
@@ -42,7 +48,7 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   since = "1.1.0")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression {
+  extends Expression with NoSideEffect {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -160,7 +166,7 @@ private [sql] object GenArrayData {
   """,
   since = "2.0.0")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression {
+  extends Expression with NoSideEffect{
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -379,7 +385,7 @@ object CreateStruct {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
+case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoSideEffect {
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
     case Seq(name, value) => (name, value)
   }.toList.unzip

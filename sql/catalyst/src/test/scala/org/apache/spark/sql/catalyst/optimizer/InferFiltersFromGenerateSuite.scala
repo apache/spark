@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,7 +34,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   val testRelation = LocalRelation('a.array(StructType(Seq(
     StructField("x", IntegerType),
     StructField("y", IntegerType)
-  ))))
+  ))), 'c1.string, 'c2.string)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
     val generator = f('a)
@@ -72,4 +73,42 @@ class InferFiltersFromGenerateSuite extends PlanTest {
       comparePlans(optimized, originalQuery)
     }
   }
+
+  // setup rules to test inferFilters with ConstantFolding to make sure
+  // the Filter rule added in inferFilters is removed again when doing
+  // explode with CreateArray/CreateMap
+  object OptimizeInferAndConstantFold extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("Infer Filters", Once, InferFiltersFromGenerate) ::
+      Batch("ConstantFolding after", FixedPoint(4),
+        ConstantFolding,
+        NullPropagation,
+        PruneFilters) :: Nil
+  }
+
+  Seq(Explode(_), PosExplode(_)).foreach { f =>
+     val createArrayExplode = f(CreateArray(Seq('c1)))
+     test("Don't infer filters from CreateArray " + createArrayExplode) {
+       val originalQuery = testRelation.generate(createArrayExplode).analyze
+       val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+       comparePlans(optimized, originalQuery)
+     }
+     val createMapExplode = f(CreateMap(Seq('c1, 'c2)))
+     test("Don't infer filters from CreateMap " + createMapExplode) {
+       val originalQuery = testRelation.generate(createMapExplode).analyze
+       val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+       comparePlans(optimized, originalQuery)
+     }
+   }
+
+   Seq(Inline(_)).foreach { f =>
+     val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
+     test("Don't infer filters from CreateArray " + createArrayStructExplode) {
+       val originalQuery = testRelation.generate(createArrayStructExplode).analyze
+       val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
+       comparePlans(optimized, originalQuery)
+     }
+   }
 }
