@@ -302,8 +302,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
-   * the stream.
+   * table as new data arrives. A new table will be created if the table not exists. The returned
+   * [[StreamingQuery]] object can be used to interact with the stream.
    *
    * @since 3.1.0
    */
