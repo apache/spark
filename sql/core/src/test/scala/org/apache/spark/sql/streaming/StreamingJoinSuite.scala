@@ -59,7 +59,7 @@ abstract class StreamingJoinSuite
     (input, df)
   }
 
-  protected def setupJoin(joinType: String)
+  protected def setupWindowedJoin(joinType: String)
     : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
 
     val (input1, df1) = setupStream("left", 2)
@@ -710,7 +710,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("windowed left outer join") {
-    val (leftInput, rightInput, joined) = setupJoin("left_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoin("left_outer")
 
     testStream(joined)(
       // Test inner part of the join.
@@ -728,7 +728,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
   }
 
   test("windowed right outer join") {
-    val (leftInput, rightInput, joined) = setupJoin("right_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoin("right_outer")
 
     testStream(joined)(
       // Test inner part of the join.
@@ -1075,7 +1075,7 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
 class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
 
   test("windowed full outer join") {
-    val (leftInput, rightInput, joined) = setupJoin("full_outer")
+    val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
@@ -1280,7 +1280,7 @@ class StreamingLeftSemiJoinSuite extends StreamingJoinSuite {
   import testImplicits._
 
   test("windowed left semi join") {
-    val (leftInput, rightInput, joined) = setupJoin("left_semi")
+    val (leftInput, rightInput, joined) = setupWindowedJoin("left_semi")
 
     testStream(joined)(
       MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
