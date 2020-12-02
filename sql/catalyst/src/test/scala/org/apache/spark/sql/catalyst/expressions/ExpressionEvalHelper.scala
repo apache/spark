@@ -159,12 +159,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       expectedErrMsg: String): Unit = {
 
     def checkException(eval: => Unit, testMode: String): Unit = {
-      val modes = if (testMode == "non-codegen mode") {
-        Seq(CodegenObjectFactoryMode.NO_CODEGEN)
-      } else {
-        Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
-      }
-
+      val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
       withClue(s"($testMode)") {
         val errMsg = intercept[T] {
           for (fallbackMode <- modes) {
