@@ -159,12 +159,18 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     /**
      * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
      */
-    def genPredicate(c: Expression, in: Seq[ExprCode], attrs: Seq[Attribute]): String = {
+    def genPredicate(
+        c: Expression,
+        in: Seq[ExprCode],
+        attrs: Seq[Attribute],
+        states: Map[Expression, SubExprEliminationState] = Map.empty): String = {
       val bound = BindReferences.bindReference(c, attrs)
       val evaluated = evaluateRequiredVariables(child.output, in, c.references)
 
       // Generate the code for the predicate.
-      val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+      val ev = ctx.withSubExprEliminationExprs(states) {
+        Seq(ExpressionCanonicalizer.execute(bound).genCode(ctx))
+      }.head
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
@@ -189,7 +195,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
-    val generated = otherPreds.map { c =>
+    val (generatedNullChecks, predsToGen) = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
@@ -204,11 +210,30 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         }
       }.mkString("\n").trim
 
+      (nullChecks, c)
+    }.unzip
+
+    val (subExprsCode, generatedPreds, localValInputs) = if (conf.subexpressionEliminationEnabled) {
+      // To do subexpression elimination, we need to use bound expressions. Although `genPredicate`
+      // will bind expressions too, for simplicity we don't skip binding in `genPredicate` for this
+      // case.
+      val boundPredsToGen = bindReferences[Expression](predsToGen, child.output)
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundPredsToGen)
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
+      (subExprs.codes.mkString("\n"),
+        boundPredsToGen.map(genPredicate(_, input, output, subExprs.states)),
+        subExprs.exprCodesNeedEvaluate)
+    } else {
+      // Here we use *this* operator's output with this output's nullability since we already
+      // enforced them with the IsNotNull checks above.
+      ("", predsToGen.map(genPredicate(_, input, output)), Seq.empty)
+    }
+
+    val generated = generatedNullChecks.zip(generatedPreds).map { case (nullChecks, genPred) =>
       s"""
          |$nullChecks
-         |${genPredicate(c, input, output)}
+         |$genPred
        """.stripMargin.trim
     }.mkString("\n")
 
@@ -231,6 +256,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
+       |// common sub-expressions
+       |${evaluateVariables(localValInputs)}
+       |$subExprsCode
        |do {
        |  $generated
        |  $nullChecks
