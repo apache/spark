@@ -1489,6 +1489,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STORE_ANALYZED_PLAN_FOR_VIEW =
+    buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
+      .internal()
+      .doc("When true, analyzed plan instead of sql text will be stored when creating " +
+        "temporary view")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .version("2.1.0")
@@ -3424,6 +3433,8 @@ class SQLConf extends Serializable with Logging {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

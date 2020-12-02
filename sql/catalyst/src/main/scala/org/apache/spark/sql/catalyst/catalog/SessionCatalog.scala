@@ -606,7 +606,7 @@ class SessionCatalog(
    * Return a local temporary view exactly as it was stored.
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
-    tempViews.get(formatTableName(name))
+    tempViews.get(formatTableName(name)).map(parseTempViewPlan)
   }
 
   def getTempViewNames(): Seq[String] = synchronized {
@@ -617,7 +617,7 @@ class SessionCatalog(
    * Return a global temporary view exactly as it was stored.
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
-    globalTempViewManager.get(formatTableName(name))
+    globalTempViewManager.get(formatTableName(name)).map(parseTempViewPlan)
   }
 
   /**
@@ -654,20 +654,24 @@ class SessionCatalog(
   def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
-      getTempView(table).map { plan =>
-        CatalogTable(
-          identifier = TableIdentifier(table),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = plan.output.toStructType)
+      getTempView(table).map {
+        case View(metadata, _, _, _) => metadata
+        case plan =>
+          CatalogTable(
+            identifier = TableIdentifier(table),
+            tableType = CatalogTableType.VIEW,
+            storage = CatalogStorageFormat.empty,
+            schema = plan.output.toStructType)
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(table).map { plan =>
-        CatalogTable(
-          identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = plan.output.toStructType)
+      globalTempViewManager.get(table).map {
+        case View(metadata, _, _, _) => metadata
+        case plan =>
+          CatalogTable(
+            identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
+            tableType = CatalogTableType.VIEW,
+            storage = CatalogStorageFormat.empty,
+            schema = plan.output.toStructType)
       }.getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
     } else {
       getTableMetadata(name)
@@ -777,13 +781,13 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, db, viewDef)
+          SubqueryAlias(table, db, parseTempViewPlan(viewDef))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         getRelation(metadata)
       } else {
-        SubqueryAlias(table, tempViews(table))
+        SubqueryAlias(table, parseTempViewPlan(tempViews(table)))
       }
     }
   }
@@ -799,9 +803,10 @@ class SessionCatalog(
     if (metadata.tableType == CatalogTableType.VIEW) {
       val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
       val viewConfigs = metadata.viewSQLConfigs
-      val viewPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs)) {
-        parser.parsePlan(viewText)
-      }
+      val viewPlan =
+        SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView = false)) {
+          parser.parsePlan(viewText)
+        }
 
       logDebug(s"'$viewText' will be used for the view($table) with configs: $viewConfigs.")
       // The relation is a view, so we wrap the relation by:
@@ -809,11 +814,31 @@ class SessionCatalog(
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       val child = View(
         desc = metadata,
+        isTempView = false,
         output = metadata.schema.toAttributes,
         child = viewPlan)
       SubqueryAlias(multiParts, child)
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
+    }
+  }
+
+  def parseTempViewPlan(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case viewInfo: TemporaryViewRelation =>
+        val metadata = viewInfo.tableMeta
+        val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+        val viewConfigs = metadata.viewSQLConfigs
+        val viewPlan =
+          SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView = true)) {
+            parser.parsePlan(viewText)
+          }
+        View(
+          desc = metadata,
+          isTempView = true,
+          output = metadata.schema.toAttributes,
+          child = viewPlan)
+      case v => v
     }
   }
 

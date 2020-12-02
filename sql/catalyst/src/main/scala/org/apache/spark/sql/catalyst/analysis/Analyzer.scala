@@ -1026,7 +1026,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, _, child) if !child.resolved =>
+      case view @ View(desc, isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
           if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
@@ -1035,7 +1035,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
               "around this.")
           }
-          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs)) {
+          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
             executeSameContext(child)
           }
         }

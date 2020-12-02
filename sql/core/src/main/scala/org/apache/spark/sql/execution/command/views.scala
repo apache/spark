@@ -22,13 +22,13 @@ import scala.collection.mutable
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -116,17 +116,30 @@ case class CreateViewCommand(
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
+      // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
+      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+        TemporaryViewRelation(
+          prepareTemporaryView(name, sparkSession, analyzedPlan, aliasedPlan.schema))
+      } else {
+        aliasedPlan
+      }
+      catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val globalTempView = TableIdentifier(name.table, Option(db))
       if (replace && catalog.getGlobalTempView(name.table).isDefined &&
           !catalog.getGlobalTempView(name.table).get.sameResult(child)) {
-        val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-        val globalTempView = TableIdentifier(name.table, Option(db))
         logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
         CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
+      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+        TemporaryViewRelation(
+          prepareTemporaryView(globalTempView, sparkSession, analyzedPlan, aliasedPlan.schema))
+      } else {
+        aliasedPlan
+      }
+      catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
       val tableMetadata = catalog.getTableMetadata(name)
       if (allowExisting) {
@@ -237,6 +250,32 @@ case class CreateViewCommand(
       comment = comment
     )
   }
+
+  /**
+   * Returns a [[CatalogTable]] that contains information for temporary view.
+   * Generate the view-specific properties(e.g. view default database, view query output
+   * column names) and store them as properties in the CatalogTable, and also creates
+   * the proper schema for the view.
+   */
+  def prepareTemporaryView(
+      viewName: TableIdentifier,
+      session: SparkSession,
+      analyzedPlan: LogicalPlan,
+      aliasedSchema: StructType): CatalogTable = {
+
+    // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
+    // generating temporary view properties
+    val newProperties = generateViewProperties(
+      Map.empty, session, analyzedPlan, aliasedSchema.fieldNames)
+
+    CatalogTable(
+      identifier = viewName,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = aliasedSchema,
+      viewText = originalText,
+      properties = newProperties)
+  }
 }
 
 /**
@@ -266,13 +305,30 @@ case class AlterViewAsCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
-      // a local/global temp view has been altered, we are done.
+    if (session.sessionState.catalog.isTemporaryTable(name)) {
+      alterTemporaryView(session, analyzedPlan)
     } else {
       alterPermanentView(session, analyzedPlan)
     }
-
     Seq.empty[Row]
+  }
+
+  private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    val tableDefinition = if (conf.storeAnalyzedPlanForView) {
+      analyzedPlan
+    } else {
+      val properties = generateViewProperties(
+        Map.empty, session, analyzedPlan, analyzedPlan.schema.fieldNames)
+
+      TemporaryViewRelation(CatalogTable(
+        identifier = name,
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = analyzedPlan.schema,
+        viewText = Some(originalText),
+        properties = properties))
+    }
+    session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
 
   private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {

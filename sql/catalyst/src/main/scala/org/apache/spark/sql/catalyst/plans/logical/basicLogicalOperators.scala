@@ -437,6 +437,7 @@ case class InsertIntoDir(
  */
 case class View(
     desc: CatalogTable,
+    isTempView: Boolean,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
@@ -454,9 +455,10 @@ case class View(
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String]): SQLConf = {
+  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
     val activeConf = SQLConf.get
-    if (activeConf.useCurrentSQLConfigsForView) return activeConf
+    // For temporary view, we always use captured sql configs
+    if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
     for ((k, v) <- configs) {

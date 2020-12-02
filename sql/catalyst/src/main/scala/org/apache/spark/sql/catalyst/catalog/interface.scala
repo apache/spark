@@ -668,6 +668,15 @@ case class UnresolvedCatalogRelation(
 }
 
 /**
+ * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
+ * and will be transformed to `View` in `getTempView`
+ */
+case class TemporaryViewRelation(tableMeta: CatalogTable) extends LeafNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
  * A `LogicalPlan` that represents a hive table.
  *
  * TODO: remove this after we completely make hive as a data source.
