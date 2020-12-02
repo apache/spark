@@ -101,8 +101,7 @@ private[spark] class ShuffleBlockPusher(
       dataFile: File,
       partitionLengths: Array[Long],
       dep: ShuffleDependency[_, _, _],
-      partitionId: Int
-  ): Unit = {
+      partitionId: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val mergerLocs = dep.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
@@ -466,4 +465,3 @@ private[spark] object ShuffleBlockPusher {
     }
   }
 }
-
