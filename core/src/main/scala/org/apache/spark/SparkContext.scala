@@ -1904,16 +1904,15 @@ class SparkContext(config: SparkConf) extends Logging {
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
-      var schema = ""
-      val keys = if (path.contains("\\") && Utils.isWindows) {
+      val (keys, schema) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        addLocalJarFile(new File(path))
+        (addLocalJarFile(new File(path)), "local")
       } else {
         val uri = new Path(path).toUri
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
-        schema = uri.getScheme
-        schema match {
+        val uriSchema = uri.getScheme
+        val jarPaths = uriSchema match {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
@@ -1928,28 +1927,20 @@ class SparkContext(config: SparkConf) extends Logging {
             DependencyUtils.resolveMavenDependencies(URI.create(path))
           case _ => checkRemoteJarFile(path)
         }
+        (jarPaths, uriSchema)
       }
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
         val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
-          if (schema != "ivy") {
-            logInfo(s"Added JAR $path at ${added.mkString(",")} with timestamp $timestamp")
-          } else {
-            logInfo(s"Added dependency jars of ivy uri $path at ${added.mkString(",")}" +
-              s" with timestamp $timestamp")
-          }
+          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of ivy uri"
+          logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
           postEnvironmentUpdate()
         }
         if (existed.nonEmpty) {
-          if (schema != "ivy") {
-            logWarning(s"The jar $path has been added already. Overwriting of added jars " +
-              "is not supported in the current version.")
-          } else {
-            logWarning(s"The dependency jars of ivy URI with $path at" +
-              s" ${existed.mkString(",")} has been added already." +
-              s" Overwriting of added jars is not supported in the current version.")
-          }
+          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of ivy uri"
+          logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
+            s" Overwriting of added jar is not supported in the current version.")
         }
       }
     }
