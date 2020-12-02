@@ -434,7 +434,7 @@ package object config {
     ConfigBuilder("spark.storage.blockManagerSlaveTimeoutMs")
       .version("0.7.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+      .createOptional
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
