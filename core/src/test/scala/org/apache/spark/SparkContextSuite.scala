@@ -1017,10 +1017,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
       assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "The dependency jars of ivy URI with" +
+        "The dependency jars of ivy uri" +
           " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
       val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
-        "The dependency jars of ivy URI with" +
+        "The dependency jars of ivy uri" +
           " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
         .head.getRenderedMessage
       dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
@@ -1053,8 +1053,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
       assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in URI query" +
-          " `invalidParam1=foo&invalidParam2=boo`")))
+        "Invalid parameters `invalidParam1,invalidParam2` found in ivy URI query" +
+          " `invalidParam1=foo&invalidParam2=boo`.")))
     }
   }
 
@@ -1105,24 +1105,27 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val e2 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib")
     }.getMessage
-    assert(e2.contains("Invalid url: Expected 'org:module:version'," +
-      " found org.apache.hive:hive-contrib"))
+    assert(e2.contains("Invalid ivy uri authority in uri ivy://org.apache.hive:hive-contrib:" +
+      " Expected 'org:module:version', found org.apache.hive:hive-contrib."))
 
     val e3 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
     }.getMessage
-    assert(e3.contains("Invalid query string: foo="))
+    assert(e3.contains("Invalid query string in ivy uri" +
+      " ivy://org.apache.hive:hive-contrib:2.3.7?foo=:"))
 
     val e4 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
     }.getMessage
-    assert(e4.contains("Invalid query string: bar=&baz=foo"))
+    assert(e4.contains("Invalid query string in ivy uri" +
+      " ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo: bar=&baz=foo"))
 
     val e5 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
     }.getMessage
-    assert(e5.contains(
-      "Invalid exclude string: expected 'org:module,org:module,..', found org.pentaho"))
+    assert(e5.contains("Invalid exclude string in ivy uri" +
+      " ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho:" +
+      " expected 'org:module,org:module,..', found org.pentaho"))
   }
 }
 
