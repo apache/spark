@@ -80,6 +80,10 @@
       <version>${kafka.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.google.code.findbugs</groupId>
+      <artifactId>jsr305</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-pool2</artifactId>
       <version>${commons-pool2.version}</version>
@@ -108,11 +112,11 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-minikdc</artifactId>
     </dependency>
-    <!-- Kafka embedded server uses Zookeeper 3.4.7 API -->
+    <!-- Kafka embedded server uses Zookeeper 3.5.7 API -->
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
-      <version>3.4.7</version>
+      <version>3.5.7</version>
       <scope>test</scope>
     </dependency>
     <dependency>

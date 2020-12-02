@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, LongType, MapType, StructType}
 
 class SchemaUtilsSuite extends SparkFunSuite {
 
@@ -41,7 +41,7 @@ class SchemaUtilsSuite extends SparkFunSuite {
     test(s"Check column name duplication in $testType cases") {
       def checkExceptionCases(schemaStr: String, duplicatedColumns: Seq[String]): Unit = {
         val expectedErrorMsg = "Found duplicate column(s) in SchemaUtilsSuite: " +
-          duplicatedColumns.map(c => s"`${c.toLowerCase(Locale.ROOT)}`").mkString(", ")
+          duplicatedColumns.sorted.map(c => s"`${c.toLowerCase(Locale.ROOT)}`").mkString(", ")
         val schema = StructType.fromDDL(schemaStr)
         var msg = intercept[AnalysisException] {
           SchemaUtils.checkSchemaColumnNameDuplication(
@@ -81,5 +81,29 @@ class SchemaUtilsSuite extends SparkFunSuite {
     checkNoExceptionCases("Aa INT, b INT, aA INT", caseSensitive = true)
 
     checkNoExceptionCases("a INT, b INT, c INT", caseSensitive = false)
+  }
+
+  test("SPARK-32431: duplicated fields in nested schemas") {
+    val schemaA = new StructType()
+      .add("LowerCase", LongType)
+      .add("camelcase", LongType)
+      .add("CamelCase", LongType)
+    val schemaB = new StructType()
+      .add("f1", LongType)
+      .add("StructColumn1", schemaA)
+    val schemaC = new StructType()
+      .add("f2", LongType)
+      .add("StructColumn2", schemaB)
+    val schemaD = new StructType()
+      .add("f3", ArrayType(schemaC))
+    val schemaE = MapType(LongType, schemaD)
+    val schemaF = MapType(schemaD, LongType)
+    Seq(schemaA, schemaB, schemaC, schemaD, schemaE, schemaF).foreach { schema =>
+      val msg = intercept[AnalysisException] {
+        SchemaUtils.checkSchemaColumnNameDuplication(
+          schema, "in SchemaUtilsSuite", caseSensitiveAnalysis = false)
+      }.getMessage
+      assert(msg.contains("Found duplicate column(s) in SchemaUtilsSuite: `camelcase`"))
+    }
   }
 }

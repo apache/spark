@@ -65,8 +65,6 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
   @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "f1Measure")
-
   /**
    * param for the class whose metric will be computed in `"precisionByLabel"`, `"recallByLabel"`,
    * `"f1MeasureByLabel"`.
@@ -86,8 +84,6 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
   /** @group setParam */
   def setMetricLabel(value: Double): this.type = set(metricLabel, value)
 
-  setDefault(metricLabel -> 0.0)
-
   /** @group setParam */
   @Since("3.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -96,20 +92,11 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
   @Since("3.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
+  setDefault(metricLabel -> 0.0, metricName -> "f1Measure")
+
   @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
-    val schema = dataset.schema
-    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
-      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
-    SchemaUtils.checkColumnTypes(schema, $(labelCol),
-      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
-
-    val predictionAndLabels =
-      dataset.select(col($(predictionCol)), col($(labelCol)))
-        .rdd.map { row =>
-        (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
-      }
-    val metrics = new MultilabelMetrics(predictionAndLabels)
+    val metrics = getMetrics(dataset)
     $(metricName) match {
       case "subsetAccuracy" => metrics.subsetAccuracy
       case "accuracy" => metrics.accuracy
@@ -124,6 +111,29 @@ class MultilabelClassificationEvaluator @Since("3.0.0") (@Since("3.0.0") overrid
       case "microRecall" => metrics.microRecall
       case "microF1Measure" => metrics.microF1Measure
     }
+  }
+
+  /**
+   * Get a MultilabelMetrics, which can be used to get multilabel classification
+   * metrics such as accuracy, precision, precisionByLabel, etc.
+   *
+   * @param dataset a dataset that contains labels/observations and predictions.
+   * @return MultilabelMetrics
+   */
+  @Since("3.1.0")
+  def getMetrics(dataset: Dataset[_]): MultilabelMetrics = {
+    val schema = dataset.schema
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+    SchemaUtils.checkColumnTypes(schema, $(labelCol),
+      Seq(ArrayType(DoubleType, false), ArrayType(DoubleType, true)))
+
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)))
+        .rdd.map { row =>
+        (row.getSeq[Double](0).toArray, row.getSeq[Double](1).toArray)
+      }
+    new MultilabelMetrics(predictionAndLabels)
   }
 
   @Since("3.0.0")

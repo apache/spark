@@ -35,21 +35,35 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 
 /**
  * A serializer to serialize data in catalyst format to data in avro format.
  */
-class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean)
-  extends Logging {
+private[sql] class AvroSerializer(
+    rootCatalystType: DataType,
+    rootAvroType: Schema,
+    nullable: Boolean,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
 
-  // Whether to rebase datetimes from Gregorian to Julian calendar in write
-  private val rebaseDateTime: Boolean = SQLConf.get.avroRebaseDateTimeEnabled
+  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
+    this(rootCatalystType, rootAvroType, nullable,
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(
+        SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE)))
+  }
 
   def serialize(catalystData: Any): Any = {
     converter.apply(catalystData)
   }
+
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
+
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+    datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = {
     val actualAvroType = resolveNullableType(rootAvroType, nullable)
@@ -140,24 +154,16 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       case (BinaryType, BYTES) =>
         (getter, ordinal) => ByteBuffer.wrap(getter.getBinary(ordinal))
 
-      case (DateType, INT) if rebaseDateTime =>
-        (getter, ordinal) => DateTimeUtils.rebaseGregorianToJulianDays(getter.getInt(ordinal))
-
       case (DateType, INT) =>
-        (getter, ordinal) => getter.getInt(ordinal)
+        (getter, ordinal) => dateRebaseFunc(getter.getInt(ordinal))
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
           // For backward compatibility, if the Avro type is Long and it is not logical type
           // (the `null` case), output the timestamp value as with millisecond precision.
-          case null | _: TimestampMillis if rebaseDateTime => (getter, ordinal) =>
-            val micros = getter.getLong(ordinal)
-            val rebasedMicros = DateTimeUtils.rebaseGregorianToJulianMicros(micros)
-            DateTimeUtils.microsToMillis(rebasedMicros)
           case null | _: TimestampMillis => (getter, ordinal) =>
-            DateTimeUtils.microsToMillis(getter.getLong(ordinal))
-          case _: TimestampMicros if rebaseDateTime => (getter, ordinal) =>
-            DateTimeUtils.rebaseGregorianToJulianMicros(getter.getLong(ordinal))
-          case _: TimestampMicros => (getter, ordinal) => getter.getLong(ordinal)
+            DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
+          case _: TimestampMicros => (getter, ordinal) =>
+            timestampRebaseFunc(getter.getLong(ordinal))
           case other => throw new IncompatibleSchemaException(
             s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
@@ -249,20 +255,54 @@ class AvroSerializer(rootCatalystType: DataType, rootAvroType: Schema, nullable:
       result
   }
 
+  /**
+   * Resolve a possibly nullable Avro Type.
+   *
+   * An Avro type is nullable when it is a [[UNION]] of two types: one null type and another
+   * non-null type. This method will check the nullability of the input Avro type and return the
+   * non-null type within when it is nullable. Otherwise it will return the input Avro type
+   * unchanged. It will throw an [[UnsupportedAvroTypeException]] when the input Avro type is an
+   * unsupported nullable type.
+   *
+   * It will also log a warning message if the nullability for Avro and catalyst types are
+   * different.
+   */
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    if (avroType.getType == Type.UNION && nullable) {
-      // avro uses union to represent nullable type.
+    val (avroNullable, resolvedAvroType) = resolveAvroType(avroType)
+    warnNullabilityDifference(avroNullable, nullable)
+    resolvedAvroType
+  }
+
+  /**
+   * Check the nullability of the input Avro type and resolve it when it is nullable. The first
+   * return value is a [[Boolean]] indicating if the input Avro type is nullable. The second
+   * return value is the possibly resolved type.
+   */
+  private def resolveAvroType(avroType: Schema): (Boolean, Schema) = {
+    if (avroType.getType == Type.UNION) {
       val fields = avroType.getTypes.asScala
-      assert(fields.length == 2)
       val actualType = fields.filter(_.getType != Type.NULL)
-      assert(actualType.length == 1)
-      actualType.head
-    } else {
-      if (nullable) {
-        logWarning("Writing avro files with non-nullable avro schema with nullable catalyst " +
-          "schema will throw runtime exception if there is a record with null value.")
+      if (fields.length != 2 || actualType.length != 1) {
+        throw new UnsupportedAvroTypeException(
+          s"Unsupported Avro UNION type $avroType: Only UNION of a null type and a non-null " +
+            "type is supported")
       }
-      avroType
+      (true, actualType.head)
+    } else {
+      (false, avroType)
+    }
+  }
+
+  /**
+   * log a warning message if the nullability for Avro and catalyst types are different.
+   */
+  private def warnNullabilityDifference(avroNullable: Boolean, catalystNullable: Boolean): Unit = {
+    if (avroNullable && !catalystNullable) {
+      logWarning("Writing Avro files with nullable Avro schema and non-nullable catalyst schema.")
+    }
+    if (!avroNullable && catalystNullable) {
+      logWarning("Writing Avro files with non-nullable Avro schema and nullable catalyst " +
+        "schema will throw runtime exception if there is a record with null value.")
     }
   }
 }

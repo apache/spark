@@ -19,15 +19,9 @@ package org.apache.spark.sql.catalyst.util;
 
 public class DateTimeConstants {
 
-  public static final int YEARS_PER_DECADE = 10;
-  public static final int YEARS_PER_CENTURY = 100;
-  public static final int YEARS_PER_MILLENNIUM = 1000;
-
-  public static final byte MONTHS_PER_QUARTER = 3;
   public static final int MONTHS_PER_YEAR = 12;
 
   public static final byte DAYS_PER_WEEK = 7;
-  public static final long DAYS_PER_MONTH = 30L;
 
   public static final long HOURS_PER_DAY = 24L;
 
@@ -47,9 +41,6 @@ public class DateTimeConstants {
   public static final long MICROS_PER_MINUTE = SECONDS_PER_MINUTE * MICROS_PER_SECOND;
   public static final long MICROS_PER_HOUR = MINUTES_PER_HOUR * MICROS_PER_MINUTE;
   public static final long MICROS_PER_DAY = HOURS_PER_DAY * MICROS_PER_HOUR;
-  public static final long MICROS_PER_MONTH = DAYS_PER_MONTH * MICROS_PER_DAY;
-  /* 365.25 days per year assumes leap year every four years */
-  public static final long MICROS_PER_YEAR = (36525L * MICROS_PER_DAY) / 100;
 
   public static final long NANOS_PER_MICROS = 1000L;
   public static final long NANOS_PER_MILLIS = MICROS_PER_MILLIS * NANOS_PER_MICROS;

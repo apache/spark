@@ -4,6 +4,9 @@
 -- This file has the same test cases as not-in-unit-tests-single-column.sql with literals instead of
 -- subqueries.
 
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+
 CREATE TEMPORARY VIEW m AS SELECT * FROM VALUES
   (null, 1.0),
   (2, 3.0),

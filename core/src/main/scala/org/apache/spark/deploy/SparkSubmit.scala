@@ -28,7 +28,7 @@ import java.util.jar.JarInputStream
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Properties, Success, Try}
+import scala.util.{Properties, Try}
 
 import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
@@ -391,6 +391,7 @@ private[spark] class SparkSubmit extends Logging {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
         args.files = renameResourcesToLocalFS(args.files, localFiles)
+        args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }
 
@@ -474,10 +475,12 @@ private[spark] class SparkSubmit extends Logging {
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
         args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
       }
-      if (clusterManager != YARN) {
-        // The YARN backend handles python files differently, so don't merge the lists.
-        args.files = mergeFileLists(args.files, args.pyFiles)
-      }
+    }
+
+    // Non-PySpark applications can need Python dependencies.
+    if (deployMode == CLIENT && clusterManager != YARN) {
+      // The YARN backend handles python files differently, so don't merge the lists.
+      args.files = mergeFileLists(args.files, args.pyFiles)
     }
 
     if (localPyFiles != null) {
@@ -818,7 +821,7 @@ private[spark] class SparkSubmit extends Logging {
     }
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
-    (childArgs, childClasspath, sparkConf, childMainClass)
+    (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
   }
 
   private def renameResourcesToLocalFS(resources: String, localResources: String): String = {
@@ -1158,13 +1161,16 @@ private[spark] object SparkSubmitUtils {
     val br: IBiblioResolver = new IBiblioResolver
     br.setM2compatible(true)
     br.setUsepoms(true)
+    val defaultInternalRepo : Option[String] = sys.env.get("DEFAULT_ARTIFACT_REPOSITORY")
+    br.setRoot(defaultInternalRepo.getOrElse("https://repo1.maven.org/maven2/"))
     br.setName("central")
     cr.add(br)
 
     val sp: IBiblioResolver = new IBiblioResolver
     sp.setM2compatible(true)
     sp.setUsepoms(true)
-    sp.setRoot("https://dl.bintray.com/spark-packages/maven")
+    sp.setRoot(sys.env.getOrElse(
+      "DEFAULT_ARTIFACT_REPOSITORY", "https://dl.bintray.com/spark-packages/maven"))
     sp.setName("spark-packages")
     cr.add(sp)
     cr
@@ -1180,10 +1186,12 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { artifactInfo =>
-      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+    artifacts.map { ai =>
+      val artifactInfo = ai.asInstanceOf[Artifact]
+      val artifact = artifactInfo.getModuleRevisionId
+      val testSuffix = if (artifactInfo.getType == "test-jar") "-tests" else ""
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}${testSuffix}.jar"
     }.mkString(",")
   }
 
@@ -1345,6 +1353,13 @@ private[spark] object SparkSubmitUtils {
       ""
     } else {
       val sysOut = System.out
+      // Default configuration name for ivy
+      val ivyConfName = "default"
+
+      // A Module descriptor must be specified. Entries are dummy strings
+      val md = getModuleDescriptor
+
+      md.setDefaultConf(ivyConfName)
       try {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
@@ -1372,14 +1387,6 @@ private[spark] object SparkSubmitUtils {
           resolveOptions.setDownload(true)
         }
 
-        // Default configuration name for ivy
-        val ivyConfName = "default"
-
-        // A Module descriptor must be specified. Entries are dummy strings
-        val md = getModuleDescriptor
-
-        md.setDefaultConf(ivyConfName)
-
         // Add exclusion rules for Spark and Scala Library
         addExclusionRules(ivySettings, ivyConfName, md)
         // add all supplied maven artifacts as dependencies
@@ -1397,12 +1404,10 @@ private[spark] object SparkSubmitUtils {
           packagesDirectory.getAbsolutePath + File.separator +
             "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
-        val paths = resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
-        val mdId = md.getModuleRevisionId
-        clearIvyResolutionFiles(mdId, ivySettings, ivyConfName)
-        paths
+        resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {
         System.setOut(sysOut)
+        clearIvyResolutionFiles(md.getModuleRevisionId, ivySettings, ivyConfName)
       }
     }
   }

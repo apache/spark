@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
+import scala.collection.JavaConverters._
+
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
@@ -71,7 +73,8 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
@@ -273,8 +276,9 @@ class JDBCSuite extends QueryTest
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
-  after {
+  override def afterAll(): Unit = {
     conn.close()
+    super.afterAll()
   }
 
   // Check whether the tables are fetched in the expected degree of parallelism
@@ -635,12 +639,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("test DATE types in cache") {
-    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().createOrReplaceTempView("mycached_date")
-    val cachedRows = sql("select * from mycached_date").collect()
-    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
-    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    withTempView("mycached_date") {
+      val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().createOrReplaceTempView("mycached_date")
+      val cachedRows = sql("select * from mycached_date").collect()
+      assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+      assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    }
   }
 
   test("test types for null value") {
@@ -764,9 +770,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("Dialect unregister") {
-    JdbcDialects.registerDialect(testH2Dialect)
-    JdbcDialects.unregisterDialect(testH2Dialect)
-    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    } finally {
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("Aggregated dialects") {
@@ -847,6 +858,8 @@ class JDBCSuite extends QueryTest
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
+      Some(ArrayType(StringType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -1178,7 +1191,10 @@ class JDBCSuite extends QueryTest
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(
+      df.schema,
+      df.sqlContext.conf.caseSensitiveAnalysis,
+      "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 
@@ -1300,7 +1316,8 @@ class JDBCSuite extends QueryTest
     testJdbcOptions(new JDBCOptions(parameters))
     testJdbcOptions(new JDBCOptions(CaseInsensitiveMap(parameters)))
     // test add/remove key-value from the case-insensitive map
-    var modifiedParameters = CaseInsensitiveMap(Map.empty) ++ parameters
+    var modifiedParameters =
+      (CaseInsensitiveMap(Map.empty) ++ parameters).asInstanceOf[Map[String, String]]
     testJdbcOptions(new JDBCOptions(modifiedParameters))
     modifiedParameters -= "dbtable"
     assert(modifiedParameters.get("dbTAblE").isEmpty)
@@ -1698,5 +1715,38 @@ class JDBCSuite extends QueryTest
     assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect)
     assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
     assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
+  }
+
+  test("SQLContext.jdbc (deprecated)") {
+    val sqlContext = spark.sqlContext
+    var jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE")
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
+    checkNumPartitions(jdbcDF, 3)
+    checkAnswer(jdbcDF, Row("fred", 1) :: Row("mary", 2) :: Row ("joe 'foo' \"bar\"", 3) :: Nil)
+
+    val parts = Array[String]("THEID = 2")
+    jdbcDF = sqlContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts)
+    checkAnswer(jdbcDF, Row("mary", 2) :: Nil)
+  }
+
+  test("SPARK-32364: JDBCOption constructor") {
+    val extraOptions = CaseInsensitiveMap[String](Map("UrL" -> "url1", "dBTable" -> "table1"))
+    val connectionProperties = new Properties()
+    connectionProperties.put("url", "url2")
+    connectionProperties.put("dbtable", "table2")
+
+    // connection property should override the options in extraOptions
+    val params = extraOptions ++ connectionProperties.asScala
+    assert(params.size == 2)
+    assert(params.get("uRl").contains("url2"))
+    assert(params.get("DbtaBle").contains("table2"))
+
+    // JDBCOptions constructor parameter should overwrite the existing conf
+    val options = new JDBCOptions(url, "table3", params)
+    assert(options.asProperties.size == 2)
+    assert(options.asProperties.get("url") == url)
+    assert(options.asProperties.get("dbtable") == "table3")
   }
 }

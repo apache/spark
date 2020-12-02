@@ -18,7 +18,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
+import scala.collection.JavaConverters._
+
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
@@ -53,14 +56,23 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     paths ++ Option(map.get("path")).toSeq
   }
 
-  protected def getTableName(paths: Seq[String]): String = {
-    val name = shortName() + " " + paths.map(qualifiedPathName).mkString(",")
+  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+      !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
+    }
+    new CaseInsensitiveStringMap(withoutPath.toMap.asJava)
+  }
+
+  protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
+      map.asCaseSensitiveMap().asScala.toMap)
+    val name = shortName() + " " + paths.map(qualifiedPathName(_, hadoopConf)).mkString(",")
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
 
-  private def qualifiedPathName(path: String): String = {
+  private def qualifiedPathName(path: String, hadoopConf: Configuration): String = {
     val hdfsPath = new Path(path)
-    val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val fs = hdfsPath.getFileSystem(hadoopConf)
     hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
   }
 

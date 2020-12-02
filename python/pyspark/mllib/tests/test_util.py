@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 
-from pyspark.mllib.common import _to_java_object_rdd
+from pyspark.mllib.common import _to_java_object_rdd  # type: ignore[attr-defined]
 from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors
@@ -94,10 +94,10 @@ class SerDeTest(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_util import *
+    from pyspark.mllib.tests.test_util import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

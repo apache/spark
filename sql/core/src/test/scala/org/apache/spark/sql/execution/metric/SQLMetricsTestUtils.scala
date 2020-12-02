@@ -25,7 +25,7 @@ import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
@@ -41,28 +41,28 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
-  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB (stage 0
-  // (attempt 0): task 4))" OR "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
+  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB (stage 0.0:
+  // task 4))" OR "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
   protected val sizeMetricPattern = {
     val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
-    val maxMetrics = "\\(stage ([0-9])+ \\(attempt ([0-9])+\\)\\: task ([0-9])+\\)"
-    s"\\n$bytes \\($bytes, $bytes, $bytes( $maxMetrics)?\\)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n$bytes \\($bytes, $bytes, $bytes( $maxMetrics)?\\))|($bytes)"
   }
 
-  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms (stage 3 (attempt
-  // 0): task 217))" OR "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms (stage 3.0):
+  // task 217))" OR "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)" OR "1.0 ms"
   protected val timingMetricPattern = {
     val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
-    val maxMetrics = "\\(stage ([0-9])+ \\(attempt ([0-9])+\\)\\: task ([0-9])+\\)"
-    s"\\n$duration \\($duration, $duration, $duration( $maxMetrics)?\\)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n$duration \\($duration, $duration, $duration( $maxMetrics)?\\))|($duration)"
   }
 
   // Pattern of size SQLMetric value for Aggregate tests.
-  // e.g "\n(1, 1, 0.9 (stage 1 (attempt 0): task 8)) OR "\n(1, 1, 0.9 )"
+  // e.g "\n(1, 1, 0.9 (stage 1.0: task 8)) OR "\n(1, 1, 0.9 )" OR "1"
   protected val aggregateMetricsPattern = {
     val iters = "([0-9]+(\\.[0-9]+)?)"
-    val maxMetrics = "\\(stage ([0-9])+ \\(attempt ([0-9])+\\)\\: task ([0-9])+\\)"
-    s"\\n\\($iters, $iters, $iters( $maxMetrics)?\\)"
+    val maxMetrics = "\\(stage ([0-9])+\\.([0-9])+\\: task ([0-9])+\\)"
+    s"(.*\\n\\($iters, $iters, $iters( $maxMetrics)?\\))|($iters)"
   }
 
   /**
@@ -98,7 +98,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     }
 
     val totalNumBytesMetric = executedNode.metrics.find(
-      _.name == "written output total (min, med, max (stageId (attemptId): taskId))").get
+      _.name == "written output").get
     val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
       .split(" ").head.trim.toDouble
     assert(totalNumBytes > 0)
@@ -214,14 +214,16 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   protected def testSparkPlanMetrics(
       df: DataFrame,
       expectedNumOfJobs: Int,
-      expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
+      expectedMetrics: Map[Long, (String, Map[String, Any])],
+      enableWholeStage: Boolean = false): Unit = {
     val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
       (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
-        }))
+        }).toMap)
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates.toMap,
+      enableWholeStage)
   }
 
   /**
@@ -250,6 +252,24 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
             s"$nodeId / '$metricName' (= ${actualMetricsMap(metricName)}) did not match predicate.")
         }
       }
+    }
+  }
+
+  /**
+   * Verify if the metrics in `SparkPlan` operator are same as expected metrics.
+   *
+   * @param plan `SparkPlan` operator to check metrics
+   * @param expectedMetrics the expected metrics. The format is `metric name -> metric value`.
+   */
+  protected def testMetricsInSparkPlanOperator(
+      plan: SparkPlan,
+      expectedMetrics: Map[String, Long]): Unit = {
+    expectedMetrics.foreach { case (metricName: String, metricValue: Long) =>
+      assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
+      val actualMetric = plan.metrics(metricName)
+      assert(actualMetric.value == metricValue,
+        s"The query plan metric $metricName did not match, " +
+          s"expected:$metricValue, actual:${actualMetric.value}")
     }
   }
 }

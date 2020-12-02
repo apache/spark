@@ -103,3 +103,36 @@ SELECT (
     SELECT * FROM t
   )
 );
+
+-- CTE in subquery expression shadows outer 4
+WITH t(c) AS (SELECT 1)
+SELECT * FROM t
+WHERE c IN (
+  WITH t(c) AS (SELECT 2)
+  SELECT * FROM t
+);
+
+-- forward name conflict is not a real conflict
+WITH
+  t AS (
+    WITH t2 AS (SELECT 1)
+    SELECT * FROM t2
+  ),
+  t2 AS (SELECT 2)
+SELECT * FROM t;
+
+-- case insensitive name conflicts: in other CTE relations
+WITH
+  abc AS (SELECT 1),
+  t AS (
+    WITH aBc AS (SELECT 2)
+    SELECT * FROM aBC
+  )
+SELECT * FROM t;
+
+-- case insensitive name conflicts: in subquery expressions
+WITH abc AS (SELECT 1)
+SELECT (
+  WITH aBc AS (SELECT 2)
+  SELECT * FROM aBC
+);

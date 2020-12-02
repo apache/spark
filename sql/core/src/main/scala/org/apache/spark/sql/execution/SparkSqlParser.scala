@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Locale
+import java.time.ZoneOffset
+import java.util.{Locale, TimeZone}
 import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
@@ -26,12 +27,13 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -40,10 +42,10 @@ import org.apache.spark.sql.types.StructType
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
-  val astBuilder = new SparkSqlAstBuilder(conf)
+class SparkSqlParser extends AbstractSqlParser {
+  val astBuilder = new SparkSqlAstBuilder()
 
-  private val substitutor = new VariableSubstitution(conf)
+  private val substitutor = new VariableSubstitution()
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
@@ -53,8 +55,12 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser(conf) {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
+class SparkSqlAstBuilder extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
+
+  private val configKeyValueDef = """([a-zA-Z_\d\\.:]+)\s*=([^;]*);*""".r
+  private val configKeyDef = """([a-zA-Z_\d\\.:]+)$""".r
+  private val configValueDef = """([^;]*);*""".r
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -64,17 +70,44 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * character in the raw string.
    */
   override def visitSetConfiguration(ctx: SetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    // Construct the command.
-    val raw = remainder(ctx.SET.getSymbol)
-    val keyValueSeparatorIndex = raw.indexOf('=')
-    if (keyValueSeparatorIndex >= 0) {
-      val key = raw.substring(0, keyValueSeparatorIndex).trim
-      val value = raw.substring(keyValueSeparatorIndex + 1).trim
-      SetCommand(Some(key -> Option(value)))
-    } else if (raw.nonEmpty) {
-      SetCommand(Some(raw.trim -> None))
+    remainder(ctx.SET.getSymbol).trim match {
+      case configKeyValueDef(key, value) =>
+        SetCommand(Some(key -> Option(value.trim)))
+      case configKeyDef(key) =>
+        SetCommand(Some(key -> None))
+      case s if s == "-v" =>
+        SetCommand(Some("-v" -> None))
+      case s if s.isEmpty =>
+        SetCommand(None)
+      case _ => throw new ParseException("Expected format is 'SET', 'SET key', or " +
+        "'SET key=value'. If you want to include special characters in key, or include semicolon " +
+        "in value, please use quotes, e.g., SET `ke y`=`v;alue`.", ctx)
+    }
+  }
+
+  override def visitSetQuotedConfiguration(
+      ctx: SetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.configValue() != null && ctx.configKey() != null) {
+      SetCommand(Some(ctx.configKey().getText -> Option(ctx.configValue().getText)))
+    } else if (ctx.configValue() != null) {
+      val valueStr = ctx.configValue().getText
+      val keyCandidate = interval(ctx.SET().getSymbol, ctx.EQ().getSymbol).trim
+      keyCandidate match {
+        case configKeyDef(key) => SetCommand(Some(key -> Option(valueStr)))
+        case _ => throw new ParseException(s"'$keyCandidate' is an invalid property key, please " +
+          s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
+      }
     } else {
-      SetCommand(None)
+      val keyStr = ctx.configKey().getText
+      if (ctx.EQ() != null) {
+        remainder(ctx.EQ().getSymbol).trim match {
+          case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
+          case other => throw new ParseException(s"'$other' is an invalid property value, please " +
+            s"use quotes, e.g. SET `$keyStr`=`$other`", ctx)
+        }
+      } else {
+        SetCommand(Some(keyStr -> None))
+      }
     }
   }
 
@@ -83,11 +116,60 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Example SQL :
    * {{{
    *   RESET;
+   *   RESET spark.sql.session.timeZone;
    * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    ResetCommand
+    remainder(ctx.RESET.getSymbol).trim match {
+      case configKeyDef(key) =>
+        ResetCommand(Some(key))
+      case s if s.trim.isEmpty =>
+        ResetCommand(None)
+      case _ => throw new ParseException("Expected format is 'RESET' or 'RESET key'. " +
+        "If you want to include special characters in key, " +
+        "please use quotes, e.g., RESET `ke y`.", ctx)
+    }
+  }
+
+  override def visitResetQuotedConfiguration(
+      ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    ResetCommand(Some(ctx.configKey().getText))
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
+   * Example SQL :
+   * {{{
+   *   SET TIME ZONE LOCAL;
+   *   SET TIME ZONE 'Asia/Shanghai';
+   *   SET TIME ZONE INTERVAL 10 HOURS;
+   * }}}
+   */
+  override def visitSetTimeZone(ctx: SetTimeZoneContext): LogicalPlan = withOrigin(ctx) {
+    val key = SQLConf.SESSION_LOCAL_TIMEZONE.key
+    if (ctx.interval != null) {
+      val interval = parseIntervalLiteral(ctx.interval)
+      if (interval.months != 0 || interval.days != 0 ||
+        math.abs(interval.microseconds) > 18 * DateTimeConstants.MICROS_PER_HOUR ||
+        interval.microseconds % DateTimeConstants.MICROS_PER_SECOND != 0) {
+        throw new ParseException("The interval value must be in the range of [-18, +18] hours" +
+          " with second precision",
+          ctx.interval())
+      } else {
+        val seconds = (interval.microseconds / DateTimeConstants.MICROS_PER_SECOND).toInt
+        SetCommand(Some(key -> Some(ZoneOffset.ofTotalSeconds(seconds).toString)))
+      }
+    } else if (ctx.timezone != null) {
+      ctx.timezone.getType match {
+        case SqlBaseParser.LOCAL =>
+          SetCommand(Some(key -> Some(TimeZone.getDefault.getID)))
+        case _ =>
+          SetCommand(Some(key -> Some(string(ctx.STRING))))
+      }
+    } else {
+      throw new ParseException("Invalid time zone displacement value", ctx)
+    }
   }
 
   /**
@@ -197,7 +279,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
-      val (_, _, _, options, _, _) = visitCreateTableClauses(ctx.createTableClauses())
+      val (_, _, _, options, location, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw new ParseException("CREATE TEMPORARY TABLE without a provider is not allowed.", ctx))
       val schema = Option(ctx.colTypeList()).map(createSchema)
@@ -206,7 +288,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
           "CREATE TEMPORARY VIEW ... USING ... instead")
 
       val table = tableIdentifier(ident, "CREATE TEMPORARY VIEW", ctx)
-      CreateTempViewUsing(table, schema, replace = false, global = false, provider, options)
+      val optionsWithLocation = location.map(l => options + ("path" -> l)).getOrElse(options)
+      CreateTempViewUsing(table, schema, replace = false, global = false, provider,
+        optionsWithLocation)
     }
   }
 
@@ -229,14 +313,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitNestedConstantList(
       ctx: NestedConstantListContext): Seq[Seq[String]] = withOrigin(ctx) {
-    ctx.constantList.asScala.map(visitConstantList)
+    ctx.constantList.asScala.map(visitConstantList).toSeq
   }
 
   /**
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(visitStringConstant)
+    ctx.constant.asScala.map(visitStringConstant).toSeq
   }
 
   /**
@@ -355,7 +439,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    validateRowFormatFileFormat(
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
@@ -588,10 +673,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitRowFormatDelimited(
       ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
-    // Collect the entries if any.
-    def entry(key: String, value: Token): Seq[(String, String)] = {
-      Option(value).toSeq.map(x => key -> string(x))
-    }
     // TODO we need proper support for the NULL format.
     val entries =
       entry("field.delim", ctx.fieldsTerminatedBy) ++
@@ -690,14 +771,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // expects a seq of pairs in which the old parsers' token names are used as keys.
         // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
         // retrieving the key value pairs ourselves.
-        def entry(key: String, value: Token): Seq[(String, String)] = {
-          Option(value).map(t => key -> t.getText).toSeq
-        }
         val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
           entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
-          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs) ++
+          Option(c.linesSeparatedBy).toSeq.map { token =>
+            val value = string(token)
+            validate(
+              value == "\n",
+              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+              c)
+            "TOK_TABLEROWFORMATLINES" -> value
+          }
 
         (entries, None, Seq.empty, None)
 
@@ -717,7 +802,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         // Use default (serde) format.
         val name = conf.getConfString("hive.script.serde",
           "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq("field.delim" -> "\t")
+        val props = Seq(
+          "field.delim" -> "\t",
+          "serialization.last.column.takes.rest" -> "true")
         val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
         (Nil, Option(name), props, recordHandler)
     }
@@ -746,7 +833,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+    RepartitionByExpression(expressions, query, None)
   }
 
   /**
@@ -781,12 +868,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       // assert if directory is local when LOCAL keyword is mentioned
       val scheme = Option(storage.locationUri.get.getScheme)
       scheme match {
-        case None =>
+        case Some(pathScheme) if (!pathScheme.equals("file")) =>
+          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
+        case _ =>
           // force scheme to be file rather than fs.default.name
           val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
           storage = storage.copy(locationUri = loc)
-        case Some(pathScheme) if (!pathScheme.equals("file")) =>
-          throw new ParseException("LOCAL is supported only with file: scheme", ctx)
       }
     }
 

@@ -220,7 +220,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       super.registerAccumulatorForCleanup(a)
     }
 
-    def accumsRegisteredForCleanup: Seq[Long] = accumsRegistered.toArray
+    def accumsRegisteredForCleanup: Seq[Long] = accumsRegistered.toSeq
   }
 
 }

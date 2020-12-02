@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
@@ -54,12 +53,7 @@ case class HashAggregateExec(
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
   extends BaseAggregateExec
-    with BlockingOperatorWithCodegen
-    with AliasAwareOutputPartitioning {
-
-  private[this] val aggregateBufferAttributes = {
-    aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
-  }
+  with BlockingOperatorWithCodegen {
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
@@ -74,23 +68,6 @@ case class HashAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
       SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
-
-  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
-
-  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
-
-  override def requiredChildDistribution: List[Distribution] = {
-    requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) if exprs.nonEmpty => ClusteredDistribution(exprs) :: Nil
-      case None => UnspecifiedDistribution :: Nil
-    }
-  }
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
@@ -129,7 +106,7 @@ case class HashAggregateExec(
             resultExpressions,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
-            child.output,
+            inputAttributes,
             iter,
             testFallbackStartsAt,
             numOutputRows,
@@ -286,7 +263,7 @@ case class HashAggregateExec(
     } else {
       val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
         val inputVarsForOneFunc = aggExprsForOneFunc.map(
-          CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)).reduce(_ ++ _).toSeq
+          CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)._1).reduce(_ ++ _).toSeq
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
 
         // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
@@ -334,7 +311,7 @@ case class HashAggregateExec(
   private def doConsumeWithoutKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
+    val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ inputAttributes
     // To individually generate code for each aggregate function, an element in `updateExprs` holds
     // all the expressions for the buffer of an aggregation function.
     val updateExprs = aggregateExpressions.map { e =>
@@ -369,10 +346,10 @@ case class HashAggregateExec(
          """.stripMargin
       }
       code"""
-         |// do aggregate for ${aggNames(i)}
-         |// evaluate aggregate function
+         |${ctx.registerComment(s"do aggregate for ${aggNames(i)}")}
+         |${ctx.registerComment("evaluate aggregate function")}
          |${evaluateVariables(bufferEvalsForOneFunc)}
-         |// update aggregation buffers
+         |${ctx.registerComment("update aggregation buffers")}
          |${updates.mkString("\n").trim}
        """.stripMargin
     }
@@ -931,7 +908,7 @@ case class HashAggregateExec(
       }
     }
 
-    val inputAttr = aggregateBufferAttributes ++ child.output
+    val inputAttr = aggregateBufferAttributes ++ inputAttributes
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.
@@ -977,9 +954,9 @@ case class HashAggregateExec(
           CodeGenerator.updateColumn(unsafeRowBuffer, dt, bufferOffset + j, ev, nullable)
         }
         code"""
-           |// evaluate aggregate function for ${aggNames(i)}
+           |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
            |${evaluateVariables(rowBufferEvalsForOneFunc)}
-           |// update unsafe row buffer
+           |${ctx.registerComment("update unsafe row buffer")}
            |${updateRowBuffers.mkString("\n").trim}
          """.stripMargin
       }
@@ -1032,9 +1009,9 @@ case class HashAggregateExec(
                 isVectorized = true)
             }
             code"""
-               |// evaluate aggregate function for ${aggNames(i)}
+               |${ctx.registerComment(s"evaluate aggregate function for ${aggNames(i)}")}
                |${evaluateVariables(fastRowEvalsForOneFunc)}
-               |// update fast row
+               |${ctx.registerComment("update fast row")}
                |${updateRowBuffer.mkString("\n").trim}
              """.stripMargin
           }

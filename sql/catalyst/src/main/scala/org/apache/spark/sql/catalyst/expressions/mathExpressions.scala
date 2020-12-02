@@ -57,7 +57,7 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -111,7 +111,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -147,7 +147,8 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     Examples:
       > SELECT _FUNC_();
        2.718281828459045
-  """)
+  """,
+  since = "1.5.0")
 case class EulerNumber() extends LeafMathExpression(math.E, "E")
 
 /**
@@ -160,7 +161,8 @@ case class EulerNumber() extends LeafMathExpression(math.E, "E")
     Examples:
       > SELECT _FUNC_();
        3.141592653589793
-  """)
+  """,
+  since = "1.5.0")
 case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,7 +182,8 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
        0.0
       > SELECT _FUNC_(2);
        NaN
-  """)
+  """,
+  since = "1.4.0")
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
 @ExpressionDescription(
@@ -194,7 +197,8 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
        0.0
       > SELECT _FUNC_(2);
        NaN
-  """)
+  """,
+  since = "1.4.0")
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
 @ExpressionDescription(
@@ -206,7 +210,8 @@ case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
 @ExpressionDescription(
@@ -215,7 +220,8 @@ case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN"
     Examples:
       > SELECT _FUNC_(27.0);
        3.0
-  """)
+  """,
+  since = "1.4.0")
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
 @ExpressionDescription(
@@ -226,7 +232,8 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
        0
       > SELECT _FUNC_(5);
        5
-  """)
+  """,
+  since = "1.4.0")
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -268,7 +275,8 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 @ExpressionDescription(
@@ -284,7 +292,8 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
 @ExpressionDescription(
@@ -322,9 +331,10 @@ case class Acosh(child: Expression)
        4
       > SELECT _FUNC_(-10, 16, -10);
        -16
-  """)
+  """,
+  since = "1.5.0")
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def children: Seq[Expression] = Seq(numExpr, fromBaseExpr, toBaseExpr)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
@@ -357,7 +367,8 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     Examples:
       > SELECT _FUNC_(0);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
@@ -370,7 +381,8 @@ case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "E
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
@@ -385,7 +397,8 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
        -1
       > SELECT _FUNC_(5);
        5
-  """)
+  """,
+  since = "1.4.0")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -451,8 +464,10 @@ object Factorial {
     Examples:
       > SELECT _FUNC_(5);
        120
-  """)
-case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0")
+case class Factorial(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -490,8 +505,11 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
     Examples:
       > SELECT _FUNC_(1);
        0.0
-  """)
-case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG")
+  """,
+  since = "1.4.0")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG") {
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("ln")
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -499,7 +517,8 @@ case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LO
     Examples:
       > SELECT _FUNC_(2);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => StrictMath.log(x) / StrictMath.log(2), "LOG2") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -521,7 +540,8 @@ case class Log2(child: Expression)
     Examples:
       > SELECT _FUNC_(10);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10")
 
 @ExpressionDescription(
@@ -530,7 +550,8 @@ case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10,
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
 }
@@ -542,10 +563,12 @@ case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p,
     Examples:
       > SELECT _FUNC_(12.3456);
        12.0
-  """)
+  """,
+  since = "1.4.0")
 // scalastyle:on line.size.limit
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("rint")
 }
 
 @ExpressionDescription(
@@ -554,7 +577,8 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
     Examples:
       > SELECT _FUNC_(40);
        1.0
-  """)
+  """,
+  since = "1.4.0")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
 @ExpressionDescription(
@@ -567,7 +591,8 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 @ExpressionDescription(
@@ -582,7 +607,8 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
 @ExpressionDescription(
@@ -612,7 +638,8 @@ case class Asinh(child: Expression)
     Examples:
       > SELECT _FUNC_(4);
        2.0
-  """)
+  """,
+  since = "1.1.1")
 case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
 @ExpressionDescription(
@@ -627,7 +654,8 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
@@ -642,7 +670,8 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
     Examples:
       > SELECT _FUNC_(1);
        0.6420926159343306
-  """)
+  """,
+  since = "2.3.0")
 case class Cot(child: Expression)
   extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -663,7 +692,8 @@ case class Cot(child: Expression)
     Examples:
       > SELECT _FUNC_(0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
 @ExpressionDescription(
@@ -698,7 +728,8 @@ case class Atanh(child: Expression)
     Examples:
       > SELECT _FUNC_(3.141592653589793);
        180.0
-  """)
+  """,
+  since = "1.4.0")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
 }
@@ -713,7 +744,8 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
     Examples:
       > SELECT _FUNC_(180);
        3.141592653589793
-  """)
+  """,
+  since = "1.4.0")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
 }
@@ -729,10 +761,11 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
        1111111111111111111111111111111111111111111111111111111111110011
       > SELECT _FUNC_(13.3);
        1101
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with Serializable with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = StringType
@@ -830,8 +863,10 @@ object Hex {
        11
       > SELECT _FUNC_('Spark SQL');
        537061726B2053514C
-  """)
-case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0")
+case class Hex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
@@ -865,8 +900,10 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
     Examples:
       > SELECT decode(_FUNC_('537061726B2053514C'), 'UTF-8');
        Spark SQL
-  """)
-case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0")
+case class Unhex(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
@@ -909,7 +946,8 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
     Examples:
       > SELECT _FUNC_(0, 0);
        0.0
-  """)
+  """,
+  since = "1.4.0")
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -929,7 +967,8 @@ case class Atan2(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(2, 3);
        8.0
-  """)
+  """,
+  since = "1.4.0")
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(StrictMath.pow, "POWER") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -950,9 +989,10 @@ case class Pow(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(2, 1);
        4
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftLeft(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -984,9 +1024,10 @@ case class ShiftLeft(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftRight(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -1018,9 +1059,10 @@ case class ShiftRight(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(4, 1);
        2
-  """)
+  """,
+  since = "1.5.0")
 case class ShiftRightUnsigned(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
@@ -1045,7 +1087,8 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(3, 4);
        5.0
-  """)
+  """,
+  since = "1.4.0")
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
@@ -1062,7 +1105,8 @@ case class Hypot(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(10, 100);
        2.0
-  """)
+  """,
+  since = "1.5.0")
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => StrictMath.log(c2) / StrictMath.log(c1), "LOG") {
 
@@ -1292,7 +1336,8 @@ abstract class RoundBase(child: Expression, scale: Expression,
     Examples:
       > SELECT _FUNC_(2.5, 0);
        3
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Round(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
@@ -1312,10 +1357,108 @@ case class Round(child: Expression, scale: Expression)
     Examples:
       > SELECT _FUNC_(2.5, 0);
        2
-  """)
+  """,
+  since = "2.0.0")
 // scalastyle:on line.size.limit
 case class BRound(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
     with Serializable with ImplicitCastInputTypes {
   def this(child: Expression) = this(child, Literal(0))
+}
+
+object WidthBucket {
+
+  def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
+    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
+        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
+      return null
+    }
+
+    val lower = Math.min(min, max)
+    val upper = Math.max(min, max)
+
+    if (min < max) {
+      if (value < lower) {
+        0L
+      } else if (value >= upper) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (value - lower) / (upper - lower)).toLong + 1L
+      }
+    } else { // `min > max` case
+      if (value > upper) {
+        0L
+      } else if (value <= lower) {
+        numBucket + 1L
+      } else {
+        (numBucket.toDouble * (upper - value) / (upper - lower)).toLong + 1L
+      }
+    }
+  }
+}
+
+/**
+ * Returns the bucket number into which the value of this expression would fall
+ * after being evaluated. Note that input arguments must follow conditions listed below;
+ * otherwise, the method will return null.
+ *  - `numBucket` must be greater than zero and be less than Long.MaxValue
+ *  - `value`, `min`, and `max` cannot be NaN
+ *  - `min` bound cannot equal `max`
+ *  - `min` and `max` must be finite
+ *
+ * Note: If `minValue` > `maxValue`, a return value is as follows;
+ *  if `value` > `minValue`, it returns 0.
+ *  if `value` <= `maxValue`, it returns `numBucket` + 1.
+ *  otherwise, it returns (`numBucket` * (`minValue` - `value`) / (`minValue` - `maxValue`)) + 1
+ *
+ * @param value is the expression to compute a bucket number in the histogram
+ * @param minValue is the minimum value of the histogram
+ * @param maxValue is the maximum value of the histogram
+ * @param numBucket is the number of buckets
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(value, min_value, max_value, num_bucket) - Returns the bucket number to which
+      `value` would be assigned in an equiwidth histogram with `num_bucket` buckets,
+      in the range `min_value` to `max_value`."
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(5.3, 0.2, 10.6, 5);
+       3
+      > SELECT _FUNC_(-2.1, 1.3, 3.4, 3);
+       0
+      > SELECT _FUNC_(8.1, 0.0, 5.7, 4);
+       5
+      > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
+       3
+  """,
+  since = "3.1.0")
+case class WidthBucket(
+    value: Expression,
+    minValue: Expression,
+    maxValue: Expression,
+    numBucket: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def children: Seq[Expression] = Seq(value, minValue, maxValue, numBucket)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def dataType: DataType = LongType
+  override def nullable: Boolean = true
+  override def prettyName: String = "width_bucket"
+
+  override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
+    WidthBucket.computeBucketNumber(
+      input.asInstanceOf[Double],
+      min.asInstanceOf[Double],
+      max.asInstanceOf[Double],
+      numBucket.asInstanceOf[Long])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
+      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
+        s".computeBucketNumber($input, $min, $max, $numBucket)")
+  }
 }

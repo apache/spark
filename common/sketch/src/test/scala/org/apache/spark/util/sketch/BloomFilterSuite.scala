@@ -22,9 +22,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class BloomFilterSuite extends FunSuite { // scalastyle:ignore funsuite
+class BloomFilterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   private final val EPSILON = 0.01
 
   // Serializes and deserializes a given `BloomFilter`, then checks whether the deserialized

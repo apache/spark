@@ -271,7 +271,7 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
@@ -302,6 +302,8 @@ private[spark] object BLAS extends Serializable {
           j += 1
           prevCol = col
         }
+      case _ =>
+        throw new IllegalArgumentException(s"spr doesn't support vector type ${v.getClass}.")
     }
   }
 

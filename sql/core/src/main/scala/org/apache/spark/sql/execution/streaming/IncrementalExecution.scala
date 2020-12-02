@@ -21,14 +21,13 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{LeafExecNode, LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.Utils
@@ -51,7 +50,6 @@ class IncrementalExecution(
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
       sparkSession,
-      sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
     override def strategies: Seq[Strategy] =
       extraPlanningStrategies ++
@@ -76,7 +74,7 @@ class IncrementalExecution(
    * with the desired literal
    */
   override
-  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
+  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData,
       tracker) transformAllExpressions {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
@@ -118,7 +116,7 @@ class IncrementalExecution(
           case s: StatefulOperator =>
             statefulOpFound = true
 
-          case e: ShuffleExchangeExec =>
+          case e: ShuffleExchangeLike =>
             // Don't search recursively any further as any child stateful operator as we
             // are only looking for stateful subplans that this plan has narrow dependencies on.
 

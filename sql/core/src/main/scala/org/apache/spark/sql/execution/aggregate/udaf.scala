@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, _}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateMutableProjection, GenerateSafeProjection}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -458,7 +456,8 @@ case class ScalaUDAF(
 case class ScalaAggregator[IN, BUF, OUT](
     children: Seq[Expression],
     agg: Aggregator[IN, BUF, OUT],
-    inputEncoderNR: ExpressionEncoder[IN],
+    inputEncoder: ExpressionEncoder[IN],
+    bufferEncoder: ExpressionEncoder[BUF],
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
@@ -469,10 +468,12 @@ case class ScalaAggregator[IN, BUF, OUT](
   with ImplicitCastInputTypes
   with Logging {
 
-  private[this] lazy val inputEncoder = inputEncoderNR.resolveAndBind()
-  private[this] lazy val bufferEncoder =
-    agg.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]].resolveAndBind()
+  // input and buffer encoders are resolved by ResolveEncodersInScalaAgg
+  private[this] lazy val inputDeserializer = inputEncoder.createDeserializer()
+  private[this] lazy val bufferSerializer = bufferEncoder.createSerializer()
+  private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
+  private[this] lazy val outputSerializer = outputEncoder.createSerializer()
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
@@ -491,26 +492,41 @@ case class ScalaAggregator[IN, BUF, OUT](
   def createAggregationBuffer(): BUF = agg.zero
 
   def update(buffer: BUF, input: InternalRow): BUF =
-    agg.reduce(buffer, inputEncoder.fromRow(inputProjection(input)))
+    agg.reduce(buffer, inputDeserializer(inputProjection(input)))
 
   def merge(buffer: BUF, input: BUF): BUF = agg.merge(buffer, input)
 
   def eval(buffer: BUF): Any = {
-    val row = outputEncoder.toRow(agg.finish(buffer))
+    val row = outputSerializer(agg.finish(buffer))
     if (outputEncoder.isSerializedAsStruct) row else row.get(0, dataType)
   }
 
   private[this] lazy val bufferRow = new UnsafeRow(bufferEncoder.namedExpressions.length)
 
   def serialize(agg: BUF): Array[Byte] =
-    bufferEncoder.toRow(agg).asInstanceOf[UnsafeRow].getBytes()
+    bufferSerializer(agg).asInstanceOf[UnsafeRow].getBytes()
 
   def deserialize(storageFormat: Array[Byte]): BUF = {
     bufferRow.pointTo(storageFormat, storageFormat.length)
-    bufferEncoder.fromRow(bufferRow)
+    bufferDeserializer(bufferRow)
   }
 
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
   override def nodeName: String = agg.getClass.getSimpleName
+}
+
+/**
+ * An extension rule to resolve encoder expressions from a [[ScalaAggregator]]
+ */
+object ResolveEncodersInScalaAgg extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p if !p.resolved => p
+    case p => p.transformExpressionsUp {
+      case agg: ScalaAggregator[_, _, _] =>
+        agg.copy(
+          inputEncoder = agg.inputEncoder.resolveAndBind(),
+          bufferEncoder = agg.bufferEncoder.resolveAndBind())
+    }
+  }
 }

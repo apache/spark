@@ -23,7 +23,7 @@ import numpy as np
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
@@ -102,6 +102,7 @@ class LinearRegressionModelBase(LinearModel):
 
     """A linear regression model.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> lrmb = LinearRegressionModelBase(np.array([1.0, 2.0]), 0.1)
     >>> abs(lrmb.predict(np.array([-1.03, 7.777])) - 14.624) < 1e-6
     True
@@ -128,6 +129,7 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -297,6 +299,7 @@ class LassoModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_1 penalty term.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -441,6 +444,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_2 penalty term.
 
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),

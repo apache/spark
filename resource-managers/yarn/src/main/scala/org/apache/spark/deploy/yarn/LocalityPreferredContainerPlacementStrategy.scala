@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
+import org.apache.hadoop.yarn.api.records.ContainerId
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
@@ -40,7 +40,7 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
  * and cpus per task is 1, so the required container number is 15,
  * and host ratio is (host1: 30, host2: 30, host3: 20, host4: 10).
  *
- * 1. If requested container number (18) is more than the required container number (15):
+ * 1. If the requested container number (18) is more than the required container number (15):
  *
  * requests for 5 containers with nodes: (host1, host2, host3, host4)
  * requests for 5 containers with nodes: (host1, host2, host3)
@@ -63,16 +63,16 @@ private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], rack
  * follow the method of 1 and 2.
  *
  * 4. If containers exist and some of them can match the requested localities.
- * For example if we have 1 containers on each node (host1: 1, host2: 1: host3: 1, host4: 1),
+ * For example if we have 1 container on each node (host1: 1, host2: 1: host3: 1, host4: 1),
  * and the expected containers on each node would be (host1: 5, host2: 5, host3: 4, host4: 2),
  * so the newly requested containers on each node would be updated to (host1: 4, host2: 4,
  * host3: 3, host4: 1), 12 containers by total.
  *
  *   4.1 If requested container number (18) is more than newly required containers (12). Follow
- *   method 1 with updated ratio 4 : 4 : 3 : 1.
+ *   method 1 with an updated ratio 4 : 4 : 3 : 1.
  *
- *   4.2 If request container number (10) is more than newly required containers (12). Follow
- *   method 2 with updated ratio 4 : 4 : 3 : 1.
+ *   4.2 If request container number (10) is less than newly required containers (12). Follow
+ *   method 2 with an updated ratio 4 : 4 : 3 : 1.
  *
  * 5. If containers exist and existing localities can fully cover the requested localities.
  * For example if we have 5 containers on each node (host1: 5, host2: 5, host3: 5, host4: 5),

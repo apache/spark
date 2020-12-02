@@ -47,12 +47,13 @@ class UnivocityGenerator(
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = false)
+    isParsing = false)
   private val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false)
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>

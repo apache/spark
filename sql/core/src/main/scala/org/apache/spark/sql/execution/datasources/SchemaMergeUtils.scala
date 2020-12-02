@@ -32,10 +32,12 @@ object SchemaMergeUtils extends Logging {
    */
   def mergeSchemasInParallel(
       sparkSession: SparkSession,
+      parameters: Map[String, String],
       files: Seq[FileStatus],
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
       : Option[StructType] = {
-    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
+    val serializedConf = new SerializableConfiguration(
+      sparkSession.sessionState.newHadoopConfWithOptions(parameters))
 
     // !! HACK ALERT !!
     // Here is a hack for Parquet, but it can be used by Orc as well.

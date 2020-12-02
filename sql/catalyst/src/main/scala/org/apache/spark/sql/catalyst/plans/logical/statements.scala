@@ -83,6 +83,7 @@ case class CreateTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     ifNotExists: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
@@ -133,6 +134,7 @@ case class ReplaceTableAsSelectStatement(
     options: Map[String, String],
     location: Option[String],
     comment: Option[String],
+    writeOptions: Map[String, String],
     orCreate: Boolean) extends ParsedStatement {
 
   override def children: Seq[LogicalPlan] = Seq(asSelect)
@@ -216,30 +218,12 @@ case class AlterTableRecoverPartitionsStatement(
     tableName: Seq[String]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... ADD PARTITION command, as parsed from SQL
- */
-case class AlterTableAddPartitionStatement(
-    tableName: Seq[String],
-    partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean) extends ParsedStatement
-
-/**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
  */
 case class AlterTableRenamePartitionStatement(
     tableName: Seq[String],
     from: TablePartitionSpec,
     to: TablePartitionSpec) extends ParsedStatement
-
-/**
- * ALTER TABLE ... DROP PARTITION command, as parsed from SQL
- */
-case class AlterTableDropPartitionStatement(
-    tableName: Seq[String],
-    specs: Seq[TablePartitionSpec],
-    ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends ParsedStatement
 
 /**
  * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
@@ -282,27 +266,11 @@ case class RenameTableStatement(
     isView: Boolean) extends ParsedStatement
 
 /**
- * A DROP TABLE statement, as parsed from SQL.
- */
-case class DropTableStatement(
-    tableName: Seq[String],
-    ifExists: Boolean,
-    purge: Boolean) extends ParsedStatement
-
-/**
  * A DROP VIEW statement, as parsed from SQL.
  */
 case class DropViewStatement(
     viewName: Seq[String],
     ifExists: Boolean) extends ParsedStatement
-
-/**
- * A DESCRIBE TABLE tbl_name col_name statement, as parsed from SQL.
- */
-case class DescribeColumnStatement(
-    tableName: Seq[String],
-    colNameParts: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -357,45 +325,9 @@ case class CreateNamespaceStatement(
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
 
 /**
- * An ANALYZE TABLE statement, as parsed from SQL.
- */
-case class AnalyzeTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Map[String, Option[String]],
-    noScan: Boolean) extends ParsedStatement
-
-/**
- * An ANALYZE TABLE FOR COLUMNS statement, as parsed from SQL.
- */
-case class AnalyzeColumnStatement(
-    tableName: Seq[String],
-    columnNames: Option[Seq[String]],
-    allColumns: Boolean) extends ParsedStatement {
-  require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
-    "mutually exclusive. Only one of them should be specified.")
-}
-
-/**
  * A REPAIR TABLE statement, as parsed from SQL
  */
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
- * A LOAD DATA INTO TABLE statement, as parsed from SQL
- */
-case class LoadDataStatement(
-    tableName: Seq[String],
-    path: String,
-    isLocal: Boolean,
-    isOverwrite: Boolean,
-    partition: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
- * A SHOW CREATE TABLE statement, as parsed from SQL.
- */
-case class ShowCreateTableStatement(
-    tableName: Seq[String],
-    asSerde: Boolean = false) extends ParsedStatement
 
 /**
  * A CACHE TABLE statement, as parsed from SQL
@@ -428,11 +360,6 @@ case class ShowPartitionsStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * A REFRESH TABLE statement, as parsed from SQL
- */
-case class RefreshTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
  * A SHOW COLUMNS statement, as parsed from SQL
  */
 case class ShowColumnsStatement(
@@ -443,30 +370,6 @@ case class ShowColumnsStatement(
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
-
-/**
- * A DESCRIBE FUNCTION statement, as parsed from SQL
- */
-case class DescribeFunctionStatement(
-    functionName: Seq[String],
-    isExtended: Boolean) extends ParsedStatement
-
-/**
- *  SHOW FUNCTIONS statement, as parsed from SQL
- */
-case class ShowFunctionsStatement(
-    userScope: Boolean,
-    systemScope: Boolean,
-    pattern: Option[String],
-    functionName: Option[Seq[String]]) extends ParsedStatement
-
-/**
- *  DROP FUNCTION statement, as parsed from SQL
- */
-case class DropFunctionStatement(
-    functionName: Seq[String],
-    ifExists: Boolean,
-    isTemp: Boolean) extends ParsedStatement
 
 /**
  *  CREATE FUNCTION statement, as parsed from SQL

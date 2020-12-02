@@ -77,7 +77,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') > to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') > to_date('2009-07-30 04:17:52')):boolean>
+struct<(to_date(2009-07-30 04:17:52) > to_date(2009-07-30 04:17:52)):boolean>
 -- !query output
 false
 
@@ -85,7 +85,7 @@ false
 -- !query
 select to_date('2009-07-30 04:17:52') > '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') > CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(to_date(2009-07-30 04:17:52) > CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query output
 false
 
@@ -133,7 +133,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') >= to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') >= to_date('2009-07-30 04:17:52')):boolean>
+struct<(to_date(2009-07-30 04:17:52) >= to_date(2009-07-30 04:17:52)):boolean>
 -- !query output
 true
 
@@ -141,7 +141,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') >= '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') >= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(to_date(2009-07-30 04:17:52) >= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query output
 true
 
@@ -189,7 +189,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') < to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') < to_date('2009-07-30 04:17:52')):boolean>
+struct<(to_date(2009-07-30 04:17:52) < to_date(2009-07-30 04:17:52)):boolean>
 -- !query output
 false
 
@@ -197,7 +197,7 @@ false
 -- !query
 select to_date('2009-07-30 04:17:52') < '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') < CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(to_date(2009-07-30 04:17:52) < CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query output
 false
 
@@ -245,7 +245,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') <= to_date('2009-07-30 04:17:52')
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') <= to_date('2009-07-30 04:17:52')):boolean>
+struct<(to_date(2009-07-30 04:17:52) <= to_date(2009-07-30 04:17:52)):boolean>
 -- !query output
 true
 
@@ -253,7 +253,7 @@ true
 -- !query
 select to_date('2009-07-30 04:17:52') <= '2009-07-30 04:17:52'
 -- !query schema
-struct<(to_date('2009-07-30 04:17:52') <= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(to_date(2009-07-30 04:17:52) <= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
 -- !query output
 true
 
@@ -261,7 +261,7 @@ true
 -- !query
 select to_date('2017-03-01') = to_timestamp('2017-03-01 00:00:00')
 -- !query schema
-struct<(CAST(to_date('2017-03-01') AS TIMESTAMP) = to_timestamp('2017-03-01 00:00:00')):boolean>
+struct<(CAST(to_date(2017-03-01) AS TIMESTAMP) = to_timestamp(2017-03-01 00:00:00)):boolean>
 -- !query output
 true
 
@@ -269,7 +269,7 @@ true
 -- !query
 select to_timestamp('2017-03-01 00:00:01') > to_date('2017-03-01')
 -- !query schema
-struct<(to_timestamp('2017-03-01 00:00:01') > CAST(to_date('2017-03-01') AS TIMESTAMP)):boolean>
+struct<(to_timestamp(2017-03-01 00:00:01) > CAST(to_date(2017-03-01) AS TIMESTAMP)):boolean>
 -- !query output
 true
 
@@ -277,7 +277,7 @@ true
 -- !query
 select to_timestamp('2017-03-01 00:00:01') >= to_date('2017-03-01')
 -- !query schema
-struct<(to_timestamp('2017-03-01 00:00:01') >= CAST(to_date('2017-03-01') AS TIMESTAMP)):boolean>
+struct<(to_timestamp(2017-03-01 00:00:01) >= CAST(to_date(2017-03-01) AS TIMESTAMP)):boolean>
 -- !query output
 true
 
@@ -285,7 +285,7 @@ true
 -- !query
 select to_date('2017-03-01') < to_timestamp('2017-03-01 00:00:01')
 -- !query schema
-struct<(CAST(to_date('2017-03-01') AS TIMESTAMP) < to_timestamp('2017-03-01 00:00:01')):boolean>
+struct<(CAST(to_date(2017-03-01) AS TIMESTAMP) < to_timestamp(2017-03-01 00:00:01)):boolean>
 -- !query output
 true
 
@@ -293,6 +293,6 @@ true
 -- !query
 select to_date('2017-03-01') <= to_timestamp('2017-03-01 00:00:01')
 -- !query schema
-struct<(CAST(to_date('2017-03-01') AS TIMESTAMP) <= to_timestamp('2017-03-01 00:00:01')):boolean>
+struct<(CAST(to_date(2017-03-01) AS TIMESTAMP) <= to_timestamp(2017-03-01 00:00:01)):boolean>
 -- !query output
 true

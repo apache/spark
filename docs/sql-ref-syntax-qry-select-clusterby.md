@@ -18,7 +18,10 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-The <code>CLUSTER BY</code> clause is used to first repartition the data based
+
+### Description
+
+The `CLUSTER BY` clause is used to first repartition the data based
 on the input expressions and then sort the data within each partition. This is
 semantically equivalent to performing a
 [DISTRIBUTE BY](sql-ref-syntax-qry-select-distribute-by.html) followed by a
@@ -26,20 +29,20 @@ semantically equivalent to performing a
 resultant rows are sorted within each partition and does not guarantee a total order of output.
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 CLUSTER BY { expression [ , ... ] }
-{% endhighlight %}
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>expression</em></code></dt>
-  <dd>
+
+* **expression**
+
     Specifies combination of one or more values, operators and SQL functions that results in a value.
-  </dd>
-</dl>
 
 ### Examples
-{% highlight sql %}
+
+```sql
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
     ('Zen Hui', 25),
@@ -58,42 +61,44 @@ SET spark.sql.shuffle.partitions = 2;
 -- of a query when `CLUSTER BY` is not used vs when it's used. The query below produces rows
 -- where age column is not sorted.
 SELECT age, name FROM person;
-
-  +---+-------+
-  |age|name   |
-  +---+-------+
-  |16 |Shone S|
-  |25 |Zen Hui|
-  |16 |Jack N |
-  |25 |Mike A |
-  |18 |John A |
-  |18 |Anil B |
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 16|Shone S|
+| 25|Zen Hui|
+| 16| Jack N|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
++---+-------+
 
 -- Produces rows clustered by age. Persons with same age are clustered together.
 -- In the query below, persons with age 18 and 25 are in first partition and the
 -- persons with age 16 are in the second partition. The rows are sorted based
 -- on age within each partition.
 SELECT age, name FROM person CLUSTER BY age;
++---+-------+
+|age|   name|
++---+-------+
+| 18| John A|
+| 18| Anil B|
+| 25|Zen Hui|
+| 25| Mike A|
+| 16|Shone S|
+| 16| Jack N|
++---+-------+
+```
 
-  +---+-------+
-  |age|name   |
-  +---+-------+
-  |18 |John A |
-  |18 |Anil B |
-  |25 |Zen Hui|
-  |25 |Mike A |
-  |16 |Shone S|
-  |16 |Jack N |
-  +---+-------+
-{% endhighlight %}
+### Related Statements
 
-### Related Clauses
-- [SELECT Main](sql-ref-syntax-qry-select.html)
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

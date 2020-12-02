@@ -62,23 +62,13 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 
 # Dependencies
 
-MLlib uses the linear algebra package [Breeze](http://www.scalanlp.org/), which depends on
-[netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing.
-If native libraries[^1] are not available at runtime, you will see a warning message and a pure JVM
-implementation will be used instead.
+MLlib uses linear algebra packages [Breeze](http://www.scalanlp.org/) and [netlib-java](https://github.com/fommil/netlib-java) for optimised numerical processing[^1]. Those packages may call native acceleration libraries such as [Intel MKL](https://software.intel.com/content/www/us/en/develop/tools/math-kernel-library.html) or [OpenBLAS](http://www.openblas.net) if they are available as system libraries or in runtime library paths. 
 
-Due to licensing issues with runtime proprietary binaries, we do not include `netlib-java`'s native
-proxies by default.
-To configure `netlib-java` / Breeze to use system optimised binaries, include
-`com.github.fommil.netlib:all:1.1.2` (or build Spark with `-Pnetlib-lgpl`) as a dependency of your
-project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
-platform's additional installation instructions.
-
-The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), can use multiple threads in a single operation, which can conflict with Spark's execution model.
-
-Configuring these BLAS implementations to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of cores each Spark task is configured to use, which is 1 by default and typically left at 1.
-
-Please refer to resources like the following to understand how to configure the number of threads these BLAS implementations use: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) or [Intel oneMKL](https://software.intel.com/en-us/onemkl-linux-developer-guide-improving-performance-with-threading) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded). Note that if nativeBLAS is not properly configured in system, java implementation(f2jBLAS) will be used as fallback option.
+Due to differing OSS licenses, `netlib-java`'s native proxies can't be distributed with Spark. See [MLlib Linear Algebra Acceleration Guide](ml-linalg-guide.html) for how to enable accelerated linear algebra processing. If accelerated native libraries are not enabled, you will see a warning message like below and a pure JVM implementation will be used instead:
+```
+WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeSystemBLAS
+WARN BLAS: Failed to load implementation from:com.github.fommil.netlib.NativeRefBLAS
+```
 
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
@@ -91,10 +81,10 @@ The list below highlights some of the new features and enhancements added to MLl
 release of Spark:
 
 * Multiple columns support was added to `Binarizer` ([SPARK-23578](https://issues.apache.org/jira/browse/SPARK-23578)), `StringIndexer` ([SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215)), `StopWordsRemover` ([SPARK-29808](https://issues.apache.org/jira/browse/SPARK-29808)) and PySpark `QuantileDiscretizer` ([SPARK-22796](https://issues.apache.org/jira/browse/SPARK-22796)).
-* Support Tree-Based Feature Transformation was added
+* Tree-Based Feature Transformation was added
 ([SPARK-13677](https://issues.apache.org/jira/browse/SPARK-13677)).
 * Two new evaluators `MultilabelClassificationEvaluator` ([SPARK-16692](https://issues.apache.org/jira/browse/SPARK-16692)) and `RankingEvaluator` ([SPARK-28045](https://issues.apache.org/jira/browse/SPARK-28045)) were added.
-* Sample weights support was added in `DecisionTreeClassifier/Regressor` ([SPARK-19591](https://issues.apache.org/jira/browse/SPARK-19591)), `RandomForestClassifier/Regressor` ([SPARK-9478](https://issues.apache.org/jira/browse/SPARK-9478)), `GBTClassifier/Regressor` ([SPARK-9612](https://issues.apache.org/jira/browse/SPARK-9612)),  `RegressionEvaluator` ([SPARK-24102](https://issues.apache.org/jira/browse/SPARK-24102)), `BinaryClassificationEvaluator` ([SPARK-24103](https://issues.apache.org/jira/browse/SPARK-24103)), `BisectingKMeans` ([SPARK-30351](https://issues.apache.org/jira/browse/SPARK-30351)), `KMeans` ([SPARK-29967](https://issues.apache.org/jira/browse/SPARK-29967)) and `GaussianMixture` ([SPARK-30102](https://issues.apache.org/jira/browse/SPARK-30102)).
+* Sample weights support was added in `DecisionTreeClassifier/Regressor` ([SPARK-19591](https://issues.apache.org/jira/browse/SPARK-19591)), `RandomForestClassifier/Regressor` ([SPARK-9478](https://issues.apache.org/jira/browse/SPARK-9478)), `GBTClassifier/Regressor` ([SPARK-9612](https://issues.apache.org/jira/browse/SPARK-9612)),  `MulticlassClassificationEvaluator` ([SPARK-24101](https://issues.apache.org/jira/browse/SPARK-24101)), `RegressionEvaluator` ([SPARK-24102](https://issues.apache.org/jira/browse/SPARK-24102)), `BinaryClassificationEvaluator` ([SPARK-24103](https://issues.apache.org/jira/browse/SPARK-24103)), `BisectingKMeans` ([SPARK-30351](https://issues.apache.org/jira/browse/SPARK-30351)), `KMeans` ([SPARK-29967](https://issues.apache.org/jira/browse/SPARK-29967)) and `GaussianMixture` ([SPARK-30102](https://issues.apache.org/jira/browse/SPARK-30102)).
 * R API for `PowerIterationClustering` was added
 ([SPARK-19827](https://issues.apache.org/jira/browse/SPARK-19827)).
 * Added Spark ML listener for tracking ML pipeline status
@@ -105,10 +95,10 @@ release of Spark:
 ([SPARK-28399](https://issues.apache.org/jira/browse/SPARK-28399)).
 * [`Factorization Machines`](ml-classification-regression.html#factorization-machines) classifier and regressor were added
 ([SPARK-29224](https://issues.apache.org/jira/browse/SPARK-29224)).
-* Gaussian Naive Bayes ([SPARK-16872](https://issues.apache.org/jira/browse/SPARK-16872)) and Complement Naive Bayes ([SPARK-29942](https://issues.apache.org/jira/browse/SPARK-29942)) were added.
+* Gaussian Naive Bayes Classifier ([SPARK-16872](https://issues.apache.org/jira/browse/SPARK-16872)) and Complement Naive Bayes Classifier ([SPARK-29942](https://issues.apache.org/jira/browse/SPARK-29942)) were added.
 * ML function parity between Scala and Python
 ([SPARK-28958](https://issues.apache.org/jira/browse/SPARK-28958)).
-* `predictRaw` is made public in all the Classification models. `predictProbability` is made public in all the Classification models except `LinearSVCModel`.
+* `predictRaw` is made public in all the Classification models. `predictProbability` is made public in all the Classification models except `LinearSVCModel`
 ([SPARK-30358](https://issues.apache.org/jira/browse/SPARK-30358)).
 
 # Migration Guide

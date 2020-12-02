@@ -31,49 +31,19 @@ whichever version of Spark you currently have checked out of revision control.
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
 Python, R and SQL.
 
-You need to have Ruby 2 (preferably Ruby 2.6+) and Python 3 (preferably Python 3.7+) installed.
-
-You'll also need to install the following libraries:
-
-```sh
-gem install jekyll:4.0.0 jekyll-redirect-from:0.16.0 rouge:3.15.0
-```
-
-### Using rbenv and pyenv
-
-A handy way to install and manage various versions of Ruby and Python is with [`rbenv`] and [`pyenv`].
-
-[`rbenv`]: https://github.com/rbenv/rbenv
-[`pyenv`]: https://github.com/pyenv/pyenv
-
-On macOS you can install them with Homebrew:
+You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
+[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
+installed. Also install the following libraries:
 
 ```sh
-brew install rbenv pyenv
+$ sudo gem install jekyll jekyll-redirect-from rouge
 ```
 
-To activate them, you'll need to run these commands or add them to the end of your `.bash_profile`:
-
-```sh
-eval "$(rbenv init -)"
-eval "$(pyenv init -)"
-```
-
-You can now use them to install specific versions of Ruby and Python and associate them with 
-the Spark home directory. Whenever you navigate to this directory or any of its subdirectories, these versions of Ruby and Python will be automatically activated.
-
-```sh
-rbenv install 2.7.0
-pyenv install 3.7.6
-
-cd /path/to/spark/root
-rbenv local 2.7.0
-pyenv local 3.7.6
-```
+Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
 ### R Documentation
 
-If you'd like to generate R documentation, you'll need to install R, [install Pandoc](https://pandoc.org/installing.html),
+If you'd like to generate R documentation, you'll need to [install Pandoc](https://pandoc.org/installing.html)
 and install these libraries:
 
 ```sh
@@ -87,8 +57,13 @@ Note: Other versions of roxygen2 might work in SparkR documentation generation b
 
 To generate API docs for any language, you'll need to install these libraries:
 
+<!--
+TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
+See also https://github.com/sphinx-doc/sphinx/issues/7551.
+-->
+
 ```sh
-pip install sphinx==2.3.1 mkdocs==1.0.4 numpy==1.18.1
+$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
 ```
 
 ## Generating the Documentation HTML

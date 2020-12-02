@@ -25,10 +25,11 @@ import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -85,23 +86,29 @@ class UnivocityParser(
   // We preallocate it avoid unnecessary allocations.
   private val noRows = None
 
-  private val timestampFormatter = TimestampFormatter(
+  private lazy val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
-    needVarLengthSecondFraction = true)
-  private val dateFormatter = DateFormatter(
+    isParsing = true)
+  private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.zoneId,
     options.locale,
-    legacyFormat = FAST_DATE_FORMAT)
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true)
 
-  private val csvFilters = new CSVFilters(filters, requiredSchema)
+  private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
+    new OrderedFilters(filters, requiredSchema)
+  } else {
+    new NoopFilters
+  }
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
+    val currentContent = tokenizer.getContext.currentParsedContent()
+    if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
 
   // This parser first picks some tokens from the input tokens, according to the required schema,
@@ -184,7 +191,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
       }
@@ -197,7 +204,7 @@ class UnivocityParser(
           case NonFatal(e) =>
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
-            val str = UTF8String.fromString(DateTimeUtils.cleanLegacyTimestampStr(datum))
+            val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
         }
       }

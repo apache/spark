@@ -29,21 +29,16 @@ Renames the existing view. If the new view name already exists in the source dat
 does not support moving the views across databases.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier RENAME TO view_identifier
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
 
 #### SET View Properties
 Set one or more properties of an existing view. The properties are the key value pairs. If the properties' keys exist, 
@@ -51,119 +46,100 @@ the values are replaced with the new values. If the properties' keys do not exis
 the properties.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier SET TBLPROPERTIES ( property_key = property_val [ , ... ] )
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>property_key</em></code></dt>
-  <dd>
-    Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ key_part1 ] [ .key_part2 ] [ ... ]
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **property_key**
+
+    Specifies the property key. The key may consists of multiple parts separated by dot.
+
+    **Syntax:** `[ key_part1 ] [ .key_part2 ] [ ... ]`
 
 #### UNSET View Properties
 Drop one or more properties of an existing view. If the specified keys do not exist, an exception is thrown. Use 
 `IF EXISTS` to avoid the exception. 
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier UNSET TBLPROPERTIES [ IF EXISTS ]  ( property_key [ , ... ] )
-{% endhighlight %}
+```
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>property_key</em></code></dt>
-  <dd>
-    Specifies the property key. The key may consists of multiple parts separated by dot.<br><br>
-    <b>Syntax:</b>
-      <code>
-        [ key_part1 ] [ .key_part2 ] [ ... ]
-      </code>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **property_key**
+
+    Specifies the property key. The key may consists of multiple parts separated by dot.
+
+    **Syntax:** `[ key_part1 ] [ .key_part2 ] [ ... ]`
 
 #### ALTER View AS SELECT
-`ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view, the `SELECT` statement must be valid,
+`ALTER VIEW view_identifier AS SELECT` statement changes the definition of a view. The `SELECT` statement must be valid,
 and the `view_identifier` must exist.
 
 #### Syntax
-{% highlight sql %}
+```sql
 ALTER VIEW view_identifier AS select_statement
-{% endhighlight %}
+```
+
+Note that `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPERTIES` properties.
 
 #### Parameters
-<dl>
-  <dt><code><em>view_identifier</em></code></dt>
-  <dd>
-    Specifies a view name, which may be optionally qualified with a database name.<br><br>
-    <b> Syntax:</b>
-      <code>
-        [ database_name. ] view_name
-      </code>
-  </dd>
-  <dt><code><em>select_statement</em></code></dt>
-  <dd>
-    Specifies the definition of the view, detail check <a href="sql-ref-syntax-qry-select.html">select_statement</a>
-  </dd>
-</dl>
+* **view_identifier**
+
+    Specifies a view name, which may be optionally qualified with a database name.
+
+    **Syntax:** `[ database_name. ] view_name`
+
+* **select_statement**
+
+    Specifies the definition of the view. Check [select_statement](sql-ref-syntax-qry-select.html) for details.
 
 ### Examples
 
-{% highlight sql %}
+```sql
 -- Rename only changes the view name.
 -- The source and target databases of the view have to be the same.
--- Use qualified or unqualified name for the source and target view  
+-- Use qualified or unqualified name for the source and target view.
 ALTER VIEW tempdb1.v1 RENAME TO tempdb1.v2;
 
 -- Verify that the new view is created.
 DESCRIBE TABLE EXTENDED tempdb1.v2;
-
 +----------------------------+----------+-------+
-|col_name                    |data_type |comment|
+|                    col_name|data_type |comment|
 +----------------------------+----------+-------+
-|c1                          |int       |null   |
-|c2                          |string    |null   |
+|                          c1|       int|   null|
+|                          c2|    string|   null|
 |                            |          |       |
 |# Detailed Table Information|          |       |
-|Database                    |tempdb1   |       |
-|Table                       |v2        |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
 +----------------------------+----------+-------+
 
 -- Before ALTER VIEW SET TBLPROPERTIES
 DESC TABLE EXTENDED tempdb1.v2;
-
 +----------------------------+----------+-------+
-|col_name                    |data_type |comment|
+|                    col_name| data_type|comment|
 +----------------------------+----------+-------+
-|c1                          |int       |null   |
-|c2                          |string    |null   |
+|                          c1|       int|   null|
+|                          c2|    string|   null|
 |                            |          |       |
 |# Detailed Table Information|          |       |
-|Database                    |tempdb1   |       |
-|Table                       |v2        |       |
-|Table Properties            |[....]    |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
+|            Table Properties|    [....]|       |
 +----------------------------+----------+-------+
 
 -- Set properties in TBLPROPERTIES
@@ -171,17 +147,16 @@ ALTER VIEW tempdb1.v2 SET TBLPROPERTIES ('created.by.user' = "John", 'created.da
 
 -- Use `DESCRIBE TABLE EXTENDED tempdb1.v2` to verify
 DESC TABLE EXTENDED tempdb1.v2;
-
 +----------------------------+-----------------------------------------------------+-------+
-|col_name                    |data_type                                            |comment|
+|                    col_name|                                            data_type|comment|
 +----------------------------+-----------------------------------------------------+-------+
-|c1                          |int                                                  |null   |
-|c2                          |string                                               |null   |
+|                          c1|                                                  int|   null|
+|                          c2|                                               string|   null|
 |                            |                                                     |       |
 |# Detailed Table Information|                                                     |       |
-|Database                    |tempdb1                                              |       |
-|Table                       |v2                                                   |       |
-|Table Properties            |[created.by.user=John, created.date=01-01-2001, ....]|       |
+|                    Database|                                              tempdb1|       |
+|                       Table|                                                   v2|       |
+|            Table Properties|[created.by.user=John, created.date=01-01-2001, ....]|       |
 +----------------------------+-----------------------------------------------------+-------+
 
 -- Remove the key `created.by.user` and `created.date` from `TBLPROPERTIES`
@@ -189,17 +164,16 @@ ALTER VIEW tempdb1.v2 UNSET TBLPROPERTIES ('created.by.user', 'created.date');
 
 --Use `DESC TABLE EXTENDED tempdb1.v2` to verify the changes
 DESC TABLE EXTENDED tempdb1.v2;
-
 +----------------------------+----------+-------+
-|col_name                    |data_type |comment|
+|                    col_name| data_type|comment|
 +----------------------------+----------+-------+
-|c1                          |int       |null   |
-|c2                          |string    |null   |
+|                          c1|       int|   null|
+|                          c2|    string|   null|
 |                            |          |       |
 |# Detailed Table Information|          |       |
-|Database                    |tempdb1   |       |
-|Table                       |v2        |       |
-|Table Properties            |[....]    |       |
+|                    Database|   tempdb1|       |
+|                       Table|        v2|       |
+|            Table Properties|    [....]|       |
 +----------------------------+----------+-------+
 
 -- Change the view definition
@@ -207,29 +181,24 @@ ALTER VIEW tempdb1.v2 AS SELECT * FROM tempdb1.v1;
 
 -- Use `DESC TABLE EXTENDED` to verify
 DESC TABLE EXTENDED tempdb1.v2;
-
 +----------------------------+---------------------------+-------+
-|col_name                    |data_type                  |comment|
+|                    col_name|                  data_type|comment|
 +----------------------------+---------------------------+-------+
-|c1                          |int                        |null   |
-|c2                          |string                     |null   |
+|                          c1|                        int|   null|
+|                          c2|                     string|   null|
 |                            |                           |       |
 |# Detailed Table Information|                           |       |
-|Database                    |tempdb1                    |       |
-|Table                       |v2                         |       |
-|Type                        |VIEW                       |       |
-|View Text                   |select * from tempdb1.v1   |       |
-|View Original Text          |select * from tempdb1.v1   |       |
+|                    Database|                    tempdb1|       |
+|                       Table|                         v2|       |
+|                        Type|                       VIEW|       |
+|                   View Text|   select * from tempdb1.v1|       |
+|          View Original Text|   select * from tempdb1.v1|       |
 +----------------------------+---------------------------+-------+
-{% endhighlight %}
+```
 
 ### Related Statements
 
-- [describe-table](sql-ref-syntax-aux-describe-table.html)
-- [create-view](sql-ref-syntax-ddl-create-view.html)
-- [drop-view](sql-ref-syntax-ddl-drop-view.html)
-
-#### Note:
-
-`ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPERTIES` properties
-
+* [describe-table](sql-ref-syntax-aux-describe-table.html)
+* [create-view](sql-ref-syntax-ddl-create-view.html)
+* [drop-view](sql-ref-syntax-ddl-drop-view.html)
+* [show-views](sql-ref-syntax-aux-show-views.html)

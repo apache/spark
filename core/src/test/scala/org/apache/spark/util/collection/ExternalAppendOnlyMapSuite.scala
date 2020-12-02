@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.ref.WeakReference
 
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config._

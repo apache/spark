@@ -83,7 +83,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                   "Tasks result size has exceeded maxResultSize"))
                 return
               }
-              logDebug("Fetching indirect task result for TID %s".format(tid))
+              logDebug(s"Fetching indirect task result for ${taskSetManager.taskName(tid)}")
               scheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
               if (serializedTaskResult.isEmpty) {

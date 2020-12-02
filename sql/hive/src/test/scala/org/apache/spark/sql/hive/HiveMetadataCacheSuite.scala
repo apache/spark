@@ -114,7 +114,7 @@ class HiveMetadataCacheSuite extends QueryTest with SQLTestUtils with TestHiveSi
             val e2 = intercept[SparkException] {
               sql("select * from test").count()
             }
-            assert(e2.getMessage.contains("FileNotFoundException"))
+            assert(e.getMessage.contains("FileNotFoundException"))
             spark.catalog.refreshByPath(dir.getAbsolutePath)
             assert(sql("select * from test").count() == 3)
           }

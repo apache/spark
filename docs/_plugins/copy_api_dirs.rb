@@ -126,8 +126,8 @@ if not (ENV['SKIP_API'] == '1')
     puts "Making directory api/python"
     mkdir_p "api/python"
 
-    puts "cp -r ../python/docs/_build/html/. api/python"
-    cp_r("../python/docs/_build/html/.", "api/python")
+    puts "cp -r ../python/docs/build/html/. api/python"
+    cp_r("../python/docs/build/html/.", "api/python")
   end
 
   if not (ENV['SKIP_RDOC'] == '1')
@@ -157,8 +157,8 @@ if not (ENV['SKIP_API'] == '1')
     curr_dir = pwd
     cd("..")
 
-    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
-    system("build/sbt clean package") || raise("SQL doc generation failed")
+    puts "Running 'build/sbt clean package -Phive' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package -Phive") || raise("SQL doc generation failed")
 
     puts "Moving back into docs dir."
     cd("docs")

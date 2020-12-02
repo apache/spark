@@ -20,8 +20,8 @@ package org.apache.spark.status
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.mockito.Mockito._
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.Status._

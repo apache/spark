@@ -113,6 +113,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DISPATCHER_QUEUE =
+    ConfigBuilder("spark.mesos.dispatcher.queue")
+      .doc("Set the name of the dispatcher queue to which the application is submitted. " +
+        "The specified queue must be added to the dispatcher " +
+        "with \"spark.mesos.dispatcher.queue.[QueueName]\". If no queue is specified, then " +
+        "the application is submitted to the \"default\" queue with 0.0 priority.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefaultString("default")
+
   private[spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
       .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +

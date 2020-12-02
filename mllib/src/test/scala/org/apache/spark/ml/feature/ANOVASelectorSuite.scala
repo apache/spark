@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
@@ -136,34 +136,36 @@ class ANOVASelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test ANOVAFValue calssification selector: numTopFeatures") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test ANOVAFValue calssification selector: percentile") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test ANOVAFValue calssification selector: fpr") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(1.0E-12)
-    val model = selector.fit(dataset)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test ANOVAFValue calssification selector: fdr") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fdr").setFdr(6.0E-12)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("Test ANOVAFValue calssification selector: fwe") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fwe").setFwe(6.0E-12)
-    testSelector(selector, dataset)
+    val model = testSelector(selector, dataset)
+    MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
   test("read/write") {

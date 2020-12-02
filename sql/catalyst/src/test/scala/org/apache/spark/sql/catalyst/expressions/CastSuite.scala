@@ -26,20 +26,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
+import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
-
-  // Whether it is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  protected def requiredAnsiEnabledForOverflowTestCases: Boolean
 
   protected def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase
 
@@ -49,14 +46,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   protected def checkNullCast(from: DataType, to: DataType): Unit = {
-    checkEvaluation(cast(Literal.create(null, from), to, Option("GMT")), null)
+    checkEvaluation(cast(Literal.create(null, from), to, UTC_OPT), null)
   }
 
   test("null cast") {
     import DataTypeTestUtils._
 
-    // follow [[org.apache.spark.sql.catalyst.expressions.Cast.canCast]] logic
-    // to ensure we test every possible cast situation here
     atomicTypes.zip(atomicTypes).foreach { case (from, to) =>
       checkNullCast(from, to)
     }
@@ -65,14 +60,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     atomicTypes.foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
-    checkNullCast(DateType, BooleanType)
-    checkNullCast(TimestampType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
 
     checkNullCast(StringType, TimestampType)
-    checkNullCast(BooleanType, TimestampType)
     checkNullCast(DateType, TimestampType)
-    numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
 
     checkNullCast(StringType, DateType)
     checkNullCast(TimestampType, DateType)
@@ -80,8 +71,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkNullCast(StringType, CalendarIntervalType)
     numericTypes.foreach(dt => checkNullCast(StringType, dt))
     numericTypes.foreach(dt => checkNullCast(BooleanType, dt))
-    numericTypes.foreach(dt => checkNullCast(DateType, dt))
-    numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
     for (from <- numericTypes; to <- numericTypes) checkNullCast(from, to)
   }
 
@@ -111,13 +100,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to timestamp") {
-    new ParVector(ALL_TIMEZONES.toVector).foreach { tz =>
+    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
-        checkEvaluation(cast(Literal(str), TimestampType, Option(tz.getID)), expected)
+        checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
 
       checkCastStringToTimestamp("123", null)
 
+      val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
@@ -141,7 +131,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015-03-18T12:03:17Z", new Timestamp(c.getTimeInMillis))
@@ -172,7 +162,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       // If the string value includes timezone string, it represents the timestamp string
       // in the timezone regardless of the timeZoneId parameter.
-      c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+      c = Calendar.getInstance(TimeZone.getTimeZone(UTC))
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 456)
       checkCastStringToTimestamp("2015-03-18T12:03:17.456Z", new Timestamp(c.getTimeInMillis))
@@ -214,6 +204,39 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(0, BooleanType), IntegerType), 0)
   }
 
+  test("cast from int") {
+    checkCast(0, false)
+    checkCast(1, true)
+    checkCast(-5, true)
+    checkCast(1, 1.toByte)
+    checkCast(1, 1.toShort)
+    checkCast(1, 1)
+    checkCast(1, 1.toLong)
+    checkCast(1, 1.0f)
+    checkCast(1, 1.0)
+    checkCast(123, "123")
+
+    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
+    checkEvaluation(cast(1, LongType), 1.toLong)
+  }
+
+  test("cast from long") {
+    checkCast(0L, false)
+    checkCast(1L, true)
+    checkCast(-5L, true)
+    checkCast(1L, 1.toByte)
+    checkCast(1L, 1.toShort)
+    checkCast(1L, 1)
+    checkCast(1L, 1.toLong)
+    checkCast(1L, 1.0f)
+    checkCast(1L, 1.0)
+    checkCast(123L, "123")
+
+    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
+    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+  }
+
   test("cast from float") {
     checkCast(0.0f, false)
     checkCast(0.5f, true)
@@ -236,9 +259,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(1.5, 1.toLong)
     checkCast(1.5, 1.5f)
     checkCast(1.5, "1.5")
-
-    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
-    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
   }
 
   test("cast from string") {
@@ -262,17 +282,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
-    val ts = withDefaultTimeZone(TimeZoneGMT)(Timestamp.valueOf(nts))
+    val ts = withDefaultTimeZone(UTC)(Timestamp.valueOf(nts))
 
     for (tz <- ALL_TIMEZONES) {
-      val timeZoneId = Option(tz.getID)
-      var c = Calendar.getInstance(TimeZoneGMT)
+      val timeZoneId = Option(tz.getId)
+      var c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 2, 8, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
           TimestampType, timeZoneId),
         millisToMicros(c.getTimeInMillis))
-      c = Calendar.getInstance(TimeZoneGMT)
+      c = Calendar.getInstance(TimeZoneUTC)
       c.set(2015, 10, 1, 2, 30, 0)
       checkEvaluation(
         cast(cast(new Timestamp(c.getTimeInMillis), StringType, timeZoneId),
@@ -280,23 +300,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         millisToMicros(c.getTimeInMillis))
     }
 
-    val gmtId = Option("GMT")
-
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, gmtId), null)
+    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
     checkEvaluation(cast(cast(d, StringType), DateType), 0)
-    checkEvaluation(cast(cast(nts, TimestampType, gmtId), StringType, gmtId), nts)
+    checkEvaluation(cast(cast(nts, TimestampType, UTC_OPT), StringType, UTC_OPT), nts)
     checkEvaluation(
-      cast(cast(ts, StringType, gmtId), TimestampType, gmtId),
-      DateTimeUtils.fromJavaTimestamp(ts))
+      cast(cast(ts, StringType, UTC_OPT), TimestampType, UTC_OPT),
+      fromJavaTimestamp(ts))
 
     // all convert to string type to check
-    checkEvaluation(cast(cast(cast(nts, TimestampType, gmtId), DateType, gmtId), StringType), sd)
     checkEvaluation(
-      cast(cast(cast(ts, DateType, gmtId), TimestampType, gmtId), StringType, gmtId),
+      cast(cast(cast(nts, TimestampType, UTC_OPT), DateType, UTC_OPT), StringType),
+      sd)
+    checkEvaluation(
+      cast(cast(cast(ts, DateType, UTC_OPT), TimestampType, UTC_OPT), StringType, UTC_OPT),
       zts)
 
     checkEvaluation(cast(cast("abdef", BinaryType), StringType), "abdef")
@@ -304,17 +324,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(cast(cast(cast(
       cast(cast("5", ByteType), ShortType), IntegerType), FloatType), DoubleType), LongType),
       5.toLong)
-    checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      5.toShort)
-    checkEvaluation(
-      cast(cast(cast(cast(cast(cast("5", TimestampType, gmtId), ByteType),
-        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-      null)
-    checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
-      ByteType), TimestampType), LongType), StringType), ShortType),
-      5.toShort)
 
     checkEvaluation(cast("23", DoubleType), 23d)
     checkEvaluation(cast("23", IntegerType), 23)
@@ -349,56 +358,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(Decimal(1.5), "1.5")
   }
 
-  test("cast from date") {
-    val d = Date.valueOf("1970-01-01")
-    checkEvaluation(cast(d, ShortType), null)
-    checkEvaluation(cast(d, IntegerType), null)
-    checkEvaluation(cast(d, LongType), null)
-    checkEvaluation(cast(d, FloatType), null)
-    checkEvaluation(cast(d, DoubleType), null)
-    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
-    checkEvaluation(cast(d, DecimalType(10, 2)), null)
-    checkEvaluation(cast(d, StringType), "1970-01-01")
-
-    val gmtId = Option("GMT")
-    checkEvaluation(cast(cast(d, TimestampType, gmtId), StringType, gmtId), "1970-01-01 00:00:00")
-  }
-
-  test("cast from timestamp") {
-    val millis = 15 * 1000 + 3
-    val seconds = millis * 1000 + 3
-    val ts = new Timestamp(millis)
-    val tss = new Timestamp(seconds)
-    checkEvaluation(cast(ts, ShortType), 15.toShort)
-    checkEvaluation(cast(ts, IntegerType), 15)
-    checkEvaluation(cast(ts, LongType), 15.toLong)
-    checkEvaluation(cast(ts, FloatType), 15.003f)
-    checkEvaluation(cast(ts, DoubleType), 15.003)
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      DateTimeUtils.fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
-      millis.toFloat / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
-      millis.toDouble / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
-      Decimal(1))
-
-    // A test for higher precision than millis
-    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
-
-    checkEvaluation(cast(Double.NaN, TimestampType), null)
-    checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
-    checkEvaluation(cast(Float.NaN, TimestampType), null)
-    checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
-  }
-
   test("cast from array") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
@@ -412,6 +371,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false, null))
     }
+
+    {
+      val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
+      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
+      assert(ret.resolved)
+      checkEvaluation(ret, Seq.empty)
+    }
+
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = false))
       assert(ret.resolved === false)
@@ -624,16 +591,20 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast("", BooleanType), null)
   }
 
+  protected def checkInvalidCastFromNumericType(to: DataType): Unit = {
+    assert(cast(1.toByte, to).checkInputDataTypes().isFailure)
+    assert(cast(1.toShort, to).checkInputDataTypes().isFailure)
+    assert(cast(1, to).checkInputDataTypes().isFailure)
+    assert(cast(1L, to).checkInputDataTypes().isFailure)
+    assert(cast(1.0.toFloat, to).checkInputDataTypes().isFailure)
+    assert(cast(1.0, to).checkInputDataTypes().isFailure)
+  }
+
   test("SPARK-16729 type checking for casting to date type") {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
     assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
     assert(cast(false, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1.toByte, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1.toShort, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1L, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
-    assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
+    checkInvalidCastFromNumericType(DateType)
   }
 
   test("SPARK-20302 cast with same structure") {
@@ -673,75 +644,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     cast("1", IntegerType).genCode(ctx)
     cast("2", LongType).genCode(ctx)
     assert(ctx.inlinedMutableStates.length == 0)
-  }
-
-  test("SPARK-22825 Cast array to string") {
-    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
-    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
-    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
-    checkEvaluation(ret2, "[ab, cde, f]")
-    val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
-    checkEvaluation(ret3, "[ab,, c]")
-    val ret4 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
-    checkEvaluation(ret4, "[ab, cde, f]")
-    val ret5 = cast(
-      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
-      StringType)
-    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
-    val ret6 = cast(
-      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
-      StringType)
-    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
-    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
-    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
-    val ret8 = cast(
-      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
-      StringType)
-    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
-  }
-
-  test("SPARK-22973 Cast map to string") {
-    val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
-    checkEvaluation(ret1, "[1 -> a, 2 -> b, 3 -> c]")
-    val ret2 = cast(
-      Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
-      StringType)
-    checkEvaluation(ret2, "[1 -> a, 2 ->, 3 -> c]")
-    val ret3 = cast(
-      Literal.create(Map(
-        1 -> Date.valueOf("2014-12-03"),
-        2 -> Date.valueOf("2014-12-04"),
-        3 -> Date.valueOf("2014-12-05"))),
-      StringType)
-    checkEvaluation(ret3, "[1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05]")
-    val ret4 = cast(
-      Literal.create(Map(
-        1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
-        2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
-      StringType)
-    checkEvaluation(ret4, "[1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00]")
-    val ret5 = cast(
-      Literal.create(Map(
-        1 -> Array(1, 2, 3),
-        2 -> Array(4, 5, 6))),
-      StringType)
-    checkEvaluation(ret5, "[1 -> [1, 2, 3], 2 -> [4, 5, 6]]")
-  }
-
-  test("SPARK-22981 Cast struct to string") {
-    val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
-    checkEvaluation(ret1, "[1, a, 0.1]")
-    val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
-    checkEvaluation(ret2, "[1,, a]")
-    val ret3 = cast(Literal.create(
-      (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
-    checkEvaluation(ret3, "[2014-12-03, 2014-12-03 15:05:00]")
-    val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
-    checkEvaluation(ret4, "[[1, a], 5, 0.1]")
-    val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
-    checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
-    val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
-    checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
   }
 
   test("up-cast") {
@@ -816,20 +718,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Throw exception on casting out-of-range value to decimal type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
-        "cannot be represented")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
-    }
-  }
-
   test("Process Infinity, -Infinity, NaN in case insensitive manner") {
     Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
       checkEvaluation(cast(value, FloatType), Float.PositiveInfinity)
@@ -850,14 +738,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(value, DoubleType), Double.NaN)
     }
   }
+}
+
+abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
     assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
     Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
       checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        cast(Literal(value * MICROS_PER_SECOND, TimestampType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
         cast(Literal(value * 1.5f, FloatType), dt), "overflow")
       checkExceptionInExpression[ArithmeticException](
@@ -877,89 +766,184 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("Throw exception on casting out-of-range value to byte type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
-      testIntMaxAndMin(ByteType)
-      Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
-        checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
-      }
+  test("ANSI mode: Throw exception on casting out-of-range value to byte type") {
+    testIntMaxAndMin(ByteType)
+    Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
+    }
 
-      Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
-        checkEvaluation(cast(value, ByteType), value)
-        checkEvaluation(cast(value.toString, ByteType), value)
-        checkEvaluation(cast(Decimal(value.toString), ByteType), value)
-        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), value)
-        checkEvaluation(cast(Literal(value.toInt, DateType), ByteType), null)
-        checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
-        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
-      }
+    Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ByteType), value)
+      checkEvaluation(cast(value.toString, ByteType), value)
+      checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+      checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
+      checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
     }
   }
 
-  test("Throw exception on casting out-of-range value to short type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
-      testIntMaxAndMin(ShortType)
-      Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
-        checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
-        checkExceptionInExpression[ArithmeticException](
-          cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
-      }
+  test("ANSI mode: Throw exception on casting out-of-range value to short type") {
+    testIntMaxAndMin(ShortType)
+    Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
+    }
 
-      Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
-        checkEvaluation(cast(value, ShortType), value)
-        checkEvaluation(cast(value.toString, ShortType), value)
-        checkEvaluation(cast(Decimal(value.toString), ShortType), value)
-        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), value)
-        checkEvaluation(cast(Literal(value.toInt, DateType), ShortType), null)
-        checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
-        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
-      }
+    Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ShortType), value)
+      checkEvaluation(cast(value.toString, ShortType), value)
+      checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+      checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
+      checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
     }
   }
 
-  test("Throw exception on casting out-of-range value to int type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
-      testIntMaxAndMin(IntegerType)
-      testLongMaxAndMin(IntegerType)
+  test("ANSI mode: Throw exception on casting out-of-range value to int type") {
+    testIntMaxAndMin(IntegerType)
+    testLongMaxAndMin(IntegerType)
 
-      Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
-        checkEvaluation(cast(value, IntegerType), value)
-        checkEvaluation(cast(value.toString, IntegerType), value)
-        checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
-        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
-        checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
-      }
-      checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
-      checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+    Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
+      checkEvaluation(cast(value, IntegerType), value)
+      checkEvaluation(cast(value.toString, IntegerType), value)
+      checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
+    }
+    checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+    checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+  }
+
+  test("ANSI mode: Throw exception on casting out-of-range value to long type") {
+    testLongMaxAndMin(LongType)
+
+    Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
+      checkEvaluation(cast(value, LongType), value)
+      checkEvaluation(cast(value.toString, LongType), value)
+      checkEvaluation(cast(Decimal(value.toString), LongType), value)
+    }
+    checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+    checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+    checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+  }
+
+  test("ANSI mode: Throw exception on casting out-of-range value to decimal type") {
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+    checkExceptionInExpression[ArithmeticException](
+      cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
+  }
+
+  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(TimestampType)
+    val timestampLiteral = Literal(1L, TimestampType)
+    numericTypes.foreach { numericType =>
+      assert(cast(timestampLiteral, numericType).checkInputDataTypes().isFailure)
     }
   }
 
-  test("Throw exception on casting out-of-range value to long type") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> requiredAnsiEnabledForOverflowTestCases.toString) {
-      testLongMaxAndMin(LongType)
-
-      Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
-        checkEvaluation(cast(value, LongType), value)
-        checkEvaluation(cast(value.toString, LongType), value)
-        checkEvaluation(cast(Decimal(value.toString), LongType), value)
-        checkEvaluation(cast(Literal(value, TimestampType), LongType),
-          Math.floorDiv(value, MICROS_PER_SECOND))
-      }
-      checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
-      checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
-      checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
-      checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+  test("ANSI mode: disallow type conversions between Numeric types and Date type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(DateType)
+    val dateLiteral = Literal(1, DateType)
+    numericTypes.foreach { numericType =>
+      assert(cast(dateLiteral, numericType).checkInputDataTypes().isFailure)
     }
+  }
+
+  test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
+    import DataTypeTestUtils.numericTypes
+    checkInvalidCastFromNumericType(BinaryType)
+    val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
+    numericTypes.foreach { numericType =>
+      assert(cast(binaryLiteral, numericType).checkInputDataTypes().isFailure)
+    }
+  }
+
+  test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
+    val timestampLiteral = Literal(1L, TimestampType)
+    assert(cast(timestampLiteral, BooleanType).checkInputDataTypes().isFailure)
+    val dateLiteral = Literal(1, DateType)
+    assert(cast(dateLiteral, BooleanType).checkInputDataTypes().isFailure)
+
+    val booleanLiteral = Literal(true, BooleanType)
+    assert(cast(booleanLiteral, TimestampType).checkInputDataTypes().isFailure)
+    assert(cast(booleanLiteral, DateType).checkInputDataTypes().isFailure)
+  }
+
+  test("ANSI mode: disallow casting complex types as String type") {
+    assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
+    assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
+    assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
+  }
+
+  test("cast from invalid string to numeric should throw NumberFormatException") {
+    // cast to IntegerType
+    Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
+      val array = Literal.create(Seq("123", "true", "f", null),
+        ArrayType(StringType, containsNull = true))
+      checkExceptionInExpression[NumberFormatException](
+        cast(array, ArrayType(dataType, containsNull = true)),
+        "invalid input syntax for type numeric: true")
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input syntax for type numeric: string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
+      checkExceptionInExpression[NumberFormatException](
+        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
+    }
+
+    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
+      checkExceptionInExpression[NumberFormatException](
+        cast("string", dataType), "invalid input syntax for type numeric: string")
+      checkExceptionInExpression[NumberFormatException](
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
+      checkExceptionInExpression[NumberFormatException](
+        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
+    }
+  }
+
+  test("Fast fail for cast string type to decimal type in ansi mode") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("123456789012345678901234567890123456789", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("12345678901234567890123456789012345678", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+38", DecimalType(38, 0)),
+      "out of decimal type range")
+    checkExceptionInExpression[ArithmeticException](
+      cast("6E+37", DecimalType(38, 1)),
+      "cannot be represented as Decimal(38, 1)")
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("abcd", DecimalType(38, 1)),
+      "invalid input syntax for type numeric")
   }
 }
 
@@ -967,8 +951,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
  * Test suite for data type casting expression [[Cast]].
  */
 class CastSuite extends CastSuiteBase {
-  // It is required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = true
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
@@ -977,50 +959,26 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("cast from int") {
-    checkCast(0, false)
-    checkCast(1, true)
-    checkCast(-5, true)
-    checkCast(1, 1.toByte)
-    checkCast(1, 1.toShort)
-    checkCast(1, 1)
-    checkCast(1, 1.toLong)
-    checkCast(1, 1.0f)
-    checkCast(1, 1.0)
-    checkCast(123, "123")
+  test("null cast #2") {
+    import DataTypeTestUtils._
 
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 1)), null)
-    checkEvaluation(cast(123, DecimalType(2, 0)), null)
+    checkNullCast(DateType, BooleanType)
+    checkNullCast(TimestampType, BooleanType)
+    checkNullCast(BooleanType, TimestampType)
+    numericTypes.foreach(dt => checkNullCast(dt, TimestampType))
+    numericTypes.foreach(dt => checkNullCast(TimestampType, dt))
+    numericTypes.foreach(dt => checkNullCast(DateType, dt))
   }
 
-  test("cast from long") {
-    checkCast(0L, false)
-    checkCast(1L, true)
-    checkCast(-5L, true)
-    checkCast(1L, 1.toByte)
-    checkCast(1L, 1.toShort)
-    checkCast(1L, 1)
-    checkCast(1L, 1.toLong)
-    checkCast(1L, 1.0f)
-    checkCast(1L, 1.0)
-    checkCast(123L, "123")
-
-    checkEvaluation(cast(123L, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123L, DecimalType(3, 0)), Decimal(123))
+  test("cast from long #2") {
     checkEvaluation(cast(123L, DecimalType(3, 1)), null)
-
     checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
-  test("cast from int 2") {
-    checkEvaluation(cast(1, LongType), 1.toLong)
+  test("cast from int #2") {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)
 
-    checkEvaluation(cast(123, DecimalType.USER_DEFAULT), Decimal(123))
-    checkEvaluation(cast(123, DecimalType(3, 0)), Decimal(123))
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
   }
@@ -1138,6 +1096,36 @@ class CastSuite extends CastSuiteBase {
     assert(Cast.canCast(list.dataType, ArrayType(IntegerType, false)))
     val set = CollectSet(Literal(1))
     assert(Cast.canCast(set.dataType, ArrayType(StringType, false)))
+  }
+
+  test("NullTypes should be able to cast to any complex types") {
+    assert(Cast.canCast(ArrayType(NullType, true), ArrayType(IntegerType, true)))
+    assert(Cast.canCast(ArrayType(NullType, false), ArrayType(IntegerType, true)))
+
+    assert(Cast.canCast(
+      MapType(NullType, NullType, true), MapType(IntegerType, IntegerType, true)))
+    assert(Cast.canCast(
+      MapType(NullType, NullType, false), MapType(IntegerType, IntegerType, true)))
+
+    assert(Cast.canCast(
+      StructType(StructField("a", NullType, true) :: Nil),
+      StructType(StructField("a", IntegerType, true) :: Nil)))
+    assert(Cast.canCast(
+      StructType(StructField("a", NullType, false) :: Nil),
+      StructType(StructField("a", IntegerType, true) :: Nil)))
+  }
+
+  test("SPARK-31227: Non-nullable null type should not coerce to nullable type") {
+    TypeCoercionSuite.allTypes.foreach { t =>
+      assert(Cast.canCast(ArrayType(NullType, false), ArrayType(t, false)))
+
+      assert(Cast.canCast(
+        MapType(NullType, NullType, false), MapType(t, t, false)))
+
+      assert(Cast.canCast(
+        StructType(StructField("a", NullType, false) :: Nil),
+        StructType(StructField("a", t, false) :: Nil)))
+    }
   }
 
   test("Cast should output null for invalid strings when ANSI is not enabled.") {
@@ -1258,14 +1246,278 @@ class CastSuite extends CastSuiteBase {
       }
     }
   }
+
+  test("cast from date") {
+    val d = Date.valueOf("1970-01-01")
+    checkEvaluation(cast(d, ShortType), null)
+    checkEvaluation(cast(d, IntegerType), null)
+    checkEvaluation(cast(d, LongType), null)
+    checkEvaluation(cast(d, FloatType), null)
+    checkEvaluation(cast(d, DoubleType), null)
+    checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
+    checkEvaluation(cast(d, DecimalType(10, 2)), null)
+    checkEvaluation(cast(d, StringType), "1970-01-01")
+
+    checkEvaluation(
+      cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
+      "1970-01-01 00:00:00")
+  }
+
+  test("cast from timestamp") {
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
+    val ts = new Timestamp(millis)
+    val tss = new Timestamp(seconds)
+    checkEvaluation(cast(ts, ShortType), 15.toShort)
+    checkEvaluation(cast(ts, IntegerType), 15)
+    checkEvaluation(cast(ts, LongType), 15.toLong)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, LongType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
+      Decimal(1))
+
+    // A test for higher precision than millis
+    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+
+    checkEvaluation(cast(Double.NaN, TimestampType), null)
+    checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
+    checkEvaluation(cast(Float.NaN, TimestampType), null)
+    checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+  }
+
+  test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, ByteType), expectedSecs.toByte)
+      checkEvaluation(cast(negativeTs, ShortType), expectedSecs.toShort)
+      checkEvaluation(cast(negativeTs, IntegerType), expectedSecs.toInt)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    }
+  }
+
+  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
+        assert(cast(2.toByte, TimestampType).resolved == enable)
+        assert(cast(10.toShort, TimestampType).resolved == enable)
+        assert(cast(3, TimestampType).resolved == enable)
+        assert(cast(10L, TimestampType).resolved == enable)
+        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
+        assert(cast(1.7f, TimestampType).resolved == enable)
+        assert(cast(2.3d, TimestampType).resolved == enable)
+      }
+    }
+  }
+
+  test("SPARK-32828: cast from a derived user-defined type to a base type") {
+    val v = Literal.create(Row(1), new ExampleSubTypeUDT())
+    checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
+  }
+
+  test("Fast fail for cast string type to decimal type") {
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 0)),
+      Decimal("12345678901234567890123456789012345678"))
+    checkEvaluation(cast("123456789012345678901234567890123456789", DecimalType(38, 0)), null)
+    checkEvaluation(cast("12345678901234567890123456789012345678", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000000000001", DecimalType(38, 0)),
+      Decimal("0"))
+    checkEvaluation(cast("0.00000000000000000000000000000000000001", DecimalType(38, 18)),
+      Decimal("0E-18"))
+    checkEvaluation(cast("6E-120", DecimalType(38, 0)),
+      Decimal("0"))
+
+    checkEvaluation(cast("6E+37", DecimalType(38, 0)),
+      Decimal("60000000000000000000000000000000000000"))
+    checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
+    checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+
+    checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
+
+  test("SPARK-22825 Cast array to string") {
+    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
+    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
+    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
+    checkEvaluation(ret2, "[ab, cde, f]")
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+        checkEvaluation(ret3, s"[ab,${if (omitNull) "" else " null"}, c]")
+      }
+    }
+    val ret4 =
+      cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    checkEvaluation(ret4, "[ab, cde, f]")
+    val ret5 = cast(
+      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
+      StringType)
+    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
+    val ret6 = cast(
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00")
+        .map(Timestamp.valueOf)),
+      StringType)
+    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
+    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
+    val ret8 = cast(
+      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
+      StringType)
+    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
+  }
+
+  test("SPARK-33291: Cast array with null elements to string") {
+    Seq(false, true).foreach { omitNull =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> omitNull.toString) {
+        val ret1 = cast(Literal.create(Array(null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"[${if (omitNull) "" else "null"},${if (omitNull) "" else " null"}]")
+      }
+    }
+  }
+
+  test("SPARK-22973 Cast map to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
+        checkEvaluation(ret1, s"${lb}1 -> a, 2 -> b, 3 -> c$rb")
+        val ret2 = cast(
+          Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+          StringType)
+        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        val ret3 = cast(
+          Literal.create(Map(
+            1 -> Date.valueOf("2014-12-03"),
+            2 -> Date.valueOf("2014-12-04"),
+            3 -> Date.valueOf("2014-12-05"))),
+          StringType)
+        checkEvaluation(ret3, s"${lb}1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05$rb")
+        val ret4 = cast(
+          Literal.create(Map(
+            1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
+            2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
+          StringType)
+        checkEvaluation(ret4, s"${lb}1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00$rb")
+        val ret5 = cast(
+          Literal.create(Map(
+            1 -> Array(1, 2, 3),
+            2 -> Array(4, 5, 6))),
+          StringType)
+        checkEvaluation(ret5, s"${lb}1 -> [1, 2, 3], 2 -> [4, 5, 6]$rb")
+      }
+    }
+  }
+
+  test("SPARK-22981 Cast struct to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
+        checkEvaluation(ret1, s"${lb}1, a, 0.1$rb")
+        val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+        checkEvaluation(ret2, s"${lb}1,${if (legacyCast) "" else " null"}, a$rb")
+        val ret3 = cast(Literal.create(
+          (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
+        checkEvaluation(ret3, s"${lb}2014-12-03, 2014-12-03 15:05:00$rb")
+        val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
+        checkEvaluation(ret4, s"$lb${lb}1, a$rb, 5, 0.1$rb")
+        val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
+        checkEvaluation(ret5, s"$lb[1, 2, 3], a, 0.1$rb")
+        val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
+        checkEvaluation(ret6, s"${lb}1, ${lb}1 -> a, 2 -> b, 3 -> c$rb$rb")
+      }
+    }
+  }
+
+  test("SPARK-33291: Cast struct with null elements to string") {
+    Seq(
+      false -> ("{", "}"),
+      true -> ("[", "]")).foreach { case (legacyCast, (lb, rb)) =>
+      withSQLConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING.key -> legacyCast.toString) {
+        val ret1 = cast(Literal.create(Tuple2[String, String](null, null)), StringType)
+        checkEvaluation(
+          ret1,
+          s"$lb${if (legacyCast) "" else "null"},${if (legacyCast) "" else " null"}$rb")
+      }
+    }
+  }
+
+  test("data type casting II") {
+    checkEvaluation(
+      cast(cast(cast(cast(cast(cast("5", ByteType), TimestampType),
+        DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        5.toShort)
+      checkEvaluation(
+        cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
+          DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
+        null)
+      checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
+        ByteType), TimestampType), LongType), StringType), ShortType),
+        5.toShort)
+  }
+
+  test("Cast from double II") {
+    checkEvaluation(cast(cast(1.toDouble, TimestampType), DoubleType), 1.toDouble)
+  }
 }
 
 /**
- * Test suite for data type casting expression [[AnsiCast]].
+ * Test suite for data type casting expression [[Cast]] with ANSI mode disabled.
  */
-class AnsiCastSuite extends CastSuiteBase {
-  // It is not required to set SQLConf.ANSI_ENABLED as true for testing numeric overflow.
-  override protected def requiredAnsiEnabledForOverflowTestCases: Boolean = false
+class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => Cast(lit, targetType, timeZoneId)
+      case _ => Cast(Literal(v), targetType, timeZoneId)
+    }
+  }
+}
+
+/**
+ * Test suite for data type casting expression [[AnsiCast]] with ANSI mode enabled.
+ */
+class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
@@ -1273,31 +1525,26 @@ class AnsiCastSuite extends CastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+}
 
-  test("cast from invalid string to numeric should throw NumberFormatException") {
-    // cast to IntegerType
-    Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      val array = Literal.create(Seq("123", "true", "f", null),
-        ArrayType(StringType, containsNull = true))
-      checkExceptionInExpression[NumberFormatException](
-        cast(array, ArrayType(dataType, containsNull = true)), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input")
-    }
+/**
+ * Test suite for data type casting expression [[AnsiCast]] with ANSI mode disabled.
+ */
+class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
+  }
 
-    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input")
-      checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input")
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
+
+  override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
+    v match {
+      case lit: Expression => AnsiCast(lit, targetType, timeZoneId)
+      case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
 }

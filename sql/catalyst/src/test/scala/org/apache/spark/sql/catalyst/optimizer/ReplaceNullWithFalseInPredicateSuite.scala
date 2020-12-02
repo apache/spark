@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -50,10 +51,10 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   test("Not expected type - replaceNullWithFalse") {
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[AnalysisException] {
       testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
     }.getMessage
-    assert(e.contains("but got the type `int` in `CAST(NULL AS INT)"))
+    assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
   }
 
   test("replace null in branches of If") {

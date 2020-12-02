@@ -32,6 +32,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.api.java.function.{FlatMapFunction, Function => JFunction,
@@ -935,6 +936,34 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
     implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
     fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+  }
+
+  /**
+   * Return a RDD containing only the elements in the inclusive range `lower` to `upper`.
+   * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
+   * performed efficiently by only scanning the partitions that might containt matching elements.
+   * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
+   */
+  @Since("3.1.0")
+  def filterByRange(lower: K, upper: K): JavaPairRDD[K, V] = {
+    val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[K]]
+    filterByRange(comp, lower, upper)
+  }
+
+  /**
+   * Return a RDD containing only the elements in the inclusive range `lower` to `upper`.
+   * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
+   * performed efficiently by only scanning the partitions that might containt matching elements.
+   * Otherwise, a standard `filter` is applied to all partitions.
+   *
+   * @since 3.1.0
+   */
+  @Since("3.1.0")
+  def filterByRange(comp: Comparator[K], lower: K, upper: K): JavaPairRDD[K, V] = {
+    implicit val ordering = comp // Allow implicit conversion of Comparator to Ordering.
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).filterByRange(lower, upper))
   }
 
   /**

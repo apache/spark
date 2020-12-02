@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -184,6 +185,23 @@ class DataSourceV2DataFrameSuite
       assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
       val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
       assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+    }
+  }
+
+  test("options to scan v2 table should be passed to DataSourceV2Relation") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df1 = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df1.write.saveAsTable(t1)
+
+      val optionName = "fakeOption"
+      val df2 = spark.read
+        .option(optionName, false)
+        .table(t1)
+      val options = df2.queryExecution.analyzed.collectFirst {
+        case d: DataSourceV2Relation => d.options
+      }.get
+      assert(options.get(optionName) === "false")
     }
   }
 }

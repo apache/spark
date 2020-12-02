@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -114,6 +116,30 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, "PushedFilters"))
       assert(isIncluded(df.queryExecution, "DataFilters"))
       assert(isIncluded(df.queryExecution, "Location"))
+    }
+  }
+
+  test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
+      val partitionCol = "partitionCol"
+      spark.range(10)
+        .select("id", "id")
+        .toDF("value", partitionCol)
+        .write
+        .partitionBy(partitionCol)
+        .orc(dir)
+      val paths = (0 to 9).map(i => new File(dir, s"$partitionCol=$i").getCanonicalPath)
+      val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
+      }
+      assert(location.isDefined)
+      // The location metadata should at least contain one path
+      assert(location.get.contains(paths.head))
+      // If the temp path length is larger than 100, the metadata length should not exceed
+      // twice of the length; otherwise, the metadata length should be controlled within 200.
+      assert(location.get.length < Math.max(paths.head.length, 100) * 2)
     }
   }
 }

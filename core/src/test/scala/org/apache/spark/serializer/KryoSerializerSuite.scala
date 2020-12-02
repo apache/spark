@@ -42,7 +42,7 @@ import org.apache.spark.util.ThreadUtils
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-  conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+  conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
   conf.set(KRYO_USE_UNSAFE, false)
 
   test("SPARK-7392 configuration limits") {
@@ -313,7 +313,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     import org.apache.spark.SparkException
 
     val conf = new SparkConf(false)
-    conf.set(KRYO_USER_REGISTRATORS, "this.class.does.not.exist")
+    conf.set(KRYO_USER_REGISTRATORS, Seq("this.class.does.not.exist"))
 
     val thrown = intercept[SparkException](new KryoSerializer(conf).newInstance().serialize(1))
     assert(thrown.getMessage.contains("Failed to register classes with Kryo"))
@@ -412,7 +412,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(new SparkConf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(ser.getAutoReset)
     val conf = new SparkConf().set(KRYO_USER_REGISTRATORS,
-      classOf[RegistratorWithoutAutoReset].getName)
+      Seq(classOf[RegistratorWithoutAutoReset].getName))
     val ser2 = new KryoSerializer(conf).newInstance().asInstanceOf[KryoSerializerInstance]
     assert(!ser2.getAutoReset)
   }
@@ -443,7 +443,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
       .set(KRYO_REFERENCE_TRACKING, referenceTracking)
       .set(KRYO_USE_POOL, usePool)
     if (!autoReset) {
-      conf.set(KRYO_USER_REGISTRATORS, classOf[RegistratorWithoutAutoReset].getName)
+      conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[RegistratorWithoutAutoReset].getName))
     }
     val ser = new KryoSerializer(conf)
     val serInstance = ser.newInstance().asInstanceOf[KryoSerializerInstance]
@@ -530,7 +530,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
 
 class KryoSerializerAutoResetDisabledSuite extends SparkFunSuite with SharedSparkContext {
   conf.set(SERIALIZER, classOf[KryoSerializer].getName)
-  conf.set(KRYO_USER_REGISTRATORS, classOf[RegistratorWithoutAutoReset].getName)
+  conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[RegistratorWithoutAutoReset].getName))
   conf.set(KRYO_REFERENCE_TRACKING, true)
   conf.set(SHUFFLE_MANAGER, "sort")
   conf.set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 200)

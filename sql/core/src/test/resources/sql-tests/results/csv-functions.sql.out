@@ -33,13 +33,20 @@ select from_csv('1', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
+Cannot parse the data type: 
+extraneous input 'InvalidType' expecting <EOF>(line 1, pos 2)
 
+== SQL ==
+a InvalidType
+--^^^
+
+Failed fallback parsing: 
 DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
 a InvalidType
 --^^^
-; line 1 pos 7
+;; line 1 pos 7
 
 
 -- !query
@@ -82,7 +89,7 @@ select schema_of_csv('1|abc', map('delimiter', '|'))
 -- !query schema
 struct<schema_of_csv(1|abc):string>
 -- !query output
-struct<_c0:int,_c1:string>
+STRUCT<`_c0`: INT, `_c1`: STRING>
 
 
 -- !query
@@ -130,7 +137,7 @@ struct<to_csv(named_struct(a, 1, b, 2)):string>
 -- !query
 select to_csv(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'))
 -- !query schema
-struct<to_csv(named_struct(time, to_timestamp('2015-08-26', 'yyyy-MM-dd'))):string>
+struct<to_csv(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd))):string>
 -- !query output
 26/08/2015
 

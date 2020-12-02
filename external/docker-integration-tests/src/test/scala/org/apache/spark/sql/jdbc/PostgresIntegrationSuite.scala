@@ -26,10 +26,18 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., postgres:13.0):
+ * {{{
+ *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "postgres:12.0-alpine"
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:13.0-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -37,7 +45,6 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val jdbcPort = 5432
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -77,8 +84,20 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "'172.16.0.42']::inet[], ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[], " +
       """ARRAY['{"a": "foo", "b": "bar"}', '{"a": 1, "b": 2}']::json[], """ +
       """ARRAY['{"a": 1, "b": 2, "c": 3}']::jsonb[])"""
-    )
-      .executeUpdate()
+    ).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE char_types (" +
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar)"
+    ).executeUpdate()
+    conn.prepareStatement("INSERT INTO char_types VALUES " +
+      "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE char_array_types (" +
+      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar[])"
+    ).executeUpdate()
+    conn.prepareStatement("INSERT INTO char_array_types VALUES " +
+      """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
+    ).executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -98,14 +117,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[java.lang.Boolean].isAssignableFrom(types(7)))
     assert(classOf[String].isAssignableFrom(types(8)))
     assert(classOf[String].isAssignableFrom(types(9)))
-    assert(classOf[Seq[Int]].isAssignableFrom(types(10)))
-    assert(classOf[Seq[String]].isAssignableFrom(types(11)))
-    assert(classOf[Seq[Double]].isAssignableFrom(types(12)))
-    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(13)))
+    assert(classOf[scala.collection.Seq[Int]].isAssignableFrom(types(10)))
+    assert(classOf[scala.collection.Seq[String]].isAssignableFrom(types(11)))
+    assert(classOf[scala.collection.Seq[Double]].isAssignableFrom(types(12)))
+    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(13)))
     assert(classOf[String].isAssignableFrom(types(14)))
     assert(classOf[java.lang.Float].isAssignableFrom(types(15)))
     assert(classOf[java.lang.Short].isAssignableFrom(types(16)))
-    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(17)))
+    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(17)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)
@@ -218,5 +237,29 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length === 1)
     assert(rows(0).getShort(0) === 1)
     assert(rows(0).getShort(1) === 2)
+  }
+
+  test("character type tests") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
+    val row = df.collect()
+    assert(row.length == 1)
+    assert(row(0).length === 5)
+    assert(row(0).getString(0) === "abcd")
+    assert(row(0).getString(1) === "efgh")
+    assert(row(0).getString(2) === "ijkl")
+    assert(row(0).getString(3) === "mnop")
+    assert(row(0).getString(4) === "q")
+  }
+
+  test("SPARK-32576: character array type tests") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
+    val row = df.collect()
+    assert(row.length == 1)
+    assert(row(0).length === 5)
+    assert(row(0).getSeq[String](0) === Seq("a   ", "bcd "))
+    assert(row(0).getSeq[String](1) === Seq("ef  ", "gh  "))
+    assert(row(0).getSeq[String](2) === Seq("i", "j", "kl"))
+    assert(row(0).getSeq[String](3) === Seq("mnop"))
+    assert(row(0).getSeq[String](4) === Seq("q", "r"))
   }
 }

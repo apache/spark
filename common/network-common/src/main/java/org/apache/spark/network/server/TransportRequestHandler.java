@@ -62,16 +62,21 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** The max number of chunks being transferred and not finished yet. */
   private final long maxChunksBeingTransferred;
 
+  /** The dedicated ChannelHandler for ChunkFetchRequest messages. */
+  private final ChunkFetchRequestHandler chunkFetchRequestHandler;
+
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
       RpcHandler rpcHandler,
-      Long maxChunksBeingTransferred) {
+      Long maxChunksBeingTransferred,
+      ChunkFetchRequestHandler chunkFetchRequestHandler) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.rpcHandler = rpcHandler;
     this.streamManager = rpcHandler.getStreamManager();
     this.maxChunksBeingTransferred = maxChunksBeingTransferred;
+    this.chunkFetchRequestHandler = chunkFetchRequestHandler;
   }
 
   @Override
@@ -97,8 +102,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   @Override
-  public void handle(RequestMessage request) {
-    if (request instanceof RpcRequest) {
+  public void handle(RequestMessage request) throws Exception {
+    if (request instanceof ChunkFetchRequest) {
+      chunkFetchRequestHandler.processFetchRequest(channel, (ChunkFetchRequest) request);
+    } else if (request instanceof RpcRequest) {
       processRpcRequest((RpcRequest) request);
     } else if (request instanceof OneWayMessage) {
       processOneWayMessage((OneWayMessage) request);
@@ -117,12 +124,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         req.streamId);
     }
 
-    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
-    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
-      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-        chunksBeingTransferred, maxChunksBeingTransferred);
-      channel.close();
-      return;
+    if (maxChunksBeingTransferred < Long.MAX_VALUE) {
+      long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+      if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+        logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+          chunksBeingTransferred, maxChunksBeingTransferred);
+        channel.close();
+        return;
+      }
     }
     ManagedBuffer buf;
     try {

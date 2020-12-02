@@ -383,15 +383,24 @@ $(document).ready(function () {
             dataToShow.showBytesSpilledData =
                 (responseBody.diskBytesSpilled > 0 || responseBody.memoryBytesSpilled > 0);
 
+            var columnIndicesToRemove = [];
             if (!dataToShow.showShuffleReadData) {
                 $('#shuffle_read_blocked_time').remove();
                 $('#shuffle_remote_reads').remove();
-                optionalColumns.splice(2, 2);
+                columnIndicesToRemove.push(2);
+                columnIndicesToRemove.push(3);
             }
 
             if (!dataToShow.showShuffleWriteData) {
                 $('#shuffle_write_time').remove();
-                optionalColumns.splice(optionalColumns.length - 1, 1)
+                columnIndicesToRemove.push(7);
+            }
+
+            if (columnIndicesToRemove.length > 0) {
+                columnIndicesToRemove.sort(function(a, b) { return b - a; });
+                columnIndicesToRemove.forEach(function(idx) {
+                   optionalColumns.splice(idx, 1);
+                });
             }
 
             // prepare data for executor summary table
@@ -444,7 +453,7 @@ $(document).ready(function () {
                         {data : "failedTasks"},
                         {data : "killedTasks"},
                         {data : "succeededTasks"},
-                        {data : "isBlacklistedForStage"},
+                        {data : "isExcludedForStage"},
                         {
                             data : function (row, type) {
                                 return row.inputRecords != 0 ? formatBytes(row.inputBytes, type) + " / " + row.inputRecords : "";

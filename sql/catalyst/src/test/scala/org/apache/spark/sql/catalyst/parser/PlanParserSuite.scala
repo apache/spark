@@ -55,9 +55,14 @@ class PlanParserSuite extends AnalysisTest {
     With(plan, ctes)
   }
 
-  test("single comment") {
+  test("single comment case one") {
     val plan = table("a").select(star())
     assertEqual("-- single comment\nSELECT * FROM a", plan)
+  }
+
+  test("single comment case two") {
+    val plan = table("a").select(star())
+    assertEqual("-- single comment\\\nwith line continuity\nSELECT * FROM a", plan)
   }
 
   test("bracketed comment case one") {
@@ -208,7 +213,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").groupBy()('a, 'b).where('x < 1))
+      table("db", "c").having()('a, 'b)('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
@@ -574,8 +579,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "select g from t group by g having a > (select b from s)",
       table("t")
-        .groupBy('g)('g)
-        .where('a > ScalarSubquery(table("s").select('b))))
+        .having('g)('g)('a > ScalarSubquery(table("s").select('b))))
   }
 
   test("table reference") {
@@ -1019,5 +1023,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
       cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
+  }
+
+  test("statement containing terminal semicolons") {
+    assertEqual("select 1;", OneRowRelation().select(1))
+    assertEqual("select a, b;", OneRowRelation().select('a, 'b))
+    assertEqual("select a, b from db.c;;;", table("db", "c").select('a, 'b))
+    assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
   }
 }

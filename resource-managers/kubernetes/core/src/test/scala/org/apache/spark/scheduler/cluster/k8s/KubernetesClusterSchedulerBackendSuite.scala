@@ -31,9 +31,9 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.resource.ResourceProfileManager
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorKilled, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
@@ -67,6 +67,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var labeledPods: LABELED_PODS = _
 
   @Mock
+  private var configMapsOperations: CONFIG_MAPS = _
+
+  @Mock
+  private var labledConfigMaps: LABELED_CONFIG_MAPS = _
+
+  @Mock
   private var taskScheduler: TaskSchedulerImpl = _
 
   @Mock
@@ -87,7 +93,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var driverEndpoint: ArgumentCaptor[RpcEndpoint] = _
   private var schedulerBackendUnderTest: KubernetesClusterSchedulerBackend = _
 
-  private val resourceProfileManager = new ResourceProfileManager(sparkConf)
+  private val listenerBus = new LiveListenerBus(new SparkConf())
+  private val resourceProfileManager = new ResourceProfileManager(sparkConf, listenerBus)
+  private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -103,6 +111,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
         driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
+    when(kubernetesClient.configMaps()).thenReturn(configMapsOperations)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
       sc,
@@ -117,21 +126,27 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   test("Start all components") {
     schedulerBackendUnderTest.start()
-    verify(podAllocator).setTotalExpectedExecutors(3)
+    verify(podAllocator).setTotalExpectedExecutors(Map(defaultProfile -> 3))
     verify(podAllocator).start(TEST_SPARK_APP_ID)
     verify(lifecycleEventHandler).start(schedulerBackendUnderTest)
     verify(watchEvents).start(TEST_SPARK_APP_ID)
     verify(pollEvents).start(TEST_SPARK_APP_ID)
+    verify(configMapsOperations).create(any())
   }
 
   test("Stop all components") {
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
+    when(configMapsOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(labledConfigMaps)
+    when(labledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labledConfigMaps)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
     verify(labeledPods).delete()
+    verify(labledConfigMaps).delete()
     verify(kubernetesClient).close()
   }
 

@@ -23,7 +23,6 @@ import java.nio.ByteOrder
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
@@ -182,8 +181,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     private var _uncompressedSize = 0
     private var _compressedSize = 0
 
-    // Using `MutableRow` to store the last value to avoid boxing/unboxing cost.
-    private val lastValue = new SpecificInternalRow(Seq(columnType.dataType))
+    private var lastValue: T#InternalType = _
     private var lastRun = 0
 
     override def uncompressedSize: Int = _uncompressedSize
@@ -195,16 +193,16 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       val actualSize = columnType.actualSize(row, ordinal)
       _uncompressedSize += actualSize
 
-      if (lastValue.isNullAt(0)) {
-        columnType.copyField(row, ordinal, lastValue, 0)
+      if (lastValue == null) {
+        lastValue = columnType.clone(value)
         lastRun = 1
         _compressedSize += actualSize + 4
       } else {
-        if (columnType.getField(lastValue, 0) == value) {
+        if (lastValue == value) {
           lastRun += 1
         } else {
           _compressedSize += actualSize + 4
-          columnType.copyField(row, ordinal, lastValue, 0)
+          lastValue = columnType.clone(value)
           lastRun = 1
         }
       }
@@ -214,30 +212,27 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       to.putInt(RunLengthEncoding.typeId)
 
       if (from.hasRemaining) {
-        val currentValue = new SpecificInternalRow(Seq(columnType.dataType))
         var currentRun = 1
-        val value = new SpecificInternalRow(Seq(columnType.dataType))
-
-        columnType.extract(from, currentValue, 0)
+        var currentValue = columnType.extract(from)
 
         while (from.hasRemaining) {
-          columnType.extract(from, value, 0)
+          val value = columnType.extract(from)
 
-          if (value.get(0, columnType.dataType) == currentValue.get(0, columnType.dataType)) {
+          if (value == currentValue) {
             currentRun += 1
           } else {
             // Writes current run
-            columnType.append(currentValue, 0, to)
+            columnType.append(currentValue, to)
             to.putInt(currentRun)
 
             // Resets current run
-            columnType.copyField(value, 0, currentValue, 0)
+            currentValue = value
             currentRun = 1
           }
         }
 
         // Writes the last run
-        columnType.append(currentValue, 0, to)
+        columnType.append(currentValue, to)
         to.putInt(currentRun)
       }
 
@@ -318,7 +313,8 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var valueCountLocal = 0
       var currentValueLocal: Long = 0
 
-      while (valueCountLocal < runLocal || (pos < capacity)) {
+      while (pos < capacity) {
+        assert(valueCountLocal <= runLocal)
         if (pos != nextNullIndex) {
           if (valueCountLocal == runLocal) {
             currentValueLocal = getFunction(buffer)
@@ -616,7 +612,6 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     override def hasNext: Boolean = visited < count
 
     override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
-      val countLocal = count
       var currentWordLocal: Long = 0
       var visitedLocal: Int = 0
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
@@ -626,7 +621,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
       var pos = 0
       var seenNulls = 0
 
-      while (visitedLocal < countLocal) {
+      while (pos < capacity) {
         if (pos != nextNullIndex) {
           val bit = visitedLocal % BITS_PER_LONG
 

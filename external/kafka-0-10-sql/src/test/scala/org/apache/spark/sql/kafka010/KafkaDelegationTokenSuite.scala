@@ -62,7 +62,7 @@ class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with 
     }
   }
 
-  ignore("Roundtrip") {
+  testRetry("Roundtrip", 3) {
     val hadoopConf = new Configuration()
     val manager = new HadoopDelegationTokenManager(spark.sparkContext.conf, hadoopConf, null)
     val credentials = new Credentials()

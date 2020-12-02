@@ -19,6 +19,10 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * Expression information, will be used to describe a expression.
  */
@@ -31,8 +35,13 @@ public class ExpressionInfo {
     private String arguments;
     private String examples;
     private String note;
+    private String group;
     private String since;
     private String deprecated;
+
+    private static final Set<String> validGroups =
+        new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "datetime_funcs",
+            "json_funcs", "map_funcs", "window_funcs"));
 
     public String getClassName() {
         return className;
@@ -75,6 +84,10 @@ public class ExpressionInfo {
         return deprecated;
     }
 
+    public String getGroup() {
+        return group;
+    }
+
     public String getDb() {
         return db;
     }
@@ -87,6 +100,7 @@ public class ExpressionInfo {
             String arguments,
             String examples,
             String note,
+            String group,
             String since,
             String deprecated) {
         assert name != null;
@@ -94,6 +108,7 @@ public class ExpressionInfo {
         assert examples != null;
         assert examples.isEmpty() || examples.contains("    Examples:");
         assert note != null;
+        assert group != null;
         assert since != null;
         assert deprecated != null;
 
@@ -104,6 +119,7 @@ public class ExpressionInfo {
         this.arguments = arguments;
         this.examples = examples;
         this.note = note;
+        this.group = group;
         this.since = since;
         this.deprecated = deprecated;
 
@@ -119,6 +135,11 @@ public class ExpressionInfo {
                     "with a newline and two spaces; however, got [" + note + "].");
             }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
+        }
+        if (!group.isEmpty() && !validGroups.contains(group)) {
+            throw new IllegalArgumentException("'group' is malformed in the expression [" +
+                this.name + "]. It should be a value in " + validGroups + "; however, " +
+                "got [" + group + "].");
         }
         if (!since.isEmpty()) {
             if (Integer.parseInt(since.split("\\.")[0]) < 0) {
@@ -140,11 +161,11 @@ public class ExpressionInfo {
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, "", "", "", "", "");
+        this(className, null, name, null, "", "", "", "", "", "");
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, "", "", "", "", "");
+        this(className, db, name, null, "", "", "", "", "", "");
     }
 
     /**
@@ -155,7 +176,7 @@ public class ExpressionInfo {
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.
-        this(className, db, name, usage, extended, "", "", "", "");
+        this(className, db, name, usage, extended, "", "", "", "", "");
     }
 
     private String replaceFunctionName(String usage) {

@@ -21,34 +21,46 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 
 /**
  * Helper functions for testing date and time functionality.
  */
 object DateTimeTestUtils {
 
-  val ALL_TIMEZONES: Seq[TimeZone] = TimeZone.getAvailableIDs.toSeq.map(TimeZone.getTimeZone)
+  val CEST = getZoneId("+02:00")
+  val CET = getZoneId("+01:00")
+  val JST = getZoneId("+09:00")
+  val LA = getZoneId("America/Los_Angeles")
+  val MIT = getZoneId("-09:30")
+  val PST = getZoneId("-08:00")
+  val UTC = getZoneId("+00:00")
+
+  val UTC_OPT = Option("UTC")
+
+  val ALL_TIMEZONES: Seq[ZoneId] = ZoneId.getAvailableZoneIds.asScala.map(getZoneId).toSeq
 
   val outstandingTimezonesIds: Seq[String] = Seq(
     "UTC",
-    "PST",
-    "CET",
+    PST.getId,
+    CET.getId,
     "Africa/Dakar",
-    "America/Los_Angeles",
+    LA.getId,
     "Antarctica/Vostok",
     "Asia/Hong_Kong",
     "Europe/Amsterdam")
-  val outstandingTimezones: Seq[TimeZone] = outstandingTimezonesIds.map(TimeZone.getTimeZone)
-  val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(DateTimeUtils.getZoneId)
+  val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)
 
-  def withDefaultTimeZone[T](newDefaultTimeZone: TimeZone)(block: => T): T = {
-    val originalDefaultTimeZone = TimeZone.getDefault
+  def withDefaultTimeZone[T](newDefaultTimeZone: ZoneId)(block: => T): T = {
+    val originalDefaultTimeZone = ZoneId.systemDefault()
     try {
-      TimeZone.setDefault(newDefaultTimeZone)
+      TimeZone.setDefault(TimeZone.getTimeZone(newDefaultTimeZone))
       block
     } finally {
-      TimeZone.setDefault(originalDefaultTimeZone)
+      TimeZone.setDefault(TimeZone.getTimeZone(originalDefaultTimeZone))
     }
   }
 
@@ -76,12 +88,8 @@ object DateTimeTestUtils {
   def days(
       year: Int,
       month: Byte = 1,
-      day: Byte = 1,
-      hour: Byte = 0,
-      minute: Byte = 0,
-      sec: Byte = 0): Int = {
-    val micros = date(year, month, day, hour, minute, sec)
-    TimeUnit.MICROSECONDS.toDays(micros).toInt
+      day: Byte = 1): Int = {
+    LocalDate.of(year, month, day).toEpochDay.toInt
   }
 
   // Returns microseconds since epoch for current date and give time

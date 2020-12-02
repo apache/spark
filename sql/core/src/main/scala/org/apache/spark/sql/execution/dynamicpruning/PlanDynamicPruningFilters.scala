@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeSeq, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
@@ -39,8 +40,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
    */
-  private def broadcastMode(keys: Seq[Expression], plan: LogicalPlan): BroadcastMode = {
-    val packedKeys = BindReferences.bindReferences(HashJoin.rewriteKeyExpr(keys), plan.output)
+  private def broadcastMode(keys: Seq[Expression], output: AttributeSeq): BroadcastMode = {
+    val packedKeys = BindReferences.bindReferences(HashJoin.rewriteKeyExpr(keys), output)
     HashedRelationBroadcastMode(packedKeys)
   }
 
@@ -58,16 +59,16 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = SQLConf.get.exchangeReuseEnabled && buildKeys.nonEmpty &&
           plan.find {
-            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _) =>
+            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(sparkPlan)
-            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right) =>
+            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
               right.sameResult(sparkPlan)
             case _ => false
           }.isDefined
 
         if (canReuseExchange) {
-          val mode = broadcastMode(buildKeys, buildPlan)
           val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sparkPlan)
+          val mode = broadcastMode(buildKeys, executedPlan.output)
           // plan a broadcast exchange of the build side of the join
           val exchange = BroadcastExchangeExec(mode, executedPlan)
           val name = s"dynamicpruning#${exprId.id}"

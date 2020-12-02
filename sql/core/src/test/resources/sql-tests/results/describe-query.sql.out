@@ -112,7 +112,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'desc_temp1' expecting {<EOF>, '.'}(line 1, pos 21)
+mismatched input 'desc_temp1' expecting {<EOF>, ';'}(line 1, pos 21)
 
 == SQL ==
 DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
@@ -126,7 +126,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'desc_temp1' expecting {<EOF>, '.'}(line 1, pos 21)
+mismatched input 'desc_temp1' expecting {<EOF>, ';'}(line 1, pos 21)
 
 == SQL ==
 DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2

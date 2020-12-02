@@ -60,8 +60,6 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
     "number of categories of the feature).",
     ParamValidators.inArray(VectorIndexer.supportedHandleInvalids))
 
-  setDefault(handleInvalid, VectorIndexer.ERROR_INVALID)
-
   /**
    * Threshold for the number of values a categorical feature can take.
    * If a feature is found to have {@literal >} maxCategories values, then it is declared
@@ -75,10 +73,10 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
       " If a feature is found to have > maxCategories values, then it is declared continuous.",
     ParamValidators.gtEq(2))
 
-  setDefault(maxCategories -> 20)
-
   /** @group getParam */
   def getMaxCategories: Int = $(maxCategories)
+
+  setDefault(maxCategories -> 20, handleInvalid -> VectorIndexer.ERROR_INVALID)
 }
 
 /**
@@ -302,7 +300,7 @@ class VectorIndexerModel private[ml] (
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
-    categoryMaps.mapValues(_.asJava).asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
+    categoryMaps.mapValues(_.asJava).toMap.asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
   }
 
   /**

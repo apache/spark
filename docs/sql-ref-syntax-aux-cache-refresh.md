@@ -20,35 +20,38 @@ license: |
 ---
 
 ### Description
+
 `REFRESH` is used to invalidate and refresh all the cached data (and the associated metadata) for
 all Datasets that contains the given data source path. Path matching is by prefix, i.e. "/" would
 invalidate everything that is cached. 
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 REFRESH resource_path
-{% endhighlight %}
+```
 
 ### Parameters
-<dl>
- <dt><code><em>resource_path</em></code></dt>
- <dd>The path of the resource that is to be refreshed.</dd>
-</dl>
+
+* **resource_path**
+
+    The path of the resource that is to be refreshed.
 
 ### Examples
-{% highlight sql %}
- -- The Path is resolved using the datasource's File Index.
- 
+
+```sql
+-- The Path is resolved using the datasource's File Index.
 CREATE TABLE test(ID INT) using parquet;
 INSERT INTO test SELECT 1000;
 CACHE TABLE test;
 INSERT INTO test SELECT 100;
 REFRESH "hdfs://path/to/table";
- 
-{% endhighlight %}
+```
 
 ### Related Statements
-- [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
-- [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
-- [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
-- [REFRESH TABLE](sql-ref-syntax-aux-refresh-table.html)
+
+* [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+* [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+* [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
+* [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
+* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

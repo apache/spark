@@ -32,6 +32,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
@@ -76,11 +77,13 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
+  // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
+      DecimalPrecision.decimalAndDecimal(
+        Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _ =>
-      sum.cast(resultType) / count.cast(resultType)
+      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(

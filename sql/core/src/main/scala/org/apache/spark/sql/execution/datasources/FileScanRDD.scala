@@ -21,7 +21,7 @@ import java.io.{FileNotFoundException, IOException}
 
 import org.apache.parquet.io.ParquetDecodingException
 
-import org.apache.spark.{Partition => RDDPartition, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -178,7 +178,9 @@ class FileScanRDD(
                 s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
               throw new QueryExecutionException(message, e)
             case e: ParquetDecodingException =>
-              if (e.getMessage.contains("Can not read value at")) {
+              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
+                throw e.getCause
+              } else if (e.getMessage.contains("Can not read value at")) {
                 val message = "Encounter error while reading parquet files. " +
                   "One possible cause: Parquet column cannot be converted in the " +
                   "corresponding files. Details: "

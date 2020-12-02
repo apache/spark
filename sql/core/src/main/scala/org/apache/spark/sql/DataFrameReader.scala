@@ -28,10 +28,11 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.catalyst.util.FailureSafeParser
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, FailureSafeParser}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -40,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,21 +96,38 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
-    this.extraOptions += (key -> value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
   /**
    * Adds an input option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -117,12 +136,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds an input option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
 
   /**
    * Adds an input option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -131,10 +156,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -147,10 +186,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Adds input options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -178,7 +231,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def load(path: String): DataFrame = {
     // force invocation of `load(...varargs...)`
-    option("path", path).load(Seq.empty: _*)
+    if (sparkSession.sessionState.conf.legacyPathOptionBehavior) {
+      option("path", path).load(Seq.empty: _*)
+    } else {
+      load(Seq(path): _*)
+    }
   }
 
   /**
@@ -194,18 +251,31 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    if (!legacyPathOptionBehavior &&
+        (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
+      throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
+        "with path parameters. Either remove the path option if it's the same as the path " +
+        "parameter, or add it to the load() parameter if you do want to read multiple paths. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
       val catalogManager = sparkSession.sessionState.catalogManager
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (paths.isEmpty) {
-        None
+
+      val optionsWithPath = if (paths.isEmpty) {
+        extraOptions
+      } else if (paths.length == 1) {
+        extraOptions + ("path" -> paths.head)
       } else {
         val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
+        extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
       }
 
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
       val (table, catalog, ident) = provider match {
         case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
@@ -236,14 +306,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   private def loadV1Source(paths: String*) = {
+    val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
+    val (finalPaths, finalOptions) = if (!legacyPathOptionBehavior && paths.length == 1) {
+      (Nil, extraOptions + ("path" -> paths.head))
+    } else {
+      (paths, extraOptions)
+    }
+
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
-        paths = paths,
+        paths = finalPaths,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = extraOptions.toMap).resolveRelation())
+        options = finalOptions.originalMap).resolveRelation())
   }
 
   /**
@@ -257,7 +334,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
-    this.extraOptions += (JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
+    this.extraOptions ++= Seq(JDBCOptions.JDBC_URL -> url, JDBCOptions.JDBC_TABLE_NAME -> table)
     format("jdbc").load()
   }
 
@@ -328,7 +405,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       connectionProperties: Properties): DataFrame = {
     assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
-    val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
+    val params = extraOptions ++ connectionProperties.asScala
     val options = new JDBCOptions(url, table, params)
     val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
       JDBCPartition(part, i) : Partition
@@ -395,7 +472,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -416,8 +493,22 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` for positive infinity, as well as alias of `+Infinity` and `Infinity`.
+   *     <li>`-INF` for negative infinity), alias `-Infinity`.
+   *     <li>`NaN` for other not-a-numbers, like result of division by zero.
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -514,6 +605,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * If the enforceSchema is set to `false`, only the CSV header in the first line is checked
    * to conform specified or inferred schema.
+   *
+   * @note if `header` option is set to `true` when calling this API, all lines same with
+   * the header will be removed if exists.
    *
    * @param csvDataset input Dataset with one CSV row per record
    * @since 2.2.0
@@ -624,7 +718,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -662,6 +756,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -693,6 +793,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -726,6 +832,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -737,13 +849,24 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def orc(paths: String*): DataFrame = format("orc").load(paths: _*)
 
   /**
-   * Returns the specified table as a `DataFrame`.
+   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
+   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
+   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
+   * streaming query plan.
    *
+   * @param tableName is either a qualified or unqualified name that designates a table or view.
+   *                  If a database is specified, it identifies the table/view from the database.
+   *                  Otherwise, it first attempts to find a temporary view with the given name
+   *                  and then match the table/view from the current database.
+   *                  Note that, the global temporary view database is also valid here.
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
-    sparkSession.table(tableName)
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
   }
 
   /**
@@ -781,6 +904,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`pathGlobFilter`: an optional glob pattern to only include files with paths matching
    * the pattern. The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
    * It does not change the behavior of partition discovery.</li>
+   * <li>`modifiedBefore` (batch only): an optional timestamp to only include files with
+   * modification times  occurring before the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
+   * <li>`modifiedAfter` (batch only): an optional timestamp to only include files with
+   * modification times occurring after the specified Time. The provided timestamp
+   * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
    * </ul>
@@ -846,6 +975,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
 }

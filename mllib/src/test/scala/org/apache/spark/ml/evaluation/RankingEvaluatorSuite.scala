@@ -59,4 +59,42 @@ class RankingEvaluatorSuite
       .setK(2)
     assert(evaluator.evaluate(scoreAndLabels) ~== 1.0 / 3 absTol 1e-5)
   }
+
+  test("getMetrics") {
+    val scoreAndLabels = Seq(
+      (Array(1.0, 6.0, 2.0, 7.0, 8.0, 3.0, 9.0, 10.0, 4.0, 5.0),
+        Array(1.0, 2.0, 3.0, 4.0, 5.0)),
+      (Array(4.0, 1.0, 5.0, 6.0, 2.0, 7.0, 3.0, 8.0, 9.0, 10.0),
+        Array(1.0, 2.0, 3.0)),
+      (Array(1.0, 2.0, 3.0, 4.0, 5.0), Array.empty[Double])
+    ).toDF("prediction", "label")
+
+    val evaluator = new RankingEvaluator().setK(5)
+
+    val metrics = evaluator.getMetrics(scoreAndLabels)
+    val meanAveragePrecision = metrics.meanAveragePrecision
+    val meanAveragePrecisionAtK = metrics.meanAveragePrecisionAt(evaluator.getK)
+    val precisionAtK = metrics.precisionAt(evaluator.getK)
+    val ndcgAtK = metrics.ndcgAt(evaluator.getK)
+    val recallAtK = metrics.recallAt(evaluator.getK)
+
+    // default = meanAveragePrecision
+    assert(evaluator.evaluate(scoreAndLabels) == meanAveragePrecision)
+
+    // meanAveragePrecisionAtK
+    evaluator.setMetricName("meanAveragePrecisionAtK")
+    assert(evaluator.evaluate(scoreAndLabels) == meanAveragePrecisionAtK)
+
+    // precisionAtK
+    evaluator.setMetricName("precisionAtK")
+    assert(evaluator.evaluate(scoreAndLabels) == precisionAtK)
+
+    // ndcgAtK
+    evaluator.setMetricName("ndcgAtK")
+    assert(evaluator.evaluate(scoreAndLabels) == ndcgAtK)
+
+    // recallAtK
+    evaluator.setMetricName("recallAtK")
+    assert(evaluator.evaluate(scoreAndLabels) == recallAtK)
+  }
 }

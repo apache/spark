@@ -76,7 +76,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * @return fitted models, matching the input parameter maps
    */
   @Since("2.0.0")
-  def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
+  def fit(dataset: Dataset[_], paramMaps: Seq[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
 

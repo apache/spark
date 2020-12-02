@@ -17,7 +17,7 @@
 package org.apache.spark.ml.optim.aggregator
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TestingUtils._
@@ -28,6 +28,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
   @transient var instancesConstantFeatureFiltered: Array[Instance] = _
+  @transient var standardizedInstances: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -46,6 +47,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       Instance(1.0, 0.5, Vectors.dense(1.0)),
       Instance(2.0, 0.3, Vectors.dense(0.5))
     )
+    standardizedInstances = standardize(instances)
   }
 
   /** Get summary statistics for some data and create a new HuberAggregator. */
@@ -59,6 +61,15 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcParameters = spark.sparkContext.broadcast(parameters)
     new HuberAggregator(fitIntercept, epsilon, bcFeaturesStd)(bcParameters)
+  }
+
+  /** Get summary statistics for some data and create a new BlockHingeAggregator. */
+  private def getNewBlockAggregator(
+      parameters: Vector,
+      fitIntercept: Boolean,
+      epsilon: Double): BlockHuberAggregator = {
+    val bcParameters = spark.sparkContext.broadcast(parameters)
+    new BlockHuberAggregator(fitIntercept, epsilon)(bcParameters)
   }
 
   test("aggregator add method should check input size") {
@@ -147,6 +158,23 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(loss ~== agg.loss relTol 0.01)
     assert(gradient ~== agg.gradient relTol 0.01)
+
+    Seq(1, 2, 4).foreach { blockSize =>
+      val blocks1 = standardizedInstances
+        .grouped(blockSize)
+        .map(seq => InstanceBlock.fromInstances(seq))
+        .toArray
+      val blocks2 = blocks1.map { block =>
+        new InstanceBlock(block.labels, block.weights, block.matrix.toSparseRowMajor)
+      }
+
+      Seq(blocks1, blocks2).foreach { blocks =>
+        val blockAgg = getNewBlockAggregator(parameters, fitIntercept = true, epsilon)
+        blocks.foreach(blockAgg.add)
+        assert(agg.loss ~== blockAgg.loss relTol 1e-9)
+        assert(agg.gradient ~== blockAgg.gradient relTol 1e-9)
+      }
+    }
   }
 
   test("check with zero standard deviation") {

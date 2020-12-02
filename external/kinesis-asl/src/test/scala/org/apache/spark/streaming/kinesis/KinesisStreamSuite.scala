@@ -23,8 +23,8 @@ import scala.util.Random
 
 import com.amazonaws.services.kinesis.model.Record
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils

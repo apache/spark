@@ -26,18 +26,19 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateTableAsSelectStatement, InsertIntoStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, SupportsWrite, Table, TableCatalog, TableProvider, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -60,8 +61,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`SaveMode.ErrorIfExists`: throw an exception at runtime.</li>
    * </ul>
    * <p>
-   * When writing to data source v1, the default option is `ErrorIfExists`. When writing to data
-   * source v2, the default option is `Append`.
+   * The default option is `ErrorIfExists`.
    *
    * @since 1.4.0
    */
@@ -105,21 +105,38 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter[T] = {
-    this.extraOptions += (key -> value)
+    this.extraOptions = this.extraOptions + (key -> value)
     this
   }
 
   /**
    * Adds an output option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -128,12 +145,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds an output option for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * @since 2.0.0
    */
   def option(key: String, value: Long): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * Adds an output option for the underlying data source.
+   *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
    *
    * @since 2.0.0
    */
@@ -142,10 +165,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -158,10 +195,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Adds output options for the underlying data source.
    *
+   * All options are maintained in a case-insensitive way in terms of key names.
+   * If a new option has the same key case-insensitively, it will override the existing option.
+   *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to format timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to format timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 1.4.0
@@ -233,8 +284,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(path: String): Unit = {
-    this.extraOptions += ("path" -> path)
-    save()
+    if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path")) {
+      throw new AnalysisException("There is a 'path' option set and save() is called with a path " +
+        "parameter. Either remove the path option, or call save() without the parameter. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+    saveInternal(Some(path))
   }
 
   /**
@@ -242,7 +298,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * @since 1.4.0
    */
-  def save(): Unit = {
+  def save(): Unit = saveInternal(None)
+
+  private def saveInternal(path: Option[String]): Unit = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
@@ -255,15 +313,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
-      val options = sessionOptions ++ extraOptions
-      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+
+      val optionsWithPath = if (path.isEmpty) {
+        extraOptions
+      } else {
+        extraOptions + ("path" -> path.get)
+      }
+
+      val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        optionsWithPath.originalMap
+      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
       def getTable: Table = {
-        // For file source, it's expensive to infer schema/partition at each write. Here we pass
-        // the schema of input query and the user-specified partitioning to `getTable`. If the
-        // query schema is not compatible with the existing data, the write can still success but
-        // following reads would fail.
-        if (provider.isInstanceOf[FileDataSourceV2]) {
+        // If the source accepts external table metadata, here we pass the schema of input query
+        // and the user-specified partitioning to `getTable`. This is for avoiding
+        // schema/partitioning inference, which can be very expensive.
+        // If the query schema is not compatible with the existing data, the behavior is undefined.
+        // For example, writing file source will success but the following reads will fail.
+        if (provider.supportsExternalMetadata()) {
           provider.getTable(
             df.schema.asNullable,
             partitioningAsV2.toArray,
@@ -292,7 +359,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fall back to saving as though it's a V1 source.
-                return saveToV1Source()
+                return saveToV1Source(path)
               }
           }
 
@@ -300,14 +367,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           checkPartitioningMatchesV2Table(table)
           if (mode == SaveMode.Append) {
             runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
+              AppendData.byName(relation, df.logicalPlan, finalOptions)
             }
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
             runCommand(df.sparkSession, "save") {
               OverwriteByExpression.byName(
-                relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+                relation, df.logicalPlan, Literal(true), finalOptions)
             }
           }
 
@@ -327,7 +394,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   Map(TableCatalog.PROP_PROVIDER -> source) ++ location,
-                  extraOptions.toMap,
+                  finalOptions,
                   ignoreIfExists = createMode == SaveMode.Ignore)
               }
             case _: TableProvider =>
@@ -339,20 +406,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fallback to saving as though it's a V1 source.
-                saveToV1Source()
+                saveToV1Source(path)
               }
           }
       }
 
     } else {
-      saveToV1Source()
+      saveToV1Source(path)
     }
   }
 
-  private def saveToV1Source(): Unit = {
+  private def saveToV1Source(path: Option[String]): Unit = {
     partitioningColumns.foreach { columns =>
-      extraOptions += (DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
+      extraOptions = extraOptions + (
+        DataSourceUtils.PARTITIONING_COLUMNS_KEY ->
         DataSourceUtils.encodePartitioningColumns(columns))
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     // Code path for data source v1.
@@ -361,7 +435,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = optionsWithPath.originalMap).planForWriting(mode, df.logicalPlan)
     }
   }
 
@@ -396,7 +470,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 
@@ -541,12 +614,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val canUseV2 = lookupV2Provider().isDefined
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
-      case NonSessionCatalogAndIdentifier(catalog, ident) =>
-        saveAsTable(catalog.asTableCatalog, ident)
+      case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
+        saveAsTable(catalog.asTableCatalog, ident, nameParts)
 
-      case SessionCatalogAndIdentifier(catalog, ident)
+      case nameParts @ SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTable(catalog.asTableCatalog, ident)
+        saveAsTable(catalog.asTableCatalog, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -558,14 +631,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
 
-  private def saveAsTable(catalog: TableCatalog, ident: Identifier): Unit = {
+  private def saveAsTable(
+      catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): Unit = {
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
-    }
-
-    def getLocationIfExists: Option[(String, String)] = {
-      val opts = CaseInsensitiveMap(extraOptions.toMap)
-      opts.get("path").map(TableCatalog.PROP_LOCATION -> _)
     }
 
     val command = (mode, tableOpt) match {
@@ -578,12 +647,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
 
       case (SaveMode.Overwrite, _) =>
-        ReplaceTableAsSelect(
-          catalog,
-          ident,
-          partitioningAsV2,
+        ReplaceTableAsSelectStatement(
+          nameParts,
           df.queryExecution.analyzed,
-          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
+          partitioningAsV2,
+          None,
+          Map.empty,
+          Some(source),
+          Map.empty,
+          extraOptions.get("path"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -591,14 +664,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
-        CreateTableAsSelect(
-          catalog,
-          ident,
-          partitioningAsV2,
+        CreateTableAsSelectStatement(
+          nameParts,
           df.queryExecution.analyzed,
-          Map(TableCatalog.PROP_PROVIDER -> source) ++ getLocationIfExists,
+          partitioningAsV2,
+          None,
+          Map.empty,
+          Some(source),
+          Map.empty,
+          extraOptions.get("path"),
+          extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
-          ignoreIfExists = other == SaveMode.Ignore)
+          ifNotExists = other == SaveMode.Ignore)
     }
 
     runCommand(df.sparkSession, "saveAsTable") {
@@ -732,7 +809,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     // connectionProperties should override settings in extraOptions.
     this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
-    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
     format("jdbc").save()
   }
 
@@ -754,7 +831,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -879,7 +956,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -924,7 +1001,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 
-  private val extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 
   private var partitioningColumns: Option[Seq[String]] = None
 

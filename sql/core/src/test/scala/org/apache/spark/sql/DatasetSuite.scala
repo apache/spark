@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.ScroogeLikeExample
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -1116,8 +1116,8 @@ class DatasetSuite extends QueryTest
       """+--------+
         ||       f|
         |+--------+
-        ||[foo, 1]|
-        ||[bar, 2]|
+        ||{foo, 1}|
+        ||{bar, 2}|
         |+--------+
         |""".stripMargin
 
@@ -1220,14 +1220,6 @@ class DatasetSuite extends QueryTest
 
     val result = joined.collect().toSet
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
-  }
-
-  test("better error message when use java reserved keyword as field name") {
-    val e = intercept[UnsupportedOperationException] {
-      Seq(InvalidInJava(1)).toDS()
-    }
-    assert(e.getMessage.contains(
-      "`abstract` is a reserved keyword and cannot be used as field name"))
   }
 
   test("Dataset should support flat input object to be null") {
@@ -1924,6 +1916,45 @@ class DatasetSuite extends QueryTest
     assert(df1.semanticHash !== df3.semanticHash)
     assert(df3.semanticHash === df4.semanticHash)
   }
+
+  test("SPARK-31854: Invoke in MapElementsExec should not propagate null") {
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val ds = Seq(1.asInstanceOf[Integer], null.asInstanceOf[Integer]).toDS()
+        val expectedAnswer = Seq[(Integer, Integer)]((1, 1), (null, null))
+        checkDataset(ds.map(v => (v, v)), expectedAnswer: _*)
+      }
+    }
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    checkDataset(
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+
+    // test null
+    checkDataset(
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    checkAnswer(df.where($"zoo" === Array('a', 'a')), Seq(Row("aa")))
+    checkAnswer(
+      df.where($"zoo".contains(Array('a', 'b'))),
+      Seq(Row("abc")))
+  }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val df = Seq(1).toDF("c")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+      assert(timezone == "Asia/Shanghai")
+    }
+  }
 }
 
 object AssertExecutionId {
@@ -1963,8 +1994,6 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
-
-case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

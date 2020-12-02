@@ -20,11 +20,11 @@
 SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/release-util.sh"
 
-while getopts "bn" opt; do
+while getopts ":b:n" opt; do
   case $opt in
     b) GIT_BRANCH=$OPTARG ;;
     n) DRY_RUN=1 ;;
-    ?) error "Invalid option: $OPTARG" ;;
+    \?) error "Invalid option: $OPTARG" ;;
   esac
 done
 

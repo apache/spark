@@ -59,10 +59,10 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   }
 
   private def castExpr(from: String): String = from match {
-    case "timestamp" => "cast(id as timestamp)"
-    case "date" => "cast(cast(id as timestamp) as date)"
-    case "interval" => "(cast(cast(id as timestamp) as date) - date'0001-01-01') + " +
-      "(cast(id as timestamp) - timestamp'1000-01-01 01:02:03.123456')"
+    case "timestamp" => "timestamp_seconds(id)"
+    case "date" => "cast(timestamp_seconds(id) as date)"
+    case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
+      "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
       s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }
@@ -86,17 +86,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    val datetimeFields = Seq(
-      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
-      "ISOYEAR", "QUARTER", "MONTH", "WEEK",
-      "DAY", "DAYOFWEEK", "DOW", "ISODOW",
-      "DOY", "HOUR", "MINUTE", "SECOND",
-      "MILLISECONDS", "MICROSECONDS", "EPOCH")
-    val intervalFields = Seq(
-      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
-      "QUARTER", "MONTH", "DAY",
-      "HOUR", "MINUTE", "SECOND",
-      "MILLISECONDS", "MICROSECONDS", "EPOCH")
+    val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
+      "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
+    val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
     val settings = Map(
       "timestamp" -> datetimeFields,
       "date" -> datetimeFields,

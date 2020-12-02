@@ -19,10 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -70,7 +70,7 @@ trait Predicate extends Expression {
 object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePredicate] {
 
   override protected def createCodeGeneratedObject(in: Expression): BasePredicate = {
-    GeneratePredicate.generate(in)
+    GeneratePredicate.generate(in, SQLConf.get.subexpressionEliminationEnabled)
   }
 
   override protected def createInterpretedObject(in: Expression): BasePredicate = {
@@ -94,7 +94,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
   }
 }
 
-trait PredicateHelper {
+trait PredicateHelper extends AliasHelper with Logging {
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -114,18 +114,13 @@ trait PredicateHelper {
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
-      case Project(projectList, child) =>
-        val aliases = AttributeMap(projectList.collect {
-          case a @ Alias(child, _) => (a.toAttribute, child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), child)
+      case p: Project =>
+        val aliases = getAliasMap(p)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case Aggregate(_, aggregateExpressions, child) =>
-        val aliasMap = AttributeMap(aggregateExpressions.collect {
-          case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
-            (a.toAttribute, a.child)
-        })
-        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), child)
+      case a: Aggregate =>
+        val aliasMap = getAliasMap(a)
+        findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>
         Some((exp, l))
       case other =>
@@ -144,18 +139,6 @@ trait PredicateHelper {
       case Or(cond1, cond2) =>
         splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
       case other => other :: Nil
-    }
-  }
-
-  // Substitute any known alias from a map.
-  protected def replaceAlias(
-      condition: Expression,
-      aliases: AttributeMap[Expression]): Expression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
-    condition.transformUp {
-      case a: Attribute =>
-        aliases.getOrElse(a, a)
     }
   }
 
@@ -197,10 +180,67 @@ trait PredicateHelper {
     case e: Unevaluable => false
     case e => e.children.forall(canEvaluateWithinJoin)
   }
+
+  /**
+   * Returns a filter that its reference is a subset of `outputSet` and it contains the maximum
+   * constraints from `condition`. This is used for predicate pushdown.
+   * When there is no such filter, `None` is returned.
+   */
+  protected def extractPredicatesWithinOutputSet(
+      condition: Expression,
+      outputSet: AttributeSet): Option[Expression] = condition match {
+    case And(left, right) =>
+      val leftResultOptional = extractPredicatesWithinOutputSet(left, outputSet)
+      val rightResultOptional = extractPredicatesWithinOutputSet(right, outputSet)
+      (leftResultOptional, rightResultOptional) match {
+        case (Some(leftResult), Some(rightResult)) => Some(And(leftResult, rightResult))
+        case (Some(leftResult), None) => Some(leftResult)
+        case (None, Some(rightResult)) => Some(rightResult)
+        case _ => None
+      }
+
+    // The Or predicate is convertible when both of its children can be pushed down.
+    // That is to say, if one/both of the children can be partially pushed down, the Or
+    // predicate can be partially pushed down as well.
+    //
+    // Here is an example used to explain the reason.
+    // Let's say we have
+    // condition: (a1 AND a2) OR (b1 AND b2),
+    // outputSet: AttributeSet(a1, b1)
+    // a1 and b1 is convertible, while a2 and b2 is not.
+    // The predicate can be converted as
+    // (a1 OR b1) AND (a1 OR b2) AND (a2 OR b1) AND (a2 OR b2)
+    // As per the logical in And predicate, we can push down (a1 OR b1).
+    case Or(left, right) =>
+      for {
+        lhs <- extractPredicatesWithinOutputSet(left, outputSet)
+        rhs <- extractPredicatesWithinOutputSet(right, outputSet)
+      } yield Or(lhs, rhs)
+
+    // Here we assume all the `Not` operators is already below all the `And` and `Or` operators
+    // after the optimization rule `BooleanSimplification`, so that we don't need to handle the
+    // `Not` operators here.
+    case other =>
+      if (other.references.subsetOf(outputSet)) {
+        Some(other)
+      } else {
+        None
+      }
+  }
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_ expr - Logical not.")
+  usage = "_FUNC_ expr - Logical not.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_ true;
+       false
+      > SELECT _FUNC_ false;
+       true
+      > SELECT _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -277,7 +317,6 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
 
   override def children: Seq[Expression] = values :+ query
   override def nullable: Boolean = children.exists(_.nullable)
-  override def foldable: Boolean = children.forall(_.foldable)
   override def toString: String = s"$value IN ($query)"
   override def sql: String = s"(${value.sql} IN (${query.sql}))"
 }
@@ -303,7 +342,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        false
       > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
        true
-  """)
+  """,
+  since = "1.0.0")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -519,13 +559,27 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def sql: String = {
     val valueSQL = child.sql
-    val listSQL = hset.toSeq.map(Literal(_).sql).mkString(", ")
+    val listSQL = hset.toSeq
+      .map(elem => Literal(elem, child.dataType).sql)
+      .mkString(", ")
     s"($valueSQL IN ($listSQL))"
   }
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical AND.")
+  usage = "expr1 _FUNC_ expr2 - Logical AND.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ true;
+       true
+      > SELECT true _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       NULL
+      > SELECT false _FUNC_ NULL;
+       false
+  """,
+  since = "1.0.0")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -595,7 +649,19 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Logical OR.")
+  usage = "expr1 _FUNC_ expr2 - Logical OR.",
+  examples = """
+    Examples:
+      > SELECT true _FUNC_ false;
+       true
+      > SELECT false _FUNC_ false;
+       false
+      > SELECT true _FUNC_ NULL;
+       true
+      > SELECT false _FUNC_ NULL;
+       NULL
+  """,
+  since = "1.0.0")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -728,7 +794,8 @@ object Equality {
        NULL
       > SELECT NULL _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -771,7 +838,8 @@ case class EqualTo(left: Expression, right: Expression)
        false
       > SELECT NULL _FUNC_ NULL;
        true
-  """)
+  """,
+  since = "1.1.0")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -828,7 +896,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -858,7 +927,8 @@ case class LessThan(left: Expression, right: Expression)
        true
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -888,7 +958,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -918,7 +989,8 @@ case class GreaterThan(left: Expression, right: Expression)
        false
       > SELECT 1 _FUNC_ NULL;
        NULL
-  """)
+  """,
+  since = "1.0.0")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

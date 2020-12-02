@@ -21,13 +21,13 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    override protected val blacklistedOnceBatches = Set("PullupCorrelatedPredicates")
+    override protected val excludedOnceBatches = Set("PullupCorrelatedPredicates")
 
     val batches =
       Batch("PullupCorrelatedPredicates", Once,
@@ -91,9 +91,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
         .select(max('d))
     val scalarSubquery =
       testRelation
-        .where(ScalarSubquery(subPlan))
+        .where(ScalarSubquery(subPlan) === 1)
         .select('a).analyze
-    assert(scalarSubquery.resolved)
 
     val optimized = Optimize.execute(scalarSubquery)
     val doubleOptimized = Optimize.execute(optimized)

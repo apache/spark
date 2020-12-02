@@ -21,7 +21,6 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
@@ -69,7 +68,7 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
       .set("spark.master", s"k8s://${kubernetesClient.getMasterUrl}")
       .set("spark.kubernetes.namespace", namespace)
       .set("spark.executor.cores", "1")
-      .set("spark.executors.instances", "1")
+      .set("spark.executor.instances", "1")
       .set("spark.app.name", "spark-test-app")
       .set(IS_TESTING.key, "false")
       .set(UI_ENABLED.key, "true")

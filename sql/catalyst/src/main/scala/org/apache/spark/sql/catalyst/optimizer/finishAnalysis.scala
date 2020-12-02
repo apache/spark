@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.LocalDate
-
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -77,29 +76,37 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timeExpr = CurrentTimestamp()
     val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
     val currentTime = Literal.create(timestamp, timeExpr.dataType)
+    val timezone = Literal.create(SQLConf.get.sessionLocalTimeZone, StringType)
 
     plan transformAllExpressions {
-      case CurrentDate(Some(timeZoneId)) =>
+      case currentDate @ CurrentDate(Some(timeZoneId)) =>
         currentDates.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            LocalDate.now(DateTimeUtils.getZoneId(timeZoneId)),
+            DateTimeUtils.microsToDays(timestamp, currentDate.zoneId),
             DateType)
         })
-      case CurrentTimestamp() => currentTime
+      case CurrentTimestamp() | Now() => currentTime
+      case CurrentTimeZone() => timezone
     }
   }
 }
 
 
-/** Replaces the expression of CurrentDatabase with the current database name. */
-case class GetCurrentDatabase(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+/**
+ * Replaces the expression of CurrentDatabase with the current database name.
+ * Replaces the expression of CurrentCatalog with the current catalog name.
+ */
+case class GetCurrentDatabaseAndCatalog(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val currentNamespace = catalogManager.currentNamespace.quoted
+    val currentCatalog = catalogManager.currentCatalog.name()
 
     plan transformAllExpressions {
       case CurrentDatabase() =>
         Literal.create(currentNamespace, StringType)
+      case CurrentCatalog() =>
+        Literal.create(currentCatalog, StringType)
     }
   }
 }

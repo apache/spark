@@ -155,16 +155,17 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val ex = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(s"$viewName is a temp view not table or permanent view"))
     }
 
     withGlobalTempView(viewName) {
       sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
       val ex = intercept[AnalysisException] {
-        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
         sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(
+        s"$globalTempViewDb.$viewName is a temp view not table or permanent view"))
     }
   }
 
@@ -188,18 +189,26 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     if (result.length > 1) result(0) + result(1) else result.head
   }
 
-  protected def checkCreateTable(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "TABLE")
+  protected def checkCreateTable(table: String, serde: Boolean = false): Unit = {
+    checkCreateTableOrView(TableIdentifier(table, Some("default")), "TABLE", serde)
   }
 
-  protected def checkCreateView(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW")
+  protected def checkCreateView(table: String, serde: Boolean = false): Unit = {
+    checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW", serde)
   }
 
-  private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
+  protected def checkCreateTableOrView(
+      table: TableIdentifier,
+      checkType: String,
+      serde: Boolean): Unit = {
     val db = table.database.getOrElse("default")
     val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
-    val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
+    val shownDDL = if (serde) {
+      sql(s"SHOW CREATE TABLE ${table.quotedString} AS SERDE").head().getString(0)
+    } else {
+      sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
+    }
+
     sql(s"DROP $checkType ${table.quotedString}")
 
     try {
@@ -230,7 +239,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       table.copy(
         createTime = 0L,
         lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
         stats = None,
         ignoredProperties = Map.empty
       )

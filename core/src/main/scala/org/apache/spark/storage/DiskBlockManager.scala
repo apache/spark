@@ -18,9 +18,8 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
+import java.nio.file.Files
 import java.util.UUID
-
-import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
@@ -71,8 +70,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
+        if (!newDir.exists()) {
+          Files.createDirectory(newDir.toPath)
         }
         subDirs(dirId)(subDirId) = newDir
         newDir
@@ -99,7 +98,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files else Seq.empty
+      if (files != null) files.toSeq else Seq.empty
     }
   }
 
@@ -119,38 +118,20 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
-    var blockId = TempLocalBlockId(UUID.randomUUID())
-    var tempLocalFile = getFile(blockId)
-    var count = 0
-    while (!canCreateFile(tempLocalFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
-      blockId = TempLocalBlockId(UUID.randomUUID())
-      tempLocalFile = getFile(blockId)
-      count += 1
+    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempLocalBlockId(UUID.randomUUID())
     }
-    (blockId, tempLocalFile)
+    (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
-    var blockId = TempShuffleBlockId(UUID.randomUUID())
-    var tempShuffleFile = getFile(blockId)
-    var count = 0
-    while (!canCreateFile(tempShuffleFile) && count < Utils.MAX_DIR_CREATION_ATTEMPTS) {
-      blockId = TempShuffleBlockId(UUID.randomUUID())
-      tempShuffleFile = getFile(blockId)
-      count += 1
+    var blockId = new TempShuffleBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, tempShuffleFile)
-  }
-
-  private def canCreateFile(file: File): Boolean = {
-    try {
-      file.createNewFile()
-    } catch {
-      case NonFatal(_) =>
-        logError("Failed to create temporary block file: " + file.getAbsoluteFile)
-        false
-    }
+    (blockId, getFile(blockId))
   }
 
   /**

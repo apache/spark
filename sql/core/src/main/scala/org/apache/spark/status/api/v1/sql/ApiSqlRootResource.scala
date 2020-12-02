@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.api.v1.sql
 
-import javax.ws.rs.Path
+import javax.ws.rs.{Path, PathParam}
 
 import org.apache.spark.status.api.v1.ApiRequestContext
 
@@ -25,5 +25,10 @@ import org.apache.spark.status.api.v1.ApiRequestContext
 private[v1] class ApiSqlRootResource extends ApiRequestContext {
 
   @Path("applications/{appId}/sql")
-  def sqlList(): Class[SqlResource] = classOf[SqlResource]
+  def sqlList(@PathParam("appId") appId: String): Class[SqlResource] = classOf[SqlResource]
+
+  @Path("applications/{appId}/{attemptId}/sql")
+  def sqlList(
+      @PathParam("appId") appId: String,
+      @PathParam("attemptId") attemptId: String): Class[SqlResource] = classOf[SqlResource]
 }

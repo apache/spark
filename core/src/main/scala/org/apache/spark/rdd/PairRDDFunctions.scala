@@ -934,7 +934,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           for (pair <- it if pair._1 == key) {
             buf += pair._2
           }
-          buf
+          buf.toSeq
         } : Seq[V]
         val res = self.context.runJob(self, process, Array(index))
         res(0)

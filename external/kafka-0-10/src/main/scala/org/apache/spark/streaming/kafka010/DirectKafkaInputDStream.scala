@@ -70,7 +70,8 @@ private[spark] class DirectKafkaInputDStream[K, V](
   @transient private var kc: Consumer[K, V] = null
   def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
-      kc = consumerStrategy.onStart(currentOffsets.mapValues(l => java.lang.Long.valueOf(l)).asJava)
+      kc = consumerStrategy.onStart(
+        currentOffsets.mapValues(l => java.lang.Long.valueOf(l)).toMap.asJava)
     }
     kc
   }

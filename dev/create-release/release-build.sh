@@ -103,7 +103,7 @@ if [ -z "$SPARK_VERSION" ]; then
   # Run $MVN in a separate command so that 'set -e' does the right thing.
   TMP=$(mktemp)
   $MVN help:evaluate -Dexpression=project.version > $TMP
-  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -vi Download)
   rm $TMP
 fi
 
@@ -164,7 +164,7 @@ fi
 DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
-rm .gitignore
+rm -f .gitignore
 cd ..
 
 if [[ "$1" == "package" ]]; then
@@ -174,16 +174,15 @@ if [[ "$1" == "package" ]]; then
 
   # For source release in v2.4+, exclude copy of binary license/notice
   if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm spark-$SPARK_VERSION/LICENSE-binary
-    rm spark-$SPARK_VERSION/NOTICE-binary
-    rm -r spark-$SPARK_VERSION/licenses-binary
+    rm -f spark-$SPARK_VERSION/LICENSE-binary
+    rm -f spark-$SPARK_VERSION/NOTICE-binary
+    rm -rf spark-$SPARK_VERSION/licenses-binary
   fi
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
+  shasum -a 512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
   ZINC_PORT=3035
@@ -275,20 +274,22 @@ if [[ "$1" == "package" ]]; then
   # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
   # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
 
+  # NOTE: Don't forget to update the valid combinations of distributions at
+  #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
+  #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
-  BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
+  BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
     if [[ $SPARK_VERSION < "3.0." ]]; then
       BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     else
-      BINARY_PKGS_ARGS["hadoop2.7-hive1.2"]="-Phadoop-2.7 -Phive-1.2 $HIVE_PROFILES"
-      BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
+      BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
     fi
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
   if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
     key="without-hadoop-scala-2.11"
@@ -380,7 +381,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "</server></servers></settings>" >> $tmp_settings
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
 
@@ -412,7 +413,7 @@ if [[ "$1" == "publish-release" ]]; then
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
   # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   # TODO: revisit for Scala 2.13 support
 

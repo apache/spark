@@ -37,6 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import org.slf4j.LoggerFactory
 import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.SparkConf
@@ -46,6 +47,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -58,6 +60,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   private var transport: TSocket = _
   private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
 
+  initializeLogIfNecessary(true)
   installSignalHandler()
 
   /**
@@ -130,6 +133,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
+    SharedState.loadHiveConfFile(sparkConf, conf)
     SessionState.start(sessionState)
 
     // Clean up after we exit
@@ -188,9 +192,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    newHiveConf.foreach { kv =>
-      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
+    // We don't propagate hive.metastore.warehouse.dir, because it might has been adjusted in
+    // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
+    // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
+    for ((k, v) <- newHiveConf if k != "hive.metastore.warehouse.dir") {
+      SparkSQLEnv.sqlContext.setConf(k, v)
     }
+
+    cli.printMasterAndAppId
 
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
@@ -261,8 +270,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
-    cli.printMasterAndAppId
-
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -301,7 +308,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val console = ThriftserverShimUtils.getConsole
+  private val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
+
+  private val console = new SessionState.LogHelper(LOG)
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
@@ -375,10 +384,18 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           ret = rc.getResponseCode
           if (ret != 0) {
-            // For analysis exception, only the error is printed out to the console.
-            rc.getException() match {
-              case e : AnalysisException =>
-                err.println(s"""Error in query: ${e.getMessage}""")
+            rc.getException match {
+              case e: AnalysisException => e.cause match {
+                case Some(_) if !sessionState.getIsSilent =>
+                  err.println(
+                    s"""Error in query: ${e.getMessage}
+                       |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
+                     """.stripMargin)
+                // For analysis exceptions in silent mode or simple ones that only related to the
+                // query itself, such as `NoSuchDatabaseException`, only the error is printed out
+                // to the console.
+                case _ => err.println(s"""Error in query: ${e.getMessage}""")
+              }
               case _ => err.println(rc.getErrorMessage())
             }
             driver.close()
@@ -448,7 +465,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       oldSignal = Signal.handle(interruptSignal, new SignalHandler() {
         private var interruptRequested: Boolean = false
 
-        override def handle(signal: Signal) {
+        override def handle(signal: Signal): Unit = {
           val initialRequest = !interruptRequested
           interruptRequested = true
 
@@ -486,7 +503,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             val ignoreErrors = HiveConf.getBoolVar(conf, HiveConf.ConfVars.CLIIGNOREERRORS)
             if (ret != 0 && !ignoreErrors) {
               CommandProcessorFactory.clean(conf.asInstanceOf[HiveConf])
-              ret
+              return ret
             }
           }
         }
@@ -502,25 +519,29 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Adapted splitSemiColon from Hive 2.3's CliDriver.splitSemiColon.
+  // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
+  // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
+  // hence we refined this function a little bit.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
     var insideComment = false
     var escape = false
     var beginIndex = 0
-    var endIndex = line.length
     val ret = new JArrayList[String]
 
     for (index <- 0 until line.length) {
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        // See the comment above about SPARK-31595
+        if (!escape && !insideDoubleQuote) {
           // flip the boolean variable
           insideSingleQuote = !insideSingleQuote
         }
       } else if (line.charAt(index) == '\"' && !insideComment) {
         // take a look to see if it is escaped
-        if (!escape) {
+        // See the comment above about SPARK-31595
+        if (!escape && !insideSingleQuote) {
           // flip the boolean variable
           insideDoubleQuote = !insideDoubleQuote
         }
@@ -534,8 +555,6 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         } else if (hasNext && line.charAt(index + 1) == '-') {
           // ignore quotes and ;
           insideComment = true
-          // ignore eol
-          endIndex = index
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
@@ -545,8 +564,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           ret.add(line.substring(beginIndex, index))
           beginIndex = index + 1
         }
-      } else {
-        // nothing to do
+      } else if (line.charAt(index) == '\n') {
+        // with a new line the inline comment should end.
+        if (!escape) {
+          insideComment = false
+        }
       }
       // set the escape
       if (escape) {
@@ -555,7 +577,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
     }
-    ret.add(line.substring(beginIndex, endIndex))
+    ret.add(line.substring(beginIndex))
     ret
   }
 }

@@ -108,7 +108,7 @@ class OrcDeserializer(
         updater.set(ordinal, bytes)
 
       case DateType => (ordinal, value) =>
-        updater.setInt(ordinal, DateTimeUtils.fromJavaDate(OrcShimUtils.getSqlDate(value)))
+        updater.setInt(ordinal, OrcShimUtils.getGregorianDays(value))
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))

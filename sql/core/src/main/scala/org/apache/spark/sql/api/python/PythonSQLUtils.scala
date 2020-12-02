@@ -20,19 +20,23 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.nio.channels.Channels
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.DataType
 
-private[sql] object PythonSQLUtils {
+private[sql] object PythonSQLUtils extends Logging {
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -40,10 +44,28 @@ private[sql] object PythonSQLUtils {
     FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
   }
 
-  def listSQLConfigs(): Array[(String, String, String, String)] = {
+  private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
     val conf = new SQLConf()
+    // Force to build static SQL configurations
+    StaticSQLConf
+    // Force to build SQL configurations from Hive module
+    try {
+      val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
+      ScalaReflection.mirror.reflectModule(symbol).instance
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Cannot generated sql configurations from hive module", e)
+    }
+    conf.getAllDefinedConfs
+  }
+
+  def listRuntimeSQLConfigs(): Array[(String, String, String, String)] = {
     // Py4J doesn't seem to translate Seq well, so we convert to an Array.
-    conf.getAllDefinedConfs.toArray
+    listAllSQLConfigs().filterNot(p => SQLConf.staticConfKeys.contains(p._1)).toArray
+  }
+
+  def listStaticSQLConfigs(): Array[(String, String, String, String)] = {
+    listAllSQLConfigs().filter(p => SQLConf.staticConfKeys.contains(p._1)).toArray
   }
 
   /**

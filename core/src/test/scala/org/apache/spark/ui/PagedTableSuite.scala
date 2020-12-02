@@ -85,6 +85,35 @@ class PagedTableSuite extends SparkFunSuite {
     assert((pagedTable.pageNavigation(93, 10, 97).head \\ "li").map(_.text.trim) ===
       Seq("<<", "<") ++ (91 to 97).map(_.toString) ++ Seq(">"))
   }
+
+  test("pageNavigation with different id") {
+    val pagedTable = new PagedTable[Int] {
+      override def tableId: String = "testTable"
+
+      override def tableCssClass: String = ""
+
+      override def dataSource: PagedDataSource[Int] = null
+
+      override def pageLink(page: Int): String = ""
+
+      override def headers: Seq[Node] = Nil
+
+      override def row(t: Int): Seq[Node] = Nil
+
+      override def pageSizeFormField: String = ""
+
+      override def pageNumberFormField: String = ""
+
+      override def goButtonFormPath: String = ""
+    }
+
+    val defaultIdNavigation = pagedTable.pageNavigation(1, 10, 2).head \\ "form"
+    assert(defaultIdNavigation \@ "id" === "form-testTable-page")
+
+    val customIdNavigation = pagedTable.pageNavigation(1, 10, 2, "customIdTable").head \\ "form"
+    assert(customIdNavigation \@ "id" === "form-customIdTable-page")
+    assert(defaultIdNavigation !== customIdNavigation)
+  }
 }
 
 private[spark] class SeqPagedDataSource[T](seq: Seq[T], pageSize: Int)

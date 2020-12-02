@@ -35,7 +35,6 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -300,6 +299,13 @@ class ParquetFileFormat
           None
         }
 
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        footerFileMetaData.getKeyValueMetaData.get,
+        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
+      val int96RebaseMode = DataSourceUtils.int96RebaseMode(
+        footerFileMetaData.getKeyValueMetaData.get,
+        SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ))
+
       val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
       val hadoopAttemptContext =
         new TaskAttemptContextImpl(broadcastedHadoopConf.value.value, attemptId)
@@ -312,7 +318,11 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+          convertTz.orNull,
+          datetimeRebaseMode.toString,
+          int96RebaseMode.toString,
+          enableOffHeapColumnVector && taskContext.isDefined,
+          capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -328,7 +338,11 @@ class ParquetFileFormat
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns InternalRow
-        val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
+        val readSupport = new ParquetReadSupport(
+          convertTz,
+          enableVectorizedReader = false,
+          datetimeRebaseMode,
+          int96RebaseMode)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
@@ -467,6 +481,7 @@ object ParquetFileFormat extends Logging {
    *     S3 nodes).
    */
   def mergeSchemasInParallel(
+      parameters: Map[String, String],
       filesToTouch: Seq[FileStatus],
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
@@ -482,13 +497,14 @@ object ParquetFileFormat extends Logging {
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
 
-    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, filesToTouch, reader)
+    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, parameters, filesToTouch, reader)
   }
 
   /**
    * Reads Spark SQL schema from a Parquet footer.  If a valid serialized Spark SQL schema string
    * can be found in the file metadata, returns the deserialized [[StructType]], otherwise, returns
-   * a [[StructType]] converted from the [[MessageType]] stored in this footer.
+   * a [[StructType]] converted from the [[org.apache.parquet.schema.MessageType]] stored in this
+   * footer.
    */
   def readSchemaFromFooter(
       footer: Footer, converter: ParquetToSparkSchemaConverter): StructType = {

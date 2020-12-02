@@ -164,8 +164,9 @@ public class InMemoryStore implements KVStore {
   }
 
   /**
-   * An alias class for the type "ConcurrentHashMap<Comparable<Object>, Boolean>", which is used
-   * as a concurrent hashset for storing natural keys and the boolean value doesn't matter.
+   * An alias class for the type "{@literal ConcurrentHashMap<Comparable<Object>, Boolean>}",
+   * which is used as a concurrent hashset for storing natural keys
+   * and the boolean value doesn't matter.
    */
   private static class NaturalKeys extends ConcurrentHashMap<Comparable<Object>, Boolean> {}
 
@@ -293,7 +294,7 @@ public class InMemoryStore implements KVStore {
     private void deleteParentIndex(Object key) {
       if (hasNaturalParentIndex) {
         for (NaturalKeys v : parentToChildrenMap.values()) {
-          if (v.remove(asKey(key))) {
+          if (v.remove(asKey(key)) != null) {
             // `v` can be empty after removing the natural key and we can remove it from
             // `parentToChildrenMap`. However, `parentToChildrenMap` is a ConcurrentMap and such
             // checking and deleting can be slow.

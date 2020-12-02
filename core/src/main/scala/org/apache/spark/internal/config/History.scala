@@ -195,4 +195,20 @@ private[spark] object History {
       .version("3.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val HYBRID_STORE_ENABLED = ConfigBuilder("spark.history.store.hybridStore.enabled")
+    .doc("Whether to use HybridStore as the store when parsing event logs. " +
+      "HybridStore will first write data to an in-memory store and having a background thread " +
+      "that dumps data to a disk store after the writing to in-memory store is completed.")
+    .version("3.1.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val MAX_IN_MEMORY_STORE_USAGE = ConfigBuilder("spark.history.store.hybridStore.maxMemoryUsage")
+    .doc("Maximum memory space that can be used to create HybridStore. The HybridStore co-uses " +
+      "the heap memory, so the heap memory should be increased through the memory option for SHS " +
+      "if the HybridStore is enabled.")
+    .version("3.1.0")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("2g")
 }

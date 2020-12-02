@@ -28,7 +28,7 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Arrays, Locale, Properties, Random, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
@@ -95,7 +95,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
@@ -1026,13 +1026,27 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
+  /**
+   * Checks if the host contains only valid hostname/ip without port
+   * NOTE: Incase of IPV6 ip it should be enclosed inside []
+   */
   def checkHost(host: String): Unit = {
-    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
+    if (host != null && host.split(":").length > 2) {
+      assert(host.startsWith("[") && host.endsWith("]"),
+        s"Expected hostname or IPv6 IP enclosed in [] but got $host")
+    } else {
+      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or IP but got $host")
+    }
   }
 
   def checkHostPort(hostPort: String): Unit = {
-    assert(hostPort != null && hostPort.indexOf(':') != -1,
-      s"Expected host and port but got $hostPort")
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      assert(hostPort != null && hostPort.indexOf("]:") != -1,
+        s"Expected host and port but got $hostPort")
+    } else {
+      assert(hostPort != null && hostPort.indexOf(':') != -1,
+        s"Expected host and port but got $hostPort")
+    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -1046,18 +1060,30 @@ private[spark] object Utils extends Logging {
       return cached
     }
 
-    val indx: Int = hostPort.lastIndexOf(':')
-    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
-    // but then hadoop does not support ipv6 right now.
-    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
-    if (-1 == indx) {
+    def setDefaultPortValue: (String, Int) = {
       val retval = (hostPort, 0)
       hostPortParseResults.put(hostPort, retval)
-      return retval
+      retval
+    }
+    // checks if the hostport contains IPV6 ip and parses the host, port
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      val indx: Int = hostPort.lastIndexOf("]:")
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 2).trim()
+      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
+    } else {
+      val indx: Int = hostPort.lastIndexOf(':')
+      if (-1 == indx) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(indx + 1).trim()
+      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
-    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
-    hostPortParseResults.putIfAbsent(hostPort, retval)
     hostPortParseResults.get(hostPort)
   }
 
@@ -1716,7 +1742,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    buf
+    buf.toSeq
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -2493,6 +2519,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
@@ -2903,6 +2937,45 @@ private[spark] object Utils extends Logging {
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
+  }
+
+  /**
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    val metadata = new StringBuilder("[")
+    var index: Int = 0
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append(paths(index).toString)
+      index += 1
+    }
+    metadata.append("]")
+    metadata.toString
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
+    }
   }
 }
 

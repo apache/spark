@@ -699,11 +699,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
-    val encoder = RowEncoder(inputSchema)
+    val toRow = RowEncoder(inputSchema).createSerializer()
     val seed = scala.util.Random.nextInt()
     test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
-        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val input = toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }
@@ -717,7 +717,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val longSeed = Math.abs(seed).toLong + Integer.MAX_VALUE.toLong
     test(s"SPARK-30633: xxHash64 with long seed: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {
-        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val input = toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
         val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
           case (value, dt) => Literal.create(value, dt)
         }

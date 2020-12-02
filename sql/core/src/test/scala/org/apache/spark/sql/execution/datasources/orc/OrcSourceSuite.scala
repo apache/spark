@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -41,8 +41,10 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
+abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
   import testImplicits._
+
+  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -120,8 +122,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
-      isHive23: Boolean = false): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -174,7 +175,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective || isHive23) {
+          if (isSelective || isHiveOrc) {
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
           } else {
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
@@ -213,9 +214,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
 
         val schema = SchemaMergeUtils.mergeSchemasInParallel(
-          spark,
-          fileStatuses,
-          schemaReader)
+          spark, Map.empty, fileStatuses, schemaReader)
 
         assert(schema.isDefined)
         assert(schema.get == StructType(Seq(
@@ -482,6 +481,64 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
+
+  test("SPARK-31238: compatibility with Spark 2.4 in reading dates") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_date_v2_4.snappy.orc"),
+          Row(java.sql.Date.valueOf("1200-01-01")))
+      }
+    }
+  }
+
+  test("SPARK-31238, SPARK-31423: rebasing dates in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01", "1582-10-10").toDF("dateS")
+        .select($"dateS".cast("date").as("date"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(Row(Date.valueOf("1001-01-01")), Row(Date.valueOf("1582-10-15"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-31284: compatibility with Spark 2.4 in reading timestamps") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        checkAnswer(
+          readResourceOrcFile("test-data/before_1582_ts_v2_4.snappy.orc"),
+          Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")))
+      }
+    }
+  }
+
+  test("SPARK-31284, SPARK-31423: rebasing timestamps in write") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      Seq("1001-01-01 01:02:03.123456", "1582-10-10 11:12:13.654321").toDF("tsS")
+        .select($"tsS".cast("timestamp").as("ts"))
+        .write
+        .orc(path)
+
+      Seq(false, true).foreach { vectorized =>
+        withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          checkAnswer(
+            spark.read.orc(path),
+            Seq(
+              Row(java.sql.Timestamp.valueOf("1001-01-01 01:02:03.123456")),
+              Row(java.sql.Timestamp.valueOf("1582-10-15 11:12:13.654321"))))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -525,10 +582,16 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(isSelective = true)
+    testSelectiveDictionaryEncoding(isSelective = true, isHiveOrc = false)
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
     testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
+  }
+
+  test("SPARK-31580: Read a file written before ORC-569") {
+    // Test ORC file came from ORC-621
+    val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
+    assert(df.where("str < 'row 001000'").count() === 1000)
   }
 }

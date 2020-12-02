@@ -23,11 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -76,35 +74,6 @@ case class StreamingExecutionRelation(
   // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
   // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
   // value.
-  override def computeStats(): Statistics = Statistics(
-    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
-  )
-
-  override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))(session)
-}
-
-// We have to pack in the V1 data source as a shim, for the case when a source implements
-// continuous processing (which is always V2) but only has V1 microbatch support. We don't
-// know at read time whether the query is continuous or not, so we need to be able to
-// swap a V1 relation back in.
-/**
- * Used to link a [[TableProvider]] into a streaming
- * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
- * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]],
- * and should be converted before passing to [[StreamExecution]].
- */
-case class StreamingRelationV2(
-    source: TableProvider,
-    sourceName: String,
-    table: Table,
-    extraOptions: CaseInsensitiveStringMap,
-    output: Seq[Attribute],
-    v1Relation: Option[StreamingRelation])(session: SparkSession)
-  extends LeafNode with MultiInstanceRelation {
-  override def otherCopyArgs: Seq[AnyRef] = session :: Nil
-  override def isStreaming: Boolean = true
-  override def toString: String = sourceName
-
   override def computeStats(): Statistics = Statistics(
     sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )

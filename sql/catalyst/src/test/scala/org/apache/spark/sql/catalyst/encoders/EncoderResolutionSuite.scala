@@ -22,8 +22,9 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,22 +43,29 @@ case class NestedArrayClass(nestedArr: Array[ArrayClass])
 class EncoderResolutionSuite extends PlanTest {
   private val str = UTF8String.fromString("hello")
 
+  def testFromRow[T](
+      encoder: ExpressionEncoder[T],
+      attributes: Seq[Attribute],
+      row: InternalRow): Unit = {
+    encoder.resolveAndBind(attributes).createDeserializer().apply(row)
+  }
+
   test("real type doesn't match encoder schema but they are compatible: product") {
     val encoder = ExpressionEncoder[StringLongClass]
 
     // int type can be up cast to long type
     val attrs1 = Seq('a.string, 'b.int)
-    encoder.resolveAndBind(attrs1).fromRow(InternalRow(str, 1))
+    testFromRow(encoder, attrs1, InternalRow(str, 1))
 
     // int type can be up cast to string type
     val attrs2 = Seq('a.int, 'b.long)
-    encoder.resolveAndBind(attrs2).fromRow(InternalRow(1, 2L))
+    testFromRow(encoder, attrs2, InternalRow(1, 2L))
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested product") {
     val encoder = ExpressionEncoder[ComplexClass]
     val attrs = Seq('a.int, 'b.struct('a.int, 'b.long))
-    encoder.resolveAndBind(attrs).fromRow(InternalRow(1, InternalRow(2, 3L)))
+    testFromRow(encoder, attrs, InternalRow(1, InternalRow(2, 3L)))
   }
 
   test("real type doesn't match encoder schema but they are compatible: tupled encoder") {
@@ -65,14 +73,14 @@ class EncoderResolutionSuite extends PlanTest {
       ExpressionEncoder[StringLongClass],
       ExpressionEncoder[Long])
     val attrs = Seq('a.struct('a.string, 'b.byte), 'b.int)
-    encoder.resolveAndBind(attrs).fromRow(InternalRow(InternalRow(str, 1.toByte), 2))
+    testFromRow(encoder, attrs, InternalRow(InternalRow(str, 1.toByte), 2))
   }
 
   test("real type doesn't match encoder schema but they are compatible: primitive array") {
     val encoder = ExpressionEncoder[PrimitiveArrayClass]
     val attrs = Seq('arr.array(IntegerType))
     val array = new GenericArrayData(Array(1, 2, 3))
-    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+    testFromRow(encoder, attrs, InternalRow(array))
   }
 
   test("the real type is not compatible with encoder schema: primitive array") {
@@ -93,7 +101,7 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[ArrayClass]
     val attrs = Seq('arr.array(new StructType().add("a", "int").add("b", "int").add("c", "int")))
     val array = new GenericArrayData(Array(InternalRow(1, 2, 3)))
-    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+    testFromRow(encoder, attrs, InternalRow(array))
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested array") {
@@ -103,7 +111,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq('nestedArr.array(et))
     val innerArr = new GenericArrayData(Array(InternalRow(1, 2, 3)))
     val outerArr = new GenericArrayData(Array(InternalRow(innerArr)))
-    encoder.resolveAndBind(attrs).fromRow(InternalRow(outerArr))
+    testFromRow(encoder, attrs, InternalRow(outerArr))
   }
 
   test("the real type is not compatible with encoder schema: non-array field") {
@@ -142,14 +150,14 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = 'a.array(IntegerType) :: Nil
 
     // It should pass analysis
-    val bound = encoder.resolveAndBind(attrs)
+    val fromRow = encoder.resolveAndBind(attrs).createDeserializer()
 
     // If no null values appear, it should work fine
-    bound.fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
+    fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
 
     // If there is null value, it should throw runtime exception
     val e = intercept[RuntimeException] {
-      bound.fromRow(InternalRow(new GenericArrayData(Array(1, null))))
+      fromRow(InternalRow(new GenericArrayData(Array(1, null))))
     }
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
   }
@@ -237,6 +245,13 @@ class EncoderResolutionSuite extends PlanTest {
          |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
          |You can either add an explicit cast to the input data or choose a higher precision type
        """.stripMargin.trim + " of the field in the target object")
+  }
+
+  test("SPARK-31750: eliminate UpCast if child's dataType is DecimalType") {
+    val encoder = ExpressionEncoder[Seq[BigDecimal]]
+    val attr = Seq(AttributeReference("a", ArrayType(DecimalType(38, 0)))())
+    // Before SPARK-31750, it will fail because Decimal(38, 0) can not be casted to Decimal(38, 18)
+    testFromRow(encoder, attr, InternalRow(ArrayData.toArrayData(Array(Decimal(1.0)))))
   }
 
   // test for leaf types

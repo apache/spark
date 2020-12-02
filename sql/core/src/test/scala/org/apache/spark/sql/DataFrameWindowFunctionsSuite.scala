@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
@@ -61,26 +61,28 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("rank functions in unspecific window") {
-    val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        max("key").over(Window.partitionBy("value").orderBy("key")),
-        min("key").over(Window.partitionBy("value").orderBy("key")),
-        mean("key").over(Window.partitionBy("value").orderBy("key")),
-        count("key").over(Window.partitionBy("value").orderBy("key")),
-        sum("key").over(Window.partitionBy("value").orderBy("key")),
-        ntile(2).over(Window.partitionBy("value").orderBy("key")),
-        row_number().over(Window.partitionBy("value").orderBy("key")),
-        dense_rank().over(Window.partitionBy("value").orderBy("key")),
-        rank().over(Window.partitionBy("value").orderBy("key")),
-        cume_dist().over(Window.partitionBy("value").orderBy("key")),
-        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
-      Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
-        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
-        Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select(
+          $"key",
+          max("key").over(Window.partitionBy("value").orderBy("key")),
+          min("key").over(Window.partitionBy("value").orderBy("key")),
+          mean("key").over(Window.partitionBy("value").orderBy("key")),
+          count("key").over(Window.partitionBy("value").orderBy("key")),
+          sum("key").over(Window.partitionBy("value").orderBy("key")),
+          ntile(2).over(Window.partitionBy("value").orderBy("key")),
+          row_number().over(Window.partitionBy("value").orderBy("key")),
+          dense_rank().over(Window.partitionBy("value").orderBy("key")),
+          rank().over(Window.partitionBy("value").orderBy("key")),
+          cume_dist().over(Window.partitionBy("value").orderBy("key")),
+          percent_rank().over(Window.partitionBy("value").orderBy("key"))),
+        Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
+          Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
+          Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
+    }
   }
 
   test("window function should fail if order by clause is not specified") {
@@ -92,89 +94,187 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    val df = Seq(
-      ("a", "p1", 10.0, 20.0),
-      ("b", "p1", 20.0, 10.0),
-      ("c", "p2", 20.0, 20.0),
-      ("d", "p2", 20.0, 20.0),
-      ("e", "p3", 0.0, 0.0),
-      ("f", "p3", 6.0, 12.0),
-      ("g", "p3", 6.0, 12.0),
-      ("h", "p3", 8.0, 16.0),
-      ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
-    checkAnswer(
-      df.select(
-        $"key",
-        corr("value1", "value2").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        covar_pop("value1", "value2")
-          .over(Window.partitionBy("partitionId")
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
             .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
 
-      // As stddev_pop(expr) = sqrt(var_pop(expr))
-      // the "stddev_pop" column can be calculated from the "var_pop" column.
-      //
-      // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
-      // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns.
-      Seq(
-        Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
+  }
+
+  test("SPARK-13860: " +
+    "corr, covar_pop, stddev_pop functions in specific window " +
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", null, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
   }
 
   test("covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window") {
-    val df = Seq(
-      ("a", "p1", 10.0, 20.0),
-      ("b", "p1", 20.0, 10.0),
-      ("c", "p2", 20.0, 20.0),
-      ("d", "p2", 20.0, 20.0),
-      ("e", "p3", 0.0, 0.0),
-      ("f", "p3", 6.0, 12.0),
-      ("g", "p3", 6.0, 12.0),
-      ("h", "p3", 8.0, 16.0),
-      ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
-    checkAnswer(
-      df.select(
-        $"key",
-        covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_samp("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        variance("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_samp("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
-      ),
-      Seq(
-        Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
-        Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
-        Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("i", Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)))
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          variance("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
+        ),
+        Seq(
+          Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("i", Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)))
+    }
+  }
+
+  test("SPARK-13860: " +
+    "covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window " +
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          variance("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
+        ),
+        Seq(
+          Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("i", null, null, null, null, null)))
+    }
   }
 
   test("collect_list in ascending ordered window") {
@@ -348,15 +448,17 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("SPARK-16195 empty over spec") {
-    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
-      toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
-    checkAnswer(
-      sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
-      Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    withTempView("window_table") {
+      val df = Seq(("a", 1), ("a", 1), ("a", 2), ("b", 2)).
+        toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      checkAnswer(
+        df.select($"key", $"value", sum($"value").over(), avg($"value").over()),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+      checkAnswer(
+        sql("select key, value, sum(value) over(), avg(value) over() from window_table"),
+        Seq(Row("a", 1, 6, 1.5), Row("a", 1, 6, 1.5), Row("a", 2, 6, 1.5), Row("b", 2, 6, 1.5)))
+    }
   }
 
   test("window function with udaf") {
@@ -537,6 +639,67 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 3, null, null, null, null, null, null)))
   }
 
+  test("nth_value with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window),
+        nth_value($"value", 3, ignoreNulls = false).over(window)),
+      Seq(
+        Row("a", 0, null, null, null, null),
+        Row("a", 1, "x", "x", null, null),
+        Row("a", 2, "x", "x", "y", "y"),
+        Row("a", 3, "x", "x", "y", "y"),
+        Row("a", 4, "x", "x", "y", "y"),
+        Row("b", 1, null, null, null, null),
+        Row("b", 2, null, null, null, null)))
+  }
+
+  test("nth_value on descending ordered window") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, "v"),
+      ("b", 1, "k"),
+      ("b", 2, "l"),
+      ("b", 3, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order".desc)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, "z", "z", "z"),
+        Row("a", 1, "z", "z", "z"),
+        Row("a", 2, "z", "z", "z"),
+        Row("a", 3, "z", "z", "z"),
+        Row("a", 4, null, null, null),
+        Row("b", 1, "l", "l", "k"),
+        Row("b", 2, "l", "l", null),
+        Row("b", 3, null, null, null)))
+  }
+
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
     val src = Seq((0, 3, 5)).toDF("a", "b", "c")
       .withColumn("Data", struct("a", "b"))
@@ -548,37 +711,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("aggregation and rows between with unbounded + predicate pushdown") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
-      last("key").over(
-        Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
-      last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
+    withTempView("window_table") {
+      val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
+        last("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+        last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < "3"),
-      Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < "3"),
+        Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+    }
   }
 
   test("aggregation and range between with unbounded + predicate pushdown") {
-    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    val selectList = Seq($"key", $"value",
-      last("value").over(
-        Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
-        .as("last_v"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
-        .as("avg_key1"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
-        .as("avg_key2"),
-      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
-        .as("avg_key3"))
+    withTempView("window_table") {
+      val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
+      df.createOrReplaceTempView("window_table")
+      val selectList = Seq($"key", $"value",
+        last("value").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
+          .as("last_v"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
+          .as("avg_key1"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
+          .as("avg_key2"),
+        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
+          .as("avg_key3"))
 
-    checkAnswer(
-      df.select(selectList: _*).where($"value" < 2),
-      Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+      checkAnswer(
+        df.select(selectList: _*).where($"value" < 2),
+        Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
+    }
   }
 
   test("Window spill with less than the inMemoryThreshold") {
@@ -665,40 +832,46 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("SPARK-24575: Window functions inside WHERE and HAVING clauses") {
-    def checkAnalysisError(df: => DataFrame): Unit = {
+    def checkAnalysisError(df: => DataFrame, clause: String): Unit = {
       val thrownException = the[AnalysisException] thrownBy {
         df.queryExecution.analyzed
       }
-      assert(thrownException.message.contains("window functions inside WHERE and HAVING clauses"))
+      assert(thrownException.message.contains(s"window functions inside $clause clause"))
     }
 
-    checkAnalysisError(testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1))
-    checkAnalysisError(testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1))
+    checkAnalysisError(
+      testData2.select("a").where(rank().over(Window.orderBy($"b")) === 1), "WHERE")
+    checkAnalysisError(
+      testData2.where($"b" === 2 && rank().over(Window.orderBy($"b")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(avg($"b").as("avgb"))
-        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1))
+        .where($"a" > $"avgb" && rank().over(Window.orderBy($"a")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
-        .where(rank().over(Window.orderBy($"a")) === 1))
+        .where(rank().over(Window.orderBy($"a")) === 1), "WHERE")
     checkAnalysisError(
       testData2.groupBy($"a")
         .agg(max($"b").as("maxb"), sum($"b").as("sumb"))
-        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1))
+        .where($"sumb" === 5 && rank().over(Window.orderBy($"a")) === 1), "WHERE")
 
-    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"))
-    checkAnalysisError(sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"))
+    checkAnalysisError(sql("SELECT a FROM testData2 WHERE RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
-      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
+      sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
+    checkAnalysisError(
+      sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"),
+      "HAVING")
     checkAnalysisError(
       sql(
         s"""SELECT a, MAX(b)
            |FROM testData2
            |GROUP BY a
-           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))
+           |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
+      "HAVING")
   }
 
   test("window functions in multiple selects") {

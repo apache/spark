@@ -22,6 +22,7 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -45,7 +46,6 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> OrcPartitionDiscoverySuite
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
@@ -131,6 +131,37 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
 
       case _ =>
         throw new AnalysisException("Can not match OrcTable in the query.")
+    }
+  }
+
+  protected def readResourceOrcFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
+    val file = File.createTempFile("orc-test", ".orc")
+    file.deleteOnExit();
+    FileUtils.copyURLToFile(url, file)
+    spark.read.orc(file.getAbsolutePath)
+  }
+
+  /**
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
+   *
+   * This is different from [[withOrcDataFrame]] which does not
+   * test nested cases.
+   */
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+    withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
+
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
+      withTempPath { file =>
+        newDF.write.format(dataSourceName).save(file.getCanonicalPath)
+        readFile(file.getCanonicalPath, true) { df => runTest(df, colName, resultFun) }
+      }
     }
   }
 }

@@ -49,22 +49,25 @@ import org.apache.spark.sql.types._
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
-      column `col` at the given percentage. The value of percentage must be between 0.0
-      and 1.0. The `accuracy` parameter (default: 10000) is a positive numeric literal which
-      controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
-      better accuracy, `1.0/accuracy` is the relative error of the approximation.
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric
+      column `col` which is the smallest value in the ordered `col` values (sorted from least to
+      greatest) such that no more than `percentage` of `col` values is less than the value
+      or equal to that value. The value of percentage must be between 0.0 and 1.0. The `accuracy`
+      parameter (default: 10000) is a positive numeric literal which controls approximation accuracy
+      at the cost of memory. Higher value of `accuracy` yields better accuracy, `1.0/accuracy` is
+      the relative error of the approximation.
       When `percentage` is an array, each value of the percentage array must be between 0.0 and 1.0.
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
-       [10.0,10.0,10.0]
-      > SELECT _FUNC_(10.0, 0.5, 100);
-       10.0
+      > SELECT _FUNC_(col, array(0.5, 0.4, 0.1), 100) FROM VALUES (0), (1), (2), (10) AS tab(col);
+       [1,1,0]
+      > SELECT _FUNC_(col, 0.5, 100) FROM VALUES (0), (6), (7), (9), (10) AS tab(col);
+       7
   """,
+  group = "agg_funcs",
   since = "2.1.0")
 case class ApproximatePercentile(
     child: Expression,
@@ -184,9 +187,11 @@ case class ApproximatePercentile(
   override def nullable: Boolean = true
 
   // The result type is the same as the input type.
-  override def dataType: DataType = {
+  private lazy val internalDataType: DataType = {
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
+
+  override def dataType: DataType = internalDataType
 
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile_approx")

@@ -163,7 +163,7 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(AttributeReference("a", IntegerType)()), testRelation, conf.numShufflePartitions))
+        Seq(AttributeReference("a", IntegerType)()), testRelation, None))
 
     val e = intercept[IllegalArgumentException] {
       checkAnalysis(
@@ -187,7 +187,7 @@ class ResolveHintsSuite extends AnalysisTest {
         "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
-        testRelation, conf.numShufflePartitions))
+        testRelation, None))
 
     val errMsg2 = "REPARTITION Hint parameter should include columns, but"
 
@@ -242,51 +242,56 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
   }
 
-  test("Supports multi-part table names for broadcast hint resolution") {
-    // local temp table (single-part identifier case)
-    checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("table", "table2"),
-        table("TaBlE").join(table("TaBlE2"))),
-      Join(
-        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
-        ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
-        Inner,
-        None,
-        JoinHint.NONE),
-      caseSensitive = false)
+  test("Supports multi-part table names for join strategy hint resolution") {
+    Seq(("MAPJOIN", BROADCAST),
+        ("MERGEJOIN", SHUFFLE_MERGE),
+        ("SHUFFLE_HASH", SHUFFLE_HASH),
+        ("SHUFFLE_REPLICATE_NL", SHUFFLE_REPLICATE_NL)).foreach { case (hintName, st) =>
+      // local temp table (single-part identifier case)
+      checkAnalysis(
+        UnresolvedHint(hintName, Seq("table", "table2"),
+          table("TaBlE").join(table("TaBlE2"))),
+        Join(
+          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation2, HintInfo(strategy = Some(st))),
+          Inner,
+          None,
+          JoinHint.NONE),
+        caseSensitive = false)
 
-    checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("TaBlE", "table2"),
-        table("TaBlE").join(table("TaBlE2"))),
-      Join(
-        ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
-        testRelation2,
-        Inner,
-        None,
-        JoinHint.NONE),
-      caseSensitive = true)
+      checkAnalysis(
+        UnresolvedHint(hintName, Seq("TaBlE", "table2"),
+          table("TaBlE").join(table("TaBlE2"))),
+        Join(
+          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
+          testRelation2,
+          Inner,
+          None,
+          JoinHint.NONE),
+        caseSensitive = true)
 
-    // global temp table (multi-part identifier case)
-    checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("GlOBal_TeMP.table4", "table5"),
-        table("global_temp", "table4").join(table("global_temp", "table5"))),
-      Join(
-        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
-        ResolvedHint(testRelation5, HintInfo(strategy = Some(BROADCAST))),
-        Inner,
-        None,
-        JoinHint.NONE),
-      caseSensitive = false)
+      // global temp table (multi-part identifier case)
+      checkAnalysis(
+        UnresolvedHint(hintName, Seq("GlOBal_TeMP.table4", "table5"),
+          table("global_temp", "table4").join(table("global_temp", "table5"))),
+        Join(
+          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation5, HintInfo(strategy = Some(st))),
+          Inner,
+          None,
+          JoinHint.NONE),
+        caseSensitive = false)
 
-    checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("global_temp.TaBlE4", "table5"),
-        table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
-      Join(
-        ResolvedHint(testRelation4, HintInfo(strategy = Some(BROADCAST))),
-        testRelation5,
-        Inner,
-        None,
-        JoinHint.NONE),
-      caseSensitive = true)
+      checkAnalysis(
+        UnresolvedHint(hintName, Seq("global_temp.TaBlE4", "table5"),
+          table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
+        Join(
+          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
+          testRelation5,
+          Inner,
+          None,
+          JoinHint.NONE),
+        caseSensitive = true)
+    }
   }
 }

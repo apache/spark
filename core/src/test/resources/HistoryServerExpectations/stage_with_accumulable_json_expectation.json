@@ -504,6 +504,7 @@
       "memoryBytesSpilled" : 0,
       "diskBytesSpilled" : 0,
       "isBlacklistedForStage" : false,
+      "isExcludedForStage" : false,
       "jvmHeapMemory" : 0,
       "jvmOffHeapMemory" : 0,
       "onHeapExecutionMemory" : 0,
@@ -514,5 +515,6 @@
       "mappedPoolMemory" : 0
     }
   },
-  "killedTasksSummary" : { }
+  "killedTasksSummary" : { },
+  "resourceProfileId" : 0
 }

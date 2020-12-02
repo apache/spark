@@ -24,27 +24,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.StructType
 
-class DebuggingSuite extends SharedSparkSession {
-
-
-  var originalValue: String = _
-  // With on AQE, the WholeStageCodegenExec is added when running QueryStageExec.
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalValue = spark.conf.get(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-  }
-
-  override def afterAll(): Unit = {
-    spark.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, originalValue)
-    super.afterAll()
-  }
+// Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
+class DebuggingSuite extends SharedSparkSession with DisableAdaptiveExecutionSuite {
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -82,8 +69,9 @@ class DebuggingSuite extends SharedSparkSession {
     }
 
     val output = captured.toString()
+    val hashedModeString = "HashedRelationBroadcastMode(List(input[0, bigint, false]),false)"
     assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
-      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
+      s"""== BroadcastExchange $hashedModeString, [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
         |== WholeStageCodegen (1) ==

@@ -21,13 +21,12 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.CastSupport
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, ExternalCatalogUtils, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, SubqueryExpression}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
@@ -41,9 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
-  extends Rule[LogicalPlan] with CastSupport {
-
-  override val conf: SQLConf = session.sessionState.conf
+  extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
   /**
    * Extract the partition filters from the filters on the table.
@@ -54,9 +51,8 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
     val normalizedFilters = DataSourceStrategy.normalizeExprs(
       filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), relation.output)
     val partitionColumnSet = AttributeSet(relation.partitionCols)
-    ExpressionSet(normalizedFilters.filter { f =>
-      !f.references.isEmpty && f.references.subsetOf(partitionColumnSet)
-    })
+    ExpressionSet(
+      normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionColumnSet)))
   }
 
   /**

@@ -16,12 +16,8 @@
 # limitations under the License.
 #
 
-import sys
-
-from py4j.protocol import Py4JJavaError
-
 from pyspark.sql import Column, Row
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, LongType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -87,23 +83,13 @@ class ColumnTests(ReusedSQLTestCase):
                                 "Cannot apply 'in' operator against a column",
                                 lambda: 1 in cs)
 
-    def test_column_apply(self):
+    def test_column_accessor(self):
         from pyspark.sql.functions import col
 
         self.assertIsInstance(col("foo")[1:3], Column)
         self.assertIsInstance(col("foo")[0], Column)
         self.assertIsInstance(col("foo")["bar"], Column)
         self.assertRaises(ValueError, lambda: col("foo")[0:10:2])
-
-    def test_column_getitem(self):
-        from pyspark.sql.functions import col, create_map, lit
-
-        map_col = create_map(lit(0), lit(100), lit(1), lit(200))
-        self.assertRaisesRegexp(
-            Py4JJavaError,
-            "Unsupported literal type class org.apache.spark.sql.Column id",
-            lambda: map_col.getItem(col('id'))
-        )
 
     def test_column_select(self):
         df = self.df
@@ -121,12 +107,8 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
-        if sys.version >= '3':
-            columnName = "数量"
-            self.assertTrue(isinstance(columnName, str))
-        else:
-            columnName = unicode("数量", "utf-8")
-            self.assertTrue(isinstance(columnName, unicode))
+        columnName = "数量"
+        self.assertTrue(isinstance(columnName, str))
         schema = StructType([StructField(columnName, LongType(), True)])
         df = self.spark.createDataFrame([(1,)], schema)
         self.assertEqual(schema, df.schema)
@@ -134,6 +116,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertEqual([("数量", 'bigint')], df.dtypes)
         self.assertEqual(1, df.select("数量").first()[0])
         self.assertEqual(1, df.select(df["数量"]).first()[0])
+        self.assertTrue(columnName in repr(df[columnName]))
 
     def test_field_accessor(self):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
@@ -157,13 +140,51 @@ class ColumnTests(ReusedSQLTestCase):
         result = df.select(functions.bitwiseNOT(df.b)).collect()[0].asDict()
         self.assertEqual(~75, result['~b'])
 
+    def test_with_field(self):
+        from pyspark.sql.functions import lit, col
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2))])
+        self.assertIsInstance(df['a'].withField('b', lit(3)), Column)
+        self.assertIsInstance(df['a'].withField('d', lit(3)), Column)
+        result = df.withColumn('a', df['a'].withField('d', lit(3))).collect()[0].asDict()
+        self.assertEqual(3, result['a']['d'])
+        result = df.withColumn('a', df['a'].withField('b', lit(3))).collect()[0].asDict()
+        self.assertEqual(3, result['a']['b'])
+
+        self.assertRaisesRegex(TypeError,
+                               'col should be a Column',
+                               lambda: df['a'].withField('b', 3))
+        self.assertRaisesRegex(TypeError,
+                               'fieldName should be a string',
+                               lambda: df['a'].withField(col('b'), lit(3)))
+
+    def test_drop_fields(self):
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2, d=Row(e=3, f=4)))])
+        self.assertIsInstance(df["a"].dropFields("b"), Column)
+        self.assertIsInstance(df["a"].dropFields("b", "c"), Column)
+        self.assertIsInstance(df["a"].dropFields("d.e"), Column)
+
+        result = df.select(
+            df["a"].dropFields("b").alias("a1"),
+            df["a"].dropFields("d.e").alias("a2"),
+        ).first().asDict(True)
+
+        self.assertTrue(
+            "b" not in result["a1"] and
+            "c" in result["a1"] and
+            "d" in result["a1"]
+        )
+
+        self.assertTrue(
+            "e" not in result["a2"]["d"] and
+            "f" in result["a2"]["d"]
+        )
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_column import *
+    from pyspark.sql.tests.test_column import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

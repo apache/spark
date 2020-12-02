@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-* [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-* [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
-* [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
-* [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
+ * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+ * [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+ * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+ * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)

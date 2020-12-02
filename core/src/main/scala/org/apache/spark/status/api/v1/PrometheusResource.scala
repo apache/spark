@@ -23,15 +23,19 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.ui.SparkUI
 
 /**
+ * :: Experimental ::
  * This aims to expose Executor metrics like REST API which is documented in
  *
  *    https://spark.apache.org/docs/3.0.0/monitoring.html#executor-metrics
  *
  * Note that this is based on ExecutorSummary which is different from ExecutorSource.
  */
+@Experimental
 @Path("/executors")
 private[v1] class PrometheusResource extends ApiRequestContext {
   @GET
@@ -39,6 +43,7 @@ private[v1] class PrometheusResource extends ApiRequestContext {
   @Produces(Array(MediaType.TEXT_PLAIN))
   def executors(): String = {
     val sb = new StringBuilder
+    sb.append(s"""spark_info{version="$SPARK_VERSION_SHORT", revision="$SPARK_REVISION"} 1.0\n""")
     val store = uiRoot.asInstanceOf[SparkUI].store
     store.executorList(true).foreach { executor =>
       val prefix = "metrics_executor_"
@@ -47,27 +52,27 @@ private[v1] class PrometheusResource extends ApiRequestContext {
         "application_name" -> store.applicationInfo.name,
         "executor_id" -> executor.id
       ).map { case (k, v) => s"""$k="$v"""" }.mkString("{", ", ", "}")
-      sb.append(s"${prefix}rddBlocks_Count$labels ${executor.rddBlocks}\n")
-      sb.append(s"${prefix}memoryUsed_Count$labels ${executor.memoryUsed}\n")
-      sb.append(s"${prefix}diskUsed_Count$labels ${executor.diskUsed}\n")
-      sb.append(s"${prefix}totalCores_Count$labels ${executor.totalCores}\n")
-      sb.append(s"${prefix}maxTasks_Count$labels ${executor.maxTasks}\n")
-      sb.append(s"${prefix}activeTasks_Count$labels ${executor.activeTasks}\n")
-      sb.append(s"${prefix}failedTasks_Count$labels ${executor.failedTasks}\n")
-      sb.append(s"${prefix}completedTasks_Count$labels ${executor.completedTasks}\n")
-      sb.append(s"${prefix}totalTasks_Count$labels ${executor.totalTasks}\n")
-      sb.append(s"${prefix}totalDuration_Value$labels ${executor.totalDuration}\n")
-      sb.append(s"${prefix}totalGCTime_Value$labels ${executor.totalGCTime}\n")
-      sb.append(s"${prefix}totalInputBytes_Count$labels ${executor.totalInputBytes}\n")
-      sb.append(s"${prefix}totalShuffleRead_Count$labels ${executor.totalShuffleRead}\n")
-      sb.append(s"${prefix}totalShuffleWrite_Count$labels ${executor.totalShuffleWrite}\n")
-      sb.append(s"${prefix}maxMemory_Count$labels ${executor.maxMemory}\n")
+      sb.append(s"${prefix}rddBlocks$labels ${executor.rddBlocks}\n")
+      sb.append(s"${prefix}memoryUsed_bytes$labels ${executor.memoryUsed}\n")
+      sb.append(s"${prefix}diskUsed_bytes$labels ${executor.diskUsed}\n")
+      sb.append(s"${prefix}totalCores$labels ${executor.totalCores}\n")
+      sb.append(s"${prefix}maxTasks$labels ${executor.maxTasks}\n")
+      sb.append(s"${prefix}activeTasks$labels ${executor.activeTasks}\n")
+      sb.append(s"${prefix}failedTasks_total$labels ${executor.failedTasks}\n")
+      sb.append(s"${prefix}completedTasks_total$labels ${executor.completedTasks}\n")
+      sb.append(s"${prefix}totalTasks_total$labels ${executor.totalTasks}\n")
+      sb.append(s"${prefix}totalDuration_seconds_total$labels ${executor.totalDuration * 0.001}\n")
+      sb.append(s"${prefix}totalGCTime_seconds_total$labels ${executor.totalGCTime * 0.001}\n")
+      sb.append(s"${prefix}totalInputBytes_bytes_total$labels ${executor.totalInputBytes}\n")
+      sb.append(s"${prefix}totalShuffleRead_bytes_total$labels ${executor.totalShuffleRead}\n")
+      sb.append(s"${prefix}totalShuffleWrite_bytes_total$labels ${executor.totalShuffleWrite}\n")
+      sb.append(s"${prefix}maxMemory_bytes$labels ${executor.maxMemory}\n")
       executor.executorLogs.foreach { case (k, v) => }
       executor.memoryMetrics.foreach { m =>
-        sb.append(s"${prefix}usedOnHeapStorageMemory_Count$labels ${m.usedOnHeapStorageMemory}\n")
-        sb.append(s"${prefix}usedOffHeapStorageMemory_Count$labels ${m.usedOffHeapStorageMemory}\n")
-        sb.append(s"${prefix}totalOnHeapStorageMemory_Count$labels ${m.totalOnHeapStorageMemory}\n")
-        sb.append(s"${prefix}totalOffHeapStorageMemory_Count$labels " +
+        sb.append(s"${prefix}usedOnHeapStorageMemory_bytes$labels ${m.usedOnHeapStorageMemory}\n")
+        sb.append(s"${prefix}usedOffHeapStorageMemory_bytes$labels ${m.usedOffHeapStorageMemory}\n")
+        sb.append(s"${prefix}totalOnHeapStorageMemory_bytes$labels ${m.totalOnHeapStorageMemory}\n")
+        sb.append(s"${prefix}totalOffHeapStorageMemory_bytes$labels " +
           s"${m.totalOffHeapStorageMemory}\n")
       }
       executor.peakMemoryMetrics.foreach { m =>
@@ -87,14 +92,16 @@ private[v1] class PrometheusResource extends ApiRequestContext {
           "ProcessTreePythonVMemory",
           "ProcessTreePythonRSSMemory",
           "ProcessTreeOtherVMemory",
-          "ProcessTreeOtherRSSMemory",
-          "MinorGCCount",
-          "MinorGCTime",
-          "MajorGCCount",
-          "MajorGCTime"
+          "ProcessTreeOtherRSSMemory"
         )
         names.foreach { name =>
-          sb.append(s"$prefix${name}_Count$labels ${m.getMetricValue(name)}\n")
+          sb.append(s"$prefix${name}_bytes$labels ${m.getMetricValue(name)}\n")
+        }
+        Seq("MinorGCCount", "MajorGCCount").foreach { name =>
+          sb.append(s"$prefix${name}_total$labels ${m.getMetricValue(name)}\n")
+        }
+        Seq("MinorGCTime", "MajorGCTime").foreach { name =>
+          sb.append(s"$prefix${name}_seconds_total$labels ${m.getMetricValue(name) * 0.001}\n")
         }
       }
     }

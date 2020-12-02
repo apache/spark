@@ -20,14 +20,12 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import scala.collection.mutable
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -188,7 +186,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   testWithAllStateVersions("state metrics - append mode") {
     val inputData = MemoryStream[Int]
     val aggWithWatermark = inputData.toDF()
-      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
       .groupBy(window($"eventTime", "5 seconds") as 'window)
       .agg(count("*") as 'count)
@@ -202,47 +200,68 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         }
       }
 
+      // Pick the latest progress that actually ran a batch
+      def lastExecutedBatch: StreamingQueryProgress = {
+        query.recentProgress.filter(_.durationMs.containsKey("addBatch")).last
+      }
+
       def stateOperatorProgresses: Seq[StateOperatorProgress] = {
-        val operatorProgress = mutable.ArrayBuffer[StateOperatorProgress]()
-        var progress = query.recentProgress.last
-
-        operatorProgress ++= progress.stateOperators.map { op => op.copy(op.numRowsUpdated) }
-        if (progress.numInputRows == 0) {
-          // empty batch, merge metrics from previous batch as well
-          progress = query.recentProgress.takeRight(2).head
-          operatorProgress.zipWithIndex.foreach { case (sop, index) =>
-            // "numRowsUpdated" should be merged, as it could be updated in both batches.
-            // (for now it is only updated from previous batch, but things can be changed.)
-            // other metrics represent current status of state so picking up the latest values.
-            val newOperatorProgress = sop.copy(
-              sop.numRowsUpdated + progress.stateOperators(index).numRowsUpdated)
-            operatorProgress(index) = newOperatorProgress
-          }
-        }
-
-        operatorProgress
+        lastExecutedBatch.stateOperators
       }
     }
 
+    val clock = new StreamManualClock()
+
     testStream(aggWithWatermark)(
+      // batchId 0
       AddData(inputData, 15),
-      CheckAnswer(), // watermark = 5
+      StartStream(Trigger.ProcessingTime("interval 1 second"), clock),
+      CheckAnswer(), // watermark = 0
       AssertOnQuery { _.stateNodes.size === 1 },
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 1 without data
+      AdvanceManualClock(1000L), // watermark = 5
+      Execute { q =>             // wait for the no data batch to complete
+        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 1) }
+      },
+      CheckAnswer(),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 1 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 2 with data
       AddData(inputData, 10, 12, 14),
-      CheckAnswer(), // watermark = 5
-      AssertOnQuery { _.stateNodes.size === 1 },
+      AdvanceManualClock(1000L), // watermark = 5
+      CheckAnswer(),
       AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 3 with data
       AddData(inputData, 25),
-      CheckAnswer((10, 3)), // watermark = 15
-      AssertOnQuery { _.stateNodes.size === 1 },
-      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
+      AdvanceManualClock(1000L), // watermark = 5
+      CheckAnswer(),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 0 },
       AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 1 },
-      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 }
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 3 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 0 },
+
+      // batchId 4 without data
+      AdvanceManualClock(1000L), // watermark = 15
+      Execute { q =>             // wait for the no data batch to complete
+        eventually(timeout(streamingTimeout)) { assert(q.lastProgress.batchId === 4) }
+      },
+      CheckAnswer((10, 3)),
+      AssertOnQuery { _.stateNodes.head.metrics("numOutputRows").value === 1 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsUpdated === 0 },
+      AssertOnQuery { _.stateOperatorProgresses.head.numRowsTotal === 2 },
+      AssertOnQuery { _.lastExecutedBatch.sink.numOutputRows == 1 }
     )
   }
 
@@ -314,6 +333,49 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 2), (2, 3, 2))
     )
+  }
+
+  testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead streaming aggregation to use" +
+    " shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input2 = MemoryStream[Int]
+      val df1 = input1.toDF()
+        .select($"value", $"value" + 1)
+      val df2 = input2.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+
+      // Unioned DF would have columns as (Int, Int)
+      (input1, input2, df1.union(df2))
+    }
+
+    withTempDir { checkpointDir =>
+      val (input1, input2, unionDf) = constructUnionDf(2)
+      testStream(unionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 11, 12)(input2, 21, 22),
+        CheckNewAnswer(Row(11, 12), Row(12, 13), Row(21, 1), Row(22, 1)),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
+      // TaskContext.partitionId()). This test will verify streaming aggregation doesn't have
+      // such issue.
+
+      val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData(11, 12)
+      newInput2.addData(21, 22)
+
+      testStream(newUnionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(newInput1, 13, 14)(newInput2, 22, 23),
+        CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1))
+      )
+    }
   }
 
   testQuietlyWithAllStateVersions("midbatch failure") {

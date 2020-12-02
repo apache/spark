@@ -123,7 +123,7 @@ public class TransportContext implements Closeable {
 
     if (conf.getModuleName() != null &&
         conf.getModuleName().equalsIgnoreCase("shuffle") &&
-        !isClientOnly) {
+        !isClientOnly && conf.separateChunkFetchRequest()) {
       chunkFetchWorkers = NettyUtils.createEventLoop(
           IOMode.valueOf(conf.ioMode()),
           conf.chunkFetchHandlerThreads(),
@@ -187,8 +187,6 @@ public class TransportContext implements Closeable {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      ChunkFetchRequestHandler chunkFetchHandler =
-        createChunkFetchHandler(channelHandler, channelRpcHandler);
       ChannelPipeline pipeline = channel.pipeline()
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
@@ -200,6 +198,9 @@ public class TransportContext implements Closeable {
         .addLast("handler", channelHandler);
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
       if (chunkFetchWorkers != null) {
+        ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
+          channelHandler.getClient(), rpcHandler.getStreamManager(),
+          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
         pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       }
       return channelHandler;
@@ -217,19 +218,17 @@ public class TransportContext implements Closeable {
   private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
+    boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
+    ChunkFetchRequestHandler chunkFetchRequestHandler = null;
+    if (!separateChunkFetchRequest) {
+      chunkFetchRequestHandler = new ChunkFetchRequestHandler(
+        client, rpcHandler.getStreamManager(),
+        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
+    }
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler, conf.maxChunksBeingTransferred());
+      rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), closeIdleConnections, this);
-  }
-
-  /**
-   * Creates the dedicated ChannelHandler for ChunkFetchRequest messages.
-   */
-  private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
-      RpcHandler rpcHandler) {
-    return new ChunkFetchRequestHandler(channelHandler.getClient(),
-      rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
+      conf.connectionTimeoutMs(), separateChunkFetchRequest, closeIdleConnections, this);
   }
 
   public TransportConf getConf() { return conf; }

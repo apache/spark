@@ -122,7 +122,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
     while (iter.hasNext) {
       val name = iter.next
         postMessage(name, message, (e) => { e match {
-          case e: RpcEnvStoppedException => logDebug (s"Message $message dropped. ${e.getMessage}")
+          case e: RpcEnvStoppedException => logDebug(s"Message $message dropped. ${e.getMessage}")
           case e: Throwable => logWarning(s"Message $message dropped. ${e.getMessage}")
         }}
       )}
@@ -147,7 +147,14 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
   /** Posts a one-way message. */
   def postOneWayMessage(message: RequestMessage): Unit = {
     postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
-      (e) => throw e)
+      (e) => e match {
+        // SPARK-31922: in local cluster mode, there's always a RpcEnvStoppedException when
+        // stop is called due to some asynchronous message handling. We catch the exception
+        // and log it at debug level to avoid verbose error message when user stop a local
+        // cluster in spark shell.
+        case re: RpcEnvStoppedException => logDebug(s"Message $message dropped. ${re.getMessage}")
+        case _ => throw e
+      })
   }
 
   /**

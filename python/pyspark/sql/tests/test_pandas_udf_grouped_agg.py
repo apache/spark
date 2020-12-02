@@ -21,11 +21,12 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import ArrayType, TimestampType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
+
 
 if have_pandas:
     import pandas as pd
@@ -34,7 +35,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
@@ -158,7 +159,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
-                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
+                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 
@@ -491,12 +492,29 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             agg2 = self.spark.sql("select max_udf(id) from table")
             assert_frame_equal(agg1.toPandas(), agg2.toPandas())
 
+    def test_no_predicate_pushdown_through(self):
+        # SPARK-30921: We should not pushdown predicates of PythonUDFs through Aggregate.
+        import numpy as np
+
+        @pandas_udf('float', PandasUDFType.GROUPED_AGG)
+        def mean(x):
+            return np.mean(x)
+
+        df = self.spark.createDataFrame([
+            Row(id=1, foo=42), Row(id=2, foo=1), Row(id=2, foo=2)
+        ])
+
+        agg = df.groupBy('id').agg(mean('foo').alias("mean"))
+        filtered = agg.filter(agg['mean'] > 40.0)
+
+        assert(filtered.collect()[0]["mean"] == 42.0)
+
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_grouped_agg import *
+    from pyspark.sql.tests.test_pandas_udf_grouped_agg import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

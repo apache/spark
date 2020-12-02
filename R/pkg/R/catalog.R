@@ -17,6 +17,35 @@
 
 # catalog.R: SparkSession catalog functions
 
+#' (Deprecated) Create an external table
+#'
+#' Creates an external table based on the dataset in a data source,
+#' Returns a SparkDataFrame associated with the external table.
+#'
+#' The data source is specified by the \code{source} and a set of options(...).
+#' If \code{source} is not specified, the default data source configured by
+#' "spark.sql.sources.default" will be used.
+#'
+#' @param tableName a name of the table.
+#' @param path the path of files to load.
+#' @param source the name of external data source.
+#' @param schema the schema of the data required for some data sources.
+#' @param ... additional argument(s) passed to the method.
+#' @return A SparkDataFrame.
+#' @rdname createExternalTable-deprecated
+#' @seealso \link{createTable}
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df <- createExternalTable("myjson", path="path/to/json", source="json", schema)
+#' }
+#' @name createExternalTable
+#' @note createExternalTable since 1.4.0
+createExternalTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
+  .Deprecated("createTable", old = "createExternalTable")
+  createTable(tableName, path, source, schema, ...)
+}
+
 #' Creates a table based on the dataset in a data source
 #'
 #' Creates a table based on the dataset in a data source. Returns a SparkDataFrame associated with
@@ -128,6 +157,31 @@ clearCache <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
   invisible(callJMethod(catalog, "clearCache"))
+}
+
+#' (Deprecated) Drop Temporary Table
+#'
+#' Drops the temporary table with the given table name in the catalog.
+#' If the table has been cached/persisted before, it's also unpersisted.
+#'
+#' @param tableName The name of the SparkSQL table to be dropped.
+#' @seealso \link{dropTempView}
+#' @rdname dropTempTable-deprecated
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' df <- read.df(path, "parquet")
+#' createOrReplaceTempView(df, "table")
+#' dropTempTable("table")
+#' }
+#' @name dropTempTable
+#' @note dropTempTable since 1.4.0
+dropTempTable <- function(tableName) {
+  .Deprecated("dropTempView", old = "dropTempTable")
+  if (class(tableName) != "character") {
+    stop("tableName must be a string.")
+  }
+  dropTempView(tableName)
 }
 
 #' Drops the temporary view with the given view name in the catalog.

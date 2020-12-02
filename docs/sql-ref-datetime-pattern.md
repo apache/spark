@@ -28,200 +28,40 @@ There are several common scenarios for datetime usage in Spark:
 
 Spark uses pattern letters in the following table for date and timestamp parsing and formatting:
 
-<table class="table">
-<tr>
-  <th> <b>Symbol</b> </th>
-  <th> <b>Meaning</b> </th>
-  <th> <b>Presentation</b> </th>
-  <th> <b>Examples</b> </th>
-</tr>
-<tr>
-  <td> <b>G</b> </td>
-  <td> era </td>
-  <td> text </td>
-  <td> AD; Anno Domini; A </td>
-</tr>
-<tr>
-  <td> <b>y</b> </td>
-  <td> year </td>
-  <td> year </td>
-  <td> 2020; 20 </td>
-</tr>
-<tr>
-  <td> <b>D</b> </td>
-  <td> day-of-year </td>
-  <td> number </td>
-  <td> 189 </td>
-</tr>
-<tr>
-  <td> <b>M/L</b> </td>
-  <td> month-of-year </td>
-  <td> number/text </td>
-  <td> 7; 07; Jul; July; J </td>
-</tr>
-<tr>
-  <td> <b>d</b> </td>
-  <td> day-of-month </td>
-  <td> number </td>
-  <td> 28 </td>
-</tr>
-<tr>
-  <td> <b>Q/q</b> </td>
-  <td> quarter-of-year </td>
-  <td> number/text </td>
-  <td> 3; 03; Q3; 3rd quarter </td>
-</tr>
-<tr>
-  <td> <b>Y</b> </td>
-  <td> week-based-year </td>
-  <td> year </td>
-  <td> 1996; 96 </td>
-</tr>
-<tr>
-  <td> <b>w</b> </td>
-  <td> week-of-week-based-year </td>
-  <td> number </td>
-  <td> 27 </td>
-</tr>
-<tr>
-  <td> <b>W</b> </td>
-  <td> week-of-month </td>
-  <td> number </td>
-  <td> 4 </td>
-</tr>
-<tr>
-  <td> <b>E</b> </td>
-  <td> day-of-week </td>
-  <td> text </td>
-  <td> Tue; Tuesday; T </td>
-</tr>
-<tr>
-  <td> <b>u</b> </td>
-  <td> localized day-of-week </td>
-  <td> number/text </td>
-  <td> 2; 02; Tue; Tuesday; T </td>
-</tr>
-<tr>
-  <td> <b>F</b> </td>
-  <td> week-of-month </td>
-  <td> number </td>
-  <td> 3 </td>
-</tr>
-<tr>
-  <td> <b>a</b> </td>
-  <td> am-pm-of-day </td>
-  <td> text </td>
-  <td> PM </td>
-</tr>
-<tr>
-  <td> <b>h</b> </td>
-  <td> clock-hour-of-am-pm (1-12) </td>
-  <td> number </td>
-  <td> 12 </td>
-</tr>
-<tr>
-  <td> <b>K</b> </td>
-  <td> hour-of-am-pm (0-11) </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>k</b> </td>
-  <td> clock-hour-of-day (1-24) </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>H</b> </td>
-  <td> hour-of-day (0-23)  </td>
-  <td> number </td>
-  <td> 0 </td>
-</tr>
-<tr>
-  <td> <b>m</b> </td>
-  <td> minute-of-hour </td>
-  <td> number </td>
-  <td> 30 </td>
-</tr>
-<tr>
-  <td> <b>s</b> </td>
-  <td> second-of-minute </td>
-  <td> number </td>
-  <td> 55 </td>
-</tr>
-<tr>
-  <td> <b>S</b> </td>
-  <td> fraction-of-second </td>
-  <td> fraction </td>
-  <td> 978 </td>
-</tr>
-<tr>
-  <td> <b>V</b> </td>
-  <td> time-zone ID </td>
-  <td> zone-id </td>
-  <td> America/Los_Angeles; Z; -08:30 </td>
-</tr>
-<tr>
-  <td> <b>z</b> </td>
-  <td> time-zone name </td>
-  <td> zone-name </td>
-  <td> Pacific Standard Time; PST </td>
-</tr>
-<tr>
-  <td> <b>O</b> </td>
-  <td> localized zone-offset </td>
-  <td> offset-O </td>
-  <td> GMT+8; GMT+08:00; UTC-08:00; </td>
-</tr>
-<tr>
-  <td> <b>X</b> </td>
-  <td> zone-offset 'Z' for zero </td>
-  <td> offset-X </td>
-  <td> Z; -08; -0830; -08:30; -083015; -08:30:15; </td>
-</tr>
-<tr>
-  <td> <b>x</b> </td>
-  <td> zone-offset </td>
-  <td> offset-x </td>
-  <td> +0000; -08; -0830; -08:30; -083015; -08:30:15; </td>
-</tr>
-<tr>
-  <td> <b>Z</b> </td>
-  <td> zone-offset </td>
-  <td> offset-Z </td>
-  <td> +0000; -0800; -08:00; </td>
-</tr>
-<tr>
-  <td> <b>'</b> </td>
-  <td> escape for text </td>
-  <td> delimiter </td>
-  <td></td>
-</tr>
-<tr>
-  <td> <b>''</b> </td>
-  <td> single quote </td>
-  <td> literal </td>
-  <td> ' </td>
-</tr>
-<tr>
-  <td> <b>[</b> </td>
-  <td> optional section start </td>
-  <td>  </td>
-  <td>  </td>
-</tr>
-<tr>
-  <td> <b>]</b> </td>
-  <td> optional section end </td>
-  <td>  </td>
-  <td>  </td>
-</tr>
-</table>
+|Symbol|Meaning|Presentation|Examples|
+|------|-------|------------|--------|
+|**G**|era|text|AD; Anno Domini|
+|**y**|year|year|2020; 20|
+|**D**|day-of-year|number(3)|189|
+|**M/L**|month-of-year|month|7; 07; Jul; July|
+|**d**|day-of-month|number(3)|28|
+|**Q/q**|quarter-of-year|number/text|3; 03; Q3; 3rd quarter|
+|**E**|day-of-week|text|Tue; Tuesday|
+|**F**|aligned day of week in month|number(1)|3|
+|**a**|am-pm-of-day|am-pm|PM|
+|**h**|clock-hour-of-am-pm (1-12)|number(2)|12|
+|**K**|hour-of-am-pm (0-11)|number(2)|0|
+|**k**|clock-hour-of-day (1-24)|number(2)|0|
+|**H**|hour-of-day (0-23)|number(2)|0|
+|**m**|minute-of-hour|number(2)|30|
+|**s**|second-of-minute|number(2)|55|
+|**S**|fraction-of-second|fraction|978|
+|**V**|time-zone ID|zone-id|America/Los_Angeles; Z; -08:30|
+|**z**|time-zone name|zone-name|Pacific Standard Time; PST|
+|**O**|localized zone-offset|offset-O|GMT+8; GMT+08:00; UTC-08:00;|
+|**X**|zone-offset 'Z' for zero|offset-X|Z; -08; -0830; -08:30; -083015; -08:30:15;|
+|**x**|zone-offset|offset-x|+0000; -08; -0830; -08:30; -083015; -08:30:15;|
+|**Z**|zone-offset|offset-Z|+0000; -0800; -08:00;|
+|**'**|escape for text|delimiter| |
+|**''**|single quote|literal|'|
+|**[**|optional section start| | |
+|**]**|optional section end| | |
 
 The count of pattern letters determines the format.
 
-- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short form. Exactly 4 pattern letters will use the full form. Exactly 5 pattern letters will use the narrow form. Six or more letters will fail.
+- Text: The text style is determined based on the number of pattern letters used. Less than 4 pattern letters will use the short text form, typically an abbreviation, e.g. day-of-week Monday might output "Mon". Exactly 4 pattern letters will use the full text form, typically the full description, e.g, day-of-week Monday might output "Monday". 5 or more letters will fail.
 
-- Number: If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary. The following pattern letters have constraints on the count of letters. Only one letter 'F' can be specified. Up to two letters of 'd', 'H', 'h', 'K', 'k', 'm', and 's' can be specified. Up to three letters of 'D' can be specified.
+- Number(n): The n here represents the maximum count of letters this type of datetime pattern can be used. If the count of letters is one, then the value is output using the minimum number of digits and without padding. Otherwise, the count of digits is used as the width of the output field, with the value zero-padded as necessary.
 
 - Number/Text: If the count of pattern letters is 3 or greater, use the Text rules above. Otherwise use the Number rules above.
 
@@ -230,7 +70,53 @@ The count of pattern letters determines the format.
   For formatting, the fraction length would be padded to the number of contiguous 'S' with zeros.
   Spark supports datetime of micro-of-second precision, which has up to 6 significant digits, but can parse nano-of-second with exceeded part truncated.
 
-- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present.
+- Year: The count of letters determines the minimum field width below which padding is used. If the count of letters is two, then a reduced two digit form is used. For printing, this outputs the rightmost two digits. For parsing, this will parse using the base value of 2000, resulting in a year within the range 2000 to 2099 inclusive. If the count of letters is less than four (but not two), then the sign is only output for negative years. Otherwise, the sign is output if the pad width is exceeded when 'G' is not present. 7 or more letters will fail.
+
+- Month: It follows the rule of Number/Text. The text form is depend on letters - 'M' denotes the 'standard' form, and 'L' is for 'stand-alone' form. These two forms are different only in some certain languages. For example, in Russian, 'Июль' is the stand-alone form of July, and 'Июля' is the standard form. Here are examples for all supported pattern letters:
+  - `'M'` or `'L'`: Month number in a year starting from 1. There is no difference between 'M' and 'L'. Month from 1 to 9 are printed without padding.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "M");
+    1
+    spark-sql> select date_format(date '1970-12-01', "L");
+    12
+    ```
+  - `'MM'` or `'LL'`: Month number in a year starting from 1. Zero padding is added for month 1-9.
+      ```sql
+      spark-sql> select date_format(date '1970-1-01', "LL");
+      01
+      spark-sql> select date_format(date '1970-09-01', "MM");
+      09
+      ```
+  - `'MMM'`: Short textual representation in the standard form. The month pattern should be a part of a date pattern not just a stand-alone month except locales where there is no difference between stand and stand-alone forms like in English.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "d MMM");
+    1 Jan
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'dd MMM', 'locale', 'RU'));
+    01 янв.
+    ```
+  - `'LLL'`: Short textual representation in the stand-alone form. It should be used to format/parse only months without any other date fields.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "LLL");
+    Jan
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLL', 'locale', 'RU'));
+    янв.
+    ```
+  - `'MMMM'`: full textual month representation in the standard form. It is used for parsing/formatting months as a part of dates/timestamps.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "d MMMM");
+    1 January
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'd MMMM', 'locale', 'RU'));
+    1 января
+    ```
+  - `'LLLL'`: full textual month representation in the stand-alone form. The pattern can be used to format/parse only months.
+    ```sql
+    spark-sql> select date_format(date '1970-01-01', "LLLL");
+    January
+    spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLLL', 'locale', 'RU'));
+    январь
+    ```
+
+- am-pm: This outputs the am-pm-of-day. Pattern letter count must be 1.
 
 - Zone ID(V): This outputs the display the time-zone ID. Pattern letter count must be 2.
 
@@ -246,11 +132,5 @@ The count of pattern letters determines the format.
   During formatting, all valid data will be output even it is in the optional section.
   During parsing, the whole section may be missing from the parsed string.
   An optional section is started by `[` and ended using `]` (or at the end of the pattern).
-
-More details for the text style:
-
-- Short Form: Short text, typically an abbreviation. For example, day-of-week Monday might output "Mon".
-
-- Full Form: Full text, typically the full description. For example, day-of-week Monday might output "Monday".
-
-- Narrow Form: Narrow text, typically a single letter. For example, day-of-week Monday might output "M".
+  
+- Symbols of 'E', 'F', 'q' and 'Q' can only be used for datetime formatting, e.g. `date_format`. They are not allowed used for datetime parsing, e.g. `to_timestamp`.

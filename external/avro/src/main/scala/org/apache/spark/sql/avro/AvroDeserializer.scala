@@ -30,35 +30,54 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
-class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
+private[sql] class AvroDeserializer(
+    rootAvroType: Schema,
+    rootCatalystType: DataType,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    filters: StructFilters) {
+
+  def this(rootAvroType: Schema, rootCatalystType: DataType) = {
+    this(
+      rootAvroType,
+      rootCatalystType,
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)),
+      new NoopFilters)
+  }
+
   private lazy val decimalConversions = new DecimalConversion()
 
-  // Enable rebasing date/timestamp from Julian to Proleptic Gregorian calendar
-  private val rebaseDateTime = SQLConf.get.avroRebaseDateTimeEnabled
+  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
 
-  private val converter: Any => Any = rootCatalystType match {
+  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
+    datetimeRebaseMode, "Avro")
+
+  private val converter: Any => Option[Any] = rootCatalystType match {
     // A shortcut for empty schema.
     case st: StructType if st.isEmpty =>
-      (data: Any) => InternalRow.empty
+      (data: Any) => Some(InternalRow.empty)
 
     case st: StructType =>
       val resultRow = new SpecificInternalRow(st.map(_.dataType))
       val fieldUpdater = new RowUpdater(resultRow)
-      val writer = getRecordWriter(rootAvroType, st, Nil)
+      val applyFilters = filters.skipRow(resultRow, _)
+      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
       (data: Any) => {
         val record = data.asInstanceOf[GenericRecord]
-        writer(fieldUpdater, record)
-        resultRow
+        val skipRow = writer(fieldUpdater, record)
+        if (skipRow) None else Some(resultRow)
       }
 
     case _ =>
@@ -67,11 +86,11 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       val writer = newWriter(rootAvroType, rootCatalystType, Nil)
       (data: Any) => {
         writer(fieldUpdater, 0, data)
-        tmpRow.get(0, rootCatalystType)
+        Some(tmpRow.get(0, rootCatalystType))
       }
   }
 
-  def deserialize(data: Any): Any = converter(data)
+  def deserialize(data: Any): Option[Any] = converter(data)
 
   /**
    * Creates a writer to write avro values to Catalyst values at the given ordinal with the given
@@ -92,13 +111,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
 
-      case (INT, DateType) if rebaseDateTime => (updater, ordinal, value) =>
-        val days = value.asInstanceOf[Int]
-        val rebasedDays = DateTimeUtils.rebaseJulianToGregorianDays(days)
-        updater.setInt(ordinal, rebasedDays)
-
       case (INT, DateType) => (updater, ordinal, value) =>
-        updater.setInt(ordinal, value.asInstanceOf[Int])
+        updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
 
       case (LONG, LongType) => (updater, ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[Long])
@@ -106,22 +120,13 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
       case (LONG, TimestampType) => avroType.getLogicalType match {
         // For backward compatibility, if the Avro type is Long and it is not logical type
         // (the `null` case), the value is processed as timestamp type with millisecond precision.
-        case null | _: TimestampMillis if rebaseDateTime => (updater, ordinal, value) =>
-          val millis = value.asInstanceOf[Long]
-          val micros = DateTimeUtils.millisToMicros(millis)
-          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
-          updater.setLong(ordinal, rebasedMicros)
         case null | _: TimestampMillis => (updater, ordinal, value) =>
           val millis = value.asInstanceOf[Long]
           val micros = DateTimeUtils.millisToMicros(millis)
-          updater.setLong(ordinal, micros)
-        case _: TimestampMicros if rebaseDateTime => (updater, ordinal, value) =>
-          val micros = value.asInstanceOf[Long]
-          val rebasedMicros = DateTimeUtils.rebaseJulianToGregorianMicros(micros)
-          updater.setLong(ordinal, rebasedMicros)
+          updater.setLong(ordinal, timestampRebaseFunc(micros))
         case _: TimestampMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          updater.setLong(ordinal, micros)
+          updater.setLong(ordinal, timestampRebaseFunc(micros))
         case other => throw new IncompatibleSchemaException(
           s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
       }
@@ -177,7 +182,9 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
-        val writeRecord = getRecordWriter(avroType, st, path)
+        // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
+        // We can always return `false` from `applyFilters` for nested records.
+        val writeRecord = getRecordWriter(avroType, st, path, applyFilters = _ => false)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -249,7 +256,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
           } else {
-            nonNullTypes.map(_.getType) match {
+            nonNullTypes.map(_.getType).toSeq match {
               case Seq(a, b) if Set(a, b) == Set(INT, LONG) && catalystType == LongType =>
                 (updater, ordinal, value) => value match {
                   case null => updater.setNullAt(ordinal)
@@ -314,7 +321,8 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
   private def getRecordWriter(
       avroType: Schema,
       sqlType: StructType,
-      path: List[String]): (CatalystDataUpdater, GenericRecord) => Unit = {
+      path: List[String],
+      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
@@ -349,10 +357,13 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
 
     (fieldUpdater, record) => {
       var i = 0
-      while (i < validFieldIndexes.length) {
+      var skipRow = false
+      while (i < validFieldIndexes.length && !skipRow) {
         fieldWriters(i)(fieldUpdater, record.get(validFieldIndexes(i)))
+        skipRow = applyFilters(i)
         i += 1
       }
+      skipRow
     }
   }
 

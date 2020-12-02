@@ -30,7 +30,7 @@ import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -62,6 +62,11 @@ case class ApplicationAttemptInfo private[spark](
 
 }
 
+class ResourceProfileInfo private[spark](
+    val id: Int,
+    val executorResources: Map[String, ExecutorResourceRequest],
+    val taskResources: Map[String, TaskResourceRequest])
+
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
     val failedTasks : Int,
@@ -77,15 +82,12 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
+    @deprecated("use isExcludedForStage instead", "3.1.0")
     val isBlacklistedForStage: Boolean,
-    val jvmHeapMemory: Long,
-    val jvmOffHeapMemory: Long,
-    val onHeapExecutionMemory: Long,
-    val offHeapExecutionMemory: Long,
-    val onHeapStorageMemory: Long,
-    val offHeapStorageMemory: Long,
-    val directPoolMemory: Long,
-    val mappedPoolMemory: Long)
+    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    val peakMemoryMetrics: Option[ExecutorMetrics],
+    val isExcludedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -105,6 +107,7 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
+    @deprecated("use isExcluded instead", "3.1.0")
     val isBlacklisted: Boolean,
     val maxMemory: Long,
     val addTime: Date,
@@ -112,12 +115,16 @@ class ExecutorSummary private[spark](
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
     val memoryMetrics: Option[MemoryMetrics],
+    @deprecated("use excludedInStages instead", "3.1.0")
     val blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
     val attributes: Map[String, String],
-    val resources: Map[String, ResourceInformation])
+    val resources: Map[String, ResourceInformation],
+    val resourceProfileId: Int,
+    val isExcluded: Boolean,
+    val excludedInStages: Set[Int])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
@@ -135,6 +142,10 @@ private[spark] class ExecutorMetricsJsonDeserializer
       new TypeReference[Option[Map[String, java.lang.Long]]] {})
     metricsMap.map(metrics => new ExecutorMetrics(metrics))
   }
+
+  override def getNullValue(ctxt: DeserializationContext): Option[ExecutorMetrics] = {
+    None
+  }
 }
 /** serializer for peakMemoryMetrics: convert ExecutorMetrics to map with metric name as key */
 private[spark] class ExecutorMetricsJsonSerializer
@@ -143,11 +154,15 @@ private[spark] class ExecutorMetricsJsonSerializer
       metrics: Option[ExecutorMetrics],
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
-    metrics.foreach { m: ExecutorMetrics =>
-      val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
-        metric -> m.getMetricValue(metric)
+    if (metrics.isEmpty) {
+      jsonGenerator.writeNull()
+    } else {
+      metrics.foreach { m: ExecutorMetrics =>
+        val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+          metric -> m.getMetricValue(metric)
+        }
+        jsonGenerator.writeObject(metricsMap)
       }
-      jsonGenerator.writeObject(metricsMap)
     }
   }
 
@@ -260,7 +275,11 @@ class StageData private[spark](
     val accumulatorUpdates: Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
-    val killedTasksSummary: Map[String, Int])
+    val killedTasksSummary: Map[String, Int],
+    val resourceProfileId: Int,
+    @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
+    @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
+    val peakExecutorMetrics: Option[ExecutorMetrics])
 
 class TaskData private[spark](
     val taskId: Long,
@@ -373,12 +392,15 @@ class AccumulableInfo private[spark](
 class VersionInfo private[spark](
   val spark: String)
 
+// Note the resourceProfiles information are only added here on return from the
+// REST call, they are not stored with it.
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
     val sparkProperties: Seq[(String, String)],
     val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)])
+    val classpathEntries: Seq[(String, String)],
+    val resourceProfiles: Seq[ResourceProfileInfo])
 
 class RuntimeInfo private[spark](
     val javaVersion: String,

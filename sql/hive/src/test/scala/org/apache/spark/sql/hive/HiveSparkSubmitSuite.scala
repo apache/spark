@@ -23,8 +23,9 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.Assertions._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -38,12 +39,13 @@ import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveContext}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types.{DecimalType, StructType}
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * This suite tests spark-submit with applications using HiveContext.
  */
+@SlowHiveTest
 @ExtendedHiveTest
 class HiveSparkSubmitSuite
   extends SparkSubmitTestUtils
@@ -151,7 +153,7 @@ class HiveSparkSubmitSuite
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     // TODO: revisit for Scala 2.13 support
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.12") => v.substring(0, 4)
+      case v if v.startsWith("2.12") || v.startsWith("2.13") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
@@ -768,8 +770,6 @@ object SPARK_14244 extends QueryTest {
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
 
-    import hiveContext.implicits._
-
     try {
       val window = Window.orderBy("id")
       val df = spark.range(2).select(cume_dist().over(window).as("cdist")).orderBy("cdist")
@@ -787,7 +787,7 @@ object SPARK_18360 {
       .enableHiveSupport().getOrCreate()
 
     val defaultDbLocation = spark.catalog.getDatabase("default").locationUri
-    assert(new Path(defaultDbLocation) == new Path(spark.sharedState.warehousePath))
+    assert(new Path(defaultDbLocation) == new Path(spark.conf.get(WAREHOUSE_PATH)))
 
     val hiveClient =
       spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

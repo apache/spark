@@ -1,0 +1,39 @@
+TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
+  WholeStageCodegen (5)
+    HashAggregate [ca_zip,sum] [sum(UnscaledValue(cs_sales_price)),sum(cs_sales_price),sum]
+      InputAdapter
+        Exchange [ca_zip] #1
+          WholeStageCodegen (4)
+            HashAggregate [ca_zip,cs_sales_price] [sum,sum]
+              Project [cs_sales_price,ca_zip]
+                BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                  Project [cs_sold_date_sk,cs_sales_price,ca_zip]
+                    BroadcastHashJoin [c_current_addr_sk,ca_address_sk,ca_zip,ca_state,cs_sales_price]
+                      Project [cs_sold_date_sk,cs_sales_price,c_current_addr_sk]
+                        BroadcastHashJoin [cs_bill_customer_sk,c_customer_sk]
+                          Filter [cs_bill_customer_sk,cs_sold_date_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.catalog_sales [cs_sold_date_sk,cs_bill_customer_sk,cs_sales_price]
+                          InputAdapter
+                            BroadcastExchange #2
+                              WholeStageCodegen (1)
+                                Filter [c_customer_sk,c_current_addr_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.customer [c_customer_sk,c_current_addr_sk]
+                      InputAdapter
+                        BroadcastExchange #3
+                          WholeStageCodegen (2)
+                            Filter [ca_address_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip]
+                  InputAdapter
+                    BroadcastExchange #4
+                      WholeStageCodegen (3)
+                        Project [d_date_sk]
+                          Filter [d_qoy,d_year,d_date_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]

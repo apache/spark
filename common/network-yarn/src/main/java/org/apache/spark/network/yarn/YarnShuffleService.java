@@ -41,6 +41,7 @@ import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
+import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -172,7 +173,10 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
-      blockHandler = new ExternalBlockHandler(transportConf, registeredExecutorFile);
+      MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
+        transportConf);
+      blockHandler = new ExternalBlockHandler(
+        transportConf, registeredExecutorFile, shuffleMergeManager);
 
       // If authentication is enabled, set up the shuffle server to use a
       // special RPC handler that filters out unauthenticated fetch requests
@@ -188,7 +192,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
       int port = conf.getInt(
         SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-      transportContext = new TransportContext(transportConf, blockHandler);
+      transportContext = new TransportContext(transportConf, blockHandler, true);
       shuffleServer = transportContext.createServer(port, bootstraps);
       // the port should normally be fixed, but for tests its useful to find an open port
       port = shuffleServer.getPort();
@@ -198,6 +202,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // register metrics on the block handler into the Node Manager's metrics system.
       blockHandler.getAllMetrics().getMetrics().put("numRegisteredConnections",
           shuffleServer.getRegisteredConnections());
+      blockHandler.getAllMetrics().getMetrics().putAll(shuffleServer.getAllMetrics().getMetrics());
       YarnShuffleServiceMetrics serviceMetrics =
           new YarnShuffleServiceMetrics(blockHandler.getAllMetrics());
 
@@ -215,6 +220,23 @@ public class YarnShuffleService extends AuxiliaryService {
       } else {
         noteFailure(e);
       }
+    }
+  }
+
+  @VisibleForTesting
+  static MergedShuffleFileManager newMergedShuffleFileManagerInstance(TransportConf conf) {
+    String mergeManagerImplClassName = conf.mergedShuffleFileManagerImpl();
+    try {
+      Class<?> mergeManagerImplClazz = Class.forName(
+        mergeManagerImplClassName, true, Thread.currentThread().getContextClassLoader());
+      Class<? extends MergedShuffleFileManager> mergeManagerSubClazz =
+        mergeManagerImplClazz.asSubclass(MergedShuffleFileManager.class);
+      // The assumption is that all the custom implementations just like the RemoteBlockPushResolver
+      // will also need the transport configuration.
+      return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
+    } catch (Exception e) {
+      logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
+      return new ExternalBlockHandler.NoOpMergedShuffleFileManager(conf);
     }
   }
 

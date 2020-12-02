@@ -18,10 +18,12 @@
 import sys
 
 from pyspark import since, keyword_only
-from pyspark.ml.util import *
+from pyspark.ml.param.shared import HasPredictionCol, HasBlockSize, HasMaxIter, HasRegParam, \
+    HasCheckpointInterval, HasSeed
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.param import Params, TypeConverters, Param
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable
 
 
 __all__ = ['ALS', 'ALSModel']
@@ -45,6 +47,10 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
                               "user/item ids the model has not seen in the training data. " +
                               "Supported values: 'nan', 'drop'.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSModelParams, self).__init__(*args)
+        self._setDefault(blockSize=4096)
 
     @since("1.4.0")
     def getUserCol(self):
@@ -98,6 +104,14 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
                               "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)
+
+    def __init__(self, *args):
+        super(_ALSParams, self).__init__(*args)
+        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
+                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                         intermediateStorageLevel="MEMORY_AND_DISK",
+                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan")
 
     @since("1.4.0")
     def getRank(self):
@@ -202,13 +216,19 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     indicated user preferences rather than explicit ratings given to
     items.
 
-    .. note:: the input rating dataframe to the ALS implementation should be deterministic.
-              Nondeterministic data can cause failure during fitting ALS model.
-              For example, an order-sensitive operation like sampling after a repartition makes
-              dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
-              Checkpointing sampled dataframe or adding a sort before sampling can help make the
-              dataframe deterministic.
+    .. versionadded:: 1.4.0
 
+    Notes
+    -----
+    The input rating dataframe to the ALS implementation should be deterministic.
+    Nondeterministic data can cause failure during fitting ALS model.
+    For example, an order-sensitive operation like sampling after a repartition makes
+    dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
+    Checkpointing sampled dataframe or adding a sort before sampling can help make the
+    dataframe deterministic.
+
+    Examples
+    --------
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
@@ -240,11 +260,11 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     >>> test = spark.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
-    Row(user=0, item=2, newPrediction=0.6929101347923279)
+    Row(user=0, item=2, newPrediction=0.692910...)
     >>> predictions[1]
-    Row(user=1, item=0, newPrediction=3.47356915473938)
+    Row(user=1, item=0, newPrediction=3.473569...)
     >>> predictions[2]
-    Row(user=2, item=0, newPrediction=-0.8991986513137817)
+    Row(user=2, item=0, newPrediction=-0.899198...)
     >>> user_recs = model.recommendForAllUsers(3)
     >>> user_recs.where(user_recs.user == 0)\
         .select("recommendations.item", "recommendations.rating").collect()
@@ -275,45 +295,39 @@ class ALS(JavaEstimator, _ALSParams, JavaMLWritable, JavaMLReadable):
     True
     >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
     True
-
-    .. versionadded:: 1.4.0
+    >>> model.transform(test).take(1) == model2.transform(test).take(1)
+    True
     """
 
     @keyword_only
-    def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def __init__(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=false, checkpointInterval=10, \
+        __init__(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
-        self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                         implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
-                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
-                         intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan",
-                         blockSize=4096)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
-                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
+    def setParams(self, *, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10,
+                  numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
+                  seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
                   finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096):
         """
-        setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
-                 implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10, \
+        setParams(self, \\*, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, \
+                 numItemBlocks=10, implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", \
+                 seed=None, ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         Sets params for ALS.
@@ -520,55 +534,87 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("itemFactors")
 
-    @since("2.2.0")
     def recommendForAllUsers(self, numItems):
         """
         Returns top `numItems` items recommended for each user, for all users.
 
-        :param numItems: max number of recommendations for each user
-        :return: a DataFrame of (userCol, recommendations), where recommendations are
-                 stored as an array of (itemCol, rating) Rows.
+        .. versionadded:: 2.2.0
+
+        Parameters
+        ----------
+        numItems : int
+            max number of recommendations for each user
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (userCol, recommendations), where recommendations are
+            stored as an array of (itemCol, rating) Rows.
         """
         return self._call_java("recommendForAllUsers", numItems)
 
-    @since("2.2.0")
     def recommendForAllItems(self, numUsers):
         """
         Returns top `numUsers` users recommended for each item, for all items.
 
-        :param numUsers: max number of recommendations for each item
-        :return: a DataFrame of (itemCol, recommendations), where recommendations are
-                 stored as an array of (userCol, rating) Rows.
+        .. versionadded:: 2.2.0
+
+        Parameters
+        ----------
+        numUsers : int
+            max number of recommendations for each item
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (itemCol, recommendations), where recommendations are
+            stored as an array of (userCol, rating) Rows.
         """
         return self._call_java("recommendForAllItems", numUsers)
 
-    @since("2.3.0")
     def recommendForUserSubset(self, dataset, numItems):
         """
         Returns top `numItems` items recommended for each user id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
 
-        :param dataset: a Dataset containing a column of user ids. The column name must match
-                        `userCol`.
-        :param numItems: max number of recommendations for each user
-        :return: a DataFrame of (userCol, recommendations), where recommendations are
-                 stored as an array of (itemCol, rating) Rows.
+        .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a DataFrame containing a column of user ids. The column name must match `userCol`.
+        numItems : int
+            max number of recommendations for each user
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (userCol, recommendations), where recommendations are
+            stored as an array of (itemCol, rating) Rows.
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
-    @since("2.3.0")
     def recommendForItemSubset(self, dataset, numUsers):
         """
         Returns top `numUsers` users recommended for each item id in the input data set. Note that
         if there are duplicate ids in the input dataset, only one set of recommendations per unique
         id will be returned.
 
-        :param dataset: a Dataset containing a column of item ids. The column name must match
-                        `itemCol`.
-        :param numUsers: max number of recommendations for each item
-        :return: a DataFrame of (itemCol, recommendations), where recommendations are
-                 stored as an array of (userCol, rating) Rows.
+        .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            a DataFrame containing a column of item ids. The column name must match `itemCol`.
+        numUsers : int
+            max number of recommendations for each item
+
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            a DataFrame of (itemCol, recommendations), where recommendations are
+            stored as an array of (userCol, rating) Rows.
         """
         return self._call_java("recommendForItemSubset", dataset, numUsers)
 

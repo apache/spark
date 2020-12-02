@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+         stop("Unsupported type for SparkDataFrame: ", class(x)))
 }
 
 #' return the SparkSession
@@ -110,10 +110,11 @@ sparkR.conf <- function(key, defaultValue) {
     value <- if (missing(defaultValue)) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
-                if (any(grep("java.util.NoSuchElementException", as.character(e)))) {
-                  stop(paste0("Config '", key, "' is not set"))
+                estr <- as.character(e)
+                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                  stop("Config '", key, "' is not set")
                 } else {
-                  stop(paste0("Unknown error: ", as.character(e)))
+                  stop("Unknown error: ", estr)
                 }
               })
     } else {
@@ -205,9 +206,9 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
     # SPAKR-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
-      nn <- gsub("[.]", "_", n)
+      nn <- gsub(".", "_", n, fixed = TRUE)
       if (nn != n) {
-        warning(paste("Use", nn, "instead of", n, "as column name"))
+        warning("Use ", nn, " instead of ", n, " as column name")
       }
       nn
     })
@@ -289,10 +290,9 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
         TRUE
       },
       error = function(e) {
-        warning(paste0("createDataFrame attempted Arrow optimization because ",
-                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
-                       "failed, attempting non-optimization. Reason: ",
-                       e))
+        warning("createDataFrame attempted Arrow optimization because ",
+                "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
+                "failed, attempting non-optimization. Reason: ", e)
         FALSE
       })
     }
@@ -325,7 +325,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
   } else if (inherits(data, "RDD")) {
     rdd <- data
   } else {
-    stop(paste("unexpected type:", class(data)))
+    stop("unexpected type: ", class(data))
   }
 
   schema <- getSchema(schema, firstRow, rdd)

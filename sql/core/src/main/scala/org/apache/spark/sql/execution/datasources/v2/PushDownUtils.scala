@@ -48,7 +48,8 @@ object PushDownUtils extends PredicateHelper {
 
         for (filterExpr <- filters) {
           val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr))
+            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
+              nestedPredicatePushdownEnabled = true)
           if (translated.isEmpty) {
             untranslatableExprs += filterExpr
           } else {
@@ -62,7 +63,7 @@ object PushDownUtils extends PredicateHelper {
         val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
           DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
         }
-        (r.pushedFilters(), untranslatableExprs ++ postScanFilters)
+        (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
     }
@@ -95,13 +96,11 @@ object PushDownUtils extends PredicateHelper {
         val exprs = projects ++ filters
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
-        if (neededOutput != relation.output) {
-          r.pruneColumns(neededOutput.toStructType)
-          val scan = r.build()
-          scan -> toOutputAttrs(scan.readSchema(), relation)
-        } else {
-          r.build() -> relation.output
-        }
+        r.pruneColumns(neededOutput.toStructType)
+        val scan = r.build()
+        // always project, in case the relation's output has been updated and doesn't match
+        // the underlying table schema
+        scan -> toOutputAttrs(scan.readSchema(), relation)
 
       case _ => scanBuilder.build() -> relation.output
     }

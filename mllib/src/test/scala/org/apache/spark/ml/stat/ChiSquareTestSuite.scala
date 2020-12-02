@@ -117,7 +117,7 @@ class ChiSquareTestSuite
     withClue("ChiSquare should throw an exception when given a continuous-valued label") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousLabel)
-        ChiSquareTest.test(df, "features", "label")
+        ChiSquareTest.test(df, "features", "label").count()
       }
     }
     val continuousFeature = Seq.fill(tooManyCategories)(
@@ -125,7 +125,7 @@ class ChiSquareTestSuite
     withClue("ChiSquare should throw an exception when given continuous-valued features") {
       intercept[SparkException] {
         val df = spark.createDataFrame(continuousFeature)
-        ChiSquareTest.test(df, "features", "label")
+        ChiSquareTest.test(df, "features", "label").count()
       }
     }
   }

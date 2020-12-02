@@ -36,7 +36,7 @@ private[spark] object DockerUtils {
       .orElse(findFromDockerMachine())
       .orElse(Try(Seq("/bin/bash", "-c", "boot2docker ip 2>/dev/null").!!.trim).toOption)
       .getOrElse {
-        // This block of code is based on Utils.findLocalInetAddress(), but is modified to blacklist
+        // This block of code is based on Utils.findLocalInetAddress(), but is modified to exclude
         // certain interfaces.
         val address = InetAddress.getLocalHost
         // Address resolves to something like 127.0.1.1, which happens on Debian; try to find
@@ -44,12 +44,12 @@ private[spark] object DockerUtils {
         // getNetworkInterfaces returns ifs in reverse order compared to ifconfig output order
         // on unix-like system. On windows, it returns in index order.
         // It's more proper to pick ip address following system output order.
-        val blackListedIFs = Seq(
+        val excludedIFs = Seq(
           "vboxnet0",  // Mac
           "docker0"    // Linux
         )
         val activeNetworkIFs = NetworkInterface.getNetworkInterfaces.asScala.toSeq.filter { i =>
-          !blackListedIFs.contains(i.getName)
+          !excludedIFs.contains(i.getName)
         }
         val reOrderedNetworkIFs = activeNetworkIFs.reverse
         for (ni <- reOrderedNetworkIFs) {

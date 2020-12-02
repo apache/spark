@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -50,57 +49,25 @@ object IntervalUtils {
     interval.months / MONTHS_PER_YEAR
   }
 
-  def getMillenniums(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_MILLENNIUM
-  }
-
-  def getCenturies(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_CENTURY
-  }
-
-  def getDecades(interval: CalendarInterval): Int = {
-    getYears(interval) / YEARS_PER_DECADE
-  }
-
   def getMonths(interval: CalendarInterval): Byte = {
     (interval.months % MONTHS_PER_YEAR).toByte
   }
 
-  def getQuarters(interval: CalendarInterval): Byte = {
-    (getMonths(interval) / MONTHS_PER_QUARTER + 1).toByte
-  }
-
   def getDays(interval: CalendarInterval): Int = {
-    interval.days
+    val daysInMicroseconds = (interval.microseconds / MICROS_PER_DAY).toInt
+    Math.addExact(interval.days, daysInMicroseconds)
   }
 
   def getHours(interval: CalendarInterval): Long = {
-    interval.microseconds / MICROS_PER_HOUR
+    (interval.microseconds % MICROS_PER_DAY) / MICROS_PER_HOUR
   }
 
   def getMinutes(interval: CalendarInterval): Byte = {
     ((interval.microseconds % MICROS_PER_HOUR) / MICROS_PER_MINUTE).toByte
   }
 
-  def getMicroseconds(interval: CalendarInterval): Long = {
-    interval.microseconds % MICROS_PER_MINUTE
-  }
-
   def getSeconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 6)
-  }
-
-  def getMilliseconds(interval: CalendarInterval): Decimal = {
-    Decimal(getMicroseconds(interval), 8, 3)
-  }
-
-  // Returns total number of seconds with microseconds fractional part in the given interval.
-  def getEpoch(interval: CalendarInterval): Decimal = {
-    var result = interval.microseconds
-    result += MICROS_PER_DAY * interval.days
-    result += MICROS_PER_YEAR * (interval.months / MONTHS_PER_YEAR)
-    result += MICROS_PER_MONTH * (interval.months % MONTHS_PER_YEAR)
-    Decimal(result, 18, 6)
+    Decimal(interval.microseconds % MICROS_PER_MINUTE, 8, 6)
   }
 
   private def toLongWithRange(
@@ -606,7 +573,7 @@ object IntervalUtils {
     var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
-      if (b <= ' ') {
+      if (Character.isWhitespace(b)) {
         i += 1
       } else {
         state = next
@@ -627,7 +594,7 @@ object IntervalUtils {
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
               throwIAE("interval string cannot be empty")
-            } else if (bytes(i + intervalStr.numBytes()) > ' ') {
+            } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
               throwIAE(s"invalid interval prefix $currentWord")
             } else {
               i += intervalStr.numBytes() + 1
@@ -674,7 +641,7 @@ object IntervalUtils {
               } catch {
                 case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
-            case _ if b <= ' ' => state = TRIM_BEFORE_UNIT
+            case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
@@ -685,7 +652,8 @@ object IntervalUtils {
           if ('0' <= b && b <= '9' && fractionScale > 0) {
             fraction += (b - '0') * fractionScale
             fractionScale /= 10
-          } else if (b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale)) {
+          } else if (Character.isWhitespace(b) &&
+              (!pointPrefixed || fractionScale < initialFractionScale)) {
             fraction /= NANOS_PER_MICROS.toInt
             state = TRIM_BEFORE_UNIT
           } else if ('0' <= b && b <= '9') {
@@ -751,12 +719,12 @@ object IntervalUtils {
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case _ if b <= ' ' => state = TRIM_BEFORE_SIGN
+            case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_SIGN
             case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
-          if (b <= ' ') {
+          if (Character.isWhitespace(b) ) {
             i += 1
             state = TRIM_BEFORE_SIGN
           } else {
@@ -768,7 +736,10 @@ object IntervalUtils {
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
-      case _ => null
+      case TRIM_BEFORE_VALUE => throwIAE(s"expect a number after '$currentWord' but hit EOL")
+      case VALUE | VALUE_FRACTIONAL_PART =>
+        throwIAE(s"expect a unit name after '$currentWord' but hit EOL")
+      case _ => throwIAE(s"unknown error when parsing '$currentWord'")
     }
 
     result
@@ -784,7 +755,8 @@ object IntervalUtils {
       secs: Decimal): CalendarInterval = {
     val totalMonths = Math.addExact(months, Math.multiplyExact(years, MONTHS_PER_YEAR))
     val totalDays = Math.addExact(days, Math.multiplyExact(weeks, DAYS_PER_WEEK))
-    var micros = (secs * Decimal(MICROS_PER_SECOND)).toLong
+    assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
+    var micros = secs.toUnscaledLong
     micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
     micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
 

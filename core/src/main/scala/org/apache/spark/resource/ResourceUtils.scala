@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
 import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
 import org.apache.spark.util.Utils
 
@@ -149,8 +149,13 @@ private[spark] object ResourceUtils extends Logging {
 
   def listResourceIds(sparkConf: SparkConf, componentName: String): Seq[ResourceID] = {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
-      key.substring(0, key.indexOf('.'))
-    }.toSet.toSeq.map(name => new ResourceID(componentName, name))
+      val index = key.indexOf('.')
+      if (index < 0) {
+        throw new SparkException(s"You must specify an amount config for resource: $key " +
+          s"config: $componentName.$RESOURCE_PREFIX.$key")
+      }
+      key.substring(0, index)
+    }.distinct.map(name => new ResourceID(componentName, name))
   }
 
   def parseAllResourceRequests(
@@ -392,7 +397,7 @@ private[spark] object ResourceUtils extends Logging {
       s"${resourceRequest.id.resourceName}")
   }
 
-  def validateTaskCpusLargeEnough(execCores: Int, taskCpus: Int): Boolean = {
+  def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
     if (execCores < taskCpus) {
       throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
@@ -414,7 +419,7 @@ private[spark] object ResourceUtils extends Logging {
     val coresKnown = rp.isCoresLimitKnown
     var limitingResource = rp.limitingResource(sparkConf)
     var maxTaskPerExec = rp.maxTasksPerExecutor(sparkConf)
-    val taskCpus = rp.getTaskCpus.getOrElse(sparkConf.get(CPUS_PER_TASK))
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(rp, sparkConf)
     val cores = if (execCores.isDefined) {
       execCores.get
     } else if (coresKnown) {
@@ -455,11 +460,12 @@ private[spark] object ResourceUtils extends Logging {
 
     taskReq.foreach { case (rName, treq) =>
       val execAmount = execReq(rName).amount
+      // handles fractional
+      val taskAmount = rp.getSchedulerTaskResourceAmount(rName)
       val numParts = rp.getNumSlotsPerAddress(rName, sparkConf)
-      // handle fractional
-      val taskAmount = if (numParts > 1) 1 else treq.amount
       if (maxTaskPerExec < (execAmount * numParts / taskAmount)) {
-        val taskReqStr = s"${taskAmount}/${numParts}"
+        val origTaskAmount = treq.amount
+        val taskReqStr = s"${origTaskAmount}/${numParts}"
         val resourceNumSlots = Math.floor(execAmount * numParts / taskAmount).toInt
         val message = s"The configuration of resource: ${treq.resourceName} " +
           s"(exec = ${execAmount}, task = ${taskReqStr}, " +

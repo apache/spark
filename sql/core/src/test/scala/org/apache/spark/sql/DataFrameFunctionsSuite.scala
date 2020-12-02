@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.TimeZone
 
 import scala.util.Random
 
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -937,10 +936,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val answer = Seq(Row(Seq(2, 3)), Row(Seq(5)))
 
     checkAnswer(df.select(slice(df("x"), 2, 2)), answer)
+    checkAnswer(df.select(slice(df("x"), lit(2), lit(2))), answer)
     checkAnswer(df.selectExpr("slice(x, 2, 2)"), answer)
 
     val answerNegative = Seq(Row(Seq(3)), Row(Seq(5)))
     checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
+    checkAnswer(df.select(slice(df("x"), lit(-1), lit(1))), answerNegative)
     checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
   }
 
@@ -1028,7 +1029,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Timestamp.valueOf("2018-01-01 12:00:00"),
         Timestamp.valueOf("2018-01-02 00:00:00")))))
 
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    withDefaultTimeZone(UTC) {
       checkAnswer(
         spark.sql("select sequence(" +
           "   cast('2018-01-01' as date)" +
@@ -1530,6 +1531,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.selectExpr("concat(map(1, 2), map(3, 4))")
     }
     assert(e.getMessage.contains("string, binary or array"))
+  }
+
+  test("SPARK-31227: Non-nullable null type should not coerce to nullable type in concat") {
+    val actual = spark.range(1).selectExpr("concat(array(), array(1)) as arr")
+    val expected = spark.range(1).selectExpr("array(1) as arr")
+    checkAnswer(actual, expected)
+    assert(actual.schema === expected.schema)
   }
 
   test("flatten function") {

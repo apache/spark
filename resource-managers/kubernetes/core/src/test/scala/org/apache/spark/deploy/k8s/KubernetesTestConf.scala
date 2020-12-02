@@ -21,7 +21,6 @@ import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
 
 /**
@@ -48,6 +47,7 @@ object KubernetesTestConf {
       labels: Map[String, String] = Map.empty,
       environment: Map[String, String] = Map.empty,
       annotations: Map[String, String] = Map.empty,
+      serviceAnnotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
       volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
@@ -60,6 +60,7 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_LABEL_PREFIX, labels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ENV_PREFIX, environment)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ANNOTATION_PREFIX, annotations)
+    setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX, serviceAnnotations)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRETS_PREFIX, secretNamesToMountPaths)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_DRIVER_VOLUMES_PREFIX, volumes)
@@ -112,14 +113,22 @@ object KubernetesTestConf {
           (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
             Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
 
-        case KubernetesPVCVolumeConf(claimName) =>
+        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit) =>
+          val sconf = storageClass
+            .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
+          val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
           (KUBERNETES_VOLUMES_PVC_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName))
+            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++ sconf ++ lconf)
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
           (KUBERNETES_VOLUMES_EMPTYDIR_TYPE, mconf ++ lconf)
+
+        case KubernetesNFSVolumeConf(path, server) =>
+          (KUBERNETES_VOLUMES_NFS_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path,
+            KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY -> server))
       }
 
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_PATH_KEY), spec.mountPath)

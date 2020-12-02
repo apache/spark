@@ -37,9 +37,9 @@ if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
   exit 1
 fi
 
-# Default to standard python interpreter unless told otherwise
+# Default to standard python3 interpreter unless told otherwise
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  PYSPARK_PYTHON=python
+  PYSPARK_PYTHON=python3
 fi
 if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
   PYSPARK_DRIVER_PYTHON=$PYSPARK_PYTHON

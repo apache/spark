@@ -27,8 +27,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -845,20 +846,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
-    val dstOffset = timeZone.getDSTSavings
 
-    def noDST(t: Timestamp): Timestamp = new Timestamp(t.getTime - dstOffset)
+    def ts(s: String, noDST: Boolean = false): Long = {
+      val offset = if (noDST) timeZone.getDSTSavings else 0
+      DateTimeUtils.millisToMicros(Timestamp.valueOf(s).getTime - offset)
+    }
 
-    DateTimeTestUtils.withDefaultTimeZone(timeZone) {
+    DateTimeTestUtils.withDefaultTimeZone(timeZone.toZoneId) {
       // Spring time change
       checkEvaluation(new Sequence(
         Literal(Timestamp.valueOf("2018-03-25 01:30:00")),
         Literal(Timestamp.valueOf("2018-03-25 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-03-25 01:30:00"),
-          Timestamp.valueOf("2018-03-25 03:00:00"),
-          Timestamp.valueOf("2018-03-25 03:30:00")))
+          ts("2018-03-25 01:30:00"),
+          ts("2018-03-25 03:00:00"),
+          ts("2018-03-25 03:30:00")))
 
       // Autumn time change
       checkEvaluation(new Sequence(
@@ -866,18 +869,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Literal(Timestamp.valueOf("2018-10-28 03:30:00")),
         Literal(stringToInterval("interval 30 minutes"))),
         Seq(
-          Timestamp.valueOf("2018-10-28 01:30:00"),
-          noDST(Timestamp.valueOf("2018-10-28 02:00:00")),
-          noDST(Timestamp.valueOf("2018-10-28 02:30:00")),
-          Timestamp.valueOf("2018-10-28 02:00:00"),
-          Timestamp.valueOf("2018-10-28 02:30:00"),
-          Timestamp.valueOf("2018-10-28 03:00:00"),
-          Timestamp.valueOf("2018-10-28 03:30:00")))
+          ts("2018-10-28 01:30:00"),
+          ts("2018-10-28 02:00:00", noDST = true),
+          ts("2018-10-28 02:30:00", noDST = true),
+          ts("2018-10-28 02:00:00"),
+          ts("2018-10-28 02:30:00"),
+          ts("2018-10-28 03:00:00"),
+          ts("2018-10-28 03:30:00")))
     }
   }
 
   test("Sequence of dates") {
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("UTC")) {
+    DateTimeTestUtils.withDefaultTimeZone(UTC) {
       checkEvaluation(new Sequence(
         Literal(Date.valueOf("2018-01-01")),
         Literal(Date.valueOf("2018-01-05")),
@@ -930,6 +933,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(negateExact(stringToInterval("interval 1 month")))),
         EmptyRow,
         s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
+
+      // SPARK-32133: Sequence step must be a day interval if start and end values are dates
+      checkExceptionInExpression[IllegalArgumentException](Sequence(
+        Cast(Literal("2011-03-01"), DateType),
+        Cast(Literal("2011-04-01"), DateType),
+        Option(Literal(stringToInterval("interval 1 hour")))), null,
+        "sequence step must be a day interval if start and end values are dates")
     }
   }
 
@@ -1108,36 +1118,62 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("correctly handles ElementAt nullability for arrays") {
-    // CreateArray case
-    val a = AttributeReference("a", IntegerType, nullable = false)()
-    val b = AttributeReference("b", IntegerType, nullable = true)()
-    val array = CreateArray(a :: b :: Nil)
-    assert(!ElementAt(array, Literal(0)).nullable)
-    assert(ElementAt(array, Literal(1)).nullable)
-    assert(!ElementAt(array, Subtract(Literal(2), Literal(2))).nullable)
-    assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // CreateArray case
+        val a = AttributeReference("a", IntegerType, nullable = false)()
+        val b = AttributeReference("b", IntegerType, nullable = true)()
+        val array = CreateArray(a :: b :: Nil)
+        assert(!ElementAt(array, Literal(1)).nullable)
+        assert(!ElementAt(array, Literal(-2)).nullable)
+        assert(ElementAt(array, Literal(2)).nullable)
+        assert(ElementAt(array, Literal(-1)).nullable)
+        assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
+        assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
 
-    // GetArrayStructFields case
-    val f1 = StructField("a", IntegerType, nullable = false)
-    val f2 = StructField("b", IntegerType, nullable = true)
-    val structType = StructType(f1 :: f2 :: Nil)
-    val c = AttributeReference("c", structType, nullable = false)()
-    val inputArray1 = CreateArray(c :: Nil)
-    val inputArray1ContainsNull = c.nullable
-    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
-    assert(!ElementAt(stArray1, Literal(0)).nullable)
-    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
-    assert(ElementAt(stArray2, Literal(0)).nullable)
+        // CreateArray case invalid indices
+        assert(!ElementAt(array, Literal(0)).nullable)
+        assert(ElementAt(array, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(array, Literal(-4)).nullable == !ansiEnabled)
 
-    val d = AttributeReference("d", structType, nullable = true)()
-    val inputArray2 = CreateArray(c :: d :: Nil)
-    val inputArray2ContainsNull = c.nullable || d.nullable
-    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
-    assert(!ElementAt(stArray3, Literal(0)).nullable)
-    assert(ElementAt(stArray3, Literal(1)).nullable)
-    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
-    assert(ElementAt(stArray4, Literal(0)).nullable)
-    assert(ElementAt(stArray4, Literal(1)).nullable)
+        // GetArrayStructFields case
+        val f1 = StructField("a", IntegerType, nullable = false)
+        val f2 = StructField("b", IntegerType, nullable = true)
+        val structType = StructType(f1 :: f2 :: Nil)
+        val c = AttributeReference("c", structType, nullable = false)()
+        val inputArray1 = CreateArray(c :: Nil)
+        val inputArray1ContainsNull = c.nullable
+        val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
+        assert(!ElementAt(stArray1, Literal(1)).nullable)
+        assert(!ElementAt(stArray1, Literal(-1)).nullable)
+        val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
+        assert(ElementAt(stArray2, Literal(1)).nullable)
+        assert(ElementAt(stArray2, Literal(-1)).nullable)
+
+        val d = AttributeReference("d", structType, nullable = true)()
+        val inputArray2 = CreateArray(c :: d :: Nil)
+        val inputArray2ContainsNull = c.nullable || d.nullable
+        val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
+        assert(!ElementAt(stArray3, Literal(1)).nullable)
+        assert(!ElementAt(stArray3, Literal(-2)).nullable)
+        assert(ElementAt(stArray3, Literal(2)).nullable)
+        assert(ElementAt(stArray3, Literal(-1)).nullable)
+        val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
+        assert(ElementAt(stArray4, Literal(1)).nullable)
+        assert(ElementAt(stArray4, Literal(-2)).nullable)
+        assert(ElementAt(stArray4, Literal(2)).nullable)
+        assert(ElementAt(stArray4, Literal(-1)).nullable)
+
+        // GetArrayStructFields case invalid indices
+        assert(!ElementAt(stArray3, Literal(0)).nullable)
+        assert(ElementAt(stArray3, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(stArray3, Literal(-4)).nullable == !ansiEnabled)
+
+        assert(ElementAt(stArray4, Literal(0)).nullable)
+        assert(ElementAt(stArray4, Literal(4)).nullable)
+        assert(ElementAt(stArray4, Literal(-4)).nullable)
+      }
+    }
   }
 
   test("Concat") {
@@ -1832,5 +1868,66 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
     checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
     checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
+  }
+
+  test("SPARK-31980: Start and end equal in month range") {
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 day"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 month"))),
+      Seq(Date.valueOf("2018-01-01")))
+    checkEvaluation(new Sequence(
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(Date.valueOf("2018-01-01")),
+      Literal(stringToInterval("interval 1 year"))),
+      Seq(Date.valueOf("2018-01-01")))
+  }
+
+  test("SPARK-33386: element_at ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+        var expr: Expression = ElementAt(array, Literal(5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 5, numElements: 3"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = ElementAt(array, Literal(-5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -5, numElements: 3"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        // SQL array indices start at 1 exception throws for both mode.
+        expr = ElementAt(array, Literal(0))
+        val errMsg = "SQL array indices start at 1"
+        checkExceptionInExpression[Exception](expr, errMsg)
+      }
+    }
+  }
+
+  test("SPARK-33460: element_at NoSuchElementException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
+        val expr: Expression = ElementAt(map, Literal(5))
+        if (ansiEnabled) {
+          val errMsg = "Key 5 does not exist."
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
   }
 }

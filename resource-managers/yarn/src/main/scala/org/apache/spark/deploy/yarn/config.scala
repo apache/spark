@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
-package object config {
+package object config extends Logging {
 
   /* Common app configuration. */
 
@@ -70,6 +72,16 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val POPULATE_HADOOP_CLASSPATH = ConfigBuilder("spark.yarn.populateHadoopClasspath")
+    .doc("Whether to populate Hadoop classpath from `yarn.application.classpath` and " +
+      "`mapreduce.application.classpath` Note that if this is set to `false`, it requires " +
+      "a `with-Hadoop` Spark distribution that bundles Hadoop runtime or user has to provide " +
+      "a Hadoop installation separately. By default, for `with-hadoop` Spark distribution, " +
+      "this is set to `false`; for `no-hadoop` distribution, this is set to `true`.")
+    .version("2.4.6")
+    .booleanConf
+    .createWithDefault(isHadoopProvided())
+
   private[spark] val GATEWAY_ROOT_PATH = ConfigBuilder("spark.yarn.config.gatewayPath")
     .doc("Root of configuration paths that is present on gateway nodes, and will be replaced " +
       "with the corresponding path in cluster machines.")
@@ -101,6 +113,14 @@ package object config {
       .version("2.2.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val APPLICATION_TYPE = ConfigBuilder("spark.yarn.applicationType")
+    .doc("Type of this application," +
+      "it allows user to specify a more specific type for the application, such as SPARK," +
+      "SPARK-SQL, SPARK-STREAMING, SPARK-MLLIB and SPARK-GRAPH")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("SPARK")
 
   /* File distribution. */
 
@@ -168,6 +188,15 @@ package object config {
       .version("2.3.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
+
+  private[spark] val CLIENT_INCLUDE_DRIVER_LOGS_LINK =
+    ConfigBuilder("spark.yarn.includeDriverLogsLink")
+      .doc("In cluster mode, whether the client application report includes links to the driver "
+          + "container's logs. This requires polling the ResourceManager's REST API, so it "
+          + "places some additional load on the RM.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   /* Shared Client-mode AM / Driver configuration. */
 
@@ -359,14 +388,15 @@ package object config {
     .stringConf
     .createOptional
 
-  /* YARN allocator-level blacklisting related config entries. */
-  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
-    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
-      .version("2.4.0")
+  /* YARN allocator-level excludeOnFailure related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
+    ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
 
-  /* Initially blacklisted YARN nodes. */
+  /* Initially excluded YARN nodes. */
   private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
     .version("3.0.0")
     .stringConf
@@ -377,4 +407,20 @@ package object config {
   private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
   private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
+  def isHadoopProvided(): Boolean = IS_HADOOP_PROVIDED
+
+  private lazy val IS_HADOOP_PROVIDED: Boolean = {
+    val configPath = "org/apache/spark/deploy/yarn/config.properties"
+    val propertyKey = "spark.yarn.isHadoopProvided"
+    try {
+      val prop = new Properties()
+      prop.load(ClassLoader.getSystemClassLoader.getResourceAsStream(configPath))
+      prop.getProperty(propertyKey).toBoolean
+    } catch {
+      case e: Exception =>
+        log.warn(s"Can not load the default value of `$propertyKey` from " +
+          s"`$configPath` with error, ${e.toString}. Using `false` as a default value.")
+        false
+    }
+  }
 }

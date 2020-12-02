@@ -18,7 +18,8 @@
 import tempfile
 import unittest
 
-from pyspark.ml import Estimator, Model
+from pyspark.ml.feature import HashingTF, Tokenizer
+from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
@@ -88,15 +89,50 @@ class CrossValidatorTests(SparkSessionTestCase):
         grid = (ParamGridBuilder()
                 .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
                 .build())
-        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            numFolds=2
+        )
         cvCopied = cv.copy()
-        self.assertEqual(cv.getEstimator().uid, cvCopied.getEstimator().uid)
+        for param in [
+            lambda x: x.getEstimator().uid,
+            # SPARK-32092: CrossValidator.copy() needs to copy all existing params
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cv), param(cvCopied))
 
         cvModel = cv.fit(dataset)
         cvModelCopied = cvModel.copy()
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed()
+        ]:
+            self.assertEqual(param(cvModel), param(cvModelCopied))
+
+        cvModel.avgMetrics[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.avgMetrics[0],
+            'foo',
+            "Changing the original avgMetrics should not affect the copied model"
+        )
+        cvModel.subModels[0][0].getInducedError = lambda: 'foo'
+        self.assertNotEqual(
+            cvModelCopied.subModels[0][0].getInducedError(),
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -165,15 +201,38 @@ class CrossValidatorTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cv = CrossValidator(
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            numFolds=4,
+            seed=42
+        )
         cvModel = cv.fit(dataset)
         lrModel = cvModel.bestModel
 
-        cvModelPath = temp_path + "/cvModel"
-        lrModel.save(cvModelPath)
-        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        # SPARK-32092: Saving and then loading CrossValidatorModel should not change the params
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedCvModel = CrossValidatorModel.load(cvModelPath)
+        for param in [
+            lambda x: x.getNumFolds(),
+            lambda x: x.getFoldCol(),
+            lambda x: x.getSeed(),
+            lambda x: len(x.subModels)
+        ]:
+            self.assertEqual(param(cvModel), param(loadedCvModel))
+
+        self.assertTrue(all(
+            loadedCvModel.isSet(param) for param in loadedCvModel.params
+        ))
 
     def test_save_load_simple_estimator(self):
         temp_path = tempfile.mkdtemp()
@@ -310,6 +369,147 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        crossval = CrossValidator(estimator=pipeline,
+                                  estimatorParamMaps=paramGrid,
+                                  evaluator=MulticlassClassificationEvaluator(),
+                                  numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel = crossval.fit(training)
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(cvModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              cvModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        crossval2 = CrossValidator(estimator=nested_pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator(),
+                                   numFolds=2)  # use 3+ folds in practice
+
+        # Run cross-validation, and choose the best set of parameters.
+        cvModel2 = crossval2.fit(training)
+        # test save/load of CrossValidatorModel
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedModel2 = CrossValidatorModel.load(cvModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, cvModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = cvModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+    def test_user_specified_folds(self):
+        from pyspark.sql import functions as F
+
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"]).repartition(2, "features")
+
+        dataset_with_folds = dataset.repartition(1).withColumn("random", rand(100)) \
+            .withColumn("fold", F.when(F.col("random") < 0.33, 0)
+                        .when(F.col("random") < 0.66, 1)
+                        .otherwise(2)).repartition(2, "features")
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, numFolds=3)
+        cv_with_user_folds = CrossValidator(estimator=lr,
+                                            estimatorParamMaps=grid,
+                                            evaluator=evaluator,
+                                            numFolds=3,
+                                            foldCol="fold")
+
+        self.assertEqual(cv.getEstimator().uid, cv_with_user_folds.getEstimator().uid)
+
+        cvModel1 = cv.fit(dataset)
+        cvModel2 = cv_with_user_folds.fit(dataset_with_folds)
+        for index in range(len(cvModel1.avgMetrics)):
+            print(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index]))
+            self.assertTrue(abs(cvModel1.avgMetrics[index] - cvModel2.avgMetrics[index])
+                            < 0.1)
+
+        # test save/load of CrossValidator
+        temp_path = tempfile.mkdtemp()
+        cvPath = temp_path + "/cv"
+        cv_with_user_folds.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getFoldCol(), cv_with_user_folds.getFoldCol())
+
+    def test_invalid_user_specified_folds(self):
+        dataset_with_folds = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0, 0),
+             (Vectors.dense([0.4]), 1.0, 1),
+             (Vectors.dense([0.5]), 0.0, 2),
+             (Vectors.dense([0.6]), 1.0, 0),
+             (Vectors.dense([1.0]), 1.0, 1)] * 10,
+            ["features", "label", "fold"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [20]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        cv = CrossValidator(estimator=lr,
+                            estimatorParamMaps=grid,
+                            evaluator=evaluator,
+                            numFolds=2,
+                            foldCol="fold")
+        with self.assertRaisesRegexp(Exception, "Fold number must be in range"):
+            cv.fit(dataset_with_folds)
+
+        cv = CrossValidator(estimator=lr,
+                            estimatorParamMaps=grid,
+                            evaluator=evaluator,
+                            numFolds=4,
+                            foldCol="fold")
+        with self.assertRaisesRegexp(Exception, "The validation data at fold 3 is empty"):
+            cv.fit(dataset_with_folds)
+
 
 class TrainValidationSplitTests(SparkSessionTestCase):
 
@@ -381,15 +581,34 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         lr = LogisticRegression()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
         evaluator = BinaryClassificationEvaluator()
-        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=lr,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True,
+            seed=42
+        )
         tvsModel = tvs.fit(dataset)
         lrModel = tvsModel.bestModel
 
-        tvsModelPath = temp_path + "/tvsModel"
-        lrModel.save(tvsModelPath)
-        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        lrModelPath = temp_path + "/lrModel"
+        lrModel.save(lrModelPath)
+        loadedLrModel = LogisticRegressionModel.load(lrModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedTvsModel = TrainValidationSplitModel.load(tvsModelPath)
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(loadedTvsModel))
+
+        self.assertTrue(all(
+            loadedTvsModel.isSet(param) for param in loadedTvsModel.params
+        ))
 
     def test_save_load_simple_estimator(self):
         # This tests saving and loading the trained model only.
@@ -511,6 +730,73 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
+    def test_save_load_pipeline_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        training = self.spark.createDataFrame([
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+        ], ["id", "text", "label"])
+
+        # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+        tokenizer = Tokenizer(inputCol="text", outputCol="words")
+        hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(5)
+        lr2 = LogisticRegression().setMaxIter(10)
+
+        pipeline = Pipeline(stages=[tokenizer, hashingTF, ova])
+
+        paramGrid = ParamGridBuilder() \
+            .addGrid(hashingTF.numFeatures, [10, 100]) \
+            .addGrid(ova.classifier, [lr1, lr2]) \
+            .build()
+
+        tvs = TrainValidationSplit(estimator=pipeline,
+                                   estimatorParamMaps=paramGrid,
+                                   evaluator=MulticlassClassificationEvaluator())
+
+        # Run train validation split, and choose the best set of parameters.
+        tvsModel = tvs.fit(training)
+
+        # test save/load of CrossValidatorModel
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        self.assertEqual(len(loadedModel.bestModel.stages), len(tvsModel.bestModel.stages))
+        for loadedStage, originalStage in zip(loadedModel.bestModel.stages,
+                                              tvsModel.bestModel.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
+        # Test nested pipeline
+        nested_pipeline = Pipeline(stages=[tokenizer, Pipeline(stages=[hashingTF, ova])])
+        tvs2 = TrainValidationSplit(estimator=nested_pipeline,
+                                    estimatorParamMaps=paramGrid,
+                                    evaluator=MulticlassClassificationEvaluator())
+
+        # Run train validation split, and choose the best set of parameters.
+        tvsModel2 = tvs2.fit(training)
+        # test save/load of CrossValidatorModel
+        tvsModelPath2 = temp_path + "/tvsModel2"
+        tvsModel2.save(tvsModelPath2)
+        loadedModel2 = TrainValidationSplitModel.load(tvsModelPath2)
+        self.assertEqual(loadedModel2.bestModel.uid, tvsModel2.bestModel.uid)
+        loaded_nested_pipeline_model = loadedModel2.bestModel.stages[1]
+        original_nested_pipeline_model = tvsModel2.bestModel.stages[1]
+        self.assertEqual(loaded_nested_pipeline_model.uid, original_nested_pipeline_model.uid)
+        self.assertEqual(len(loaded_nested_pipeline_model.stages),
+                         len(original_nested_pipeline_model.stages))
+        for loadedStage, originalStage in zip(loaded_nested_pipeline_model.stages,
+                                              original_nested_pipeline_model.stages):
+            self.assertEqual(loadedStage.uid, originalStage.uid)
+
     def test_copy(self):
         dataset = self.spark.createDataFrame([
             (10, 10.0),
@@ -525,10 +811,29 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         grid = ParamGridBuilder() \
             .addGrid(iee.inducedError, [100.0, 0.0, 10000.0]) \
             .build()
-        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvs = TrainValidationSplit(
+            estimator=iee,
+            estimatorParamMaps=grid,
+            evaluator=evaluator,
+            collectSubModels=True
+        )
         tvsModel = tvs.fit(dataset)
         tvsCopied = tvs.copy()
         tvsModelCopied = tvsModel.copy()
+
+        for param in [
+            lambda x: x.getCollectSubModels(),
+            lambda x: x.getParallelism(),
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvs), param(tvsCopied))
+
+        for param in [
+            lambda x: x.getSeed(),
+            lambda x: x.getTrainRatio(),
+        ]:
+            self.assertEqual(param(tvsModel), param(tvsModelCopied))
 
         self.assertEqual(tvs.getEstimator().uid, tvsCopied.getEstimator().uid,
                          "Copied TrainValidationSplit has the same uid of Estimator")
@@ -541,12 +846,25 @@ class TrainValidationSplitTests(SparkSessionTestCase):
             self.assertEqual(tvsModel.validationMetrics[index],
                              tvsModelCopied.validationMetrics[index])
 
+        tvsModel.validationMetrics[0] = 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.validationMetrics[0],
+            'foo',
+            "Changing the original validationMetrics should not affect the copied model"
+        )
+        tvsModel.subModels[0].getInducedError = lambda: 'foo'
+        self.assertNotEqual(
+            tvsModelCopied.subModels[0].getInducedError(),
+            'foo',
+            "Changing the original subModels should not affect the copied model"
+        )
+
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_tuning import *
+    from pyspark.ml.tests.test_tuning import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

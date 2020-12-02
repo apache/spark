@@ -66,9 +66,6 @@ case class SortOrder(
     sameOrderExpressions: Set[Expression])
   extends UnaryExpression with Unevaluable {
 
-  /** Sort order is not foldable because we don't have an eval for it. */
-  override def foldable: Boolean = false
-
   override def checkInputDataTypes(): TypeCheckResult = {
     if (RowOrdering.isOrderable(dataType)) {
       TypeCheckResult.TypeCheckSuccess

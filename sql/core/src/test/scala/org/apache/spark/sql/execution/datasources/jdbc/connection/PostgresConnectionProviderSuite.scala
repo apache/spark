@@ -17,69 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
-import java.sql.{Driver, DriverManager}
-import javax.security.auth.login.Configuration
-
-import scala.collection.JavaConverters._
-
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
-
-class PostgresConnectionProviderSuite extends SparkFunSuite with BeforeAndAfterEach {
-  private def options(url: String) = new JDBCOptions(Map[String, String](
-    JDBCOptions.JDBC_URL -> url,
-    JDBCOptions.JDBC_TABLE_NAME -> "table",
-    JDBCOptions.JDBC_KEYTAB -> "/path/to/keytab",
-    JDBCOptions.JDBC_PRINCIPAL -> "principal"
-  ))
-
-  override def afterEach(): Unit = {
-    try {
-      Configuration.setConfiguration(null)
-    } finally {
-      super.afterEach()
-    }
-  }
-
+class PostgresConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    DriverRegistry.register(PostgresConnectionProvider.driverClass)
-    val driver = DriverManager.getDrivers.asScala.collectFirst {
-      case d if d.getClass.getCanonicalName == PostgresConnectionProvider.driverClass => d
-    }.get
-    val defaultProvider = new PostgresConnectionProvider(
-      driver, options("jdbc:postgresql://localhost/postgres"))
-    val customProvider = new PostgresConnectionProvider(
-      driver, options(s"jdbc:postgresql://localhost/postgres?jaasApplicationName=custompgjdbc"))
+    val provider = new PostgresConnectionProvider()
+    val defaultOptions = options("jdbc:postgresql://localhost/postgres")
+    val customOptions =
+      options(s"jdbc:postgresql://localhost/postgres?jaasApplicationName=custompgjdbc")
+    val driver = registerDriver(provider.driverClass)
 
-    assert(defaultProvider.appEntry !== customProvider.appEntry)
-
-    // Make sure no authentication for postgres is set
-    assert(Configuration.getConfiguration.getAppConfigurationEntry(
-      defaultProvider.appEntry) == null)
-    assert(Configuration.getConfiguration.getAppConfigurationEntry(
-      customProvider.appEntry) == null)
-
-    // Make sure the first call sets authentication properly
-    val savedConfig = Configuration.getConfiguration
-    defaultProvider.setAuthenticationConfigIfNeeded()
-    val defaultConfig = Configuration.getConfiguration
-    assert(savedConfig != defaultConfig)
-    val defaultAppEntry = defaultConfig.getAppConfigurationEntry(defaultProvider.appEntry)
-    assert(defaultAppEntry != null)
-    customProvider.setAuthenticationConfigIfNeeded()
-    val customConfig = Configuration.getConfiguration
-    assert(savedConfig != customConfig)
-    assert(defaultConfig != customConfig)
-    val customAppEntry = customConfig.getAppConfigurationEntry(customProvider.appEntry)
-    assert(customAppEntry != null)
-
-    // Make sure a second call is not modifying the existing authentication
-    defaultProvider.setAuthenticationConfigIfNeeded()
-    customProvider.setAuthenticationConfigIfNeeded()
-    assert(customConfig == Configuration.getConfiguration)
-    assert(defaultConfig.getAppConfigurationEntry(defaultProvider.appEntry) === defaultAppEntry)
-    assert(customConfig.getAppConfigurationEntry(customProvider.appEntry) === customAppEntry)
+    assert(provider.appEntry(driver, defaultOptions) !== provider.appEntry(driver, customOptions))
+    testSecureConnectionProvider(provider, driver, defaultOptions)
+    testSecureConnectionProvider(provider, driver, customOptions)
   }
 }

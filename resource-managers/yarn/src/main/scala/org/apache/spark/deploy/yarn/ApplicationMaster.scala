@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -36,12 +36,12 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
-import org.apache.hadoop.yarn.server.webproxy.ProxyUriUtils
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -210,9 +210,13 @@ private[spark] class ApplicationMaster(
   final def run(): Int = {
     try {
       val attemptID = if (isClusterMode) {
-        // Set the web ui port to be ephemeral for yarn so we don't conflict with
-        // other spark processes running on the same box
-        System.setProperty(UI_PORT.key, "0")
+        // Set the web ui port to be ephemeral for yarn if not set explicitly
+        // so we don't conflict with other spark processes running on the same box
+        // If set explicitly, Web UI will attempt to run on UI_PORT and try
+        // incrementally until UI_PORT + `spark.port.maxRetries`
+        if (System.getProperty(UI_PORT.key) == null) {
+          System.setProperty(UI_PORT.key, "0")
+        }
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
@@ -303,7 +307,8 @@ private[spark] class ApplicationMaster(
       // The client-mode AM doesn't listen for incoming connections, so report an invalid port.
       registerAM(Utils.localHostName, -1, sparkConf,
         sparkConf.getOption("spark.driver.appUIAddress"), appAttemptId)
-      addAmIpFilter(Some(driverRef), ProxyUriUtils.getPath(appAttemptId.getApplicationId))
+      val encodedAppId = URLEncoder.encode(appAttemptId.getApplicationId.toString, "UTF-8")
+      addAmIpFilter(Some(driverRef), s"/proxy/$encodedAppId")
       createAllocator(driverRef, sparkConf, clientRpcEnv, appAttemptId, cachedResourcesConf)
       reporterThread.join()
     } catch {
@@ -562,10 +567,10 @@ private[spark] class ApplicationMaster(
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
             s"Max number of executor failures ($maxNumExecutorFailures) reached")
-        } else if (allocator.isAllNodeBlacklisted) {
+        } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-            "Due to executor failures all available nodes are blacklisted")
+            "Due to executor failures all available nodes are excluded")
         } else {
           logDebug("Sending progress")
           allocator.allocateResources()
@@ -774,6 +779,11 @@ private[spark] class ApplicationMaster(
       driver.send(RegisterClusterManager(self))
     }
 
+    override def receive: PartialFunction[Any, Unit] = {
+      case UpdateDelegationTokens(tokens) =>
+        SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
+    }
+
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>
         Option(allocator) match {
@@ -782,7 +792,7 @@ private[spark] class ApplicationMaster(
               r.resourceProfileToTotalExecs,
               r.numLocalityAwareTasksPerResourceProfileId,
               r.hostToLocalTaskCount,
-              r.nodeBlacklist)) {
+              r.excludedNodes)) {
               resetAllocatorInterval()
             }
             context.reply(true)
@@ -808,9 +818,6 @@ private[spark] class ApplicationMaster(
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
-
-      case UpdateDelegationTokens(tokens) =>
-        SparkHadoopUtil.get.addDelegationTokens(tokens, sparkConf)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -863,10 +870,22 @@ object ApplicationMaster extends Logging {
     val ugi = sparkConf.get(PRINCIPAL) match {
       // We only need to log in with the keytab in cluster mode. In client mode, the driver
       // handles the user keytab.
-      case Some(principal) if amArgs.userClass != null =>
+      case Some(principal) if master.isClusterMode =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()
+
+        if (master.appAttemptId == null || master.appAttemptId.getAttemptId > 1) {
+          // Re-obtain delegation tokens if this is not a first attempt, as they might be outdated
+          // as of now. Add the fresh tokens on top of the original user's credentials (overwrite).
+          // Set the context class loader so that the token manager has access to jars
+          // distributed by the user.
+          Utils.withContextClassLoader(master.userClassLoader) {
+            val credentialManager = new HadoopDelegationTokenManager(sparkConf, yarnConf, null)
+            credentialManager.obtainDelegationTokens(originalCreds)
+          }
+        }
+
         // Transfer the original user's tokens to the new user, since it may contain needed tokens
         // (such as those user to connect to YARN).
         newUGI.addCredentials(originalCreds)

@@ -21,11 +21,9 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.mllib.stat.test.{ChiSqTest => OldChiSqTest}
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
 
 
 /**
@@ -36,12 +34,6 @@ import org.apache.spark.sql.types.DoubleType
  */
 @Since("2.2.0")
 object ChiSquareTest {
-
-  /** Used to construct output schema of tests */
-  private case class ChiSquareResult(
-      pValues: Vector,
-      degreesOfFreedom: Array[Int],
-      statistics: Vector)
 
   /**
    * Conduct Pearson's independence test for every feature against the label. For each feature, the
@@ -63,18 +55,7 @@ object ChiSquareTest {
    */
   @Since("2.2.0")
   def test(dataset: DataFrame, featuresCol: String, labelCol: String): DataFrame = {
-    val spark = dataset.sparkSession
-    import spark.implicits._
-
-    SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
-    SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val rdd = dataset.select(col(labelCol).cast("double"), col(featuresCol)).as[(Double, Vector)]
-      .rdd.map { case (label, features) => OldLabeledPoint(label, OldVectors.fromML(features)) }
-    val testResults = OldStatistics.chiSqTest(rdd)
-    val pValues = Vectors.dense(testResults.map(_.pValue))
-    val degreesOfFreedom = testResults.map(_.degreesOfFreedom)
-    val statistics = Vectors.dense(testResults.map(_.statistic))
-    spark.createDataFrame(Seq(ChiSquareResult(pValues, degreesOfFreedom, statistics)))
+    test(dataset, featuresCol, labelCol, false)
   }
 
   /**
@@ -82,21 +63,42 @@ object ChiSquareTest {
    *                 Real-valued features will be treated as categorical for each distinct value.
    * @param featuresCol  Name of features column in dataset, of type `Vector` (`VectorUDT`)
    * @param labelCol  Name of label column in dataset, of any numerical type
-   * @return Array containing the SelectionTestResult for every feature against the label.
+   * @param flatten  If false, the returned DataFrame contains only a single Row, otherwise, one
+   *                 row per feature.
    */
   @Since("3.1.0")
-  def testChiSquare(
-      dataset: Dataset[_],
+  def test(
+      dataset: DataFrame,
       featuresCol: String,
-      labelCol: String): Array[SelectionTestResult] = {
-
+      labelCol: String,
+      flatten: Boolean): DataFrame = {
     SchemaUtils.checkColumnType(dataset.schema, featuresCol, new VectorUDT)
     SchemaUtils.checkNumericType(dataset.schema, labelCol)
-    val input = dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd
-      .map { case Row(label: Double, features: Vector) =>
-        OldLabeledPoint(label, OldVectors.fromML(features))
-      }
-    val chiTestResult = OldStatistics.chiSqTest(input)
-    chiTestResult.map(r => new ChiSqTestResult(r.pValue, r.degreesOfFreedom, r.statistic))
+
+    val spark = dataset.sparkSession
+    import spark.implicits._
+
+    val data = dataset.select(col(labelCol).cast("double"), col(featuresCol)).rdd
+      .map { case Row(label: Double, vec: Vector) => (label, OldVectors.fromML(vec)) }
+
+    val resultDF = OldChiSqTest.computeChiSquared(data)
+      .map { case (col, pValue, degreesOfFreedom, statistic, _) =>
+        (col, pValue, degreesOfFreedom, statistic)
+      }.toDF("featureIndex", "pValue", "degreesOfFreedom", "statistic")
+
+    if (flatten) {
+      resultDF
+    } else {
+      resultDF.groupBy()
+        .agg(collect_list(struct("*")))
+        .as[Seq[(Int, Double, Int, Double)]]
+        .map { seq =>
+          val results = seq.toArray.sortBy(_._1)
+          val pValues = Vectors.dense(results.map(_._2))
+          val degreesOfFreedom = results.map(_._3)
+          val statistics = Vectors.dense(results.map(_._4))
+          (pValues, degreesOfFreedom, statistics)
+        }.toDF("pValues", "degreesOfFreedom", "statistics")
+    }
   }
 }

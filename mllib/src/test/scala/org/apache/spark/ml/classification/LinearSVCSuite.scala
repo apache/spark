@@ -30,7 +30,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions._
 
 
 class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
@@ -207,6 +207,21 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
+  test("LinearSVC on blocks") {
+    for (dataset <- Seq(smallBinaryDataset, smallSparseBinaryDataset);
+         fitIntercept <- Seq(true, false)) {
+      val lsvc = new LinearSVC()
+        .setFitIntercept(fitIntercept)
+        .setMaxIter(5)
+      val model = lsvc.fit(dataset)
+      Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
+        val model2 = lsvc.setMaxBlockSizeInMB(s).fit(dataset)
+        assert(model.intercept ~== model2.intercept relTol 1e-9)
+        assert(model.coefficients ~== model2.coefficients relTol 1e-9)
+      }
+    }
+  }
+
   test("prediction on single instance") {
     val trainer = new LinearSVC()
     val model = trainer.fit(smallBinaryDataset)
@@ -267,6 +282,57 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val interceptSK = 7.36947518
     assert(model1.intercept ~== interceptSK relTol 1E-3)
     assert(model1.coefficients ~== coefficientsSK relTol 4E-3)
+  }
+
+  test("summary and training summary") {
+    val lsvc = new LinearSVC()
+    val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
+
+    val summary = model.evaluate(smallBinaryDataset)
+
+    assert(model.summary.accuracy === summary.accuracy)
+    assert(model.summary.weightedPrecision === summary.weightedPrecision)
+    assert(model.summary.weightedRecall === summary.weightedRecall)
+    assert(model.summary.pr.collect() === summary.pr.collect())
+    assert(model.summary.roc.collect() === summary.roc.collect())
+    assert(model.summary.areaUnderROC === summary.areaUnderROC)
+
+    // verify instance weight works
+    val lsvc2 = new LinearSVC()
+      .setMaxIter(5)
+      .setWeightCol("weight")
+
+    val smallBinaryDatasetWithWeight =
+      smallBinaryDataset.select(col("label"), col("features"), lit(2.5).as("weight"))
+
+    val summary2 = model.evaluate(smallBinaryDatasetWithWeight)
+
+    val model2 = lsvc2.fit(smallBinaryDatasetWithWeight)
+    assert(model2.summary.accuracy === summary2.accuracy)
+    assert(model2.summary.weightedPrecision ~== summary2.weightedPrecision relTol 1e-6)
+    assert(model2.summary.weightedRecall === summary2.weightedRecall)
+    assert(model2.summary.pr.collect() === summary2.pr.collect())
+    assert(model2.summary.roc.collect() === summary2.roc.collect())
+    assert(model2.summary.areaUnderROC === summary2.areaUnderROC)
+
+    assert(model2.summary.accuracy === model.summary.accuracy)
+    assert(model2.summary.weightedPrecision ~== model.summary.weightedPrecision relTol 1e-6)
+    assert(model2.summary.weightedRecall === model.summary.weightedRecall)
+    assert(model2.summary.pr.collect() === model.summary.pr.collect())
+    assert(model2.summary.roc.collect() === model.summary.roc.collect())
+    assert(model2.summary.areaUnderROC === model.summary.areaUnderROC)
+  }
+
+  test("linearSVC training summary totalIterations") {
+    Seq(1, 5, 10, 20, 100).foreach { maxIter =>
+      val trainer = new LinearSVC().setMaxIter(maxIter)
+      val model = trainer.fit(smallBinaryDataset)
+      if (maxIter == 1) {
+        assert(model.summary.totalIterations === maxIter)
+      } else {
+        assert(model.summary.totalIterations <= maxIter)
+      }
+    }
   }
 
   test("read/write: SVM") {

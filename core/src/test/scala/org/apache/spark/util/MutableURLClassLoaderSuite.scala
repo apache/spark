@@ -21,7 +21,8 @@ import java.net.URLClassLoader
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TestUtils}
 

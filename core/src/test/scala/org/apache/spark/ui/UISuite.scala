@@ -262,6 +262,27 @@ class UISuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-32467: Avoid encoding URL twice on https redirect") {
+    val (conf, securityMgr, sslOptions) = sslEnabledConf()
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val serverAddr = s"http://localhost:${serverInfo.boundPort}"
+
+      val (_, ctx) = newContext("/ctx1")
+      serverInfo.addHandler(ctx, securityMgr)
+
+      TestUtils.withHttpConnection(new URL(s"$serverAddr/ctx%281%29?a%5B0%5D=b")) { conn =>
+        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        val location = Option(conn.getHeaderFields().get("Location"))
+          .map(_.get(0)).orNull
+        val expectedLocation = s"https://localhost:${serverInfo.securePort.get}/ctx(1)?a[0]=b"
+        assert(location == expectedLocation)
+      }
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
+
   test("http -> https redirect applies to all URIs") {
     val (conf, securityMgr, sslOptions) = sslEnabledConf()
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)

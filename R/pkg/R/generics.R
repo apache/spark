@@ -528,6 +528,9 @@ setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
 #' @rdname printSchema
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
+#' @rdname registerTempTable-deprecated
+setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+
 #' @rdname rename
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -635,7 +638,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
-setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
+setGeneric("unionByName", function(x, y, ...) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
@@ -672,6 +675,12 @@ setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 #' @rdname columnfunctions
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
+#' @rdname columnfunctions
+setGeneric("asc_nulls_first", function(x) { standardGeneric("asc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("asc_nulls_last", function(x) { standardGeneric("asc_nulls_last") })
+
 #' @rdname between
 setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
@@ -685,6 +694,12 @@ setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname columnfunctions
 setGeneric("desc", function(x) { standardGeneric("desc") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_first", function(x) { standardGeneric("desc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_last", function(x) { standardGeneric("desc_nulls_last") })
 
 #' @rdname endsWith
 setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
@@ -725,6 +740,12 @@ setGeneric("over", function(x, window) { standardGeneric("over") })
 
 #' @rdname eq_null_safe
 setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
+
+#' @rdname withField
+setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
+
+#' @rdname dropFields
+setGeneric("dropFields", function(x, ...) { standardGeneric("dropFields") })
 
 ###################### WindowSpec Methods ##########################
 
@@ -841,6 +862,10 @@ setGeneric("arrays_zip_with", function(x, y, f) { standardGeneric("arrays_zip_wi
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("assert_true", function(x, errMsg = NULL) { standardGeneric("assert_true") })
+
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
@@ -925,7 +950,6 @@ setGeneric("current_date", function(x = "missing") { standardGeneric("current_da
 #' @name NULL
 setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
 
-
 #' @rdname column_datetime_diff_functions
 #' @name NULL
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
@@ -989,6 +1013,10 @@ setGeneric("expr", function(x) { standardGeneric("expr") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("flatten", function(x) { standardGeneric("flatten") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("from_avro", function(x, ...) { standardGeneric("from_avro") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -1158,6 +1186,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
@@ -1209,6 +1241,10 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("raise_error", function(x) { standardGeneric("raise_error") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
@@ -1351,6 +1387,14 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 #' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 
+#' @rdname column_datetime_functions
+#' @name timestamp_seconds
+setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("to_avro", function(x, ...) { standardGeneric("to_avro") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("transform_keys", function(x, f) {  standardGeneric("transform_keys") })
@@ -1435,6 +1479,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
@@ -1475,6 +1523,14 @@ setGeneric("spark.als", function(data, ...) { standardGeneric("spark.als") })
 #' @rdname spark.bisectingKmeans
 setGeneric("spark.bisectingKmeans",
            function(data, formula, ...) { standardGeneric("spark.bisectingKmeans") })
+
+#' @rdname spark.fmClassifier
+setGeneric("spark.fmClassifier",
+           function(data, formula, ...) { standardGeneric("spark.fmClassifier") })
+
+#' @rdname spark.fmRegressor
+setGeneric("spark.fmRegressor",
+           function(data, formula, ...) { standardGeneric("spark.fmRegressor") })
 
 #' @rdname spark.gaussianMixture
 setGeneric("spark.gaussianMixture",
@@ -1543,6 +1599,10 @@ setGeneric("spark.findFrequentSequentialPatterns",
 #' @rdname spark.powerIterationClustering
 setGeneric("spark.assignClusters",
             function(data, ...) { standardGeneric("spark.assignClusters") })
+
+#' @rdname spark.lm
+setGeneric("spark.lm",
+           function(data, formula, ...) { standardGeneric("spark.lm") })
 
 #' @param object a fitted ML model object.
 #' @param path the directory where the model is saved.

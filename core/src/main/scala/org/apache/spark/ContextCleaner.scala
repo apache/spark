@@ -222,11 +222,15 @@ private[spark] class ContextCleaner(
   /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
-      logDebug("Cleaning shuffle " + shuffleId)
-      mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-      shuffleDriverComponents.removeShuffle(shuffleId, blocking)
-      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
-      logDebug("Cleaned shuffle " + shuffleId)
+      if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
+        logDebug("Cleaning shuffle " + shuffleId)
+        mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+        shuffleDriverComponents.removeShuffle(shuffleId, blocking)
+        listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
+        logDebug("Cleaned shuffle " + shuffleId)
+      } else {
+        logDebug("Asked to cleanup non-existent shuffle (maybe it was already removed)")
+      }
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
     }
@@ -281,7 +285,7 @@ private object ContextCleaner {
 }
 
 /**
- * Listener class used for testing when any item has been cleaned by the Cleaner class.
+ * Listener class used when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
   def rddCleaned(rddId: Int): Unit

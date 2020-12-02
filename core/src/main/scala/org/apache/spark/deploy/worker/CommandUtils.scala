@@ -61,7 +61,7 @@ object CommandUtils extends Logging {
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     val cmd = new WorkerCommandBuilder(sparkHome, memory, command).buildCommand()
-    cmd.asScala ++ Seq(command.mainClass) ++ command.arguments
+    (cmd.asScala ++ Seq(command.mainClass) ++ command.arguments).toSeq
   }
 
   /**

@@ -77,7 +77,13 @@ NULL
 #'          days to be added to or subtracted from \code{y}. For class \code{character}, it is
 #'          \itemize{
 #'          \item \code{date_format}: date format specification.
-#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: time zone to use.
+#'          \item \code{from_utc_timestamp}, \code{to_utc_timestamp}: A string detailing
+#'            the time zone ID that the input should be adjusted to. It should be in the format
+#'            of either region-based zone IDs or zone offsets. Region IDs must have the form
+#'            'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+#'            (+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported
+#'            as aliases of '+00:00'. Other short names are not recommended to use
+#'            because they can be ambiguous.
 #'          \item \code{next_day}: day of the week string.
 #'          }
 #' @param ... additional argument(s).
@@ -332,10 +338,71 @@ NULL
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
 #'               percent_rank = over(percent_rank(), ws),
-#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws),
+#'               nth_value = over(nth_value(df$mpg, 3), ws))
 #' # Get ntile group id (1-4) for hp
 #' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
+NULL
+
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(select(df, vector_to_array(df$features)))
+#' }
+NULL
+
+#' Avro processing functions for Column operations
+#'
+#' Avro processing functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param jsonFormatSchema character Avro schema in JSON string format
+#' @param ... additional argument(s) passed as parser options.
+#' @name column_avro_functions
+#' @rdname column_avro_functions
+#' @family avro functions
+#' @note Avro is built-in but external data source module since Spark 2.4.
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#' schema <- paste(
+#'   c(
+#'     '{"type": "record", "namespace": "example.avro", "name": "Iris", "fields": [',
+#'     '{"type": ["double", "null"], "name": "Sepal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Sepal_Width"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Width"},',
+#'     '{"type": ["string", "null"], "name": "Species"}]}'
+#'   ),
+#'   collapse="\\n"
+#' )
+#'
+#' df_serialized <- select(
+#'   df,
+#'   alias(to_avro(alias(struct(column("*")), "fields")), "payload")
+#' )
+#'
+#' df_deserialized <- select(
+#'   df_serialized,
+#'   from_avro(df_serialized$payload, schema)
+#' )
+#'
+#' head(df_deserialized)
+#' }
 NULL
 
 #' @details
@@ -800,6 +867,57 @@ setMethod("xxhash64",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg)) {
+                stopifnot(length(errMsg) == 1)
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x)) {
+              stopifnot(length(x) == 1)
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
@@ -1411,8 +1529,10 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{percentile_approx} Returns the approximate percentile value of
-#' numeric column at the given percentage.
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
 #'
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
@@ -1879,7 +1999,7 @@ setMethod("radians",
 #' @details
 #' \code{to_date}: Converts the column into a DateType. You may optionally specify
 #' a format according to the rules in:
-#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
+#' \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{Datetime Pattern}
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a DateType if the format is omitted
@@ -1975,7 +2095,7 @@ setMethod("to_csv", signature(x = "Column"),
 #' @details
 #' \code{to_timestamp}: Converts the column into a TimestampType. You may optionally specify
 #' a format according to the rules in:
-#' \url{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}.
+#' \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{Datetime Pattern}
 #' If the string cannot be parsed according to the specified format (or default),
 #' the value of the column will be null.
 #' By default, it follows casting rules to a TimestampType if the format is omitted
@@ -2280,7 +2400,7 @@ setMethod("pmod", signature(y = "Column"),
             column(jc)
           })
 
-#' @param rsd maximum estimation error allowed (default = 0.05).
+#' @param rsd maximum relative standard deviation allowed (default = 0.05).
 #'
 #' @rdname column_aggregate_functions
 #' @aliases approx_count_distinct,Column-method
@@ -2847,8 +2967,8 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
 #' to a string representing the timestamp of that moment in the current system time zone in the JVM
 #' in the given format.
-#' See \href{https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html}{
-#' Customizing Formats} for available options.
+#' See \href{https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html}{
+#' Datetime Pattern} for available options.
 #'
 #' @rdname column_datetime_functions
 #'
@@ -2969,7 +3089,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 
 #' @details
 #' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
-#' samples from U[0.0, 1.0].
+#' samples uniformly distributed in [0.0, 1.0).
 #' Note: the function is non-deterministic in general case.
 #'
 #' @rdname column_nonaggregate_functions
@@ -3287,6 +3407,37 @@ setMethod("lead",
 
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lead", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
             column(jc)
           })
 
@@ -3945,7 +4096,6 @@ setMethod("map_values",
 #' @rdname column_collection_functions
 #' @aliases map_zip_with map_zip_with,characterOrColumn,characterOrColumn,function-method
 #'
-#' @examples
 #' @note map_zip_with since 3.1.0
 setMethod("map_zip_with",
           signature(x = "characterOrColumn", y = "characterOrColumn", f = "function"),
@@ -4375,7 +4525,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4391,7 +4542,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
@@ -4400,5 +4552,99 @@ setMethod("current_timestamp",
           signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
+            column(jc)
+          })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float64", "float32")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{from_avro} Converts a binary column of Avro format into its corresponding catalyst value.
+#' The specified schema must match the read data, otherwise the behavior is undefined:
+#' it may fail or return arbitrary result.
+#' To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+#' set via the option avroSchema.
+#'
+#' @rdname column_avro_functions
+#' @aliases from_avro from_avro,Column-method
+#' @note from_avro since 3.1.0
+setMethod("from_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema, ...) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic(
+              "org.apache.spark.sql.avro.functions", "from_avro",
+              x@jc,
+              jsonFormatSchema,
+              options
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{to_avro} Converts a column into binary of Avro format.
+#'
+#' @rdname column_avro_functions
+#' @aliases to_avro to_avro,Column-method
+#' @note to_avro since 3.1.0
+setMethod("to_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema = NULL) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            jc <- if (is.null(jsonFormatSchema)) {
+              callJStatic("org.apache.spark.sql.avro.functions", "to_avro", x@jc)
+            } else {
+              callJStatic(
+                "org.apache.spark.sql.avro.functions",
+                "to_avro",
+                x@jc,
+                jsonFormatSchema
+              )
+            }
             column(jc)
           })

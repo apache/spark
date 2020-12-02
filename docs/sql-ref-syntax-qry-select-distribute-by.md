@@ -18,25 +18,28 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-The <code>DISTRIBUTE BY</code> clause is used to repartition the data based
+
+### Description
+
+The `DISTRIBUTE BY` clause is used to repartition the data based
 on the input expressions. Unlike the [CLUSTER BY](sql-ref-syntax-qry-select-clusterby.html)
 clause, this does not sort the data within each partition.
 
 ### Syntax
-{% highlight sql %}
+
+```sql
 DISTRIBUTE BY { expression [ , ... ] }
-{% endhighlight %}
+```
 
 ### Parameters
-<dl>
-  <dt><code><em>expression</em></code></dt>
-  <dd>
+
+* **expression**
+
     Specifies combination of one or more values, operators and SQL functions that results in a value.
-  </dd>
-</dl>
 
 ### Examples
-{% highlight sql %}
+
+```sql
 CREATE TABLE person (name STRING, age INT);
 INSERT INTO person VALUES
     ('Zen Hui', 25),
@@ -55,40 +58,42 @@ SET spark.sql.shuffle.partitions = 2;
 -- behavior of `DISTRIBUTE BY`. The query below produces rows where age columns are not
 -- clustered together.
 SELECT age, name FROM person;
-
-  +---+-------+
-  |age|name   |
-  +---+-------+
-  |16 |Shone S|
-  |25 |Zen Hui|
-  |16 |Jack N |
-  |25 |Mike A |
-  |18 |John A |
-  |18 |Anil B |
-  +---+-------+
++---+-------+
+|age|   name|
++---+-------+
+| 16|Shone S|
+| 25|Zen Hui|
+| 16| Jack N|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
++---+-------+
 
 -- Produces rows clustered by age. Persons with same age are clustered together.
 -- Unlike `CLUSTER BY` clause, the rows are not sorted within a partition.
 SELECT age, name FROM person DISTRIBUTE BY age;
++---+-------+
+|age|   name|
++---+-------+
+| 25|Zen Hui|
+| 25| Mike A|
+| 18| John A|
+| 18| Anil B|
+| 16|Shone S|
+| 16| Jack N|
++---+-------+
+```
 
-  +---+-------+
-  |age|name   |
-  +---+-------+
-  |25 |Zen Hui|
-  |25 |Mike A |
-  |18 |John A |
-  |18 |Anil B |
-  |16 |Shone S|
-  |16 |Jack N |
-  +---+-------+
-{% endhighlight %}
+### Related Statements
 
-### Related Clauses
-- [SELECT Main](sql-ref-syntax-qry-select.html)
-- [WHERE Clause](sql-ref-syntax-qry-select-where.html)
-- [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
-- [HAVING Clause](sql-ref-syntax-qry-select-having.html)
-- [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
-- [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
-- [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
-- [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [SELECT Main](sql-ref-syntax-qry-select.html)
+* [WHERE Clause](sql-ref-syntax-qry-select-where.html)
+* [GROUP BY Clause](sql-ref-syntax-qry-select-groupby.html)
+* [HAVING Clause](sql-ref-syntax-qry-select-having.html)
+* [ORDER BY Clause](sql-ref-syntax-qry-select-orderby.html)
+* [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
+* [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
+* [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

@@ -205,7 +205,7 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view python/sql/basic.py %}
 </div>
 
-<div data-lang="sql"  markdown="1">
+<div data-lang="SQL"  markdown="1">
 
 {% highlight sql %}
 
@@ -347,40 +347,14 @@ For example:
 </div>
 
 ## Scalar Functions
-(to be filled soon)
 
-## Aggregations
+Scalar functions are functions that return a single value per row, as opposed to aggregation functions, which return a value for a group of rows. Spark SQL supports a variety of [Built-in Scalar Functions](sql-ref-functions.html#scalar-functions). It also supports [User Defined Scalar Functions](sql-ref-functions-udf-scalar.html).
 
-The [built-in DataFrames functions](api/scala/org/apache/spark/sql/functions$.html) provide common
-aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
-While those functions are designed for DataFrames, Spark SQL also has type-safe versions for some of them in
-[Scala](api/scala/org/apache/spark/sql/expressions/scalalang/typed$.html) and
-[Java](api/java/org/apache/spark/sql/expressions/javalang/typed.html) to work with strongly typed Datasets.
-Moreover, users are not limited to the predefined aggregate functions and can create their own.
+## Aggregate Functions
 
-### Type-Safe User-Defined Aggregate Functions
+Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) provide common aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
+Users are not limited to the predefined aggregate functions and can create their own. For more details
+about user defined aggregate functions, please refer to the documentation of
+[User Defined Aggregate Functions](sql-ref-functions-udf-aggregate.html).
 
-User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/org/apache/spark/sql/expressions/Aggregator.html) abstract class.
-For example, a type-safe user-defined average can look like:
 
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
-</div>
-<div data-lang="java"  markdown="1">
-{% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
-</div>
-</div>
-
-### Untyped User-Defined Aggregate Functions
-Typed aggregations, as described above, may also be registered as untyped aggregating UDFs for use with DataFrames.
-For example, a user-defined average for untyped DataFrames can look like:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
-</div>
-<div data-lang="java"  markdown="1">
-{% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
-</div>
-</div>

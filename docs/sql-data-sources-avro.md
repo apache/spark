@@ -88,8 +88,6 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 * If the "value" field that contains your data is in Avro, you could use `from_avro()` to extract your data, enrich it, clean it, and then push it downstream to Kafka again or write it out to a file.
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
 
-Both functions are currently only available in Scala and Java.
-
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -185,6 +183,38 @@ query = output\
 
 {% endhighlight %}
 </div>
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema <- paste0(readLines("examples/src/main/resources/user.avsc"), collapse=" ")
+
+df <- read.stream(
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  subscribe = "topic1"
+)
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+
+output <- select(
+  filter(
+    select(df, alias(from_avro("value", jsonFormatSchema), "user")),
+    column("user.favorite_color") == "red"
+  ),
+  alias(to_avro("user.name"), "value")
+)
+
+write.stream(
+  output,
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  topic = "topic2"
+)
+{% endhighlight %}
+</div>
 </div>
 
 ## Data Source Option
@@ -258,21 +288,34 @@ Data source options of Avro can be set via:
 ## Configuration
 Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
 <table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
-    <td>If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped to the built-in but external Avro data source module for backward compatibility.</td>
+    <td>
+      If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped
+      to the built-in but external Avro data source module for backward compatibility.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.compression.codec</td>
     <td>snappy</td>
-    <td>Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.</td>
+    <td>
+      Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
+      snappy, bzip2 and xz. Default codec is snappy.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.deflate.level</td>
     <td>-1</td>
-    <td>Compression level for the deflate codec used in writing of AVRO files. Valid value must be in the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level in the current implementation.</td>
+    <td>
+      Compression level for the deflate codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level
+      in the current implementation.
+    </td>
+    <td>2.4.0</td>
   </tr>
 </table>
 

@@ -90,8 +90,8 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
         if (requiredSchema.isEmpty) {
           filteredResult.map(_ => emptyUnsafeRow)
         } else {
-          val converter = RowEncoder(requiredSchema)
-          filteredResult.map(row => converter.toRow(row))
+          val toRow = RowEncoder(requiredSchema).createSerializer()
+          filteredResult.map(row => toRow(row))
         }
       }
     }

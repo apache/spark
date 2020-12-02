@@ -22,20 +22,18 @@ import java.io.File
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, V1Table}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
   private def getAnalyzer(externalCatalog: ExternalCatalog, databasePath: File): Analyzer = {
-    val conf = new SQLConf()
-    val v1Catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin, conf)
+    val v1Catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin)
     v1Catalog.createDatabase(
       CatalogDatabase("default", "", databasePath.toURI, Map.empty),
       ignoreIfExists = false)
@@ -64,7 +62,7 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
     when(catalogManager.currentCatalog).thenReturn(v2Catalog)
     when(catalogManager.currentNamespace).thenReturn(Array("default"))
 
-    new Analyzer(catalogManager, conf)
+    new Analyzer(catalogManager)
   }
 
   test("table lookups to external catalog are cached") {

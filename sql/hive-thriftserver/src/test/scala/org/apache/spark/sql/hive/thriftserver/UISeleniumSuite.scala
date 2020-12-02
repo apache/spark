@@ -22,8 +22,10 @@ import scala.util.Random
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 

@@ -1,0 +1,39 @@
+TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
+  WholeStageCodegen (6)
+    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+      InputAdapter
+        Exchange [i_product_name,i_brand,i_class,i_category,spark_grouping_id] #1
+          WholeStageCodegen (5)
+            HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,inv_quantity_on_hand] [sum,count,sum,count]
+              Expand [inv_quantity_on_hand,i_product_name,i_brand,i_class,i_category]
+                InputAdapter
+                  BroadcastNestedLoopJoin
+                    WholeStageCodegen (3)
+                      Project [inv_quantity_on_hand,i_brand,i_class,i_category,i_product_name]
+                        BroadcastHashJoin [inv_item_sk,i_item_sk]
+                          Project [inv_item_sk,inv_quantity_on_hand]
+                            BroadcastHashJoin [inv_date_sk,d_date_sk]
+                              Filter [inv_date_sk,inv_item_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.inventory [inv_date_sk,inv_item_sk,inv_quantity_on_hand]
+                              InputAdapter
+                                BroadcastExchange #2
+                                  WholeStageCodegen (1)
+                                    Project [d_date_sk]
+                                      Filter [d_month_seq,d_date_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                          InputAdapter
+                            BroadcastExchange #3
+                              WholeStageCodegen (2)
+                                Filter [i_item_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                    BroadcastExchange #4
+                      WholeStageCodegen (4)
+                        ColumnarToRow
+                          InputAdapter
+                            Scan parquet default.warehouse

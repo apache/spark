@@ -1,0 +1,21 @@
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+Can skip all row groups:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 30687          31552         NaN          3.4         292.7       1.0X
+With nested predicate Pushdown                      105            150          61        999.3           1.0     292.5X
+
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+Can skip some row groups:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 30505          31828         NaN          3.4         290.9       1.0X
+With nested predicate Pushdown                     3156           3215          77         33.2          30.1       9.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_252-b09 on Mac OS X 10.14.6
+Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+Can skip no row groups:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without nested predicate Pushdown                 34475          35302         NaN          3.0         328.8       1.0X
+With nested predicate Pushdown                    34003          34596         567          3.1         324.3       1.0X
+

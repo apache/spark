@@ -26,7 +26,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -114,10 +114,10 @@ trait EvalPythonExec extends UnaryExecNode {
           }
         }.toArray
       }.toArray
-      val projection = MutableProjection.create(allInputs, child.output)
+      val projection = MutableProjection.create(allInputs.toSeq, child.output)
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
-      })
+      }.toSeq)
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>

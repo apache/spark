@@ -24,12 +24,16 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
-import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -81,8 +85,19 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -118,8 +133,19 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -134,8 +160,19 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * You can set the following option(s):
    * <ul>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a time zone ID
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values. The following
+   * formats of `timeZone` are supported:
+   *   <ul>
+   *     <li> Region-based zone ID: It should have the form 'area/city', such as
+   *         'America/Los_Angeles'.</li>
+   *     <li> Zone offset: It should be in the format '(+|-)HH:mm', for example '-08:00'
+   *          or '+01:00'. Also 'UTC' and 'Z' are supported as aliases of '+00:00'.</li>
+   *   </ul>
+   * Other short names like 'CST' are not recommended to use because they can be ambiguous.
+   * If it isn't set, the current value of the SQL config `spark.sql.session.timeZone` is
+   * used by default.
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -152,10 +189,18 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  def load(): DataFrame = {
+  def load(): DataFrame = loadInternal(None)
+
+  private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
@@ -167,7 +212,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
-      options = extraOptions.toMap)
+      options = optionsWithPath.originalMap)
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None
@@ -177,8 +222,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+            optionsWithPath.originalMap
+        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
@@ -186,8 +232,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                provider, source, table, dsOptions, table.schema.toAttributes, v1Relation)(
-                sparkSession))
+                Some(provider), source, table, dsOptions,
+                table.schema.toAttributes, None, None, v1Relation))
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
@@ -206,7 +252,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load()
+    if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path")) {
+      throw new AnalysisException("There is a 'path' option set and load() is called with a path" +
+        "parameter. Either remove the path option, or call load() without the parameter. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+    loadInternal(Some(path))
   }
 
   /**
@@ -257,7 +309,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -275,6 +327,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * It does not change the behavior of partition discovery.</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`allowNonNumericNumbers` (default `true`): allows JSON parser to recognize set of
+   * "Not-a-Number" (NaN) tokens as legal floating number values:
+   *   <ul>
+   *     <li>`+INF` for positive infinity, as well as alias of `+Infinity` and `Infinity`.
+   *     <li>`-INF` for negative infinity, alias `-Infinity`.
+   *     <li>`NaN` for other not-a-numbers, like result of division by zero.
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
@@ -327,7 +387,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
    * This applies to date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">
    *   Datetime Patterns</a>.
@@ -418,6 +478,23 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName The name of the table
+   * @since 3.1.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedRelation(
+        identifier,
+        new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
+        isStreaming = true))
+  }
+
+  /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    * The text files must be encoded as UTF-8.
@@ -487,5 +564,5 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 }

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Unresol
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.util.PartitioningUtils
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
@@ -69,7 +69,7 @@ case class AnalyzePartitionCommand(
     if (filteredSpec.isEmpty) {
       None
     } else {
-      Some(filteredSpec)
+      Some(filteredSpec.toMap)
     }
   }
 

@@ -72,7 +72,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }
     }
     // There is no Python UDF over aggregate expression
-    Project(projList, agg.copy(aggregateExpressions = aggExpr))
+    Project(projList.toSeq, agg.copy(aggregateExpressions = aggExpr.toSeq))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -134,9 +134,9 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
       }.asInstanceOf[NamedExpression]
     }
     agg.copy(
-      groupingExpressions = groupingExpr,
+      groupingExpressions = groupingExpr.toSeq,
       aggregateExpressions = aggExpr,
-      child = Project(projList ++ agg.child.output, agg.child))
+      child = Project((projList ++ agg.child.output).toSeq, agg.child))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -218,13 +218,22 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def canonicalizeDeterministic(u: PythonUDF) = {
+    if (u.deterministic) {
+      u.canonicalized.asInstanceOf[PythonUDF]
+    } else {
+      u
+    }
+  }
+
   /**
    * Extract all the PythonUDFs from the current operator and evaluate them before the operator.
    */
   private def extract(plan: LogicalPlan): LogicalPlan = {
-    val udfs = collectEvaluableUDFsFromExpressions(plan.expressions)
+    val udfs = ExpressionSet(collectEvaluableUDFsFromExpressions(plan.expressions))
       // ignore the PythonUDF that come from second/third aggregate, which is not used
       .filter(udf => udf.references.subsetOf(plan.inputSet))
+      .toSeq.asInstanceOf[Seq[PythonUDF]]
     if (udfs.isEmpty) {
       // If there aren't any, we are done.
       plan
@@ -262,7 +271,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
               throw new AnalysisException("Unexcepted UDF evalType")
           }
 
-          attributeMap ++= validUdfs.zip(resultAttrs)
+          attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)
           evaluation
         } else {
           child
@@ -270,13 +279,12 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
       }
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
-      udfs.filterNot(attributeMap.contains).foreach { udf =>
-        sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
+      udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach {
+        udf => sys.error(s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 
       val rewritten = plan.withNewChildren(newChildren).transformExpressions {
-        case p: PythonUDF if attributeMap.contains(p) =>
-          attributeMap(p)
+        case p: PythonUDF => attributeMap.getOrElse(canonicalizeDeterministic(p), p)
       }
 
       // extract remaining python UDFs recursively

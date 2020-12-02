@@ -209,9 +209,7 @@ private [util] class SparkShutdownHookManager {
 private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
   extends Comparable[SparkShutdownHook] {
 
-  override def compareTo(other: SparkShutdownHook): Int = {
-    other.priority - priority
-  }
+  override def compareTo(other: SparkShutdownHook): Int = other.priority.compareTo(priority)
 
   def run(): Unit = hook()
 

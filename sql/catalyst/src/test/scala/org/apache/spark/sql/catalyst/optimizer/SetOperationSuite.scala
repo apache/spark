@@ -223,4 +223,21 @@ class SetOperationSuite extends PlanTest {
     val unionCorrectAnswer = unionQuery.analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
+
+  test("CombineUnions only flatten the unions with same byName and allowMissingCol") {
+    val union1 = Union(testRelation :: testRelation :: Nil, true, false)
+    val union2 = Union(testRelation :: testRelation :: Nil, true, true)
+    val union3 = Union(testRelation :: testRelation2 :: Nil, false, false)
+
+    val union4 = Union(union1 :: union2 :: union3 :: Nil)
+    val unionOptimized1 = Optimize.execute(union4)
+    val unionCorrectAnswer1 = Union(union1 :: union2 :: testRelation :: testRelation2 :: Nil)
+    comparePlans(unionOptimized1, unionCorrectAnswer1, false)
+
+    val union5 = Union(union1 :: union1 :: Nil, true, false)
+    val unionOptimized2 = Optimize.execute(union5)
+    val unionCorrectAnswer2 =
+      Union(testRelation :: testRelation :: testRelation :: testRelation :: Nil, true, false)
+    comparePlans(unionOptimized2, unionCorrectAnswer2, false)
+  }
 }

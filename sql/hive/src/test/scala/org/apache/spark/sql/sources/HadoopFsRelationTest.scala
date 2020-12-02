@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -145,40 +146,53 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
           val seed = System.nanoTime()
           withClue(s"Random data generated with the seed: ${seed}") {
-            val dataGenerator = RandomDataGenerator.forType(
-              dataType = dataType,
-              nullable = true,
-              new Random(seed)
-            ).getOrElse {
-              fail(s"Failed to create data generator for schema $dataType")
+            val java8ApiConfValues = if (dataType == DateType || dataType == TimestampType) {
+              Seq(false, true)
+            } else {
+              Seq(false)
             }
+            java8ApiConfValues.foreach { java8Api =>
+              withSQLConf(
+                SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+                SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+                val dataGenerator = RandomDataGenerator.forType(
+                  dataType = dataType,
+                  nullable = true,
+                  new Random(seed)
+                ).getOrElse {
+                  fail(s"Failed to create data generator for schema $dataType")
+                }
 
-            // Create a DF for the schema with random data. The index field is used to sort the
-            // DataFrame.  This is a workaround for SPARK-10591.
-            val schema = new StructType()
-              .add("index", IntegerType, nullable = false)
-              .add("col", dataType, nullable = true)
-            val rdd =
-              spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-            val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+                // Create a DF for the schema with random data. The index field is used to sort the
+                // DataFrame.  This is a workaround for SPARK-10591.
+                val schema = new StructType()
+                  .add("index", IntegerType, nullable = false)
+                  .add("col", dataType, nullable = true)
+                val rdd =
+                  spark.sparkContext.parallelize((1 to 20).map(i => Row(i, dataGenerator())))
+                val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
 
-            df.write
-              .mode("overwrite")
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .options(extraOptions)
-              .save(path)
+                df.write
+                  .mode("overwrite")
+                  .format(dataSourceName)
+                  .option("dataSchema", df.schema.json)
+                  .options(extraOptions)
+                  .save(path)
 
-            val loadedDF = spark
-              .read
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .schema(df.schema)
-              .options(extraOptions)
-              .load(path)
-              .orderBy("index")
+                val loadedDF = spark
+                  .read
+                  .format(dataSourceName)
+                  .option("dataSchema", df.schema.json)
+                  .schema(df.schema)
+                  .options(extraOptions)
+                  .load(path)
+                  .orderBy("index")
 
-            checkAnswer(loadedDF, df)
+                checkAnswer(loadedDF, df)
+              }
+            }
           }
         }
       }

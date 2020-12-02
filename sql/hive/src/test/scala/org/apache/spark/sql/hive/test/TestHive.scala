@@ -23,7 +23,6 @@ import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -38,8 +37,10 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
@@ -57,6 +58,7 @@ object TestHive
       new SparkConf()
         .set("spark.sql.test", "")
         .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+        .set(SQLConf.CODEGEN_FACTORY_MODE.key, CodegenObjectFactoryMode.CODEGEN_ONLY.toString)
         .set(HiveUtils.HIVE_METASTORE_BARRIER_PREFIXES.key,
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set(WAREHOUSE_PATH.key, TestHiveContext.makeWarehouseDir().toURI.getPath)
@@ -127,11 +129,11 @@ class TestHiveContext(
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
-  def this(sc: SparkContext, loadTestTables: Boolean = true) {
+  def this(sc: SparkContext, loadTestTables: Boolean = true) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient) {
+  def this(sc: SparkContext, hiveClient: HiveClient) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
@@ -175,7 +177,7 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  def this(sc: SparkContext, loadTestTables: Boolean) {
+  def this(sc: SparkContext, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = None,
@@ -183,7 +185,7 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) {
+  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = Some(new TestHiveSharedState(sc, Some(hiveClient))),
@@ -221,7 +223,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -233,16 +235,16 @@ private[hive] class TestHiveSparkSession(
    * Dataset.ofRows that creates a TestHiveQueryExecution (rather than a normal QueryExecution
    * which wouldn't load all the test tables).
    */
-  override def sql(sqlText: String): DataFrame = {
+  override def sql(sqlText: String): DataFrame = withActive {
     val plan = sessionState.sqlParser.parsePlan(sqlText)
     Dataset.ofRows(self, plan)
   }
 
-  override def newSession(): TestHiveSparkSession = {
+  override def newSession(): TestHiveSparkSession = withActive {
     new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
   }
 
-  override def cloneSession(): SparkSession = {
+  override def cloneSession(): SparkSession = withActive {
     val result = new TestHiveSparkSession(
       sparkContext,
       Some(sharedState),
@@ -263,7 +265,10 @@ private[hive] class TestHiveSparkSession(
   System.clearProperty("spark.hostPort")
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  // Make sure it is not called again when cloning sessions.
+  if (parentSessionState.isEmpty) {
+    System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
+  }
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -490,7 +495,10 @@ private[hive] class TestHiveSparkSession(
   def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
   def loadTestTable(name: String): Unit = {
-    if (!sharedState.loadedTables.contains(name)) {
+    // LOAD DATA does not work on temporary views. Since temporary views are resolved first,
+    // skip loading if there exists a temporary view with the given name.
+    if (sessionState.catalog.getTempView(name).isEmpty &&
+        !sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       sharedState.loadedTables += name
       logDebug(s"Loading test table $name")
@@ -578,30 +586,39 @@ private[hive] class TestHiveQueryExecution(
     logicalPlan: LogicalPlan)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
-  def this(sparkSession: TestHiveSparkSession, sql: String) {
+  def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
   }
 
-  def this(sql: String) {
+  def this(sql: String) = {
     this(TestHive.sparkSession, sql)
   }
 
-  override lazy val analyzed: LogicalPlan = {
+  override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl.table :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
       case _ => Nil
     }
 
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(ident) => ident.last }
+        logical.collect { case UnresolvedRelation(ident, _, _) => ident.asTableIdentifier }
     val resolver = sparkSession.sessionState.conf.resolver
-    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
-      referencedTables.exists(resolver(_, testTable))
+    val referencedTestTables = referencedTables.flatMap { tbl =>
+      val testTableOpt = sparkSession.testTables.keys.find(resolver(_, tbl.table))
+      testTableOpt.map(testTable => tbl.copy(table = testTable))
     }
-    logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-    referencedTestTables.foreach(sparkSession.loadTestTable)
+    logDebug(s"Query references test tables: ${referencedTestTables.map(_.table).mkString(", ")}")
+    referencedTestTables.foreach { tbl =>
+      val curDB = sparkSession.catalog.currentDatabase
+      try {
+        tbl.database.foreach(db => sparkSession.catalog.setCurrentDatabase(db))
+        sparkSession.loadTestTable(tbl.table)
+      } finally {
+        tbl.database.foreach(_ => sparkSession.catalog.setCurrentDatabase(curDB))
+      }
+    }
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
@@ -635,8 +652,9 @@ private[hive] object TestHiveContext {
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState])
-  extends HiveSessionStateBuilder(session, state)
+    state: Option[SessionState],
+    options: Map[String, String])
+  extends HiveSessionStateBuilder(session, state, options)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -645,7 +663,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
 }
 
 private[hive] object HiveTestJars {

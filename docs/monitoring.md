@@ -373,6 +373,25 @@ Security options for the Spark History Server are covered more detail in the
     </td>
     <td>3.0.0</td>
   </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.enabled</td>
+    <td>false</td>
+    <td>
+      Whether to use HybridStore as the store when parsing event logs. HybridStore will first write data
+      to an in-memory store and having a background thread that dumps data to a disk store after the writing
+      to in-memory store is completed.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.store.hybridStore.maxMemoryUsage</td>
+    <td>2g</td>
+    <td>
+      Maximum memory space that can be used to create HybridStore. The HybridStore co-uses the heap memory,
+      so the heap memory should be increased through the memory option for SHS if the HybridStore is enabled.
+    </td>
+    <td>3.1.0</td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,
@@ -480,7 +499,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
        A list of all tasks for the given stage attempt.
       <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
       <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
-      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+      <br><code>?status=[running|success|killed|failed|unknown]</code> list only tasks in the state.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime&amp;status=running</code>
     </td>
   </tr>
   <tr>
@@ -543,6 +563,26 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   <tr>
     <td><code>/applications/[app-id]/streaming/batches/[batch-id]/operations/[outputOp-id]</code></td>
     <td>Details of the given operation and given batch.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql</code></td>
+    <td>A list of all queries for a given application.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides details of Spark plan nodes.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists queries in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/sql/[execution-id]</code></td>
+    <td>Details for the given query.
+    <br>
+    <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
+    <br>
+    <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
@@ -713,9 +753,12 @@ A list of the available metrics, with a short description:
 ### Executor Metrics
 
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
-Executor metric values and their measured peak values per executor are exposed via the REST API at the end point `/applications/[app-id]/executors`.
-In addition, aggregated per-stage peak values of the executor metrics are written to the event log if `spark.eventLog.logStageExecutorMetrics` is true.
-Executor metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
+Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
+The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
+The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
+`spark.eventLog.logStageExecutorMetrics` is true.  
+Executor memory metrics are also exposed via the Spark metrics system based on the [Dropwizard metrics library](http://metrics.dropwizard.io/4.1.1).
 A list of the available metrics, with a short description:
 
 <table class="table">
@@ -723,21 +766,62 @@ A list of the available metrics, with a short description:
       <th>Short description</th>
   </tr>
   <tr>
+    <td>rddBlocks</td>
+    <td>RDD blocks in the block manager of this executor.</td>
+  </tr>
+  <tr>
+    <td>memoryUsed</td>
+    <td>Storage memory used by this executor.</td>
+  </tr>
+  <tr>
+    <td>diskUsed</td>
+    <td>Disk space used for RDD storage by this executor.</td>
+  </tr>
+  <tr>
+    <td>totalCores</td>
+    <td>Number of cores available in this executor.</td>
+  </tr>
+  <tr>
+    <td>maxTasks</td>
+    <td>Maximum number of tasks that can run concurrently in this executor.</td>
+  </tr>
+  <tr>
+    <td>activeTasks</td>
+    <td>Number of tasks currently executing.</td>
+  </tr>
+  <tr>
+    <td>failedTasks</td>
+    <td>Number of tasks that have failed in this executor.</td>
+  </tr>
+  <tr>
+    <td>completedTasks</td>
+    <td>Number of tasks that have completed in this executor.</td>
+  </tr>
+  <tr>
+    <td>totalTasks</td>
+    <td>Total number of tasks (running, failed and completed) in this executor.</td>
+  </tr>
+  <tr>
+    <td>totalDuration</td>
+    <td>Elapsed time the JVM spent executing tasks in this executor.
+    The value is expressed in milliseconds.</td>
+  </tr>
+  <tr>
     <td>totalGCTime</td>
-    <td>Elapsed time the JVM spent in garbage collection summed in this Executor.
+    <td>Elapsed time the JVM spent in garbage collection summed in this executor.
     The value is expressed in milliseconds.</td>
   </tr>
   <tr>
     <td>totalInputBytes</td>
-    <td>Total input bytes summed in this Executor.</td>
+    <td>Total input bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>totalShuffleRead</td>
-    <td>Total shuffer read bytes summed in this Executor.</td>
+    <td>Total shuffle read bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>totalShuffleWrite</td>
-    <td>Total shuffer write bytes summed in this Executor.</td>
+    <td>Total shuffle write bytes summed in this executor.</td>
   </tr>
   <tr>
     <td>maxMemory</td>
@@ -878,7 +962,7 @@ keep the paths consistent in both modes.
 # Metrics
 
 Spark has a configurable metrics system based on the
-[Dropwizard Metrics Library](http://metrics.dropwizard.io/).
+[Dropwizard Metrics Library](http://metrics.dropwizard.io/4.1.1).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
 files. The metrics are generated by sources embedded in the Spark code base. They
 provide instrumentation for specific activities and Spark components.
@@ -919,7 +1003,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `CSVSink`: Exports metrics data to CSV files at regular intervals.
 * `JmxSink`: Registers metrics for viewing in a JMX console.
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
-* `PrometheusServlet`: Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
+* `PrometheusServlet`: (Experimental) Adds a servlet within the existing Spark UI to serve metrics data in Prometheus format.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
 * `StatsdSink`: Sends metrics to a StatsD node.
@@ -972,7 +1056,7 @@ activates the JVM source:
 ## List of available metrics providers 
 
 Metrics used by Spark are of multiple types: gauge, counter, histogram, meter and timer, 
-see [Dropwizard library documentation for details](https://metrics.dropwizard.io/3.1.0/getting-started/).
+see [Dropwizard library documentation for details](https://metrics.dropwizard.io/4.1.1/getting-started.html).
 The following list of components and metrics reports the name and some details about the available metrics,
 grouped per component instance and source namespace.
 The most common time of metrics used in Spark instrumentation are gauges and counters. 
@@ -998,7 +1082,7 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1007,12 +1091,11 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=DAGScheduler
@@ -1042,12 +1125,14 @@ This is the component with the largest amount of instrumented metrics
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
-  - tasks.blackListedExecutors.count
+  - tasks.blackListedExecutors.count // deprecated use excludedExecutors instead
+  - tasks.excludedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count
   - tasks.killedTasks.count
   - tasks.skippedTasks.count
-  - tasks.unblackListedExecutors.count
+  - tasks.unblackListedExecutors.count // deprecated use unexcludedExecutors instead
+  - tasks.unexcludedExecutors.count
   - jobs.succeededJobs
   - jobs.failedJobs
   - jobDuration
@@ -1070,6 +1155,11 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=executor
+  - **note:** These metrics are available in the driver in local mode only.
+  - A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+    
 - namespace=ExecutorMetrics
   - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
@@ -1082,10 +1172,11 @@ This is the component with the largest amount of instrumented metrics
   custom plugins into Spark.
 
 ### Component instance = Executor
-These metrics are exposed by Spark executors. Note, currently they are not available
-when running in local mode.
+These metrics are exposed by Spark executors. 
  
 - namespace=executor (metrics are of type counter or gauge)
+  - **notes:**
+    - `spark.executor.metrics.fileSystemSchemes` (default: `file,hdfs`) determines the exposed file system metrics.
   - bytesRead.count
   - bytesWritten.count
   - cpuTime.count
@@ -1171,7 +1262,7 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1180,7 +1271,7 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
@@ -1197,9 +1288,11 @@ when running in local mode.
 Notes: 
   - Activate this source by setting the relevant `metrics.properties` file entry or the 
   configuration parameter:`spark.metrics.conf.*.source.jvm.class=org.apache.spark.metrics.source.JvmSource`  
+  - These metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true)
   - This source is available for driver and executor instances and is also available for other instances.  
   - This source provides information on JVM metrics using the 
-  [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/3.1.0/manual/jvm/)
+  [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/4.1.1/manual/jvm.html)
    and in particular the metric sets BufferPoolMetricSet, GarbageCollectorMetricSet and MemoryUsageGaugeSet. 
 
 ### Component instance = applicationMaster
@@ -1281,9 +1374,3 @@ Both take a comma-separated list of class names that implement the
 possible for one list to be placed in the Spark default config file, allowing users to
 easily add other plugins from the command line without overwriting the config file's list. Duplicate
 plugins are ignored.
-
-Distribution of the jar files containing the plugin code is currently not done by Spark. The user
-or admin should make sure that the jar files are available to Spark applications, for example, by
-including the plugin jar with the Spark distribution. The exception to this rule is the YARN
-backend, where the <code>--jars</code> command line option (or equivalent config entry) can be
-used to make the plugin code available to both executors and cluster-mode drivers.

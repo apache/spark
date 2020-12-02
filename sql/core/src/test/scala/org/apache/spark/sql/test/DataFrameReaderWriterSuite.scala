@@ -40,7 +40,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
@@ -224,6 +224,56 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     assert(LastOptions.parameters("opt3") == "3")
   }
 
+  test("SPARK-32364: later option should override earlier options for load()") {
+    spark.read
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .load()
+    assert(LastOptions.parameters("path") == "5")
+
+    withClue("SPARK-32516: legacy path option behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        spark.read
+          .format("org.apache.spark.sql.test")
+          .option("paTh", "1")
+          .option("PATH", "2")
+          .option("Path", "3")
+          .option("patH", "4")
+          .load("5")
+        assert(LastOptions.parameters("path") == "5")
+      }
+    }
+  }
+
+  test("SPARK-32364: later option should override earlier options for save()") {
+    Seq(1).toDF.write
+      .format("org.apache.spark.sql.test")
+      .option("paTh", "1")
+      .option("PATH", "2")
+      .option("Path", "3")
+      .option("patH", "4")
+      .option("path", "5")
+      .save()
+    assert(LastOptions.parameters("path") == "5")
+
+    withClue("SPARK-32516: legacy path option behavior") {
+      withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+        Seq(1).toDF.write
+          .format("org.apache.spark.sql.test")
+          .option("paTh", "1")
+          .option("PATH", "2")
+          .option("Path", "3")
+          .option("patH", "4")
+          .save("5")
+        assert(LastOptions.parameters("path") == "5")
+      }
+    }
+  }
+
   test("pass partitionBy as options") {
     Seq(1).toDF.write
       .format("org.apache.spark.sql.test")
@@ -333,7 +383,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+        assert(msg.contains("Cannot safely cast 'i': bigint to int"))
 
         // Insert into table successfully.
         Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
@@ -354,14 +404,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': string to int") &&
+          msg.contains("Cannot safely cast 'd': string to double"))
 
         msg = intercept[AnalysisException] {
           Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': boolean to int") &&
+          msg.contains("Cannot safely cast 'd': boolean to double"))
       }
     }
   }
@@ -1080,6 +1130,92 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         } finally {
           sparkContext.removeSparkListener(jobListener)
         }
+      }
+    }
+  }
+
+  test("SPARK-32516: 'path' or 'paths' option cannot coexist with load()'s path parameters") {
+    def verifyLoadFails(f: => DataFrame): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option if it's the same as the path parameter"))
+    }
+
+    val path = "/tmp"
+    verifyLoadFails(spark.read.option("path", path).parquet(path))
+    verifyLoadFails(spark.read.option("path", path).parquet(""))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("path", path).format("parquet").load(""))
+    verifyLoadFails(spark.read.option("paths", path).parquet(path))
+    verifyLoadFails(spark.read.option("paths", path).parquet(""))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(path))
+    verifyLoadFails(spark.read.option("paths", path).format("parquet").load(""))
+  }
+
+  test("SPARK-32516: legacy path option behavior in load()") {
+    withSQLConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        Seq(1).toDF.write.mode("overwrite").parquet(path)
+
+        // When there is one path parameter to load(), "path" option is overwritten.
+        checkAnswer(spark.read.format("parquet").option("path", path).load(path), Row(1))
+
+        // When there are multiple path parameters to load(), "path" option is added.
+        checkAnswer(
+          spark.read.format("parquet").option("path", path).load(path, path),
+          Seq(Row(1), Row(1), Row(1)))
+
+        // When built-in datasource functions are invoked (e.g, `csv`, `parquet`, etc.),
+        // the path option is always added regardless of the number of path parameters.
+        checkAnswer(spark.read.option("path", path).parquet(path), Seq(Row(1), Row(1)))
+        checkAnswer(
+          spark.read.option("path", path).parquet(path, path),
+          Seq(Row(1), Row(1), Row(1)))
+      }
+    }
+  }
+
+  test("SPARK-32516: 'path' option cannot coexist with save()'s path parameter") {
+    def verifyLoadFails(f: => Unit): Unit = {
+      val e = intercept[AnalysisException](f)
+      assert(e.getMessage.contains(
+        "Either remove the path option, or call save() without the parameter"))
+    }
+
+    val df = Seq(1).toDF
+    val path = "tmp"
+    verifyLoadFails(df.write.option("path", path).parquet(path))
+    verifyLoadFails(df.write.option("path", path).parquet(""))
+    verifyLoadFails(df.write.option("path", path).format("parquet").save(path))
+    verifyLoadFails(df.write.option("path", path).format("parquet").save(""))
+  }
+
+  test("SPARK-32853: consecutive load/save calls should be allowed") {
+    val dfr = spark.read.format(classOf[FakeSourceOne].getName)
+    dfr.load("1")
+    dfr.load("2")
+    val dfw = spark.range(10).write.format(classOf[DefaultSource].getName)
+    dfw.save("1")
+    dfw.save("2")
+  }
+
+  test("SPARK-32844: DataFrameReader.table take the specified options for V1 relation") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, d double) USING parquet OPTIONS ('p1'='v1', 'p2'='v2')")
+
+        val msg = intercept[AnalysisException] {
+          spark.read.option("P1", "v3").table("t").count()
+        }.getMessage
+        assert(msg.contains("duplicated key"))
+
+        val df = spark.read.option("P2", "v2").option("p3", "v3").table("t")
+        val options = df.queryExecution.analyzed.collectFirst {
+          case r: LogicalRelation => r.relation.asInstanceOf[HadoopFsRelation].options
+        }.get
+        assert(options("p2") == "v2")
+        assert(options("p3") == "v3")
       }
     }
   }

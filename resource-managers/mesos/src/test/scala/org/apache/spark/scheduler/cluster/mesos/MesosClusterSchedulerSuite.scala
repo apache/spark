@@ -146,7 +146,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val resources = taskInfo.getResourcesList
     assert(scheduler.getResource(resources, "cpus") == 1.5)
     assert(scheduler.getResource(resources, "mem") == 1200)
-    val resourcesSeq: Seq[Resource] = resources.asScala
+    val resourcesSeq: Seq[Resource] = resources.asScala.toSeq
     val cpus = resourcesSeq.filter(_.getName == "cpus").toList
     assert(cpus.size == 2)
     assert(cpus.exists(_.getRole() == "role2"))
@@ -413,7 +413,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new MesosDriverDescription("d1", "jar", 100, 1, true, command,
         Map((config.EXECUTOR_HOME.key, "test"), ("spark.app.name", "test")), "s1", new Date()))
     assert(response.success)
-    val slaveId = SlaveID.newBuilder().setValue("s1").build()
+    val agentId = SlaveID.newBuilder().setValue("s1").build()
     val offer = Offer.newBuilder()
       .addResources(
         Resource.newBuilder().setRole("*")
@@ -425,7 +425,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           .setType(Type.SCALAR))
       .setId(OfferID.newBuilder().setValue("o1").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1").build())
-      .setSlaveId(slaveId)
+      .setSlaveId(agentId)
       .setHostname("host1")
       .build()
     // Offer the resource to launch the submitted driver
@@ -438,7 +438,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val taskStatus = TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(response.submissionId).build())
-      .setSlaveId(slaveId)
+      .setSlaveId(agentId)
       .setState(MesosTaskState.TASK_KILLED)
       .build()
     // Update the status of the killed task
@@ -592,15 +592,145 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val expectedCmd = "cd spark-version*;  " +
         "bin/spark-submit --name \"app name\" --master mesos://mesos://localhost:5050 " +
-        "--driver-cores 1.0 --driver-memory 1000M --class Main --py-files  " +
-        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
+        "--driver-cores 1.0 --driver-memory 1000M --class Main " +
         "--conf \"another.conf=\\\\value\" " +
         "--conf \"spark.app.name=app name\" " +
+        "--conf spark.executor.uri=s3a://bucket/spark-version.tgz " +
         "../jar " +
         "\"--a=\\$2\" " +
         "--b \"x y z\""
 
     assert(scheduler.getDriverCommandValue(driverDesc) == expectedCmd)
+  }
+
+  test("SPARK-23499: Test dispatcher priority queue with non float value") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
+    conf.set("spark.mesos.dispatcher.queue.URGENT", "abc")
+    conf.set("spark.mesos.dispatcher.queue.EXCEPTIONAL", "3.0")
+    assertThrows[NumberFormatException] {
+      setScheduler(conf.getAll.toMap)
+    }
+  }
+
+  test("SPARK-23499: Get driver priority") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
+    conf.set("spark.mesos.dispatcher.queue.URGENT", "2.0")
+    conf.set("spark.mesos.dispatcher.queue.EXCEPTIONAL", "3.0")
+    setScheduler(conf.getAll.toMap)
+
+    val mem = 1000
+    val cpu = 1
+
+    // Test queue not declared in scheduler
+    var desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
+      command,
+      Map("spark.mesos.dispatcher.queue" -> "dummy"),
+      "s1",
+      new Date())
+
+    assertThrows[NoSuchElementException] {
+      scheduler.getDriverPriority(desc)
+    }
+
+    // Test with no specified queue
+    desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
+      command,
+      Map[String, String](),
+      "s2",
+      new Date())
+
+    assert(scheduler.getDriverPriority(desc) == 0.0f)
+
+    // Test with "default" queue specified
+    desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
+      command,
+      Map("spark.mesos.dispatcher.queue" -> "default"),
+      "s3",
+      new Date())
+
+    assert(scheduler.getDriverPriority(desc) == 0.0f)
+
+    // Test queue declared in scheduler
+    desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
+      command,
+      Map("spark.mesos.dispatcher.queue" -> "ROUTINE"),
+      "s4",
+      new Date())
+
+    assert(scheduler.getDriverPriority(desc) == 1.0f)
+
+    // Test other queue declared in scheduler
+    desc = new MesosDriverDescription("d1", "jar", mem, cpu, true,
+      command,
+      Map("spark.mesos.dispatcher.queue" -> "URGENT"),
+      "s5",
+      new Date())
+
+    assert(scheduler.getDriverPriority(desc) == 2.0f)
+  }
+
+  test("SPARK-23499: Can queue drivers with priority") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.dispatcher.queue.ROUTINE", "1.0")
+    conf.set("spark.mesos.dispatcher.queue.URGENT", "2.0")
+    conf.set("spark.mesos.dispatcher.queue.EXCEPTIONAL", "3.0")
+    setScheduler(conf.getAll.toMap)
+
+    val mem = 1000
+    val cpu = 1
+
+    val response0 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map("spark.mesos.dispatcher.queue" -> "ROUTINE"), "s0", new Date()))
+    assert(response0.success)
+
+    val response1 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map[String, String](), "s1", new Date()))
+    assert(response1.success)
+
+    val response2 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map("spark.mesos.dispatcher.queue" -> "EXCEPTIONAL"), "s2", new Date()))
+    assert(response2.success)
+
+    val response3 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map("spark.mesos.dispatcher.queue" -> "URGENT"), "s3", new Date()))
+    assert(response3.success)
+
+    val state = scheduler.getSchedulerState()
+    val queuedDrivers = state.queuedDrivers.toList
+    assert(queuedDrivers(0).submissionId == response2.submissionId)
+    assert(queuedDrivers(1).submissionId == response3.submissionId)
+    assert(queuedDrivers(2).submissionId == response0.submissionId)
+    assert(queuedDrivers(3).submissionId == response1.submissionId)
+  }
+
+  test("SPARK-23499: Can queue drivers with negative priority") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.dispatcher.queue.LOWER", "-1.0")
+    setScheduler(conf.getAll.toMap)
+
+    val mem = 1000
+    val cpu = 1
+
+    val response0 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map("spark.mesos.dispatcher.queue" -> "LOWER"), "s0", new Date()))
+    assert(response0.success)
+
+    val response1 = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", 100, 1, true, command,
+        Map[String, String](), "s1", new Date()))
+    assert(response1.success)
+
+    val state = scheduler.getSchedulerState()
+    val queuedDrivers = state.queuedDrivers.toList
+    assert(queuedDrivers(0).submissionId == response1.submissionId)
+    assert(queuedDrivers(1).submissionId == response0.submissionId)
   }
 
   private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {

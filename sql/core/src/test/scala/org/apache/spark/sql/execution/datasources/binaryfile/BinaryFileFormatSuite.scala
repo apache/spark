@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -304,7 +304,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
     val partitionedFile = mock(classOf[PartitionedFile])
     when(partitionedFile.filePath).thenReturn(file.getPath)
     val encoder = RowEncoder(requiredSchema).resolveAndBind()
-    encoder.fromRow(reader(partitionedFile).next())
+    encoder.createDeserializer().apply(reader(partitionedFile).next())
   }
 
   test("column pruning") {

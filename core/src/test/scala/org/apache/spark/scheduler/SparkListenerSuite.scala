@@ -24,7 +24,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.mockito.Mockito
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -621,7 +622,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
 
     override def onStageCompleted(stage: SparkListenerStageCompleted): Unit = {
-      stageInfos(stage.stageInfo) = taskInfoMetrics
+      stageInfos(stage.stageInfo) = taskInfoMetrics.toSeq
       taskInfoMetrics = mutable.Buffer.empty
     }
   }

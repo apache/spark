@@ -114,5 +114,33 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     }
   }
 
+  test("SPARK-33416: Avoid Hive metastore stack overflow when InSet predicate have many values") {
+    def checkConverted(inSet: InSet, result: String): Unit = {
+      assert(shim.convertFilters(testTable, inSet :: Nil) == result)
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "15") {
+      checkConverted(
+        InSet(a("intcol", IntegerType),
+          Range(1, 20).map(s => Literal(s).eval(EmptyRow)).toSet),
+        "(intcol >= 1 and intcol <= 19)")
+
+      checkConverted(
+        InSet(a("stringcol", StringType),
+          Range(1, 20).map(s => Literal(s.toString).eval(EmptyRow)).toSet),
+        "(stringcol >= \"1\" and stringcol <= \"9\")")
+
+      checkConverted(
+        InSet(a("intcol", IntegerType).cast(LongType),
+          Range(1, 20).map(s => Literal(s.toLong).eval(EmptyRow)).toSet),
+        "(intcol >= 1 and intcol <= 19)")
+
+      checkConverted(
+        InSet(a("doublecol", DoubleType),
+          Range(1, 20).map(s => Literal(s.toDouble).eval(EmptyRow)).toSet),
+        "")
+    }
+  }
+
   private def a(name: String, dataType: DataType) = AttributeReference(name, dataType)()
 }

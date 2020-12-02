@@ -14,12 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from __future__ import print_function
-import json
-
 from pyspark.java_gateway import local_connect_and_auth
-from pyspark.serializers import write_int, write_with_length, UTF8Deserializer
+from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 
 class TaskContext(object):
@@ -64,7 +60,9 @@ class TaskContext(object):
         Return the currently active TaskContext. This can be called inside of
         user functions to access contextual information about running tasks.
 
-        .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
+        Notes
+        -----
+        Must be called on the worker, not the driver. Returns None if not initialized.
         """
         return cls._taskContext
 
@@ -133,7 +131,10 @@ def _load_from_socket(port, auth_secret, function, all_gather_message=None):
     sockfile.flush()
 
     # Collect result.
-    res = UTF8Deserializer().loads(sockfile)
+    len = read_int(sockfile)
+    res = []
+    for i in range(len):
+        res.append(UTF8Deserializer().loads(sockfile))
 
     # Release resources.
     sockfile.close()
@@ -145,12 +146,14 @@ def _load_from_socket(port, auth_secret, function, all_gather_message=None):
 class BarrierTaskContext(TaskContext):
 
     """
-    .. note:: Experimental
-
     A :class:`TaskContext` with extra contextual info and tooling for tasks in a barrier stage.
     Use :func:`BarrierTaskContext.get` to obtain the barrier context for a running barrier task.
 
     .. versionadded:: 2.4.0
+
+    Notes
+    -----
+    This API is experimental
     """
 
     _port = None
@@ -170,14 +173,16 @@ class BarrierTaskContext(TaskContext):
     @classmethod
     def get(cls):
         """
-        .. note:: Experimental
-
         Return the currently active :class:`BarrierTaskContext`.
         This can be called inside of user functions to access contextual information about
         running tasks.
 
-        .. note:: Must be called on the worker, not the driver. Returns None if not initialized.
-            An Exception will raise if it is not in a barrier stage.
+        Notes
+        -----
+        Must be called on the worker, not the driver. Returns None if not initialized.
+        An Exception will raise if it is not in a barrier stage.
+
+        This API is experimental
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             raise Exception('It is not in a barrier stage')
@@ -194,17 +199,19 @@ class BarrierTaskContext(TaskContext):
 
     def barrier(self):
         """
-        .. note:: Experimental
-
         Sets a global barrier and waits until all tasks in this stage hit this barrier.
         Similar to `MPI_Barrier` function in MPI, this function blocks until all tasks
         in the same stage have reached this routine.
+
+        .. versionadded:: 2.4.0
 
         .. warning:: In a barrier stage, each task much have the same number of `barrier()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
 
-        .. versionadded:: 2.4.0
+        Notes
+        -----
+        This API is experimental
         """
         if self._port is None or self._secret is None:
             raise Exception("Not supported to call barrier() before initialize " +
@@ -214,17 +221,19 @@ class BarrierTaskContext(TaskContext):
 
     def allGather(self, message=""):
         """
-        .. note:: Experimental
-
         This function blocks until all tasks in the same stage have reached this routine.
         Each task passes in a message and returns with a list of all the messages passed in
         by each of those tasks.
+
+        .. versionadded:: 3.0.0
 
         .. warning:: In a barrier stage, each task much have the same number of `allGather()`
             calls, in all possible code branches.
             Otherwise, you may get the job hanging or a SparkException after timeout.
 
-        .. versionadded:: 3.0.0
+        Notes
+        -----
+        This API is experimental
         """
         if not isinstance(message, str):
             raise ValueError("Argument `message` must be of type `str`")
@@ -232,22 +241,18 @@ class BarrierTaskContext(TaskContext):
             raise Exception("Not supported to call barrier() before initialize " +
                             "BarrierTaskContext.")
         else:
-            gathered_items = _load_from_socket(
-                self._port,
-                self._secret,
-                ALL_GATHER_FUNCTION,
-                message,
-            )
-            return [e for e in json.loads(gathered_items)]
+            return _load_from_socket(self._port, self._secret, ALL_GATHER_FUNCTION, message)
 
     def getTaskInfos(self):
         """
-        .. note:: Experimental
-
         Returns :class:`BarrierTaskInfo` for all tasks in this barrier stage,
         ordered by partition ID.
 
         .. versionadded:: 2.4.0
+
+        Notes
+        -----
+        This API is experimental
         """
         if self._port is None or self._secret is None:
             raise Exception("Not supported to call getTaskInfos() before initialize " +
@@ -259,13 +264,18 @@ class BarrierTaskContext(TaskContext):
 
 class BarrierTaskInfo(object):
     """
-    .. note:: Experimental
-
     Carries all task infos of a barrier task.
 
-    :var address: The IPv4 address (host:port) of the executor that the barrier task is running on
-
     .. versionadded:: 2.4.0
+
+    Attributes
+    ----------
+    address : str
+        The IPv4 address (host:port) of the executor that the barrier task is running on
+
+    Notes
+    -----
+    This API is experimental
     """
 
     def __init__(self, address):

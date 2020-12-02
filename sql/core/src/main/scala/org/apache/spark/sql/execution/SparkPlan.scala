@@ -135,7 +135,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
-  /** Specifies how data is partitioned across different nodes in the cluster. */
+  /**
+   * Specifies how data is partitioned across different nodes in the cluster.
+   * Note this method may fail if it is invoked before `EnsureRequirements` is applied
+   * since `PartitioningCollection` requires all its partitionings to have
+   * the same number of partitions.
+   */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
   /**
@@ -514,20 +519,19 @@ trait LeafExecNode extends SparkPlan {
   override def producedAttributes: AttributeSet = outputSet
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    val baseStr = s"(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}"
-    val outputStr = s"${ExplainUtils.generateFieldString("Output", producedAttributes)}"
+    val outputStr = s"${ExplainUtils.generateFieldString("Output", output)}"
 
     if (argumentString.nonEmpty) {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$outputStr
          |Arguments: $argumentString
-      """.stripMargin
+         |""".stripMargin
     } else {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$outputStr
-      """.stripMargin
+         |""".stripMargin
     }
   }
 }
@@ -545,20 +549,19 @@ trait UnaryExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = child :: Nil
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    val baseStr = s"(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}"
     val inputStr = s"${ExplainUtils.generateFieldString("Input", child.output)}"
 
     if (argumentString.nonEmpty) {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$inputStr
          |Arguments: $argumentString
-      """.stripMargin
+         |""".stripMargin
     } else {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$inputStr
-      """.stripMargin
+         |""".stripMargin
     }
   }
 }
@@ -570,23 +573,22 @@ trait BinaryExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Seq(left, right)
   override def verboseStringWithOperatorId(): String = {
     val argumentString = argString(SQLConf.get.maxToStringFields)
-    val baseStr = s"(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}"
     val leftOutputStr = s"${ExplainUtils.generateFieldString("Left output", left.output)}"
     val rightOutputStr = s"${ExplainUtils.generateFieldString("Right output", right.output)}"
 
     if (argumentString.nonEmpty) {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$leftOutputStr
          |$rightOutputStr
          |Arguments: $argumentString
-      """.stripMargin
+         |""".stripMargin
     } else {
       s"""
-         |$baseStr
+         |$formattedNodeName
          |$leftOutputStr
          |$rightOutputStr
-      """.stripMargin
+         |""".stripMargin
     }
   }
 }

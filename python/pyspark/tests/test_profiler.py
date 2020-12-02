@@ -19,14 +19,10 @@ import os
 import sys
 import tempfile
 import unittest
+from io import StringIO
 
 from pyspark import SparkConf, SparkContext, BasicProfiler
 from pyspark.testing.utils import PySparkTestCase
-
-if sys.version >= "3":
-    from io import StringIO
-else:
-    from StringIO import StringIO
 
 
 class ProfilerTests(PySparkTestCase):
@@ -102,10 +98,10 @@ class ProfilerTests2(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_profiler import *
+    from pyspark.tests.test_profiler import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -26,7 +26,7 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -37,11 +37,13 @@ import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, 
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
+  private val v1Format = classOf[SimpleScanSource].getName
   private val v2Format = classOf[FakeV2Provider].getName
 
   private val table: Table = {
@@ -61,6 +63,15 @@ class PlanResolutionSuite extends AnalysisTest {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.tableType).thenReturn(CatalogTableType.MANAGED)
+    when(t.provider).thenReturn(Some(v1Format))
+    V1Table(t)
+  }
+
+  private val v1HiveTable: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.tableType).thenReturn(CatalogTableType.MANAGED)
+    when(t.provider).thenReturn(Some("hive"))
     V1Table(t)
   }
 
@@ -83,6 +94,7 @@ class PlanResolutionSuite extends AnalysisTest {
       invocation.getArgument[Identifier](0).name match {
         case "v1Table" => v1Table
         case "v1Table1" => v1Table
+        case "v1HiveTable" => v1HiveTable
         case "v2Table" => table
         case "v2Table1" => table
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
@@ -139,14 +151,14 @@ class PlanResolutionSuite extends AnalysisTest {
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager, conf)
+    val analyzer = new Analyzer(catalogManager)
     // TODO: run the analyzer directly.
     val rules = Seq(
       CTESubstitution,
-      ResolveInlineTables(conf),
+      ResolveInlineTables,
       analyzer.ResolveRelations,
       new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, conf, _ == Seq("v"), _ => false),
+      new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false),
       analyzer.ResolveTables,
       analyzer.ResolveReferences,
       analyzer.ResolveSubqueryColumnAliases,
@@ -540,7 +552,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -574,7 +586,7 @@ class PlanResolutionSuite extends AnalysisTest {
         assert(ctas.catalog.name == "testcat")
         assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
         assert(ctas.properties == expectedProperties)
-        assert(ctas.writeOptions == Map("other" -> "20"))
+        assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
 
@@ -618,10 +630,10 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("drop table") {
-    val tableName1 = "db.tab"
-    val tableIdent1 = TableIdentifier("tab", Option("db"))
-    val tableName2 = "tab"
-    val tableIdent2 = TableIdentifier("tab", Some("default"))
+    val tableName1 = "db.v1Table"
+    val tableIdent1 = TableIdentifier("v1Table", Option("db"))
+    val tableName2 = "v1Table"
+    val tableIdent2 = TableIdentifier("v1Table", Some("default"))
 
     parseResolveCompare(s"DROP TABLE $tableName1",
       DropTableCommand(tableIdent1, ifExists = false, isView = false, purge = false))
@@ -644,13 +656,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(testCat, tableIdent1, ifExists = false))
+      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(testCat, tableIdent1, ifExists = true))
+      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(testCat, tableIdent2, ifExists = false))
+      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(testCat, tableIdent2, ifExists = true))
+      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = true, purge = false))
   }
 
   test("drop view") {
@@ -1046,15 +1058,6 @@ class PlanResolutionSuite extends AnalysisTest {
           }
           assert(e2.getMessage.contains(
             "ALTER COLUMN with qualified column is only supported with v2 tables"))
-
-          val sql5 = s"ALTER TABLE $tblName ALTER COLUMN i TYPE char(1)"
-          val builder = new MetadataBuilder
-          builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
-          val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
-          val expected5 = AlterTableChangeColumnCommand(
-            tableIdent, "i", newColumnWithCleanedType)
-          val parsed5 = parseAndResolve(sql5)
-          comparePlans(parsed5, expected5)
         } else {
           parsed1 match {
             case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
@@ -1071,6 +1074,15 @@ class PlanResolutionSuite extends AnalysisTest {
           }
         }
     }
+
+    val sql = s"ALTER TABLE v1HiveTable ALTER COLUMN i TYPE char(1)"
+    val builder = new MetadataBuilder
+    builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
+    val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+    val expected = AlterTableChangeColumnCommand(
+      TableIdentifier("v1HiveTable", Some("default")), "i", newColumnWithCleanedType)
+    val parsed = parseAndResolve(sql)
+    comparePlans(parsed, expected)
   }
 
   test("alter table: alter column action is not specified") {
@@ -1506,6 +1518,45 @@ class PlanResolutionSuite extends AnalysisTest {
       case l => fail("Expected unresolved MergeIntoTable, but got:\n" + l.treeString)
     }
   }
+
+  test("SPARK-31147: forbid CHAR type in non-Hive tables") {
+    def checkFailure(t: String, provider: String): Unit = {
+      val types = Seq(
+        "CHAR(2)",
+        "ARRAY<CHAR(2)>",
+        "MAP<INT, CHAR(2)>",
+        "MAP<CHAR(2), INT>",
+        "STRUCT<s: CHAR(2)>")
+      types.foreach { tpe =>
+        intercept[AnalysisException] {
+          parseAndResolve(s"CREATE TABLE $t(col $tpe) USING $provider")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"REPLACE TABLE $t(col $tpe) USING $provider")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"CREATE OR REPLACE TABLE $t(col $tpe) USING $provider")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"ALTER TABLE $t ALTER COLUMN col TYPE $tpe")
+        }
+        intercept[AnalysisException] {
+          parseAndResolve(s"ALTER TABLE $t REPLACE COLUMNS (col $tpe)")
+        }
+      }
+    }
+
+    checkFailure("v1Table", v1Format)
+    checkFailure("v2Table", v2Format)
+    checkFailure("testcat.tab", "foo")
+  }
+
   // TODO: add tests for more commands.
 }
 
@@ -1515,4 +1566,3 @@ object AsDataSourceV2Relation {
     case _ => None
   }
 }
-

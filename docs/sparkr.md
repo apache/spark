@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -540,12 +540,15 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
 * [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
+* [`spark.fmClassifier`](api/R/fmClassifier.html): [`Factorization Machines classifier`](ml-classification-regression.html#factorization-machines-classifier)
 
 #### Regression
 
 * [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
 * [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
 * [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+* [`spark.lm`](api/R/spark.lm.html): [`Linear Regression`](ml-classification-regression.html#linear-regression)
+* [`spark.fmRegressor`](api/R/spark.fmRegressor.html): [`Factorization Machines regressor`](ml-classification-regression.html#factorization-machines-regressor)
 
 #### Tree
 
@@ -663,32 +666,27 @@ Apache Arrow is an in-memory columnar data format that is used in Spark to effic
 
 ## Ensure Arrow Installed
 
-Arrow R library is available on CRAN as of [ARROW-3204](https://issues.apache.org/jira/browse/ARROW-3204). It can be installed as below.
+Arrow R library is available on CRAN and it can be installed as below.
 
 ```bash
 Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 ```
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
 
-If you need to install old versions, it should be installed directly from Github. You can use `remotes::install_github` as below.
-
-```bash
-Rscript -e 'remotes::install_github("apache/arrow@apache-arrow-0.12.1", subdir = "r")'
-```
-
-`apache-arrow-0.12.1` is a version tag that can be checked in [Arrow at Github](https://github.com/apache/arrow/releases). You must ensure that Arrow R package is installed and available on all cluster nodes.
-The current supported minimum version is 0.12.1; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
+Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
+The current supported minimum version is 1.0.0; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.
 
 ## Enabling for Conversion to/from R DataFrame, `dapply` and `gapply`
 
 Arrow optimization is available when converting a Spark DataFrame to an R DataFrame using the call `collect(spark_df)`,
 when creating a Spark DataFrame from an R DataFrame with `createDataFrame(r_df)`, when applying an R native function to each partition
 via `dapply(...)` and when applying an R native function to grouped data via `gapply(...)`.
-To use Arrow when executing these calls, users need to first set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
-to ‘true’. This is disabled by default.
+To use Arrow when executing these, users need to set the Spark configuration ‘spark.sql.execution.arrow.sparkr.enabled’
+to ‘true’ first. This is disabled by default.
 
-In addition, optimizations enabled by ‘spark.sql.execution.arrow.sparkr.enabled’ could fallback automatically to non-Arrow optimization
-implementation if an error occurs before the actual computation within Spark during converting a Spark DataFrame to/from an R
-DataFrame.
+Whether the optimization is enabled or not, SparkR produces the same results. In addition, the conversion
+between Spark DataFrame and R DataFrame falls back automatically to non-Arrow optimization implementation
+when the optimization fails for any reasons before the actual computation.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
@@ -715,9 +713,9 @@ collect(gapply(spark_df,
 {% endhighlight %}
 </div>
 
-Using the above optimizations with Arrow will produce the same results as when Arrow is not enabled. Note that even with Arrow,
-`collect(spark_df)` results in the collection of all records in the DataFrame to the driver program and should be done on a
-small subset of the data.
+Note that even with Arrow, `collect(spark_df)` results in the collection of all records in the DataFrame to
+the driver program and should be done on a small subset of the data. In addition, the specified output schema
+in `gapply(...)` and `dapply(...)` should be matched to the R DataFrame's returned by the given function.
 
 ## Supported SQL Types
 
@@ -756,4 +754,3 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 # Migration Guide
 
 The migration guide is now archived [on this page](sparkr-migration-guide.html).
-

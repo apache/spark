@@ -52,7 +52,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     numRowsInMemoryBufferThreshold: Int,
     numRowsSpillThreshold: Int) extends Logging {
 
-  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) {
+  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) = {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,

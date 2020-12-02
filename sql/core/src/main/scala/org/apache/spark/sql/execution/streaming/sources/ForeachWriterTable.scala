@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.write.{DataWriter, LogicalWriteInfo, PhysicalWriteInfo, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.python.PythonForeachWriter
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -54,11 +55,11 @@ case class ForeachWriterTable[T](
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    new WriteBuilder with SupportsTruncate {
+    new WriteBuilder with SupportsTruncate with SupportsStreamingUpdateAsAppend {
       private var inputSchema: StructType = info.schema()
 
-      // Do nothing for truncate. Foreach sink is special that it just forwards all the records to
-      // ForeachWriter.
+      // Do nothing for truncate. Foreach sink is special and it just forwards all the
+      // records to ForeachWriter.
       override def truncate(): WriteBuilder = this
 
       override def buildForStreaming(): StreamingWrite = {
@@ -73,7 +74,7 @@ case class ForeachWriterTable[T](
                 val boundEnc = enc.resolveAndBind(
                   inputSchema.toAttributes,
                   SparkSession.getActiveSession.get.sessionState.analyzer)
-                boundEnc.fromRow
+                boundEnc.createDeserializer()
               case Right(func) =>
                 func
             }

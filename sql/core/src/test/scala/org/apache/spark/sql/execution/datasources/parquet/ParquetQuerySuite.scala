@@ -168,11 +168,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withTempPath { file =>
         val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
         df.write.parquet(file.getCanonicalPath)
-        ("true" :: "false" :: Nil).foreach { vectorized =>
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-            val df2 = spark.read.parquet(file.getCanonicalPath)
-            checkAnswer(df2, df.collect().toSeq)
-          }
+        withAllParquetReaders {
+          val df2 = spark.read.parquet(file.getCanonicalPath)
+          checkAnswer(df2, df.collect().toSeq)
         }
       }
     }
@@ -791,15 +789,13 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-26677: negated null-safe equality comparison should not filter matched row groups") {
-    (true :: false :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-        withTempPath { path =>
-          // Repeated values for dictionary encoding.
-          Seq(Some("A"), Some("A"), None).toDF.repartition(1)
-            .write.parquet(path.getAbsolutePath)
-          val df = spark.read.parquet(path.getAbsolutePath)
-          checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
-        }
+    withAllParquetReaders {
+      withTempPath { path =>
+        // Repeated values for dictionary encoding.
+        Seq(Some("A"), Some("A"), None).toDF.repartition(1)
+          .write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        checkAnswer(stripSparkFilter(df.where("NOT (value <=> 'A')")), df)
       }
     }
   }
@@ -821,10 +817,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> toTsType) {
           write(df2.write.mode(SaveMode.Append))
         }
-        Seq("true", "false").foreach { vectorized =>
-          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-            checkAnswer(readback, df1.unionAll(df2))
-          }
+        withAllParquetReaders {
+          checkAnswer(readback, df1.unionAll(df2))
         }
       }
 

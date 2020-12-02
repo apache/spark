@@ -15,11 +15,6 @@
 # limitations under the License.
 #
 
-import sys
-
-if sys.version > '3':
-    xrange = range
-
 import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc

@@ -19,19 +19,18 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils}
+import org.apache.spark.util.ThreadUtils
 
 class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set(config.Worker.WORKER_DECOMMISSION_ENABLED, true)
+    val conf = new SparkConf().setAppName("test")
+      .set(config.DECOMMISSION_ENABLED, true)
 
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
   }
@@ -46,14 +45,13 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     assert(sleepyRdd.count() === 10)
   }
 
-  test("verify a task with all workers decommissioned succeeds") {
+  test("verify a running task with all workers decommissioned succeeds") {
+    // Wait for the executors to come up
+    TestUtils.waitUntilExecutorsUp(sc = sc,
+      numExecutors = 2,
+      timeout = 30000) // 30s
+
     val input = sc.parallelize(1 to 10)
-    // Do a count to wait for the executors to be registered.
-    input.count()
-    val sleepyRdd = input.mapPartitions{ x =>
-      Thread.sleep(50)
-      x
-    }
     // Listen for the job
     val sem = new Semaphore(0)
     sc.addSparkListener(new SparkListener {
@@ -61,24 +59,28 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
         sem.release()
       }
     })
+
+    val sleepyRdd = input.mapPartitions{ x =>
+      Thread.sleep(5000) // 5s
+      x
+    }
     // Start the task.
     val asyncCount = sleepyRdd.countAsync()
     // Wait for the job to have started
     sem.acquire(1)
+    // Give it time to make it to the worker otherwise we'll block
+    Thread.sleep(2000) // 2s
     // Decommission all the executors, this should not halt the current task.
     // decom.sh message passing is tested manually.
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    execs.foreach(execId => sched.decommissionExecutor(execId))
-    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 2.seconds)
+    // Make the executors decommission, finish, exit, and not be replaced.
+    val execsAndDecomInfo = execs.map((_, ExecutorDecommissionInfo("", None))).toArray
+    sched.decommissionExecutors(
+      execsAndDecomInfo,
+      adjustTargetNumExecutors = true,
+      triggeredByExecutor = false)
+    val asyncCountResult = ThreadUtils.awaitResult(asyncCount, 20.seconds)
     assert(asyncCountResult === 10)
-    // Try and launch task after decommissioning, this should fail
-    val postDecommissioned = input.map(x => x)
-    val postDecomAsyncCount = postDecommissioned.countAsync()
-    val thrown = intercept[java.util.concurrent.TimeoutException]{
-      val result = ThreadUtils.awaitResult(postDecomAsyncCount, 2.seconds)
-    }
-    assert(postDecomAsyncCount.isCompleted === false,
-      "After exec decommission new task could not launch")
   }
 }
