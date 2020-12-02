@@ -171,8 +171,7 @@ case class Alias(child: Expression, name: String)(
     explicitMetadata.getOrElse {
       child match {
         case named: NamedExpression =>
-          val builder = new MetadataBuilder()
-            .withMetadata(named.metadata)
+          val builder = new MetadataBuilder().withMetadata(named.metadata)
           deniedMetadataKeys.foreach(builder.remove)
           builder.build()
 
