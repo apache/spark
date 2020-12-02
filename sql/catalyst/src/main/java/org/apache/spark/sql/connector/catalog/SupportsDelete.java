@@ -36,9 +36,11 @@ public interface SupportsDelete {
    * Rows should be deleted from the data source iff all of the filter expressions match.
    * That is, the expressions must be interpreted as a set of filters that are ANDed together.
    * <p>
-   * Spark will call this method to check if the delete is possible without significant effort.
-   * Otherwise, Spark will try to rewrite the delete operation and produce row-level changes
-   * if the data source table supports deleting individual records.
+   * Spark will call this method to check whether {@link #deleteWhere(Filter[])} would reject
+   * the delete operation because it requires significant effort. If this method returns false,
+   * Spark will not call {@link #deleteWhere(Filter[])} and will try to rewrite the delete
+   * operation and produce row-level changes if the data source table supports deleting
+   * individual records.
    *
    * @param filters filter expressions, used to select rows to delete when all expressions match
    * @return true if the delete operation can be performed

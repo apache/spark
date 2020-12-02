@@ -1814,7 +1814,7 @@ class DataSourceV2SQLSuite
   test("DeleteFrom: delete with unsupported predicates") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
       sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
       val exc = intercept[AnalysisException] {
         sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
