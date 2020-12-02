@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, MapType}
 class ExpressionEvalHelperSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-16489 checkEvaluation should fail if expression reuses variable names") {
-    val e = intercept[RuntimeException] { checkEvaluation(BadCodegenExpression(), 10) }
+    val e = intercept[Exception] { checkEvaluation(BadCodegenExpression(), 10) }
     assert(e.getMessage.contains("some_variable"))
   }
 

@@ -201,12 +201,6 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     expression.eval(inputRow)
   }
 
-  protected def generateProject(
-      generator: => Projection,
-      expression: Expression): Projection = {
-    generator
-  }
-
   protected def checkEvaluationWithoutCodegen(
       expression: Expression,
       expected: Any,
@@ -243,9 +237,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   protected def evaluateWithMutableProjection(
       expression: => Expression,
       inputRow: InternalRow = EmptyRow): Any = {
-    val plan = generateProject(
-      MutableProjection.create(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    val plan = MutableProjection.create(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
 
     plan(inputRow).get(0, expression.dataType)
@@ -291,11 +283,9 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.
-    val plan = generateProject(
-      UnsafeProjection.create(
-        Alias(expression, s"Optimized($expression)1")() ::
-          Alias(expression, s"Optimized($expression)2")() :: Nil),
-      expression)
+    val plan = UnsafeProjection.create(
+      Alias(expression, s"Optimized($expression)1")() ::
+        Alias(expression, s"Optimized($expression)2")() :: Nil)
 
     plan.initialize(0)
     plan(inputRow)
@@ -318,16 +308,13 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
     checkEvaluationWithMutableProjection(expression, expected)
     checkEvaluationWithOptimization(expression, expected)
 
-    var plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    var plan: Projection =
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected, expression))
 
-    plan = generateProject(
-      GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    plan = GenerateUnsafeProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
     plan.initialize(0)
     val ref = new BoundReference(0, expression.dataType, nullable = true)
     actual = GenerateSafeProjection.generate(ref :: Nil)(plan(inputRow)).get(0, expression.dataType)
@@ -455,9 +442,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       }
     }
 
-    val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
-      expr)
+    val plan = GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)
     val (codegen, codegenExc) = try {
       (Some(plan(inputRow).get(0, expr.dataType)), None)
     } catch {
