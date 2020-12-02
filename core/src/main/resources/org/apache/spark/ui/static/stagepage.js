@@ -483,23 +483,43 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 return typeof row.diskBytesSpilled != 'undefined' ? formatBytes(row.diskBytesSpilled, type) : "";
                             }
-                        },{
-                            data: function(row, type) {
-                                return formatBytes(row.jvmHeapMemory, type) + "/" + formatBytes(row.jvmOffHeapMemory, type);
+                        },
+                        {
+                            data : function (row, type) {
+                                if (type !== 'display')
+                                    return row.peakMemoryMetrics.JVMHeapMemory;
+                                else
+                                    return (formatBytes(row.peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
+                                        formatBytes(row.peakMemoryMetrics.JVMOffHeapMemory, type));
                             }
-                        },{
-                             data: function(row, type) {
-                                 return formatBytes(row.onHeapExecutionMemory, type) + "/" + formatBytes(row.offHeapExecutionMemory, type);
-                             }
-                         },{
-                             data: function(row, type) {
-                                 return formatBytes(row.onHeapStorageMemory, type) + "/" + formatBytes(row.offHeapStorageMemory, type);
-                             }
-                         },{
-                             data: function(row, type) {
-                                 return formatBytes(row.directPoolMemory, type) + "/" + formatBytes(row.mappedPoolMemory, type);
-                             }
-                         }
+                        },
+                        {
+                            data : function (row, type) {
+                                 if (type !== 'display')
+                                     return row.peakMemoryMetrics.OnHeapExecutionMemory;
+                                 else
+                                     return (formatBytes(row.peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                         formatBytes(row.peakMemoryMetrics.OffHeapExecutionMemory, type));
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                if (type !== 'display')
+                                    return row.peakMemoryMetrics.OnHeapStorageMemory;
+                                else
+                                    return (formatBytes(row.peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
+                                }
+                        },
+                        {
+                            data : function (row, type) {
+                                if (type !== 'display')
+                                    return row.peakMemoryMetrics.DirectPoolMemory;
+                                else
+                                    return (formatBytes(row.peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                        formatBytes(row.peakMemoryMetrics.MappedPoolMemory, type));
+                            }
+                        }
                     ],
                     "columnDefs": [
                         { "visible": false, "targets": 15 },

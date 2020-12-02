@@ -687,9 +687,6 @@ private[spark] class AppStatusListener(
         stage.killedSummary = killedTasksSummary(event.reason, stage.killedSummary)
       }
       stage.activeTasksPerExecutor(event.taskInfo.executorId) -= 1
-
-      val metrics = stage.executorSummary(event.taskInfo.executorId).executorMetrics
-      metrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
       // [SPARK-24415] Wait for all tasks to finish before removing stage from live list
       val removeStage =
         stage.activeTasks == 0 &&
