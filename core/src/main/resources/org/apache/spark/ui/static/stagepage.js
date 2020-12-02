@@ -245,16 +245,20 @@ function createRowMetadataForColumn(colKey, data, checkboxId) {
 function reselectCheckboxesBasedOnTaskTableState() {
     var allChecked = true;
     var taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
-    if (typeof taskTableSelector !== 'undefined' && typeof executorSummaryTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
+    if ((typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) || typeof executorSummaryTableSelector !== 'undefined') {
         for (var k = 0; k < optionalColumns.length; k++) {
             if (taskTableSelector.column(optionalColumns[k]).visible()) {
                 $("#box-"+optionalColumns[k]).prop('checked', true);
-                taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
-                taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+                var result = taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0];
+                if (typeof result !== 'undefined') {
+                    taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
+                    taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+                }
             } else {
                 allChecked = false;
             }
         }
+
         for (var k = 0; k < executorOptionalColumns.length; k++) {
             if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
                 $("#executor-box-"+executorOptionalColumns[k]).prop('checked', true);
