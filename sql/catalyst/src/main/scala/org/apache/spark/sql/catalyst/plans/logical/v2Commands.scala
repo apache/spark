@@ -691,7 +691,6 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
-
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
@@ -705,4 +704,16 @@ case class ShowPartitions(
 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("partition", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the CACHE TABLE command.
+ */
+case class CacheTable(
+    child: LogicalPlan,
+    multipartIdentifier: Seq[String],
+    plan: Option[LogicalPlan],
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
 }

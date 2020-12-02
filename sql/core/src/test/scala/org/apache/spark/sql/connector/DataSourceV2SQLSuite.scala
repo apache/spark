@@ -2023,7 +2023,10 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       def isCached(table: String): Boolean = {
-        spark.table(table).queryExecution.withCachedData.isInstanceOf[InMemoryRelation]
+        val tbl = spark.table(table)
+        tbl.count
+        val cached = tbl.queryExecution.withCachedData
+        cached.isInstanceOf[InMemoryRelation]
       }
 
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")

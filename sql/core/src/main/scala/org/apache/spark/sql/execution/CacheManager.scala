@@ -18,15 +18,13 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.immutable.IndexedSeq
-
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, SubqueryAlias}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -225,13 +223,18 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   def lookupCachedData(plan: LogicalPlan): Option[CachedData] = {
-    cachedData.find(cd => plan.sameResult(cd.plan))
+    cachedData.find{ cd =>
+      val res = plan.sameResult(cd.plan)
+      res
+    }
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
+
+      case s: SubqueryAlias => useCachedData(s.child)
 
       case currentFragment =>
         lookupCachedData(currentFragment).map { cached =>
