@@ -215,7 +215,7 @@ object QueryCompilationErrors {
   }
 
   def writingIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot write into v1 table:  $identifier.",
+    new AnalysisException(s"Cannot write into v1 table: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
 
