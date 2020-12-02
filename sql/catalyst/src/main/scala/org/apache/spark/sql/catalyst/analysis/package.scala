@@ -42,6 +42,10 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition)
     }
 
+    def failAnalysis(t: Throwable): Nothing = {
+      throw t
+    }
+
     /** Fails the analysis at the point where a specific tree node was parsed. */
     def failAnalysis(msg: String, cause: Throwable): Nothing = {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
