@@ -1207,7 +1207,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(UnixSeconds(timestamp), 1L)
   }
 
-  test("UNIX_MILLS") {
+  test("UNIX_MILLIS") {
     var timestamp = Literal(new Timestamp(0L))
     checkEvaluation(UnixMillis(timestamp), 0L)
     timestamp = Literal(new Timestamp(1000L))
