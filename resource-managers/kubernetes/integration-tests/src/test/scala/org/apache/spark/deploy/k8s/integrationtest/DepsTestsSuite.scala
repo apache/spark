@@ -177,7 +177,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       runSparkApplicationAndVerifyCompletion(
         appResource = pySparkFiles,
         mainClass = "",
-        expectedLogOnCompletion = Seq(
+        expectedDriverLogOnCompletion = Seq(
           "Python runtime version check is: True",
           "Python environment version check is: True",
           "Python runtime version check for executor is: True"),
