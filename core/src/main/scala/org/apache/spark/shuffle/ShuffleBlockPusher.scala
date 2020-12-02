@@ -48,13 +48,14 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * @param conf spark configuration
  */
 @Since("3.1.0")
-private[spark] class ShuffleBlockPusher(
-    conf: SparkConf) extends Logging {
-  private[this] var maxBlockSizeToPush = 0L
-  private[this] var maxBlockBatchSize = 0L
-  private[this] var maxBytesInFlight = 0L
-  private[this] var maxReqsInFlight = 0
-  private[this] var maxBlocksInFlightPerAddress = 0
+private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
+  private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
+  private[this] val maxBlockBatchSize =
+    conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH) * 1024 * 1024
+  private[this] val maxBytesInFlight =
+    conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
+  private[this] val maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
+  private[this] val maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
   private[this] var bytesInFlight = 0L
   private[this] var reqsInFlight = 0
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
@@ -64,16 +65,6 @@ private[spark] class ShuffleBlockPusher(
   // VisibleForTesting
   private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
   private[this] var stopPushing = false
-
-  initialize()
-
-  private def initialize(): Unit = {
-    maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
-    maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH) * 1024 * 1024
-    maxBytesInFlight = conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
-    maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
-    maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
-  }
 
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
