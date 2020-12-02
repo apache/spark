@@ -99,7 +99,8 @@ abstract class StreamingJoinSuite
     } else if (joinType == "right_outer") {
       joined.select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
     } else {
-      joined
+      joined.select(left("key"), left("window.end").cast("long"), 'leftValue,
+        right("key"), right("window.end").cast("long"), 'rightValue)
     }
 
     (leftInput, rightInput, select)
@@ -128,7 +129,8 @@ abstract class StreamingJoinSuite
     } else if (joinType == "right_outer") {
       joined.select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
     } else {
-      joined
+      joined.select(left("key"), left("window.end").cast("long"), 'leftValue,
+        right("key"), right("window.end").cast("long"), 'rightValue)
     }
 
     (leftInput, rightInput, select)
@@ -1066,6 +1068,209 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
     testStream(joined)(
       MultiAddData((input1, inputDataForInput1), (input2, inputDataForInput2)),
       CheckNewAnswer(expectedOutput.head, expectedOutput.tail: _*)
+    )
+  }
+}
+
+class StreamingFullOuterJoinSuite extends StreamingJoinSuite {
+
+  test("windowed full outer join") {
+    val (leftInput, rightInput, joined) = setupWindowedJoin("full_outer")
+
+    testStream(joined)(
+      MultiAddData(leftInput, 1, 2, 3, 4, 5)(rightInput, 3, 4, 5, 6, 7),
+      CheckNewAnswer(Row(3, 10, 6, 9), Row(4, 10, 8, 12), Row(5, 10, 10, 15)),
+      // states
+      // left: 1, 2, 3, 4 ,5
+      // right: 3, 4, 5, 6, 7
+      assertNumStateRows(total = 10, updated = 10),
+      MultiAddData(leftInput, 21)(rightInput, 22),
+      // Watermark = 11, should remove rows having window=[0,10].
+      CheckNewAnswer(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(6, 10, null, 18),
+        Row(7, 10, null, 21)),
+      // states
+      // left: 21
+      // right: 22
+      //
+      // states evicted
+      // left: 1, 2, 3, 4 ,5 (below watermark)
+      // right: 3, 4, 5, 6, 7 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
+      AddData(leftInput, 22),
+      CheckNewAnswer(Row(22, 30, 44, 66)),
+      // states
+      // left: 21, 22
+      // right: 22
+      assertNumStateRows(total = 3, updated = 1),
+      StopStream,
+      StartStream(),
+
+      AddData(leftInput, 1),
+      // Row not add as 1 < state key watermark = 12.
+      CheckNewAnswer(),
+      // states
+      // left: 21, 22
+      // right: 22
+      assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
+      AddData(rightInput, 5),
+      // Row not add as 5 < state key watermark = 12.
+      CheckNewAnswer(),
+      // states
+      // left: 21, 22
+      // right: 22
+      assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1)
+    )
+  }
+
+  test("full outer early state exclusion on left") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithLeftCondition("full_outer")
+
+    testStream(joined)(
+      MultiAddData(leftInput, 1, 2, 3)(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 should generate their outer join rows now and
+      // not get added to the state.
+      CheckNewAnswer(Row(1, 10, 2, null, null, null), Row(2, 10, 4, null, null, null),
+        Row(3, 10, 6, 3, 10, "9")),
+      // states
+      // left: 3
+      // right: 3, 4, 5
+      assertNumStateRows(total = 4, updated = 4),
+      // Generate outer join result for all non-matched rows when the watermark advances.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(Row(null, null, null, 4, 10, "12"), Row(null, null, null, 5, 10, "15")),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3 (below watermark)
+      // right: 3, 4, 5 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
+      AddData(rightInput, 20),
+      CheckNewAnswer(Row(20, 30, 40, 20, 30, "60")),
+      // states
+      // left: 20
+      // right: 21, 20
+      assertNumStateRows(total = 3, updated = 1)
+    )
+  }
+
+  test("full outer early state exclusion on right") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRightCondition("full_outer")
+
+    testStream(joined)(
+      MultiAddData(leftInput, 3, 4, 5)(rightInput, 1, 2, 3),
+      // The right rows with rightValue <= 7 should generate their outer join rows now,
+      // and never be added to the state.
+      // The right row with rightValue = 9 > 7, hence joined and added to state.
+      CheckNewAnswer(Row(null, null, null, 1, 10, "3"), Row(null, null, null, 2, 10, "6"),
+        Row(3, 10, 6, 3, 10, "9")),
+      // states
+      // left: 3, 4, 5
+      // right: 3
+      assertNumStateRows(total = 4, updated = 4),
+      // Generate outer join result for all non-matched rows when the watermark advances.
+      MultiAddData(leftInput, 20)(rightInput, 21),
+      CheckNewAnswer(Row(4, 10, 8, null, null, null), Row(5, 10, 10, null, null, null)),
+      // states
+      // left: 20
+      // right: 21
+      //
+      // states evicted
+      // left: 3, 4, 5 (below watermark)
+      // right: 3 (below watermark)
+      assertNumStateRows(total = 2, updated = 2),
+      AddData(rightInput, 20),
+      CheckNewAnswer(Row(20, 30, 40, 20, 30, "60")),
+      // states
+      // left: 20
+      // right: 21, 20
+      assertNumStateRows(total = 3, updated = 1)
+    )
+  }
+
+  test("full outer join with watermark range condition") {
+    val (leftInput, rightInput, joined) = setupWindowedJoinWithRangeCondition("full_outer")
+
+    testStream(joined)(
+      AddData(leftInput, (1, 5), (3, 5)),
+      CheckNewAnswer(),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: nothing
+      assertNumStateRows(total = 2, updated = 2),
+      AddData(rightInput, (1, 10), (2, 5)),
+      // Match left row in the state.
+      CheckNewAnswer(Row(1, 1, 5, 10)),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: (1, 10), (2, 5)
+      assertNumStateRows(total = 4, updated = 2),
+      AddData(rightInput, (1, 9)),
+      // Match left row in the state.
+      CheckNewAnswer(Row(1, 1, 5, 9)),
+      // states
+      // left: (1, 5), (3, 5)
+      // right: (1, 10), (2, 5), (1, 9)
+      assertNumStateRows(total = 5, updated = 1),
+      // Increase event time watermark to 20s by adding data with time = 30s on both inputs.
+      AddData(leftInput, (1, 7), (1, 30)),
+      CheckNewAnswer(Row(1, 1, 7, 9), Row(1, 1, 7, 10)),
+      // states
+      // left: (1, 5), (3, 5), (1, 7), (1, 30)
+      // right: (1, 10), (2, 5), (1, 9)
+      assertNumStateRows(total = 7, updated = 2),
+      // Watermark = 30 - 10 = 20, no matched row.
+      // Generate outer join result for all non-matched rows when the watermark advances.
+      AddData(rightInput, (0, 30)),
+      CheckNewAnswer(Row(3, null, 5, null), Row(null, 2, null, 5)),
+      // states
+      // left: (1, 30)
+      // right: (0, 30)
+      //
+      // states evicted
+      // left: (1, 5), (3, 5), (1, 5) (below watermark = 20)
+      // right: (1, 10), (2, 5), (1, 9) (below watermark = 20)
+      assertNumStateRows(total = 2, updated = 1)
+    )
+  }
+
+  test("self full outer join") {
+    val (inputStream, query) = setupWindowedSelfJoin("full_outer")
+
+    testStream(query)(
+      AddData(inputStream, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+      CheckNewAnswer(Row(2, 2L, 2, 2L), Row(4, 4L, 4, 4L)),
+      // batch 1 - global watermark = 0
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)
+      // right: (2, 2L), (4, 4L)
+      assertNumStateRows(total = 7, updated = 7),
+      AddData(inputStream, (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L)),
+      CheckNewAnswer(Row(6, 6L, 6, 6L), Row(8, 8L, 8, 8L), Row(10, 10L, 10, 10L)),
+      // batch 2 - global watermark = 5
+      // states
+      // left: (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L), (6, 6L), (7, 7L), (8, 8L),
+      //       (9, 9L), (10, 10L)
+      // right: (6, 6L), (8, 8L), (10, 10L)
+      //
+      // states evicted
+      // left: nothing (it waits for 5 seconds more than watermark due to join condition)
+      // right: (2, 2L), (4, 4L)
+      assertNumStateRows(total = 13, updated = 8),
+      AddData(inputStream, (11, 11L), (12, 12L), (13, 13L), (14, 14L), (15, 15L)),
+      CheckNewAnswer(Row(12, 12L, 12, 12L), Row(14, 14L, 14, 14L), Row(1, 1L, null, null),
+        Row(3, 3L, null, null)),
+      // batch 3 - global watermark = 9
+      // states
+      // left: (4, 4L), (5, 5L), (6, 6L), (7, 7L), (8, 8L), (9, 9L), (10, 10L), (11, 11L),
+      //       (12, 12L), (13, 13L), (14, 14L), (15, 15L)
+      // right: (10, 10L), (12, 12L), (14, 14L)
+      //
+      // states evicted
+      // left: (1, 1L), (2, 2L), (3, 3L)
+      // right: (6, 6L), (8, 8L)
+      assertNumStateRows(total = 15, updated = 7)
     )
   }
 }
