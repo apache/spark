@@ -284,7 +284,7 @@ class ConstantFoldingSuite extends PlanTest {
         PruneFilters) :: Nil
   }
 
-  test("Constant folding test CreateArray") {
+  test("SPARK-33544: Constant folding test CreateArray") {
     val originalQuery =
       testRelation
         .select('a)
