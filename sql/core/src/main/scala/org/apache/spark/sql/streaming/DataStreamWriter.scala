@@ -346,7 +346,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     val tableInstance = catalog.asTableCatalog.loadTable(identifier)
 
     def writeToV1Table(table: CatalogTable): StreamingQuery = {
-      require(table.tableType != CatalogTableType.VIEW, "Streaming into views is not supported.")
+      if (table.tableType == CatalogTableType.VIEW) {
+        throw new AnalysisException(s"Streaming into views $tableName is not supported.")
+      }
+      require(table.provider.isDefined)
+      if (source != table.provider.get) {
+        throw new AnalysisException(s"The input source($source) is different from the table " +
+          s"$tableName's data source provider(${table.provider.get}).")
+      }
       format(table.provider.get)
         .option("path", new Path(table.location).toString).start()
     }

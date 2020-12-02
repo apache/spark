@@ -247,10 +247,10 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     spark.sql(s"CREATE VIEW $viewIdentifier AS SELECT id, data FROM $tableIdentifier")
 
     withTempDir { checkpointDir =>
-      val exc = intercept[IllegalArgumentException] {
+      val exc = intercept[AnalysisException] {
         runStreamQueryAppendMode(viewIdentifier, checkpointDir, Seq.empty, Seq.empty)
       }
-      assert(exc.getMessage.contains("Streaming into views is not supported"))
+      assert(exc.getMessage.contains(s"Streaming into views $viewIdentifier is not supported"))
     }
   }
 
@@ -309,6 +309,21 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
         checkForStreamTable(Some(dir), tableName)
       }
+    }
+  }
+
+  test("write: write to table with different format shouldn't be allowed") {
+    val tableName = "stream_test"
+
+    spark.sql(s"CREATE TABLE $tableName (id bigint, data string) USING json")
+    checkAnswer(spark.table(tableName), Seq.empty)
+
+    withTempDir { checkpointDir =>
+      val exc = intercept[AnalysisException] {
+        runStreamQueryAppendMode(tableName, checkpointDir, Seq.empty, Seq.empty)
+      }
+      assert(exc.getMessage.contains("The input source(parquet) is different from the table " +
+        s"$tableName's data source provider(json)"))
     }
   }
 
