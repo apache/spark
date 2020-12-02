@@ -551,7 +551,7 @@ abstract class TimestampToLongBase extends UnaryExpression
   usage = "_FUNC_(timestamp) - Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
   examples = """
     Examples:
-      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01-00'));
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1
   """,
   group = "datetime_funcs",
@@ -568,7 +568,7 @@ case class UnixSeconds(child: Expression) extends TimestampToLongBase {
   usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
   examples = """
     Examples:
-      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01-00'));
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1000
   """,
   group = "datetime_funcs",
@@ -585,7 +585,7 @@ case class UnixMillis(child: Expression) extends TimestampToLongBase {
   usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
   examples = """
     Examples:
-      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01-00'));
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
        1000000
   """,
   group = "datetime_funcs",
