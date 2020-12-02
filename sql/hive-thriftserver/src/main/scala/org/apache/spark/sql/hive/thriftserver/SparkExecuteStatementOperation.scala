@@ -69,7 +69,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   private var result: DataFrame = _
 
-  private var iter: IteratorWithFetch[SparkRow] = _
+  private var iter: FetchIterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
   private lazy val resultSchema: TableSchema = {
@@ -143,8 +143,8 @@ private[hive] class SparkExecuteStatementOperation(
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter when FETCH_FIRST or FETCH_PRIOR
-    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.fetchFirst()
-    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.fetchPrior(maxRowsL)
+    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.setAbsolutePosition(0)
+    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.setRelativePosition(-maxRowsL)
     else iter.fetchNext()
     resultRowSet.setStartOffset(iter.getPosition)
     val fetchStartOffset = iter.getPosition
@@ -289,11 +289,11 @@ private[hive] class SparkExecuteStatementOperation(
       HiveThriftServer2.eventManager.onStatementParsed(statementId,
         result.queryExecution.toString())
       iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
-        new IterableIteratorWithFetch[SparkRow](new Iterable[SparkRow] {
+        new IterableFetchIterator[SparkRow](new Iterable[SparkRow] {
           override def iterator: Iterator[SparkRow] = result.toLocalIterator.asScala
         })
       } else {
-        new ArrayIteratorWithFetch[SparkRow](result.collect())
+        new ArrayFetchIterator[SparkRow](result.collect())
       }
       dataTypes = result.schema.fields.map(_.dataType)
     } catch {
@@ -379,78 +379,5 @@ object SparkExecuteStatementOperation {
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
     }
     new TableSchema(schema.asJava)
-  }
-}
-
-private[hive] sealed trait IteratorWithFetch[A] extends Iterator[A] {
-  def fetchNext(): Unit
-
-  def fetchPrior(size: Long): Unit
-
-  def fetchFirst(): Unit
-
-  def getPosition: Long
-}
-
-private[hive] class ArrayIteratorWithFetch[A](src: Array[A]) extends IteratorWithFetch[A] {
-  private var fetchStart: Long = 0
-
-  private var position: Long = 0
-
-  override def fetchNext(): Unit = fetchStart = position
-
-  override def fetchPrior(size: Long): Unit = {
-    position = (fetchStart - size max 0) min src.length
-    fetchStart = position
-  }
-
-  override def fetchFirst(): Unit = {
-    fetchStart = 0
-    position = 0
-  }
-
-  override def getPosition: Long = position
-
-  override def hasNext: Boolean = position < src.length
-
-  override def next(): A = {
-    position += 1
-    src(position.toInt - 1)
-  }
-}
-
-private[hive] class IterableIteratorWithFetch[A](
-    iterable: Iterable[A]
-) extends IteratorWithFetch[A] {
-  private var iter: Iterator[A] = iterable.iterator
-
-  private var fetchStart: Long = 0
-
-  private var position: Long = 0
-
-  override def fetchNext(): Unit = fetchStart = position
-
-  override def fetchPrior(size: Long): Unit = {
-    val newPos = fetchStart - size max 0
-    if (newPos < position) fetchFirst()
-    while (position < newPos && hasNext) next()
-    fetchStart = position
-  }
-
-  override def fetchFirst(): Unit = {
-    if (position != 0) {
-      iter = iterable.iterator
-      position = 0
-      fetchStart = 0
-    }
-  }
-
-  override def getPosition: Long = position
-
-  override def hasNext: Boolean = iter.hasNext
-
-  override def next(): A = {
-    position += 1
-    iter.next()
   }
 }
