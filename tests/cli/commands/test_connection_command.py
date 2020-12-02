@@ -43,10 +43,10 @@ class TestCliGetConnection(unittest.TestCase):
     def test_cli_connection_get(self):
         with redirect_stdout(io.StringIO()) as stdout:
             connection_command.connections_get(
-                self.parser.parse_args(["connections", "get", "google_cloud_default"])
+                self.parser.parse_args(["connections", "get", "google_cloud_default", "--output", "json"])
             )
             stdout = stdout.getvalue()
-        self.assertIn("URI: google-cloud-platform:///default", stdout)
+        self.assertIn("google-cloud-platform:///default", stdout)
 
     def test_cli_connection_get_invalid(self):
         with self.assertRaisesRegex(SystemExit, re.escape("Connection not found.")):
@@ -112,36 +112,27 @@ class TestCliListConnections(unittest.TestCase):
     def tearDown(self):
         clear_db_connections()
 
-    def test_cli_connections_list(self):
-        with redirect_stdout(io.StringIO()) as stdout:
-            connection_command.connections_list(self.parser.parse_args(["connections", "list"]))
-            stdout = stdout.getvalue()
-            lines = stdout.split("\n")
-
-        for conn_id, conn_type in self.EXPECTED_CONS:
-            self.assertTrue(any(conn_id in line and conn_type in line for line in lines))
-
-    def test_cli_connections_list_as_tsv(self):
-        args = self.parser.parse_args(["connections", "list", "--output", "tsv"])
-
+    def test_cli_connections_list_as_json(self):
+        args = self.parser.parse_args(["connections", "list", "--output", "json"])
         with redirect_stdout(io.StringIO()) as stdout:
             connection_command.connections_list(args)
+            print(stdout.getvalue())
             stdout = stdout.getvalue()
-            lines = stdout.split("\n")
 
         for conn_id, conn_type in self.EXPECTED_CONS:
-            self.assertTrue(any(conn_id in line and conn_type in line for line in lines))
+            self.assertIn(conn_type, stdout)
+            self.assertIn(conn_id, stdout)
 
     def test_cli_connections_filter_conn_id(self):
-        args = self.parser.parse_args(["connections", "list", "--output", "tsv", '--conn-id', 'http_default'])
+        args = self.parser.parse_args(
+            ["connections", "list", "--output", "json", '--conn-id', 'http_default']
+        )
 
         with redirect_stdout(io.StringIO()) as stdout:
             connection_command.connections_list(args)
             stdout = stdout.getvalue()
-            lines = stdout.split("\n")
 
-        conn_ids = [line.split("\t", 2)[0].strip() for line in lines[1:] if line]
-        self.assertEqual(conn_ids, ['http_default'])
+        self.assertIn("http_default", stdout)
 
 
 class TestCliExportConnections(unittest.TestCase):
