@@ -1393,25 +1393,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       """
   }
 
-  private[this] def lowerAndUpperBound(
-      fractionType: String,
-      integralType: String): (String, String) = {
-    assert(fractionType == "float" || fractionType == "double")
-    val typeIndicator = fractionType.charAt(0)
-    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
-      case "long" => (Long.MinValue, Long.MaxValue)
-      case "int" => (Int.MinValue, Int.MaxValue)
-      case "short" => (Short.MinValue, Short.MaxValue)
-      case "byte" => (Byte.MinValue, Byte.MaxValue)
+  private[this] def lowerAndUpperBound(integralType: String): (String, String) = {
+    val (min, max, typeIndicator) = integralType.toLowerCase(Locale.ROOT) match {
+      case "long" => (Long.MinValue, Long.MaxValue, "L")
+      case "int" => (Int.MinValue, Int.MaxValue, "")
+      case "short" => (Short.MinValue, Short.MaxValue, "")
+      case "byte" => (Byte.MinValue, Byte.MaxValue, "")
     }
     (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
-  private[this] def castFractionToIntegralTypeCode(
-      fractionType: String,
-      integralType: String): CastFunction = {
+  private[this] def castFractionToIntegralTypeCode(integralType: String): CastFunction = {
     assert(ansiEnabled)
-    val (min, max) = lowerAndUpperBound(fractionType, integralType)
+    val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
     // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
@@ -1449,12 +1443,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte")
-    case _: ShortType | _: IntegerType | _: LongType if ansiEnabled =>
+    case ShortType | IntegerType | LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode("byte")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "byte")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "byte")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("byte")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
@@ -1482,12 +1474,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short")
-    case _: IntegerType | _: LongType if ansiEnabled =>
+    case IntegerType | LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode("short")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "short")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "short")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("short")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
@@ -1513,11 +1503,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int")
-    case _: LongType if ansiEnabled => castIntegralTypeToIntegralTypeExactCode("int")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "int")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "int")
+    case LongType if ansiEnabled => castIntegralTypeToIntegralTypeExactCode("int")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("int")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
@@ -1544,10 +1532,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "long")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "long")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("long")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
