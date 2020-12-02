@@ -643,6 +643,9 @@ class ResolveSessionCatalog(
       if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
+        logWarning("A Hive serde table will be created as there is no table provider " +
+          s"specified. You can set ${SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key} to false " +
+          "so that native data source table will be created instead.")
         (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
       }
     }
@@ -659,8 +662,14 @@ class ResolveSessionCatalog(
       comment: Option[String],
       storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
-    if (external && location.isEmpty) {
-      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+    if (external) {
+      if (DDLUtils.isHiveTable(Some(provider))) {
+        if (location.isEmpty) {
+          throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+        }
+      } else {
+        throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
+      }
     }
 
     val tableType = if (location.isDefined) {
