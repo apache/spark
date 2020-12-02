@@ -119,7 +119,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       testView("v1", Seq("c1"), "SELECT c1 FROM t") {
         Seq(9, 7, 8).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
-        checkAnswer(sql("SELECT * FROM v1"), Seq(Row(9), Row(7), Row(8)))
+        checkAnswer(
+          sql(s"SELECT * FROM ${formatViewName("v1")}"),
+          Seq(Row(9), Row(7), Row(8)))
       }
     }
   }
@@ -129,7 +131,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       testView("v1", Seq.empty, "SELECT * FROM t") {
         sql("ALTER TABLE t ADD COLUMN (c2 INT)")
-        checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
+        checkAnswer(
+          sql(s"SELECT * FROM ${formatViewName("v1")}"),
+          Seq(Row(2), Row(3), Row(1)))
       }
     }
   }
