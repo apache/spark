@@ -18,9 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.net.URI
-import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -105,7 +103,7 @@ private[spark] class EventLoggingListener(
 
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
-    logEvent(event.copy(properties = redactProperties(event.properties)))
+    logEvent(event)
     if (shouldLogStageExecutorMetrics) {
       // record the peak metrics for the new stage
       liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
@@ -158,9 +156,7 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  override def onJobStart(event: SparkListenerJobStart): Unit = {
-    logEvent(event.copy(properties = redactProperties(event.properties)), flushLogger = true)
-  }
+  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
 
@@ -248,22 +244,6 @@ private[spark] class EventLoggingListener(
   /** Stop logging events. */
   def stop(): Unit = {
     logWriter.stop()
-  }
-
-  private def redactProperties(properties: Properties): Properties = {
-    if (properties == null) {
-      return properties
-    }
-    val redactedProperties = new Properties
-    // properties may contain some custom local properties such as stage/job description
-    // only properties in sparkConf need to be redacted.
-    val (globalProperties, localProperties) = properties.asScala.toSeq.partition {
-      case (key, _) => sparkConf.contains(key)
-    }
-    (Utils.redact(sparkConf, globalProperties) ++ localProperties).foreach {
-      case (key, value) => redactedProperties.setProperty(key, value)
-    }
-    redactedProperties
   }
 
   private[spark] def redactEvent(
