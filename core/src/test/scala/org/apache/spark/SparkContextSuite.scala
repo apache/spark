@@ -1053,7 +1053,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
       assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in ivy URI query" +
+        "Invalid parameters `invalidParam1,invalidParam2` found in ivy uri query" +
           " `invalidParam1=foo&invalidParam2=boo`.")))
     }
   }
@@ -1095,7 +1095,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("SPARK-33084: Add jar support ivy url -- test invalid ivy URI") {
+  test("SPARK-33084: Add jar support ivy url -- test invalid ivy uri") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     val e1 = intercept[IllegalArgumentException] {
       sc.addJar("ivy://")

@@ -77,7 +77,7 @@ private[spark] object DependencyUtils extends Logging {
       val mapTokens = uriQuery.split("&").map(_.split("="))
       if (mapTokens.exists(checkInvalidQueryString)) {
         throw new IllegalArgumentException(
-          s"Invalid query string  in ivy uri ${uri.toString}: $uriQuery")
+          s"Invalid query string in ivy uri ${uri.toString}: $uriQuery")
       }
       val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
       // Parse transitive parameters (e.g., transitive=true) in an ivy URL, default value is false
@@ -111,7 +111,7 @@ private[spark] object DependencyUtils extends Logging {
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq.sorted
       if (invalidParams.nonEmpty) {
         logWarning(s"Invalid parameters `${invalidParams.mkString(",")}` found " +
-          s"in ivy URI query `$uriQuery`.")
+          s"in ivy uri query `$uriQuery`.")
       }
 
       (transitive, exclusionList)
