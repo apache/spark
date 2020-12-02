@@ -293,9 +293,4 @@ class MetadataBuilder {
     map.remove(key)
     this
   }
-
-  def remove(keys: String*): this.type = {
-    keys.foreach(map.remove)
-    this
-  }
 }
