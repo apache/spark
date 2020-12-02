@@ -1197,6 +1197,38 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue.toLong - 100)
   }
 
+  test("UNIX_SECONDS") {
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixSeconds(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(1999L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+  }
+
+  test("UNIX_MILLS") {
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMillis(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMillis(timestamp), 1000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMillis(Literal(timestampWithNanos)), 1000L)
+  }
+
+  test("UNIX_MICROS") {
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMicros(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMicros(timestamp), 1000000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000999L)
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(
