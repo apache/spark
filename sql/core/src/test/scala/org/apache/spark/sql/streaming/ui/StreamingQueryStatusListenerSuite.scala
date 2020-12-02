@@ -21,6 +21,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, UUID}
 
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
@@ -134,35 +135,28 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       (id, runId)
     }
 
+    def checkInactiveQueryStatus(numInactives: Int, targetInactives: Seq[UUID]): Unit = {
+      eventually(timeout(10.seconds)) {
+        val inactiveQueries = queryStore.allQueryUIData.filter(!_.summary.isActive)
+        assert(inactiveQueries.size == numInactives)
+        assert(inactiveQueries.map(_.summary.id).toSet == targetInactives.toSet)
+      }
+    }
+
     val (id1, runId1) = addNewQuery()
     val (id2, runId2) = addNewQuery()
     val (id3, runId3) = addNewQuery()
-
     assert(queryStore.allQueryUIData.count(!_.summary.isActive) == 0)
 
     val terminateEvent1 = new StreamingQueryListener.QueryTerminatedEvent(id1, runId1, None)
     listener.onQueryTerminated(terminateEvent1)
-    // sleep 100 mills to make sure clean work complete
-    Thread.sleep(100)
-    assert(queryStore.allQueryUIData.count(!_.summary.isActive) == 1)
-    var inactiveQueries = queryStore.allQueryUIData.filter(!_.summary.isActive).map(_.summary.id)
-    assert(inactiveQueries == Seq(id1))
-
+    checkInactiveQueryStatus(1, Seq(id1))
     val terminateEvent2 = new StreamingQueryListener.QueryTerminatedEvent(id2, runId2, None)
     listener.onQueryTerminated(terminateEvent2)
-    // sleep 100 mills to make sure clean work complete
-    Thread.sleep(100)
-    assert(queryStore.allQueryUIData.count(!_.summary.isActive) == 2)
-    inactiveQueries = queryStore.allQueryUIData.filter(!_.summary.isActive).map(_.summary.id)
-    assert(inactiveQueries == Seq(id1, id2))
-
+    checkInactiveQueryStatus(2, Seq(id1, id2))
     val terminateEvent3 = new StreamingQueryListener.QueryTerminatedEvent(id3, runId3, None)
     listener.onQueryTerminated(terminateEvent3)
-    // sleep 100 mills to make sure clean work complete
-    Thread.sleep(100)
-    assert(queryStore.allQueryUIData.count(!_.summary.isActive) == 2)
-    inactiveQueries = queryStore.allQueryUIData.filter(!_.summary.isActive).map(_.summary.id)
-    assert(inactiveQueries == Seq(id2, id3))
+    checkInactiveQueryStatus(2, Seq(id2, id3))
   }
 
   test("test small retained progress") {
@@ -184,8 +178,6 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       val progress = mockProgressData(id, runId)
       val processEvent = new streaming.StreamingQueryListener.QueryProgressEvent(progress)
       listener.onQueryProgress(processEvent)
-      // sleep 100 mills to make sure clean work complete
-      Thread.sleep(100)
     }
 
     def mockProgressData(id: UUID, runId: UUID): StreamingQueryProgress = {
@@ -205,14 +197,17 @@ class StreamingQueryStatusListenerSuite extends StreamTest {
       progress
     }
 
+    def checkQueryProcessData(targetNum: Int): Unit = {
+      eventually(timeout(10.seconds)) {
+        assert(queryStore.getQueryProgressData(runId).size == targetNum)
+      }
+    }
+
     Array.tabulate(4) { _ => addQueryProgress() }
-
-    assert(queryStore.getQueryProgressData(runId).size == 4)
-
+    checkQueryProcessData(4)
     addQueryProgress()
-    assert(queryStore.getQueryProgressData(runId).size == 5)
-
+    checkQueryProcessData(5)
     addQueryProgress()
-    assert(queryStore.getQueryProgressData(runId).size == 5)
+    checkQueryProcessData(5)
   }
 }
