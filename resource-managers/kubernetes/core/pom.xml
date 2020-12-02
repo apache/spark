@@ -85,6 +85,11 @@
       <artifactId>jackson-dataformat-yaml</artifactId>
       <version>${fasterxml.jackson.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-jaxb-annotations</artifactId>
+      <version>${fasterxml.jackson.version}</version>
+    </dependency>
 
     <!-- Explicitly depend on shaded dependencies from the parent, since shaded deps aren't transitive -->
     <dependency>
