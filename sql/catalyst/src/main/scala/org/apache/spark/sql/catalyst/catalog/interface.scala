@@ -669,7 +669,7 @@ case class UnresolvedCatalogRelation(
 
 /**
  * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
- * and will be transformed to `View` in `getTempView`
+ * and will be transformed to `View` during analysis
  */
 case class TemporaryViewRelation(tableMeta: CatalogTable) extends LeafNode {
   override lazy val resolved: Boolean = false

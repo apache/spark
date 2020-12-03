@@ -110,9 +110,14 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog)
 
     if (viewType == LocalTempView) {
-      if (replace && catalog.getTempView(name.table).isDefined &&
-          !catalog.getTempView(name.table).get.sameResult(child)) {
+      val samePlan = catalog.getTempView(name.table).exists {
+        // Don't perform sameResult check for View logical plan, since it's unresolved
+        case _: View => false
+        case other => other.sameResult(child)
+      }
+      if (replace && !samePlan) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+        checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
@@ -126,16 +131,21 @@ case class CreateViewCommand(
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-      val globalTempView = TableIdentifier(name.table, Option(db))
-      if (replace && catalog.getGlobalTempView(name.table).isDefined &&
-          !catalog.getGlobalTempView(name.table).get.sameResult(child)) {
-        logInfo(s"Try to uncache ${globalTempView.quotedString} before replacing.")
-        CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
+      val viewIdent = TableIdentifier(name.table, Option(db))
+      val samePlan = catalog.getGlobalTempView(name.table).exists {
+        // Don't perform sameResult check for View logical plan, since it's unresolved
+        case _: View => false
+        case other => other.sameResult(child)
+      }
+      if (replace && !samePlan) {
+        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+        checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
         TemporaryViewRelation(
-          prepareTemporaryView(globalTempView, sparkSession, analyzedPlan, aliasedPlan.schema))
+          prepareTemporaryView(viewIdent, sparkSession, analyzedPlan, aliasedPlan.schema))
       } else {
         aliasedPlan
       }
@@ -261,18 +271,18 @@ case class CreateViewCommand(
       viewName: TableIdentifier,
       session: SparkSession,
       analyzedPlan: LogicalPlan,
-      aliasedSchema: StructType): CatalogTable = {
+      viewSchema: StructType): CatalogTable = {
 
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(
-      Map.empty, session, analyzedPlan, aliasedSchema.fieldNames)
+      Map.empty, session, analyzedPlan, viewSchema.fieldNames)
 
     CatalogTable(
       identifier = viewName,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
-      schema = aliasedSchema,
+      schema = viewSchema,
       viewText = originalText,
       properties = newProperties)
   }
@@ -317,6 +327,8 @@ case class AlterViewAsCommand(
     val tableDefinition = if (conf.storeAnalyzedPlanForView) {
       analyzedPlan
     } else {
+      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+
       val properties = generateViewProperties(
         Map.empty, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 

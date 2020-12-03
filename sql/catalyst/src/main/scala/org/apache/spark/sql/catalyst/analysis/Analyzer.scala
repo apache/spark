@@ -846,10 +846,9 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _, isStreaming) =>
-        lookupTempView(ident, isStreaming).map(ResolveRelations.resolveViews).getOrElse(u)
+        lookupTempView(ident, isStreaming).getOrElse(u)
       case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
         lookupTempView(ident)
-          .map(ResolveRelations.resolveViews)
           .map(view => i.copy(table = view))
           .getOrElse(i)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -895,7 +894,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
           s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
-      tmpView
+      tmpView.map(ResolveRelations.resolveViews)
     }
   }
 

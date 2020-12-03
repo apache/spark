@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -29,18 +29,33 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
-  def testView(viewName: String, columnNames: Seq[String], sqlText: String)(f: => Unit): Unit
+  protected def viewTypeString: String
+  protected def formattedViewName(viewName: String): String
 
-  def formatViewName(viewName: String): String
+  def createView(
+      viewName: String,
+      sqlText: String,
+      columnNames: Seq[String] = Seq.empty,
+      replace: Boolean = false): String = {
+    val replaceString = if (replace) "OR REPLACE" else ""
+    val columnString = if (columnNames.nonEmpty) columnNames.mkString("(", ",", ")") else ""
+    sql(s"CREATE $replaceString $viewTypeString $viewName $columnString AS $sqlText")
+    formattedViewName(viewName)
+  }
+
+  def checkViewOutput(viewName: String, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(sql(s"SELECT * FROM $viewName"), expectedAnswer)
+  }
 
   test("change SQLConf should not change view behavior - caseSensitiveAnalysis") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("c1"), "SELECT C1 FROM t") {
-        withSQLConf(CASE_SENSITIVE.key -> "true") {
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(2), Row(3), Row(1)))
+      val viewName = createView("v1", "SELECT c1 FROM t", Seq("C1"))
+      withView(viewName) {
+        Seq("true", "false").foreach { flag =>
+          withSQLConf(CASE_SENSITIVE.key -> flag) {
+            checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+          }
         }
       }
     }
@@ -49,11 +64,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - orderByOrdinal") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("c1"), "SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC") {
-        withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(1), Row(2), Row(3)))
+      val viewName = createView("v1", "SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC", Seq("c1"))
+      withView(viewName) {
+        Seq("true", "false").foreach { flag =>
+          withSQLConf(ORDER_BY_ORDINAL.key -> flag) {
+            checkViewOutput(viewName, Seq(Row(1), Row(2), Row(3)))
+          }
         }
       }
     }
@@ -62,11 +78,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - groupByOrdinal") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("c1", "count"), "SELECT c1, count(c1) FROM t GROUP BY 1") {
-        withSQLConf(GROUP_BY_ORDINAL.key -> "false") {
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+      val viewName = createView("v1", "SELECT c1, count(c1) FROM t GROUP BY 1", Seq("c1", "count"))
+      withView(viewName) {
+        Seq("true", "false").foreach { flag =>
+          withSQLConf(GROUP_BY_ORDINAL.key -> flag) {
+            checkViewOutput(viewName, Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+          }
         }
       }
     }
@@ -75,11 +92,13 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - groupByAliases") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("a", "count"), "SELECT c1 as a, count(c1) FROM t GROUP BY a") {
-        withSQLConf(GROUP_BY_ALIASES.key -> "false") {
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+      val viewName = createView(
+        "v1", "SELECT c1 as a, count(c1) FROM t GROUP BY a", Seq("a", "count"))
+      withView(viewName) {
+        Seq("true", "false").foreach { flag =>
+          withSQLConf(GROUP_BY_ALIASES.key -> flag) {
+            checkViewOutput(viewName, Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+          }
         }
       }
     }
@@ -88,11 +107,12 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - ansiEnabled") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("c1"), "SELECT 1/0") {
-        withSQLConf(ANSI_ENABLED.key -> "true") {
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(null)))
+      val viewName = createView("v1", "SELECT 1/0", Seq("c1"))
+      withView(viewName) {
+        Seq("true", "false").foreach { flag =>
+          withSQLConf(ANSI_ENABLED.key -> flag) {
+            checkViewOutput(viewName, Seq(Row(null)))
+          }
         }
       }
     }
@@ -101,27 +121,24 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change current database should not change view behavior") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq.empty, "SELECT * from t") {
+      val viewName = createView("v1", "SELECT * from t")
+      withView(viewName) {
         withTempDatabase { db =>
           sql(s"USE $db")
           Seq(4, 5, 6).toDF("c1").write.format("parquet").saveAsTable("t")
-          checkAnswer(
-            sql(s"SELECT * FROM ${formatViewName("v1")}"),
-            Seq(Row(2), Row(3), Row(1)))
+          checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
         }
       }
     }
-
   }
 
   test("view should read the new data if table is updated") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq("c1"), "SELECT c1 FROM t") {
+      val viewName = createView("v1", "SELECT c1 from t", Seq("c1"))
+      withView(viewName) {
         Seq(9, 7, 8).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
-        checkAnswer(
-          sql(s"SELECT * FROM ${formatViewName("v1")}"),
-          Seq(Row(9), Row(7), Row(8)))
+        checkViewOutput(viewName, Seq(Row(9), Row(7), Row(8)))
       }
     }
   }
@@ -129,64 +146,58 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("add column for table should not affect view output") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      testView("v1", Seq.empty, "SELECT * FROM t") {
+      val viewName = createView("v1", "SELECT * from t")
+      withView(viewName) {
         sql("ALTER TABLE t ADD COLUMN (c2 INT)")
-        checkAnswer(
-          sql(s"SELECT * FROM ${formatViewName("v1")}"),
-          Seq(Row(2), Row(3), Row(1)))
+        checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+      }
+    }
+  }
+
+  test("check cyclic view reference on CREATE OR REPLACE VIEW") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      val viewName1 = createView("v1", "SELECT * from t")
+      val viewName2 = createView("v2", s"SELECT * from $viewName1")
+      withView(viewName2, viewName1) {
+        val e = intercept[AnalysisException] {
+          createView("v1", s"SELECT * FROM $viewName2", replace = true)
+        }.getMessage
+        assert(e.contains("Recursive view"))
+      }
+    }
+  }
+
+  test("check cyclic view reference on ALTER VIEW") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      val viewName1 = createView("v1", "SELECT * from t")
+      val viewName2 = createView("v2", s"SELECT * from $viewName1")
+      withView(viewName2, viewName1) {
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
+        }.getMessage
+        assert(e.contains("Recursive view"))
       }
     }
   }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
-  override def testView(
-      viewName: String, columnNames: Seq[String], sqlText: String)(f: => Unit): Unit = {
-    withTempView(viewName) {
-      if (columnNames.isEmpty) {
-        sql(s"CREATE TEMPORARY VIEW $viewName AS $sqlText")
-      } else {
-        sql(s"CREATE TEMPORARY VIEW $viewName ${columnNames.mkString("(", ",", ")")} AS $sqlText")
-      }
-      f
-    }
-  }
+  override protected def viewTypeString: String = "TEMPORARY VIEW"
+  override protected def formattedViewName(viewName: String): String = viewName
 
-  override def formatViewName(viewName: String): String = viewName
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
-  override def testView(
-      viewName: String, columnNames: Seq[String], sqlText: String)(f: => Unit): Unit = {
-    withGlobalTempView(viewName) {
-      if (columnNames.isEmpty) {
-        sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS $sqlText")
-      } else {
-        sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName " +
-          s"${columnNames.mkString("(", ",", ")")} AS $sqlText")
-      }
-      f
-    }
-  }
-
-  override def formatViewName(viewName: String): String = {
+  override protected def viewTypeString: String = "GLOBAL TEMPORARY VIEW"
+  override protected def formattedViewName(viewName: String): String = {
     val globalTempDB = spark.sharedState.globalTempViewManager.database
     s"$globalTempDB.$viewName"
   }
 }
 
 class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
-  override def testView(
-      viewName: String, columnNames: Seq[String], sqlText: String)(f: => Unit): Unit = {
-    withView(viewName) {
-      if (columnNames.isEmpty) {
-        sql(s"CREATE VIEW $viewName AS $sqlText")
-      } else {
-        sql(s"CREATE VIEW $viewName ${columnNames.mkString("(", ",", ")")} AS $sqlText")
-      }
-      f
-    }
-  }
-
-  override def formatViewName(viewName: String): String = s"default.$viewName"
+  override protected def viewTypeString: String = "VIEW"
+  override protected def formattedViewName(viewName: String): String = s"default.$viewName"
 }

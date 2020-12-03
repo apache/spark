@@ -784,6 +784,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       withView("v1") {
         withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
           sql("CREATE TEMPORARY VIEW v1 AS SELECT * FROM t")
+          Seq(4, 6, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          val e = intercept[SparkException] {
+            sql("SELECT * FROM v1").collect()
+          }.getMessage
+          assert(e.contains("does not exist"))
         }
 
         withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {

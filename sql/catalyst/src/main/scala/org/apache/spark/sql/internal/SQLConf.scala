@@ -1492,7 +1492,7 @@ object SQLConf {
   val STORE_ANALYZED_PLAN_FOR_VIEW =
     buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
       .internal()
-      .doc("When true, analyzed plan instead of sql text will be stored when creating " +
+      .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
         "temporary view")
       .version("3.1.0")
       .booleanConf
