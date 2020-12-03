@@ -53,7 +53,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * completely resolved during the batch of Resolution.
  */
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     // The child has the different output attributes with the View operator. Adds a Project over
     // the child of the view.
     case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
@@ -81,15 +81,15 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
         case (_, originAttr) => originAttr
       }
       if (newOutput != queryOutput) {
-        Project(newOutput, child)
+        Project(newOutput, child) -> Nil
       } else {
-        child
+        child -> output.zip(queryOutput)
       }
 
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
     case View(_, _, child) =>
-      child
+      child -> Nil
   }
 }
 
