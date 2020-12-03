@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
@@ -43,6 +44,26 @@ object CharVarcharUtils {
         field
       }
     })
+  }
+
+  /**
+   * Validate the given schema to fail if it contains char or varchar types
+   *
+   * @param schema the given struct type
+   * @return
+   */
+  def failWithCharLikeTypes(schema: StructType): StructType = {
+    if (schema.exists(f => f.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))) {
+      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+    }
+    schema
+  }
+
+  def failWithCharLikeTypes(dt: DataType): DataType = {
+    if (hasCharVarchar(dt)) {
+      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+    }
+    dt
   }
 
   /**

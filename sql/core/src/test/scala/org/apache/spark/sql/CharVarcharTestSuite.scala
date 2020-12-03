@@ -435,8 +435,9 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       assert(df.schema.map(_.dataType) == Seq(StringType))
     }
 
-    assertNoCharType(spark.range(1).select($"id".cast("char(5)")))
-    assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
+    intercept[AnalysisException](spark.range(1).select($"id".cast("char(5)")))
+    intercept[AnalysisException](spark.range(1).select($"id".cast(CharType(5))))
+
     assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
     assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
   }

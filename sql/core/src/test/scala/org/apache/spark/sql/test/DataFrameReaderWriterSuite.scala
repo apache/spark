@@ -1219,4 +1219,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       }
     }
   }
+
+  test("forbid char like data types in reader schema api") {
+    val ddls = Seq("a char(1)", "b varchar(10)", "c array<char(5)>")
+    ddls.foreach { dt =>
+      val e = intercept[AnalysisException](spark.read.schema(dt))
+      val errMsg = "Cannot use char/varchar type in this caller;"
+      assert(e.getMessage === errMsg)
+      val e1 = intercept[AnalysisException](spark.read.schema(StructType.fromDDL(dt)))
+      assert(e1.getMessage === errMsg)
+    }
+  }
 }

@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
@@ -349,7 +350,7 @@ class SparkSession private(
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(CharVarcharUtils.failWithCharLikeTypes(schema))
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -365,7 +366,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD.rdd, schema)
+    createDataFrame(rowRDD.rdd, CharVarcharUtils.failWithCharLikeTypes(schema))
   }
 
   /**
@@ -378,7 +379,9 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
+    val validatedSchema = CharVarcharUtils.failWithCharLikeTypes(schema)
+    Dataset.ofRows(self,
+      LocalRelation.fromExternalRows(validatedSchema.toAttributes, rows.asScala.toSeq))
   }
 
   /**

@@ -73,7 +73,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def schema(schema: StructType): DataFrameReader = {
-    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
+    this.userSpecifiedSchema =
+      Option(CharVarcharUtils.failWithCharLikeTypes(schema))
     this
   }
 
@@ -89,7 +90,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.3.0
    */
   def schema(schemaString: String): DataFrameReader = {
-    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
+    val validatedSchema = CharVarcharUtils.failWithCharLikeTypes(StructType.fromDDL(schemaString))
+    this.userSpecifiedSchema = Option(validatedSchema)
     this
   }
 

@@ -1550,7 +1550,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
+    Cast(expression(ctx.expression), failWithCharLikeTypes(ctx.dataType))
   }
 
   /**
@@ -2234,6 +2234,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   private def visitSparkDataType(ctx: DataTypeContext): DataType = {
     CharVarcharUtils.replaceCharVarcharWithString(typedVisit(ctx))
+  }
+
+  /**
+   * Create a Spark DataType but fail ahead w/ Char/Varchar.
+   */
+  private def failWithCharLikeTypes(ctx: DataTypeContext): DataType = {
+    CharVarcharUtils.failWithCharLikeTypes(typedVisit(ctx))
   }
 
   /**
