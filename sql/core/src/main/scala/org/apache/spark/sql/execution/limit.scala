@@ -227,6 +227,74 @@ case class GlobalLimitAndOffsetExec(
 }
 
 /**
+ * Take the first `limit` elements and collect them to a single partition.
+ *
+ * This operator will be used when a logical `Limit` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
+ */
+case class CollectLimitRangeExec(start: Int, end: Int, child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = SinglePartition
+
+  override def executeCollect(): Array[InternalRow] = child.executeTake(end).drop(start)
+
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val locallyLimited = child.execute().mapPartitionsInternal(_.take(end))
+    val shuffled = new ShuffledRowRDD(
+      ShuffleExchangeExec.prepareShuffleDependency(
+        locallyLimited, child.output, SinglePartition, serializer, writeMetrics), readMetrics)
+    shuffled.mapPartitionsInternal(_.slice(start, end))
+  }
+}
+
+/**
+ * Take the first `limit` elements of the child's single output partition.
+ */
+case class RangeLimitExec(start: Int, limit: Int, child: SparkPlan) extends BaseLimitExec {
+
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val stopEarly =
+      ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "stopEarly") // init as stopEarly = false
+
+    ctx.addNewFunction("stopEarly",
+      s"""
+      @Override
+      protected boolean stopEarly() {
+        return $stopEarly;
+      }
+    """, inlineToOuterClass = true)
+    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "count") // init as count = 0
+    s"""
+       | $countTerm += 1;
+       | if ( $countTerm > $start && $countTerm <= $limit) {
+       |   ${consume(ctx, input)}
+       | } if($countTerm > $limit) {
+       |   $stopEarly = true;
+       | }
+     """.stripMargin
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.slice(start, limit)
+  }
+}
+
+/**
  * Take the first limit elements as defined by the sortOrder, and do projection if needed.
  * This is logically equivalent to having a Limit operator after a [[SortExec]] operator,
  * or having a [[ProjectExec]] operator between them.
@@ -309,4 +377,76 @@ case class TakeOrderedAndProjectExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+}
+
+/**
+ * Take the first limit elements as defined by the sortOrder, and do projection if needed.
+ * This is logically equivalent to having a Limit operator after a [[SortExec]] operator,
+ * or having a [[ProjectExec]] operator between them.
+ * This could have been named TopK, but Spark's top operator does the opposite in ordering
+ * so we name it TakeOrdered to avoid confusion.
+ */
+case class TakeOrderedRangeAndProjectExec(
+   start: Int,
+   end: Int,
+   sortOrder: Seq[SortOrder],
+   projectList: Seq[NamedExpression],
+   child: SparkPlan) extends UnaryExecNode {
+
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
+
+  override def output: Seq[Attribute] = {
+    projectList.map(_.toAttribute)
+  }
+
+  override def executeCollect(): Array[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
+    val data = child.execute().map(_.copy()).takeOrdered(end)(ord).drop(start)
+    if (projectList != child.output) {
+      val proj = UnsafeProjection.create(projectList, child.output)
+      data.map(r => proj(r).copy())
+    } else {
+      data
+    }
+  }
+
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
+    val localTopK: RDD[InternalRow] = {
+      child.execute().map(_.copy()).mapPartitions { iter =>
+        org.apache.spark.util.collection.Utils.takeOrdered(iter, end)(ord)
+      }
+    }
+    val shuffled = new ShuffledRowRDD(
+      ShuffleExchangeExec.prepareShuffleDependency(
+        localTopK, child.output, SinglePartition, serializer, writeMetrics), readMetrics)
+    shuffled.mapPartitions { iter =>
+      val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), end)(ord)
+        .drop(start)
+      if (projectList != child.output) {
+        val proj = UnsafeProjection.create(projectList, child.output)
+        topK.map(r => proj(r))
+      } else {
+        topK
+      }
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = sortOrder
+
+  override def outputPartitioning: Partitioning = SinglePartition
+
+  override def simpleString(maxFields: Int): String = {
+    val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
+    val outputString = truncatedString(output, "[", ",", "]", maxFields)
+
+    s"TakeOrderedRangeAndProject" +
+      s"(start=$start, end=$end, orderBy=$orderByString, output=$outputString)"
+  }
 }
