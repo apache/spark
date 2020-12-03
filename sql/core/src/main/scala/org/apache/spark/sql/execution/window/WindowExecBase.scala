@@ -71,6 +71,9 @@ trait WindowExecBase extends UnaryExecNode {
       case (RowFrame, IntegerLiteral(offset)) =>
         RowBoundOrdering(offset)
 
+      case (RowFrame, _) =>
+        sys.error(s"Unhandled bound in windows expressions: $bound")
+
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, child.output)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
@@ -249,6 +252,9 @@ trait WindowExecBase extends UnaryExecNode {
                 createBoundOrdering(frameType, lower, timeZone),
                 createBoundOrdering(frameType, upper, timeZone))
             }
+
+          case _ =>
+            sys.error(s"Unsupported factory: $key")
         }
 
         // Keep track of the number of expressions. This is a side-effect in a map...

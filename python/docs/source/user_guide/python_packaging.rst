@@ -77,8 +77,7 @@ Using Zipped Virtual Environment
 --------------------------------
 
 The idea of zipped environments is to zip your whole `virtual environment <https://docs.python.org/3/tutorial/venv.html>`_, 
-ship it to the cluster, unzip it remotely and target the Python interpreter from inside this zipped environment. Note that this
-is currently supported *only for YARN*.
+ship it to the cluster, unzip it remotely and target the Python interpreter from inside this zipped environment.
 
 Zip Virtual Environment
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -92,16 +91,15 @@ Example with `conda-pack`:
 
 .. code-block:: bash
 
-    conda create -y -n conda_env -c conda-forge \
-      pyspark==3.0.1 pyarrow==0.15.1 pandas==0.25.3 conda-pack==0.4.0
-    conda activate conda_env
-    conda pack -f -o conda_env.tar.gz
+    conda create -y -n pyspark_env -c conda-forge pyarrow==2.0.0 pandas==1.1.4 conda-pack==0.5.0
+    conda activate pyspark_env
+    conda pack -f -o pyspark_env.tar.gz
 
 Upload to Spark Executors
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Unzipping will be done by Spark when using target ``--archives`` option in spark-submit
-or setting ``spark.yarn.dist.archives`` configuration.
+or setting ``spark.archives`` configuration.
 
 Example with ``spark-submit``:
 
@@ -109,8 +107,7 @@ Example with ``spark-submit``:
 
     export PYSPARK_DRIVER_PYTHON=python
     export PYSPARK_PYTHON=./environment/bin/python
-    spark-submit --master=yarn --deploy-mode client \
-      --archives conda_env.tar.gz#environment app.py
+    spark-submit --master=... --archives pyspark_env.tar.gz#environment app.py
 
 Example using ``SparkSession.builder``:
 
@@ -121,10 +118,16 @@ Example using ``SparkSession.builder``:
     from app import main
 
     os.environ['PYSPARK_PYTHON'] = "./environment/bin/python"
-    builder = SparkSession.builder.master("yarn").config(
-        "spark.yarn.dist.archives", "conda_env.tar.gz#environment")
-    spark = builder.getOrCreate()
+    spark = SparkSession.builder.master("...").config("spark.archives", "pyspark_env.tar.gz#environment").getOrCreate()
     main(spark)
+
+Example with ``pyspark`` shell:
+
+.. code-block:: bash
+
+    export PYSPARK_DRIVER_PYTHON=python
+    export PYSPARK_PYTHON=./environment/bin/python
+    pyspark  --master=... --archives pyspark_env.tar.gz#environment
 
 
 Using PEX

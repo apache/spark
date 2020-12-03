@@ -34,7 +34,7 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401
@@ -137,7 +137,7 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
-                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                with self.assertRaisesRegex(Exception, 'Unsupported type'):
                     df.toPandas()
 
     def test_null_conversion(self):
@@ -214,7 +214,7 @@ class ArrowTests(ReusedSQLTestCase):
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'My error'):
+            with self.assertRaisesRegex(Exception, 'My error'):
                 df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
@@ -228,7 +228,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_toggle(self):
         pdf = self.create_pandas_data_frame()
         df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf, schema=self.schema)
-        self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
+        self.assertEqual(df_no_arrow.collect(), df_arrow.collect())
 
     def test_createDataFrame_respect_session_timezone(self):
         from datetime import timedelta
@@ -258,7 +258,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_schema(self):
         pdf = self.create_pandas_data_frame()
         df = self.spark.createDataFrame(pdf, schema=self.schema)
-        self.assertEquals(self.schema, df.schema)
+        self.assertEqual(self.schema, df.schema)
         pdf_arrow = df.toPandas()
         assert_frame_equal(pdf_arrow, pdf)
 
@@ -269,7 +269,7 @@ class ArrowTests(ReusedSQLTestCase):
         wrong_schema = StructType(fields)
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, "[D|d]ecimal.*got.*date"):
+                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -277,23 +277,23 @@ class ArrowTests(ReusedSQLTestCase):
         new_names = list(map(str, range(len(self.schema.fieldNames()))))
         # Test that schema as a list of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=list(new_names))
-        self.assertEquals(df.schema.fieldNames(), new_names)
+        self.assertEqual(df.schema.fieldNames(), new_names)
         # Test that schema as tuple of column names gets applied
         df = self.spark.createDataFrame(pdf, schema=tuple(new_names))
-        self.assertEquals(df.schema.fieldNames(), new_names)
+        self.assertEqual(df.schema.fieldNames(), new_names)
 
     def test_createDataFrame_column_name_encoding(self):
         pdf = pd.DataFrame({u'a': [1]})
         columns = self.spark.createDataFrame(pdf).columns
         self.assertTrue(isinstance(columns[0], str))
-        self.assertEquals(columns[0], 'a')
+        self.assertEqual(columns[0], 'a')
         columns = self.spark.createDataFrame(pdf, [u'b']).columns
         self.assertTrue(isinstance(columns[0], str))
-        self.assertEquals(columns[0], 'b')
+        self.assertEqual(columns[0], 'b')
 
     def test_createDataFrame_with_single_data_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, ".*IntegerType.*not supported.*"):
+            with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -311,7 +311,7 @@ class ArrowTests(ReusedSQLTestCase):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)
         schema_rt = from_arrow_schema(arrow_schema)
-        self.assertEquals(self.schema, schema_rt)
+        self.assertEqual(self.schema, schema_rt)
 
     def test_createDataFrame_with_array_type(self):
         pdf = pd.DataFrame({"a": [[1, 2], [3, 4]], "b": [[u"x", u"y"], [u"y", u"z"]]})
@@ -420,7 +420,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
+            with self.assertRaisesRegex(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
                     "a: array<timestamp>")
@@ -545,7 +545,7 @@ class MaxResultArrowTests(unittest.TestCase):
             cls.spark.stop()
 
     def test_exception_by_max_results(self):
-        with self.assertRaisesRegexp(Exception, "is bigger than"):
+        with self.assertRaisesRegex(Exception, "is bigger than"):
             self.spark.range(0, 10000, 1, 100).toPandas()
 
 

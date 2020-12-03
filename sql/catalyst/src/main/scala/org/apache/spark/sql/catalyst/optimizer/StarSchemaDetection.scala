@@ -197,9 +197,9 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
               } else {
                 false
               }
-            case None => false
+            case _ => false
           }
-        case None => false
+        case _ => false
       }
     case _ => false
   }
@@ -239,7 +239,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
         case Some(col) if t.outputSet.contains(col) =>
           val stats = t.stats
           stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)
-        case None => false
+        case _ => false
       }
     case _ => false
   }

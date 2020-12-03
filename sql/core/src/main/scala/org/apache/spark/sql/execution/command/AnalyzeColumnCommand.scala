@@ -71,9 +71,8 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
     if (!analyzeColumnInCachedData(plan, sparkSession)) {
-      val catalog = sparkSession.sessionState.catalog
-      val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-      throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+      throw new AnalysisException(
+        s"Temporary view $tableIdent is not cached for analyzing columns.")
     }
   }
 

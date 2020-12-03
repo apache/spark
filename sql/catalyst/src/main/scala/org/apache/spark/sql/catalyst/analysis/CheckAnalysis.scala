@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
@@ -94,19 +94,25 @@ trait CheckAnalysis extends PredicateHelper {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+        throw new IllegalStateException(
+          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        val viewStr = if (u.allowTempView) "view" else "permanent view"
+        u.failAnalysis(
+          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -571,6 +577,8 @@ trait CheckAnalysis extends PredicateHelper {
           case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
             checkAlterTablePartition(table, parts)
 
+          case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -1002,5 +1010,17 @@ trait CheckAnalysis extends PredicateHelper {
 
       case _ =>
     }
+  }
+
+  // Make sure that the `SHOW PARTITIONS` command is allowed for the table
+  private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
+    case ShowPartitions(rt: ResolvedTable, _)
+        if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
+      failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement), _)
+        if partTable.partitionSchema().isEmpty =>
+      failAnalysis(
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")
+    case _ =>
   }
 }

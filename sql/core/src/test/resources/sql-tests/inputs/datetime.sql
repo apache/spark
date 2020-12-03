@@ -14,6 +14,10 @@ select TIMESTAMP_MILLIS(-92233720368547758);
 select TIMESTAMP_SECONDS(0.1234567);
 -- truncation is OK for float/double
 select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
+-- UNIX_SECONDS, UNIX_MILLISECONDS and UNIX_MICROSECONDS
+select UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_SECONDS(null);
+select UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MILLIS(null);
+select UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MICROS(null);
 
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
@@ -153,3 +157,14 @@ select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat'
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- Timestamp type parse error
+select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select cast("Unparseable" as timestamp)

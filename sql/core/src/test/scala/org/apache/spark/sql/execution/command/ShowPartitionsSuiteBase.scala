@@ -20,17 +20,133 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{StringType, StructType}
 
 trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
-  protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
+  protected def wrongPartitionColumnsError(columns: String*): String
+  // Gets the schema of `SHOW PARTITIONS`
+  private val showSchema: StructType = new StructType().add("partition", StringType, false)
+  protected def runShowPartitionsSql(sqlText: String, expected: Seq[Row]): Unit = {
+    val df = spark.sql(sqlText)
+    assert(df.schema === showSchema)
+    checkAnswer(df, expected)
+  }
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
+  }
+
+  protected def createDateTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (price int, qty int, year int, month int)
+      |$defaultUsing
+      |partitioned by (year, month)""".stripMargin)
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 1) SELECT 1, 1")
+    sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
+    sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
+
+  protected def createWideTable(table: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $table (
+      |  price int, qty int,
+      |  year int, month int, hour int, minute int, sec int, extra int)
+      |$defaultUsing
+      |PARTITIONED BY (year, month, hour, minute, sec, extra)
+      |""".stripMargin)
+    sql(s"""
+      |INSERT INTO $table
+      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      |""".stripMargin)
+    sql(s"""
+      |ALTER TABLE $table
+      |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
+      |""".stripMargin)
+  }
+
+  test("show partitions of non-partitioned table") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.not_partitioned_table"
+      withTable(table) {
+        sql(s"CREATE TABLE $table (col1 int) $defaultUsing")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $table")
+        }.getMessage
+        assert(errMsg.contains("not allowed on a table that is not partitioned"))
+      }
+    }
+  }
+
+  test("non-partitioning columns") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        val errMsg = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
+        }.getMessage
+        assert(errMsg.contains(wrongPartitionColumnsError("abcd", "xyz")))
+      }
+    }
+  }
+
+  test("show everything") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table",
+          Row("year=2015/month=1") ::
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
+      }
+    }
+  }
+
+  test("filter by partitions") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        createDateTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table PARTITION(year=2015)",
+          Row("year=2015/month=1") ::
+          Row("year=2015/month=2") :: Nil)
+        runShowPartitionsSql(
+          s"show partitions $table PARTITION(year=2015, month=1)",
+          Row("year=2015/month=1") :: Nil)
+        runShowPartitionsSql(
+          s"show partitions $table PARTITION(month=2)",
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") :: Nil)
+      }
+    }
+  }
+
+  test("show everything more than 5 part keys") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.wideTable"
+      withTable(table) {
+        createWideTable(table)
+        runShowPartitionsSql(
+          s"show partitions $table",
+          Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
+          Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
+      }
+    }
   }
 }

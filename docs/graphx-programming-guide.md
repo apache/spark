@@ -571,7 +571,7 @@ messages to the source and destination attributes.  Think of `sendMsg` as the <i
 function in map-reduce.
 The user defined `mergeMsg` function takes two messages destined to the same vertex and
 yields a single message.  Think of `mergeMsg` as the <i>reduce</i> function in map-reduce.
-The  [`aggregateMessages`][Graph.aggregateMessages] operator returns a `VertexRDD[Msg]`
+The  [`aggregateMessages`][Graph.aggregateMessages] operator returns an `VertexRDD[Msg]`
 containing the aggregate message (of type `Msg`) destined to each vertex.  Vertices that did not
 receive a message are not included in the returned `VertexRDD`[VertexRDD].
 
@@ -874,7 +874,7 @@ change the `VertexId` thereby enabling the same `HashMap` data structures to be 
 `HashMap` and implement the join by linear scan rather than costly point lookups.
 
 The `aggregateUsingIndex` operator is useful for efficient construction of a new `VertexRDD`[VertexRDD] from an
-`RDD[(VertexId, A)]`.  Conceptually, if I have constructed a `VertexRDD[B]` over a set of vertices,
+`RDD[(VertexId, A)]`.  Conceptually, if I have constructed an `VertexRDD[B]` over a set of vertices,
 *which is a super-set* of the vertices in some `RDD[(VertexId, A)]` then I can reuse the index to
 both aggregate and then subsequently index the `RDD[(VertexId, A)]`.  For example:
 

@@ -273,7 +273,7 @@ Enable the profile (e.g. 2.13):
     # For sbt
     ./build/sbt -Pscala-2.13 compile
 
-## Running Jenkins tests with Github Enterprise
+## Running Jenkins tests with GitHub Enterprise
 
 To run tests with Jenkins:
 

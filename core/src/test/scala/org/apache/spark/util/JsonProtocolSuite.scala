@@ -506,9 +506,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
-    val exepectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
+    val expectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
       78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
-    assertEquals(exepectedExecutorMetrics,
+    assertEquals(expectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
@@ -978,8 +978,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val stackTrace = {
     Array[StackTraceElement](
       new StackTraceElement("Apollo", "Venus", "Mercury", 42),
-      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420),
-      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200)
+      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420), /* odd spellings intentional */
+      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200) /* odd spellings intentional */
     )
   }
 

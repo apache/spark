@@ -85,7 +85,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       }
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a Javascript string literal.
+      // extra layers of escaping in order to embed this in a JavaScript string literal.
       val escapedDesc = Utility.escape(jobDescription)
       val jsEscapedDescForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedDesc))
       val jsEscapedDescForLabel = StringEscapeUtils.escapeEcmaScript(escapedDesc)
