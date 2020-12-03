@@ -2962,7 +2962,14 @@ object LogisticRegressionSuite {
   def checkCoefficientsEquivalent(coefficients1: Matrix, coefficients2: Matrix): Unit = {
     coefficients1.colIter.zip(coefficients2.colIter).foreach { case (col1: Vector, col2: Vector) =>
       (col1.asBreeze - col2.asBreeze).toArray.toSeq.sliding(2).foreach {
-        case Seq(v1, v2) => assert(v1 ~= v2 absTol 1E-3)
+        case Seq(v1, v2) =>
+          if (math.abs(v1) < 1E-9 || math.abs(v2) < 1E-9) {
+            // If one of v1 and v2 is very close to zero, then compare absTol
+            assert(v1 ~= v2 absTol 1E-3)
+          }
+          else {
+            assert(v1 ~= v2 relTol 1E-3)
+          }
       }
     }
   }
