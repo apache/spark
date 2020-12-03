@@ -45,7 +45,7 @@ if __name__ == "__main__":
     print("1st accumulator value is: " + str(acc.value))
     print("Waiting to give nodes time to finish migration, decom exec 1.")
     print("...")
-    time.sleep(30)
+    time.sleep(60)
     rdd.count()
     rdd.collect()
     print("Final accumulator value is: " + str(acc.value))
