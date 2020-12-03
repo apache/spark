@@ -710,10 +710,10 @@ case class ShowPartitions(
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(
-    child: LogicalPlan,
+    table: LogicalPlan,
     multipartIdentifier: Seq[String],
-    plan: Option[LogicalPlan],
+    query: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override def children: Seq[LogicalPlan] = query.map(_ :: Nil).getOrElse(Nil)
 }

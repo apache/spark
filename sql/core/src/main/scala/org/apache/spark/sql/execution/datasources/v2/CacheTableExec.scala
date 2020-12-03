@@ -29,10 +29,21 @@ import org.apache.spark.storage.StorageLevel
 
 case class CacheTableExec(
     relation: LogicalPlan,
+    createTempView: Boolean,
     multipartIdentifier: Seq[String],
     isLazy: Boolean,
     options: Map[String, String]) extends V2CommandExec {
   override def run(): Seq[InternalRow] = {
+    val sparkSession = sqlContext.sparkSession
+    val relationName = multipartIdentifier.quoted
+
+    val df = if (createTempView) {
+      Dataset.ofRows(sparkSession, relation).createTempView(relationName)
+      sparkSession.table(relationName)
+    } else {
+      Dataset.ofRows(sparkSession, relation)
+    }
+
     val storageLevelKey = "storagelevel"
     val storageLevelValue =
       CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
@@ -41,9 +52,6 @@ case class CacheTableExec(
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }
 
-    val sparkSession = sqlContext.sparkSession
-    val df = Dataset.ofRows(sparkSession, relation)
-    val relationName = multipartIdentifier.quoted
     if (storageLevelValue.nonEmpty) {
       sparkSession.sharedState.cacheManager.cacheQuery(
         df,
