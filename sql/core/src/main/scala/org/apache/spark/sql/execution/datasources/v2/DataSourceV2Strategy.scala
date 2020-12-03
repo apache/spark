@@ -221,6 +221,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
                   throw new AnalysisException(s"Exec update failed:" +
                       s" cannot translate expression to source filter: $f"))
               }).toArray
+
+          if (!table.asDeletable.canDeleteWhere(filters)) {
+            throw new AnalysisException(
+              s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+          }
+
           DeleteFromTableExec(table.asDeletable, filters) :: Nil
         case _ =>
           throw new AnalysisException("DELETE is only supported with v2 tables.")
