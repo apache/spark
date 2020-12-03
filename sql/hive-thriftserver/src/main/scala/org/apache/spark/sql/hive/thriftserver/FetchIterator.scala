@@ -18,11 +18,30 @@
 package org.apache.spark.sql.hive.thriftserver
 
 private[hive] sealed trait FetchIterator[A] extends Iterator[A] {
+  /**
+   * Begin a fetch block, forward from the current position.
+   * Resets the fetch start offset.
+   */
   def fetchNext(): Unit
 
-  def setRelativePosition(diff: Long): Unit
+  /**
+   * Begin a fetch block, moving the iterator back by offset from the start of the previous fetch
+   * block start.
+   * Resets the fetch start offset.
+   *
+   * @param offset the amount to move a fetch start position toward the prior direction.
+   */
+  def fetchPrior(offset: Long): Unit = fetchAbsolute(getFetchStart - offset)
 
-  def setAbsolutePosition(pos: Long): Unit
+  /**
+   * Begin a fetch block, moving the iterator to the given position.
+   * Resets the fetch start offset.
+   *
+   * @param pos index to move a position of iterator.
+   */
+  def fetchAbsolute(pos: Long): Unit
+
+  def getFetchStart: Long
 
   def getPosition: Long
 }
@@ -34,14 +53,12 @@ private[hive] class ArrayFetchIterator[A](src: Array[A]) extends FetchIterator[A
 
   override def fetchNext(): Unit = fetchStart = position
 
-  override def setRelativePosition(diff: Long): Unit = {
-    setAbsolutePosition(fetchStart + diff)
-  }
-
-  override def setAbsolutePosition(pos: Long): Unit = {
+  override def fetchAbsolute(pos: Long): Unit = {
     position = (pos max 0) min src.length
     fetchStart = position
   }
+
+  override def getFetchStart: Long = fetchStart
 
   override def getPosition: Long = position
 
@@ -62,16 +79,14 @@ private[hive] class IterableFetchIterator[A](iterable: Iterable[A]) extends Fetc
 
   override def fetchNext(): Unit = fetchStart = position
 
-  override def setRelativePosition(diff: Long): Unit = {
-    setAbsolutePosition(fetchStart + diff)
-  }
-
-  override def setAbsolutePosition(pos: Long): Unit = {
+  override def fetchAbsolute(pos: Long): Unit = {
     val newPos = pos max 0
     if (newPos < position) resetPosition()
     while (position < newPos && hasNext) next()
     fetchStart = position
   }
+
+  override def getFetchStart: Long = fetchStart
 
   override def getPosition: Long = position
 

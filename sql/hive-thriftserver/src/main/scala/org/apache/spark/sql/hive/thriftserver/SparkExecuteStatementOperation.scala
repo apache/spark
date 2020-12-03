@@ -143,11 +143,10 @@ private[hive] class SparkExecuteStatementOperation(
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter when FETCH_FIRST or FETCH_PRIOR
-    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.setAbsolutePosition(0)
-    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.setRelativePosition(-maxRowsL)
+    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.fetchAbsolute(0)
+    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.fetchPrior(maxRowsL)
     else iter.fetchNext()
     resultRowSet.setStartOffset(iter.getPosition)
-    val fetchStartOffset = iter.getPosition
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -170,9 +169,8 @@ private[hive] class SparkExecuteStatementOperation(
         resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
       }
-      val fetchEndOffset = iter.getPosition
       log.info(s"Returning result set with ${curRow} rows from offsets " +
-        s"[$fetchStartOffset, $fetchEndOffset) with $statementId")
+        s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
       resultRowSet
     }
   }

@@ -21,67 +21,113 @@ import org.apache.spark.SparkFunSuite
 
 class FetchIteratorSuite extends SparkFunSuite {
 
-  test("Test setRelativePosition, setAbsolutePosition, fetchNext FetchIterator") {
+  private def getRows(fetchIter: FetchIterator[Int], maxRowCount: Int): Seq[Int] = {
+    for (_ <- 0 until maxRowCount if fetchIter.hasNext) yield fetchIter.next()
+  }
+
+  test("Test fetchNext and fetchPrior") {
     val testData = 0 until 10
 
     def iteratorTest(fetchIter: FetchIterator[Int]): Unit = {
-      def getRows(maxRowCount: Int): Seq[Int] = {
-        for (_ <- 0 until maxRowCount if fetchIter.hasNext) yield fetchIter.next()
-      }
-
       fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 0)
       assert(fetchIter.getPosition == 0)
-      assertResult(0 until 3)(getRows(3))
+      assertResult(0 until 2)(getRows(fetchIter, 2))
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 2)
 
       fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 2)
+      assert(fetchIter.getPosition == 2)
+      assertResult(2 until 3)(getRows(fetchIter, 1))
+      assert(fetchIter.getFetchStart == 2)
       assert(fetchIter.getPosition == 3)
-      assertResult(3 until 6)(getRows(3))
 
-      fetchIter.setRelativePosition(-2)
+      fetchIter.fetchPrior(2)
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 0)
+      assertResult(0 until 3)(getRows(fetchIter, 3))
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 3)
+
+      fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 3)
+      assert(fetchIter.getPosition == 3)
+      assertResult(3 until 8)(getRows(fetchIter, 5))
+      assert(fetchIter.getFetchStart == 3)
+      assert(fetchIter.getPosition == 8)
+
+      fetchIter.fetchPrior(2)
+      assert(fetchIter.getFetchStart == 1)
       assert(fetchIter.getPosition == 1)
-      assertResult(1 until 4)(getRows(3))
-
-      fetchIter.fetchNext()
+      assertResult(1 until 4)(getRows(fetchIter, 3))
+      assert(fetchIter.getFetchStart == 1)
       assert(fetchIter.getPosition == 4)
-      assertResult(4 until 10)(getRows(10))
 
       fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 4)
+      assert(fetchIter.getPosition == 4)
+      assertResult(4 until 10)(getRows(fetchIter, 10))
+      assert(fetchIter.getFetchStart == 4)
       assert(fetchIter.getPosition == 10)
-      assertResult(Seq.empty[Int])(getRows(1))
-
-      fetchIter.setRelativePosition(-3)
-      assert(fetchIter.getPosition == 7)
-      assertResult(7 until 10)(getRows(3))
-
-      fetchIter.setAbsolutePosition(0)
-      assert(fetchIter.getPosition == 0)
-      assertResult(0 until 1)(getRows(1))
-
-      fetchIter.setAbsolutePosition(20)
-      assert(fetchIter.getPosition == 10)
-      assertResult(Seq.empty[Int])(getRows(1))
 
       fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 10)
       assert(fetchIter.getPosition == 10)
-      assertResult(Seq.empty[Int])(getRows(1))
-
-      fetchIter.setRelativePosition(3)
+      assertResult(Seq.empty[Int])(getRows(fetchIter, 10))
+      assert(fetchIter.getFetchStart == 10)
       assert(fetchIter.getPosition == 10)
-      assertResult(Seq.empty[Int])(getRows(1))
 
-      fetchIter.setRelativePosition(-20)
+      fetchIter.fetchPrior(20)
+      assert(fetchIter.getFetchStart == 0)
       assert(fetchIter.getPosition == 0)
-      assertResult(0 until 3)(getRows(3))
-
-      fetchIter.setAbsolutePosition(-20)
-      assert(fetchIter.getPosition == 0)
-      assertResult(0 until 3)(getRows(3))
-
-      fetchIter.fetchNext()
+      assertResult(0 until 3)(getRows(fetchIter, 3))
+      assert(fetchIter.getFetchStart == 0)
       assert(fetchIter.getPosition == 3)
-      assertResult(3 until 10)(getRows(10))
     }
+    iteratorTest(new ArrayFetchIterator[Int](testData.toArray))
+    iteratorTest(new IterableFetchIterator[Int](testData))
+  }
 
+  test("Test fetchAbsolute") {
+    val testData = 0 until 10
+
+    def iteratorTest(fetchIter: FetchIterator[Int]): Unit = {
+      fetchIter.fetchNext()
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 0)
+      assertResult(0 until 5)(getRows(fetchIter, 5))
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 5)
+
+      fetchIter.fetchAbsolute(2)
+      assert(fetchIter.getFetchStart == 2)
+      assert(fetchIter.getPosition == 2)
+      assertResult(2 until 5)(getRows(fetchIter, 3))
+      assert(fetchIter.getFetchStart == 2)
+      assert(fetchIter.getPosition == 5)
+
+      fetchIter.fetchAbsolute(7)
+      assert(fetchIter.getFetchStart == 7)
+      assert(fetchIter.getPosition == 7)
+      assertResult(7 until 8)(getRows(fetchIter, 1))
+      assert(fetchIter.getFetchStart == 7)
+      assert(fetchIter.getPosition == 8)
+
+      fetchIter.fetchAbsolute(20)
+      assert(fetchIter.getFetchStart == 10)
+      assert(fetchIter.getPosition == 10)
+      assertResult(Seq.empty[Int])(getRows(fetchIter, 1))
+      assert(fetchIter.getFetchStart == 10)
+      assert(fetchIter.getPosition == 10)
+
+      fetchIter.fetchAbsolute(0)
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 0)
+      assertResult(0 until 3)(getRows(fetchIter, 3))
+      assert(fetchIter.getFetchStart == 0)
+      assert(fetchIter.getPosition == 3)
+    }
     iteratorTest(new ArrayFetchIterator[Int](testData.toArray))
     iteratorTest(new IterableFetchIterator[Int](testData))
   }
