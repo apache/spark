@@ -246,7 +246,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("add and drop partition in a table which doesn't support partition management") {
+  test("SPARK-33650: add/drop partition into a table which doesn't support partition management") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING _")
