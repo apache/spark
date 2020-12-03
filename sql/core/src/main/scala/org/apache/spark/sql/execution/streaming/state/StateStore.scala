@@ -22,6 +22,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -328,11 +329,6 @@ object StateStoreProviderId {
       stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
     StateStoreProviderId(storeId, stateInfo.queryRunId)
   }
-
-  private[sql] def withNoPartitionInformation(
-      providerId: StateStoreProviderId): StateStoreProviderId = {
-    providerId.copy(storeId = providerId.storeId.copy(partitionId = -1))
-  }
 }
 
 /**
@@ -391,12 +387,13 @@ object StateStore extends Logging {
 
   val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
+  val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
 
   @GuardedBy("loadedProviders")
-  private val schemaValidated = new mutable.HashSet[StateStoreProviderId]()
+  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
 
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
@@ -476,11 +473,22 @@ object StateStore extends Logging {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded()
 
-      val newProvIdSchemaCheck = StateStoreProviderId.withNoPartitionInformation(storeProviderId)
-      if (!schemaValidated.contains(newProvIdSchemaCheck)) {
-        validateSchema(newProvIdSchemaCheck, keySchema, valueSchema,
-          storeConf.stateSchemaCheckEnabled)
-        schemaValidated.add(newProvIdSchemaCheck)
+      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
+        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
+          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
+          // regardless of configuration, we check compatibility to at least write schema file
+          // if necessary
+          val ret = Try(checker.check(keySchema, valueSchema)).toEither.fold(Some(_), _ => None)
+          if (storeConf.stateSchemaCheckEnabled) {
+            ret
+          } else {
+            None
+          }
+        })
+
+        if (result.isDefined) {
+          throw result.get
+        }
       }
 
       val provider = loadedProviders.getOrElseUpdate(
@@ -583,24 +591,6 @@ object StateStore extends Logging {
       verified
     } else {
       false
-    }
-  }
-
-  private def validateSchema(
-      storeProviderId: StateStoreProviderId,
-      keySchema: StructType,
-      valueSchema: StructType,
-      checkEnabled: Boolean): Unit = {
-    if (SparkEnv.get != null) {
-      val validated = coordinatorRef.flatMap(
-        _.validateSchema(storeProviderId, keySchema, valueSchema, checkEnabled))
-
-      validated match {
-        case Some(exc) =>
-          // driver would log the information, so just re-throw here
-          throw exc
-        case None =>
-      }
     }
   }
 

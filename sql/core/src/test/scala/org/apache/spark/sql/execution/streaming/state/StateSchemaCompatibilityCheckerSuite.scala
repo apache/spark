@@ -31,7 +31,7 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
 
   private val hadoopConf: Configuration = new Configuration()
   private val opId = Random.nextInt(100000)
-  private val partitionId = -1
+  private val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
 
   private val structSchema = new StructType()
     .add(StructField("nested1", IntegerType, nullable = true))

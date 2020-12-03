@@ -20,14 +20,11 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.UUID
 
 import scala.collection.mutable
-import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
 /** Trait representing all messages to [[StateStoreCoordinator]] */
@@ -46,12 +43,6 @@ private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executo
 private case class GetLocation(storeId: StateStoreProviderId)
   extends StateStoreCoordinatorMessage
 
-private case class ValidateSchema(
-    storeProviderId: StateStoreProviderId,
-    keySchema: StructType,
-    valueSchema: StructType,
-    checkEnabled: Boolean) extends StateStoreCoordinatorMessage
-
 private case class DeactivateInstances(runId: UUID)
   extends StateStoreCoordinatorMessage
 
@@ -68,8 +59,7 @@ object StateStoreCoordinatorRef extends Logging {
    */
   def forDriver(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
     try {
-
-      val coordinator = new StateStoreCoordinator(env.conf, env.rpcEnv)
+      val coordinator = new StateStoreCoordinator(env.rpcEnv)
       val coordinatorRef = env.rpcEnv.setupEndpoint(endpointName, coordinator)
       logInfo("Registered StateStoreCoordinator endpoint")
       new StateStoreCoordinatorRef(coordinatorRef)
@@ -93,6 +83,7 @@ object StateStoreCoordinatorRef extends Logging {
  * [[StateStore]]s across all the executors, and get their locations for job scheduling.
  */
 class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
+
   private[sql] def reportActiveInstance(
       stateStoreProviderId: StateStoreProviderId,
       host: String,
@@ -117,16 +108,6 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
     rpcEndpointRef.askSync[Boolean](DeactivateInstances(runId))
   }
 
-  /** Validate state store operator's schema to see it's compatible with existing schema */
-  private[sql] def validateSchema(
-      storeProviderId: StateStoreProviderId,
-      keySchema: StructType,
-      valueSchema: StructType,
-      checkEnabled: Boolean): Option[Exception] = {
-    rpcEndpointRef.askSync[Option[Exception]](
-      ValidateSchema(storeProviderId, keySchema, valueSchema, checkEnabled))
-  }
-
   private[state] def stop(): Unit = {
     rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
@@ -137,12 +118,9 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  * Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster,
  * and get their locations for job scheduling.
  */
-private class StateStoreCoordinator(conf: SparkConf, override val rpcEnv: RpcEnv)
+private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
-  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]
-
-  private lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId) =>
@@ -171,25 +149,6 @@ private class StateStoreCoordinator(conf: SparkConf, override val rpcEnv: RpcEnv
       logDebug(s"Deactivating instances related to checkpoint location $runId: " +
         storeIdsToRemove.mkString(", "))
       context.reply(true)
-
-    case ValidateSchema(providerId, keySchema, valueSchema, checkEnabled) =>
-      require(providerId.storeId.partitionId == -1, "Expect the normalized partition ID in" +
-        " provider ID")
-
-      val result = schemaValidated.getOrElseUpdate(providerId, {
-        val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
-
-        // regardless of configuration, we check compatibility to at least write schema file
-        // if necessary
-        val ret = Try(checker.check(keySchema, valueSchema)).toEither.fold(Some(_), _ => None)
-        if (checkEnabled) {
-          ret
-        } else {
-          None
-        }
-      })
-
-      context.reply(result)
 
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
