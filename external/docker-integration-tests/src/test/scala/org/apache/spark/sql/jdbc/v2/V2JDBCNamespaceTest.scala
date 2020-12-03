@@ -31,11 +31,11 @@ import org.apache.spark.tags.DockerTest
 private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession {
   val catalog = new JDBCTableCatalog()
 
-  def testListNamespaces: Unit
+  def builtinNamespaces: Array[Array[String]]
 
   test("listNamespaces: basic behavior") {
     catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)
-    testListNamespaces
+    assert(catalog.listNamespaces() === Array(Array("foo")) ++ builtinNamespaces)
     assert(catalog.listNamespaces(Array("foo")) === Array())
     assert(catalog.namespaceExists(Array("foo")) === true)
 
@@ -53,6 +53,7 @@ private[v2] trait V2JDBCNamespaceTest extends SharedSparkSession {
 
     catalog.dropNamespace(Array("foo"))
     assert(catalog.namespaceExists(Array("foo")) === false)
+    assert(catalog.listNamespaces() === builtinNamespaces)
     val msg = intercept[AnalysisException] {
       catalog.listNamespaces(Array("foo"))
     }.getMessage
