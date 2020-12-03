@@ -217,6 +217,34 @@ case class CreateViewCommand(
     }
   }
 
+
+  /**
+   * Collect all temporary views and functions and return the identifiers separately
+   * This func traverses the unresolved plan `child`. Below are the reasons:
+   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+   * added/generated from a temporary view.
+   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+   * package (e.g., HiveGenericUDF).
+   */
+  private def collectTemporaryObjects(catalog: SessionCatalog): Seq[Seq[String]] = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    def collect(child: LogicalPlan): Seq[Seq[String]] = {
+      child.collect {
+        // Disallow creating permanent views based on temporary views.
+        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) => nameParts
+        case other if !other.resolved => other.expressions.flatMap(_.collect {
+          // Traverse subquery plan for any unresolved relations.
+          case e: SubqueryExpression => collect(e.plan)
+          // Disallow creating permanent views based on temporary UDFs.
+          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
+            Seq(e.name.funcName)
+        })
+      }
+    }
+    collect(child)
+  }
+
   /**
    * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
    * else return the analyzed plan directly.
