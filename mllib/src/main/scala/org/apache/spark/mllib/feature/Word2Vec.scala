@@ -509,15 +509,8 @@ class Word2VecModel private[spark] (
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
   private lazy val wordVecNorms: Array[Float] = {
-    val num = numWords
     val size = vectorSize
-    val wordVecNorms = new Array[Float](num)
-    var i = 0
-    while (i < num) {
-      wordVecNorms(i) = blas.snrm2(size, wordVectors, i * size, 1)
-      i += 1
-    }
-    wordVecNorms
+    Array.tabulate(numWords)(i => blas.snrm2(size, wordVectors, i * size, 1))
   }
 
   @Since("1.5.0")

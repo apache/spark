@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
@@ -279,8 +278,6 @@ class Word2VecModel private[ml] (
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  private var bcModel: Broadcast[Word2VecModel] = _
-
   /**
    * Transform a sentence column to a vector column to represent the whole sentence. The transform
    * is performed by averaging all word vectors it contains.
@@ -289,20 +286,17 @@ class Word2VecModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    if (bcModel == null) {
-      bcModel = dataset.sparkSession.sparkContext.broadcast(this)
-    }
-
+    val bcModel = dataset.sparkSession.sparkContext.broadcast(this.wordVectors)
     val size = $(vectorSize)
     val emptyVec = Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
     val transformer = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
         emptyVec
       } else {
-        val wordIndices = bcModel.value.wordVectors.wordIndex
-        val wordVectors = bcModel.value.wordVectors.wordVectors
+        val wordIndices = bcModel.value.wordIndex
+        val wordVectors = bcModel.value.wordVectors
         val array = Array.ofDim[Double](size)
-        var count = 0L
+        var count = 0
         sentence.foreach { word =>
           wordIndices.get(word).foreach { index =>
             val offset = index * size
