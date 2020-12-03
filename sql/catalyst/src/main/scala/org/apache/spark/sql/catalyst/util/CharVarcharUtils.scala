@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types._
 
-object CharVarcharUtils {
+object CharVarcharUtils extends Logging {
 
   private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
@@ -66,11 +67,19 @@ object CharVarcharUtils {
    * @param dt the given struct type
    * @return
    */
-  def failWithCharLikeType(dt: DataType): DataType = {
+  def failOrWarnWithCharLikeType(dt: DataType, fail: Boolean = true): DataType = {
     if (hasCharVarchar(dt)) {
-      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+      if (fail) {
+        throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+      } else {
+        logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
+          " Spark 3.1, they become actual individual type of their own, you should use string" +
+          " instead for potential consistency reason")
+        replaceCharVarcharWithString(dt)
+      }
+    } else {
+      dt
     }
-    dt
   }
 
   /**

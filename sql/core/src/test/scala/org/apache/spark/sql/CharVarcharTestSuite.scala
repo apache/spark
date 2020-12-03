@@ -426,6 +426,18 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  test("user-specified schema in cast") {
+    def assertNoCharType(df: DataFrame): Unit = {
+      checkAnswer(df, Row("0"))
+      assert(df.schema.map(_.dataType) == Seq(StringType))
+    }
+
+    assertNoCharType(spark.range(1).select($"id".cast("char(5)")))
+    assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
+    assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
+    assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
+  }
+
   test("user-specified schema in functions") {
     val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
     checkAnswer(df, Row(Row("str")))
@@ -436,13 +448,6 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   def failWithInvalidCharUsage[T](fn: => T): Unit = {
     val e = intercept[AnalysisException](fn)
     assert(e.getMessage contains "Cannot use char/varchar type")
-  }
-
-  test("invalidate char/varchar in cast") {
-    failWithInvalidCharUsage(spark.range(1).select($"id".cast("char(5)")))
-    failWithInvalidCharUsage(spark.range(1).select($"id".cast(CharType(5))))
-    failWithInvalidCharUsage(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
-    failWithInvalidCharUsage(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
   }
 
   test("invalidate char/varchar in SparkSession createDataframe") {
