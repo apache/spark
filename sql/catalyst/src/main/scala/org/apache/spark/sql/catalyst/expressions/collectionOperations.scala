@@ -3975,7 +3975,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   """,
   group = "array_funcs",
   since = "3.1.0")
-case class ArrayContainsArray(left: Expression, right: Expression)
+case class HasAll(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
 
   override def dataType: DataType = BooleanType
@@ -4155,5 +4155,5 @@ case class ArrayContainsArray(left: Expression, right: Expression)
     }
   }
 
-  override def prettyName: String = "array_contains_array"
+  override def prettyName: String = "has_all"
 }

@@ -14,7 +14,7 @@
 | org.apache.spark.sql.catalyst.expressions.And | and | SELECT true and true | struct<(true AND true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayAggregate | aggregate | SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) | struct<aggregate(array(1, 2, 3), 0, lambdafunction((namedlambdavariable() + namedlambdavariable()), namedlambdavariable(), namedlambdavariable()), lambdafunction(namedlambdavariable(), namedlambdavariable())):int> |
 | org.apache.spark.sql.catalyst.expressions.ArrayContains | array_contains | SELECT array_contains(array(1, 2, 3), 2) | struct<array_contains(array(1, 2, 3), 2):boolean> |
-| org.apache.spark.sql.catalyst.expressions.ArrayContainsArray | array_contains_array | SELECT array_contains_array(array(1, 2, 3), array(2)) | struct<array_contains_array(array(1, 2, 3), array(2)):boolean> |
+| org.apache.spark.sql.catalyst.expressions.HasAll | has_all | SELECT hasAll(array(1, 2, 3), array(2)) | struct<hasAll(array(1, 2, 3), array(2)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.ArrayDistinct | array_distinct | SELECT array_distinct(array(1, 2, 3, null, 3)) | struct<array_distinct(array(1, 2, 3, CAST(NULL AS INT), 3)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayExcept | array_except | SELECT array_except(array(1, 2, 3), array(1, 3, 5)) | struct<array_except(array(1, 2, 3), array(1, 3, 5)):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.ArrayExists | exists | SELECT exists(array(1, 2, 3), x -> x % 2 == 0) | struct<exists(array(1, 2, 3), lambdafunction(((namedlambdavariable() % 2) = 0), namedlambdavariable())):boolean> |

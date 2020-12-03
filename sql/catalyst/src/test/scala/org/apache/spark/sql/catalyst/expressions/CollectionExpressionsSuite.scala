@@ -449,7 +449,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(aa1, aae), false)
   }
 
-  test("ArrayContainsArray") {
+  test("HasAll") {
     val a0 = Literal.create(Seq(1, 2, 3, null, null), ArrayType(IntegerType))
     val a1 = Literal.create(Seq(1, 2), ArrayType(IntegerType))
     val a2 = Literal.create(Seq(null, 2, 3), ArrayType(IntegerType))
@@ -467,29 +467,29 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a14 = Literal.create(Seq(2, 3, 1, 3), ArrayType(IntegerType))
     val emptyIntArray = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
 
-    checkEvaluation(ArrayContainsArray(a0, a1), true)
-    checkEvaluation(ArrayContainsArray(a0, a2), true)
-    checkEvaluation(ArrayContainsArray(a0, a3), false)
-    checkEvaluation(ArrayContainsArray(a0, a4), true)
-    checkEvaluation(ArrayContainsArray(a2, a4), true)
-    checkEvaluation(ArrayContainsArray(a0, a8), true)
-    checkEvaluation(ArrayContainsArray(a0, emptyIntArray), true)
-    checkEvaluation(ArrayContainsArray(emptyIntArray, emptyIntArray), true)
-    checkEvaluation(ArrayContainsArray(emptyIntArray, a0), false)
-    checkEvaluation(ArrayContainsArray(a0, Literal.create(null, ArrayType(IntegerType))), null)
-    checkEvaluation(ArrayContainsArray(Literal.create(null, ArrayType(IntegerType)),
+    checkEvaluation(HasAll(a0, a1), true)
+    checkEvaluation(HasAll(a0, a2), true)
+    checkEvaluation(HasAll(a0, a3), false)
+    checkEvaluation(HasAll(a0, a4), true)
+    checkEvaluation(HasAll(a2, a4), true)
+    checkEvaluation(HasAll(a0, a8), true)
+    checkEvaluation(HasAll(a0, emptyIntArray), true)
+    checkEvaluation(HasAll(emptyIntArray, emptyIntArray), true)
+    checkEvaluation(HasAll(emptyIntArray, a0), false)
+    checkEvaluation(HasAll(a0, Literal.create(null, ArrayType(IntegerType))), null)
+    checkEvaluation(HasAll(Literal.create(null, ArrayType(IntegerType)),
       emptyIntArray), null)
-    checkEvaluation(ArrayContainsArray(Literal.create(null, ArrayType(IntegerType)),
+    checkEvaluation(HasAll(Literal.create(null, ArrayType(IntegerType)),
       Literal.create(null, ArrayType(IntegerType))), null)
 
-    checkEvaluation(ArrayContainsArray(a5, a6), true)
-    checkEvaluation(ArrayContainsArray(a5, a7), false)
+    checkEvaluation(HasAll(a5, a6), true)
+    checkEvaluation(HasAll(a5, a7), false)
 
-    checkEvaluation(ArrayContainsArray(a9, a10), true)
-    checkEvaluation(ArrayContainsArray(a9, a11), true)
-    checkEvaluation(ArrayContainsArray(a9, a12), false)
-    checkEvaluation(ArrayContainsArray(a9, a13), true)
-    checkEvaluation(ArrayContainsArray(a9, a14), true)
+    checkEvaluation(HasAll(a9, a10), true)
+    checkEvaluation(HasAll(a9, a11), true)
+    checkEvaluation(HasAll(a9, a12), false)
+    checkEvaluation(HasAll(a9, a13), true)
+    checkEvaluation(HasAll(a9, a14), true)
 
     // arrays of binaries
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](1, 2), Array[Byte](3, 4)),
@@ -508,13 +508,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(BinaryType))
     val b7 = Literal.create(Seq[Array[Byte]](null), ArrayType(BinaryType))
 
-    checkEvaluation(ArrayContainsArray(b0, b0), true)
-    checkEvaluation(ArrayContainsArray(b0, b1), true)
-    checkEvaluation(ArrayContainsArray(b0, b2), false)
-    checkEvaluation(ArrayContainsArray(b0, b3), false)
-    checkEvaluation(ArrayContainsArray(b4, b5), true)
-    checkEvaluation(ArrayContainsArray(b4, b6), false)
-    checkEvaluation(ArrayContainsArray(b4, b7), true)
+    checkEvaluation(HasAll(b0, b0), true)
+    checkEvaluation(HasAll(b0, b1), true)
+    checkEvaluation(HasAll(b0, b2), false)
+    checkEvaluation(HasAll(b0, b3), false)
+    checkEvaluation(HasAll(b4, b5), true)
+    checkEvaluation(HasAll(b4, b6), false)
+    checkEvaluation(HasAll(b4, b7), true)
 
     // arrays of complex data types
     val aa0 = Literal.create(Seq[Array[String]](
@@ -527,8 +527,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Array[String]("b", "a"), Array[String]("f", "g")),
       ArrayType(ArrayType(StringType)))
 
-    checkEvaluation(ArrayContainsArray(aa0, aa1), true)
-    checkEvaluation(ArrayContainsArray(aa0, aa2), false)
+    checkEvaluation(HasAll(aa0, aa1), true)
+    checkEvaluation(HasAll(aa0, aa2), false)
   }
 
   test("ArraysOverlap") {

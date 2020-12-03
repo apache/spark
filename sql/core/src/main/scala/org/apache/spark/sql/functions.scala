@@ -3506,12 +3506,13 @@ object functions {
   }
 
   /**
-   * Returns null if the array is null, true if the array a1 contains a2, and false otherwise.
+   * Returns null if the array is null, true if the array a1 contains all elements in a2,
+   * and false otherwise. Ignore duplicates and element order in array.
    * @group collection_funcs
    * @since 3.1.0
    */
-  def array_contains_array(a1: Column, a2: Column): Column = withExpr {
-    ArrayContainsArray(a1.expr, a2.expr)
+  def has_all(a1: Column, a2: Column): Column = withExpr {
+    HasAll(a1.expr, a2.expr)
   }
 
   /**
