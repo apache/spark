@@ -2213,7 +2213,7 @@ object SQLConf {
       "For example, Spark will throw an exception at runtime instead of returning null results " +
       "when the inputs to a SQL operator/function are invalid." +
       "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
-      "Spark's documentation. Some ANSI dialect features may not be from the ANSI SQL " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
       "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
