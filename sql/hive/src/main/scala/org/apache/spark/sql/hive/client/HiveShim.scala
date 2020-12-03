@@ -773,6 +773,28 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     filters.flatMap(convert).mkString(" and ")
   }
 
+  private def quoteStringLiteral(str: String): String = {
+    if (!str.contains("\"")) {
+      s""""$str""""
+    } else if (!str.contains("'")) {
+      s"""'$str'"""
+    } else {
+      throw new UnsupportedOperationException(
+        """Partition filter cannot have both `"` and `'` characters""")
+    }
+  }
+
+  override def getPartitionsByFilter(
+      hive: Hive,
+      table: Table,
+      predicates: Seq[Expression]): Seq[Partition] = {
+
+    // Hive getPartitionsByFilter() takes a string that represents partition
+    // predicates like "str_key=\"value\" and int_key=1 ..."
+    val filter = convertFilters(table, predicates)
+    getPartitionsByFilterInternal(hive, table, filter)
+  }
+
   def getPartitionsByFilterInternal(hive: Hive, table: Table, filter: String): Seq[Partition] = {
     val partitions =
       if (filter.isEmpty) {
@@ -811,28 +833,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
     partitions.asScala.toSeq
-  }
-
-  private def quoteStringLiteral(str: String): String = {
-    if (!str.contains("\"")) {
-      s""""$str""""
-    } else if (!str.contains("'")) {
-      s"""'$str'"""
-    } else {
-      throw new UnsupportedOperationException(
-        """Partition filter cannot have both `"` and `'` characters""")
-    }
-  }
-
-  override def getPartitionsByFilter(
-      hive: Hive,
-      table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = {
-
-    // Hive getPartitionsByFilter() takes a string that represents partition
-    // predicates like "str_key=\"value\" and int_key=1 ..."
-    val filter = convertFilters(table, predicates)
-    getPartitionsByFilterInternal(hive, table, filter)
   }
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
