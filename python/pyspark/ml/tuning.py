@@ -258,10 +258,8 @@ class _ValidatorSharedReadWrite:
                     raise ValueError('Resolve param in estimatorParamMaps failed: ' +
                                      javaParam.parent() + '.' + javaParam.name())
                 javaValue = javaPair.value()
-                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(javaValue):
-                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
-                    # and Estimator/Transformer class which implements `_from_java` static method
-                    # (such as OneVsRest, Pipeline class).
+                if sc._jvm.Class.forName("org.apache.spark.ml.util.DefaultParamsWritable") \
+                        .isInstance(javaValue):
                     pyValue = JavaParams._from_java(javaValue)
                 else:
                     pyValue = _java2py(sc, javaValue)
