@@ -26,8 +26,9 @@ from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java, _java2py
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasCollectSubModels, HasParallelism, HasSeed
-from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader
-from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
+    MetaAlgorithmReadWrite
+from pyspark.ml.wrapper import JavaParams, JavaEstimator, JavaWrapper
 from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 
@@ -40,18 +41,34 @@ def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
 
-    :param est: Estimator, the estimator to be fit.
-    :param train: DataFrame, training data set, used for fitting.
-    :param eva: Evaluator, used to compute `metric`
-    :param validation: DataFrame, validation data set, used for evaluation.
-    :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
-    :param collectSubModel: Whether to collect sub model.
-    :return: (int, float, subModel), an index into `epm` and the associated metric value.
+    Parameters
+    ----------
+    est : :py:class:`pyspark.ml.baseEstimator`
+        he estimator to be fit.
+    train : :py:class:`pyspark.sql.DataFrame`
+        DataFrame, training data set, used for fitting.
+    eva : :py:class:`pyspark.ml.evaluation.Evaluator`
+        used to compute `metric`
+    validation : :py:class:`pyspark.sql.DataFrame`
+        DataFrame, validation data set, used for evaluation.
+    epm : :py:class:`collections.abc.Sequence`
+        Sequence of ParamMap, params maps to be used during fitting & evaluation.
+    collectSubModel : bool
+        Whether to collect sub model.
+
+    Returns
+    -------
+    tuple
+        (int, float, subModel), an index into `epm` and the associated metric value.
     """
     modelIter = est.fitMultiple(train, epm)
 
     def singleTask():
         index, model = next(modelIter)
+        # TODO: duplicate evaluator to take extra params from input
+        #  Note: Supporting tuning params in evaluator need update method
+        #  `MetaAlgorithmReadWrite.getAllNestedStages`, make it return
+        #  all nested stages and evaluators
         metric = eva.evaluate(model.transform(validation, epm[index]))
         return index, metric, model if collectSubModel else None
 
@@ -62,6 +79,11 @@ class ParamGridBuilder(object):
     r"""
     Builder for a param grid used in grid search-based model selection.
 
+
+    .. versionadded:: 1.4.0
+
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> lr = LogisticRegression()
     >>> output = ParamGridBuilder() \
@@ -79,8 +101,6 @@ class ParamGridBuilder(object):
     True
     >>> all([m in expected for m in output])
     True
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
@@ -171,8 +191,16 @@ class _ValidatorParams(HasSeed):
         # Load information from java_stage to the instance.
         estimator = JavaParams._from_java(java_stage.getEstimator())
         evaluator = JavaParams._from_java(java_stage.getEvaluator())
-        epms = [estimator._transfer_param_map_from_java(epm)
-                for epm in java_stage.getEstimatorParamMaps()]
+        if isinstance(estimator, JavaEstimator):
+            epms = [estimator._transfer_param_map_from_java(epm)
+                    for epm in java_stage.getEstimatorParamMaps()]
+        elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
+            # Meta estimator such as Pipeline, OneVsRest
+            epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_from_java(
+                estimator, java_stage.getEstimatorParamMaps())
+        else:
+            raise ValueError('Unsupported estimator used in tuning: ' + str(estimator))
+
         return estimator, epms, evaluator
 
     def _to_java_impl(self):
@@ -183,13 +211,80 @@ class _ValidatorParams(HasSeed):
         gateway = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
 
-        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
-        for idx, epm in enumerate(self.getEstimatorParamMaps()):
-            java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+        estimator = self.getEstimator()
+        if isinstance(estimator, JavaEstimator):
+            java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+            for idx, epm in enumerate(self.getEstimatorParamMaps()):
+                java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+        elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
+            # Meta estimator such as Pipeline, OneVsRest
+            java_epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_to_java(
+                estimator, self.getEstimatorParamMaps())
+        else:
+            raise ValueError('Unsupported estimator used in tuning: ' + str(estimator))
 
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()
         return java_estimator, java_epms, java_evaluator
+
+
+class _ValidatorSharedReadWrite:
+    @staticmethod
+    def meta_estimator_transfer_param_maps_to_java(pyEstimator, pyParamMaps):
+        pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
+        stagePairs = list(map(lambda stage: (stage, stage._to_java()), pyStages))
+        sc = SparkContext._active_spark_context
+
+        paramMapCls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+        javaParamMaps = SparkContext._gateway.new_array(paramMapCls, len(pyParamMaps))
+
+        for idx, pyParamMap in enumerate(pyParamMaps):
+            javaParamMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+            for pyParam, pyValue in pyParamMap.items():
+                javaParam = None
+                for pyStage, javaStage in stagePairs:
+                    if pyStage._testOwnParam(pyParam.parent, pyParam.name):
+                        javaParam = javaStage.getParam(pyParam.name)
+                        break
+                if javaParam is None:
+                    raise ValueError('Resolve param in estimatorParamMaps failed: ' + str(pyParam))
+                if isinstance(pyValue, Params) and hasattr(pyValue, "_to_java"):
+                    javaValue = pyValue._to_java()
+                else:
+                    javaValue = _py2java(sc, pyValue)
+                pair = javaParam.w(javaValue)
+                javaParamMap.put([pair])
+            javaParamMaps[idx] = javaParamMap
+        return javaParamMaps
+
+    @staticmethod
+    def meta_estimator_transfer_param_maps_from_java(pyEstimator, javaParamMaps):
+        pyStages = MetaAlgorithmReadWrite.getAllNestedStages(pyEstimator)
+        stagePairs = list(map(lambda stage: (stage, stage._to_java()), pyStages))
+        sc = SparkContext._active_spark_context
+        pyParamMaps = []
+        for javaParamMap in javaParamMaps:
+            pyParamMap = dict()
+            for javaPair in javaParamMap.toList():
+                javaParam = javaPair.param()
+                pyParam = None
+                for pyStage, javaStage in stagePairs:
+                    if pyStage._testOwnParam(javaParam.parent(), javaParam.name()):
+                        pyParam = pyStage.getParam(javaParam.name())
+                if pyParam is None:
+                    raise ValueError('Resolve param in estimatorParamMaps failed: ' +
+                                     javaParam.parent() + '.' + javaParam.name())
+                javaValue = javaPair.value()
+                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(javaValue):
+                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
+                    # and Estimator/Transformer class which implements `_from_java` static method
+                    # (such as OneVsRest, Pipeline class).
+                    pyValue = JavaParams._from_java(javaValue)
+                else:
+                    pyValue = _java2py(sc, javaValue)
+                pyParamMap[pyParam] = pyValue
+            pyParamMaps.append(pyParamMap)
+        return pyParamMaps
 
 
 class _CrossValidatorParams(_ValidatorParams):
@@ -237,7 +332,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     each of which uses 2/3 of the data for training and 1/3 for testing. Each fold is used as the
     test set exactly once.
 
+    .. versionadded:: 1.4.0
 
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
@@ -270,8 +368,6 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     0.8333...
     >>> evaluator.evaluate(cvModelRead.transform(dataset))
     0.8333...
-
-    .. versionadded:: 1.4.0
     """
 
     @keyword_only
@@ -425,15 +521,24 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
         return datasets
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`CrossValidator`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -480,7 +585,10 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         """
         Transfer this instance to a Java CrossValidator. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
@@ -521,7 +629,6 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -530,8 +637,17 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         copies the embedded and extra parameters over.
         It does not copy the extra Params into the subModels.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`CrossValidatorModel`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -589,7 +705,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         """
         Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         sc = SparkContext._active_spark_context
@@ -648,6 +767,10 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     validation sets, and uses evaluation metric on the validation set to select the best model.
     Similar to :class:`CrossValidator`, but only splits the set once.
 
+    .. versionadded:: 2.0.0
+
+    Examples
+    --------
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
@@ -680,9 +803,6 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     0.833...
     >>> evaluator.evaluate(tvsModelRead.transform(dataset))
     0.833...
-
-    .. versionadded:: 2.0.0
-
     """
 
     @keyword_only
@@ -791,15 +911,23 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
         bestModel = est.fit(dataset, epm[bestIndex])
         return self._copyValues(TrainValidationSplitModel(bestModel, metrics, subModels))
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies creates a deep copy of
         the embedded paramMap, and copies the embedded and extra parameters over.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`TrainValidationSplit`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -844,7 +972,11 @@ class TrainValidationSplit(Estimator, _TrainValidationSplitParams, HasParallelis
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
-        :return: Java object equivalent to this instance.
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
@@ -880,7 +1012,6 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -890,8 +1021,17 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
         And, this creates a shallow copy of the validationMetrics.
         It does not copy the extra Params into the subModels.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`TrainValidationSplitModel`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -950,7 +1090,11 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     def _to_java(self):
         """
         Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.
-        :return: Java object equivalent to this instance.
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         sc = SparkContext._active_spark_context

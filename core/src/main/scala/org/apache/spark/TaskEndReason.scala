@@ -143,12 +143,12 @@ case class ExceptionFailure(
   private[spark] def this(
       e: Throwable,
       accumUpdates: Seq[AccumulableInfo],
-      preserveCause: Boolean) {
+      preserveCause: Boolean) = {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) = {
     this(e, accumUpdates, preserveCause = true)
   }
 

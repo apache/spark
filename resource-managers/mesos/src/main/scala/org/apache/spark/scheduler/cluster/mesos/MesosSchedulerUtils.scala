@@ -29,10 +29,10 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.Protos.Resource.ReservationInfo
-import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
+import org.apache.mesos.protobuf.GeneratedMessageV3
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
@@ -313,7 +313,6 @@ trait MesosSchedulerUtils extends Logging {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {
-          case None => false
           case Some(_) if requiredValues.isEmpty => true // empty value matches presence
           case Some(scalarValue: Value.Scalar) =>
             // check if provided values is less than equal to the offered values
@@ -332,6 +331,7 @@ trait MesosSchedulerUtils extends Logging {
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
             requiredValues.contains(textValue.getValue)
+          case _ => false
         }
     }
   }
@@ -356,7 +356,7 @@ trait MesosSchedulerUtils extends Logging {
    *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
    *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
-   * @param constraintsVal constains string consisting of ';' separated key-value pairs (separated
+   * @param constraintsVal contains string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */

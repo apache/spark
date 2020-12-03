@@ -131,7 +131,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` field.
    */
   protected lazy val sqlParser: ParserInterface = {
-    extensions.buildParser(session, new SparkSqlParser(conf))
+    extensions.buildParser(session, new SparkSqlParser())
   }
 
   /**
@@ -150,7 +150,6 @@ abstract class BaseSessionStateBuilder(
       () => session.sharedState.externalCatalog,
       () => session.sharedState.globalTempViewManager,
       functionRegistry,
-      conf,
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader)
@@ -158,9 +157,9 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
-  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
-  protected lazy val catalogManager = new CatalogManager(conf, v2SessionCatalog, catalog)
+  protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -175,11 +174,11 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      FindDataSourceTable +:
-        ResolveSQLOnFile +:
-        FallBackFileSourceV2 +:
+      new FindDataSourceTable(session) +:
+        new ResolveSQLOnFile(session) +:
+        new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
         new ResolveSessionCatalog(
           catalogManager, catalog.isTempView, catalog.isTempFunction) +:
@@ -187,9 +186,10 @@ abstract class BaseSessionStateBuilder(
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
-        PreprocessTableCreation +:
+        PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
+        ApplyCharTypePadding +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
@@ -197,7 +197,7 @@ abstract class BaseSessionStateBuilder(
         PreReadCheck +:
         HiveOnlyCheck +:
         TableCapabilityCheck +:
-        CommandCheck(conf) +:
+        CommandCheck +:
         customCheckRules
   }
 
@@ -241,6 +241,9 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
+      override def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] =
+        super.dataSourceRewriteRules ++ customDataSourceRewriteRules
+
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -265,12 +268,20 @@ abstract class BaseSessionStateBuilder(
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
+   * Custom rules for rewriting data source plans to add to the Optimizer. Prefer overriding
+   * this instead of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Planner that converts optimized logical plans to physical plans.
    *
    * Note: this depends on the `conf` and `experimentalMethods` fields.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session, conf, experimentalMethods) {
+    new SparkPlanner(session, experimentalMethods) {
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
     }

@@ -21,7 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
@@ -722,7 +722,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replay the given log file, saving the application in the listing db.
-   * Visable for testing
+   * Visible for testing
    */
   private[history] def doMergeApplicationListing(
       reader: EventLogFileReader,
@@ -1546,14 +1546,9 @@ private[history] class AppListingListener(
   private class MutableApplicationInfo {
     var id: String = null
     var name: String = null
-    var coresGranted: Option[Int] = None
-    var maxCores: Option[Int] = None
-    var coresPerExecutor: Option[Int] = None
-    var memoryPerExecutorMB: Option[Int] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
-        memoryPerExecutorMB, Nil)
+      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
 

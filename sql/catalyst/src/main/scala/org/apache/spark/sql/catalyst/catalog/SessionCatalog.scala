@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -61,10 +61,11 @@ class SessionCatalog(
     externalCatalogBuilder: () => ExternalCatalog,
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
-    functionResourceLoader: FunctionResourceLoader) extends Logging {
+    functionResourceLoader: FunctionResourceLoader,
+    cacheSize: Int = SQLConf.get.tableRelationCacheSize,
+    cacheTTL: Long = SQLConf.get.metadataCacheTTL) extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -72,23 +73,26 @@ class SessionCatalog(
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
-      conf: SQLConf) {
+      conf: SQLConf) = {
     this(
       () => externalCatalog,
       () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
       functionRegistry,
-      conf,
       new Configuration(),
-      new CatalystSqlParser(conf),
-      DummyFunctionResourceLoader)
+      new CatalystSqlParser(),
+      DummyFunctionResourceLoader,
+      conf.tableRelationCacheSize,
+      conf.metadataCacheTTL)
   }
 
   // For testing only.
-  def this(externalCatalog: ExternalCatalog) {
-    this(
-      externalCatalog,
-      new SimpleFunctionRegistry,
-      new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+  def this(externalCatalog: ExternalCatalog, functionRegistry: FunctionRegistry) = {
+    this(externalCatalog, functionRegistry, SQLConf.get)
+  }
+
+  // For testing only.
+  def this(externalCatalog: ExternalCatalog) = {
+    this(externalCatalog, new SimpleFunctionRegistry)
   }
 
   lazy val externalCatalog = externalCatalogBuilder()
@@ -136,9 +140,6 @@ class SessionCatalog(
   }
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    val cacheSize = conf.tableRelationCacheSize
-    val cacheTTL = conf.metadataCacheTTL
-
     var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
 
@@ -472,7 +473,10 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
-    externalCatalog.getTable(db, table)
+    val t = externalCatalog.getTable(db, table)
+    // We replace char/varchar with "annotated" string type in the table schema, as the query
+    // engine doesn't support char/varchar yet.
+    t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
   }
 
   /**
@@ -794,14 +798,19 @@ class SessionCatalog(
 
     if (metadata.tableType == CatalogTableType.VIEW) {
       val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-      logDebug(s"'$viewText' will be used for the view($table).")
+      val viewConfigs = metadata.viewSQLConfigs
+      val viewPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs)) {
+        parser.parsePlan(viewText)
+      }
+
+      logDebug(s"'$viewText' will be used for the view($table) with configs: $viewConfigs.")
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       val child = View(
         desc = metadata,
         output = metadata.schema.toAttributes,
-        child = parser.parsePlan(viewText))
+        child = viewPlan)
       SubqueryAlias(multiParts, child)
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))

@@ -119,7 +119,10 @@ def asc(col):
     """
     Returns a sort expression based on the ascending order of the given column name.
     """
-    return _invoke_function("asc", col)
+    return (
+        col.asc() if isinstance(col, Column)
+        else _invoke_function("asc", col)
+    )
 
 
 @since(1.3)
@@ -127,7 +130,10 @@ def desc(col):
     """
     Returns a sort expression based on the descending order of the given column name.
     """
-    return _invoke_function("desc", col)
+    return (
+        col.desc() if isinstance(col, Column)
+        else _invoke_function("desc", col)
+    )
 
 
 @since(1.3)
@@ -214,6 +220,19 @@ def acos(col):
     return _invoke_function_over_column("acos", col)
 
 
+def acosh(col):
+    """
+    Computes inverse hyperbolic cosine of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("acosh", col)
+
+
 def asin(col):
     """
     .. versionadded:: 1.3.0
@@ -227,6 +246,19 @@ def asin(col):
     return _invoke_function_over_column("asin", col)
 
 
+def asinh(col):
+    """
+    Computes inverse hyperbolic sine of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("asinh", col)
+
+
 def atan(col):
     """
     .. versionadded:: 1.4.0
@@ -237,6 +269,19 @@ def atan(col):
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
     """
     return _invoke_function_over_column("atan", col)
+
+
+def atanh(col):
+    """
+    Computes inverse hyperbolic tangent of the input column.
+
+    .. versionadded:: 3.1.0
+
+    Returns
+    -------
+    :class:`Column`
+    """
+    return _invoke_function_over_column("atanh", col)
 
 
 @since(1.4)
@@ -457,7 +502,10 @@ def asc_nulls_first(col):
     Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
     """
-    return _invoke_function("asc_nulls_first", col)
+    return (
+        col.asc_nulls_first() if isinstance(col, Column)
+        else _invoke_function("asc_nulls_first", col)
+    )
 
 
 @since(2.4)
@@ -466,7 +514,10 @@ def asc_nulls_last(col):
     Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
     """
-    return _invoke_function("asc_nulls_last", col)
+    return (
+        col.asc_nulls_last() if isinstance(col, Column)
+        else _invoke_function("asc_nulls_last", col)
+    )
 
 
 @since(2.4)
@@ -475,7 +526,10 @@ def desc_nulls_first(col):
     Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
     """
-    return _invoke_function("desc_nulls_first", col)
+    return (
+        col.desc_nulls_first() if isinstance(col, Column)
+        else _invoke_function("desc_nulls_first", col)
+    )
 
 
 @since(2.4)
@@ -484,7 +538,10 @@ def desc_nulls_last(col):
     Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
     """
-    return _invoke_function("desc_nulls_last", col)
+    return (
+        col.desc_nulls_last() if isinstance(col, Column)
+        else _invoke_function("desc_nulls_last", col)
+    )
 
 
 @since(1.6)
@@ -1243,7 +1300,7 @@ def spark_partition_id():
 
     Notes
     -----
-    This is indeterministic because it depends on data partitioning and task scheduling.
+    This is non deterministic because it depends on data partitioning and task scheduling.
 
     Examples
     --------
@@ -3509,7 +3566,7 @@ def schema_of_json(json, options={}):
     Parameters
     ----------
     json : :class:`Column` or str
-        a JSON string or a string literal containing a JSON string.
+        a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource
 
@@ -3546,7 +3603,7 @@ def schema_of_csv(csv, options={}):
     Parameters
     ----------
     csv : :class:`Column` or str
-        a CSV string or a string literal containing a CSV string.
+        a CSV string or a foldable string column containing a CSV string.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource
 
@@ -4053,7 +4110,7 @@ def _get_lambda_parameters(f):
     # We should exclude functions that use
     # variable args and keyword argnames
     # as well as keyword only args
-    supported_parmeter_types = {
+    supported_parameter_types = {
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.POSITIONAL_ONLY,
     }
@@ -4068,7 +4125,7 @@ def _get_lambda_parameters(f):
         )
 
     # and all arguments can be used as positional
-    if not all(p.kind in supported_parmeter_types for p in parameters):
+    if not all(p.kind in supported_parameter_types for p in parameters):
         raise ValueError(
             "f should use only POSITIONAL or POSITIONAL OR KEYWORD arguments"
         )
@@ -4583,7 +4640,7 @@ def years(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4607,7 +4664,7 @@ def months(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4631,7 +4688,7 @@ def days(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 
@@ -4655,7 +4712,7 @@ def hours(col):
 
     Notes
     -----
-    This function can be used only in combinatiion with
+    This function can be used only in combination with
     :py:meth:`~pyspark.sql.readwriter.DataFrameWriterV2.partitionedBy`
     method of the `DataFrameWriterV2`.
 

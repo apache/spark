@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
@@ -761,17 +761,10 @@ object JdbcUtils extends Logging {
       schema: StructType,
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
-    def typeName(f: StructField): String = {
-      // char/varchar gets translated to string type. Real data type specified by the user
-      // is available in the field metadata as HIVE_TYPE_STRING
-      if (f.metadata.contains(HIVE_TYPE_STRING)) {
-        f.metadata.getString(HIVE_TYPE_STRING)
-      } else {
-        f.dataType.catalogString
-      }
-    }
-
-    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val parsedSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
+    val userSchema = StructType(parsedSchema.map { field =>
+      field.copy(dataType = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType))
+    })
     val nameEquality = if (caseSensitive) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
     } else {
@@ -791,7 +784,7 @@ object JdbcUtils extends Logging {
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
+    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
     if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
@@ -863,6 +856,7 @@ object JdbcUtils extends Logging {
       schema: StructType,
       caseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
       schema, caseSensitive, options.url, options.createTableColumnTypes)
     val createTableOptions = options.createTableOptions
@@ -872,6 +866,15 @@ object JdbcUtils extends Logging {
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
     val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
     executeStatement(conn, options, sql)
+    if (options.tableComment.nonEmpty) {
+      try {
+        executeStatement(
+          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
+      } catch {
+        case e: Exception =>
+          logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
+      }
+    }
   }
 
   /**

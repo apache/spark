@@ -38,14 +38,14 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
     originalActiveSparkSession = SparkSession.getActiveSession
     originalInstantiatedSparkSession = SparkSession.getDefaultSession
 
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
   }
 
   override protected def afterAll(): Unit = {
     try {
       // Set these states back.
-      originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSessionInternal(ctx))
+      originalActiveSparkSession.foreach(ctx => SparkSession.setActiveSession(ctx))
       originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
     } finally {
       super.afterAll()

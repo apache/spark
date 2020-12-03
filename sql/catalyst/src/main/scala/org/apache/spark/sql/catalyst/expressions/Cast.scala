@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
@@ -25,6 +24,7 @@ import java.util.concurrent.TimeUnit._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
@@ -59,8 +59,7 @@ object Cast {
     case (StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (_: NumericType, TimestampType) =>
-      SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP)
+    case (_: NumericType, TimestampType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
@@ -258,25 +257,26 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   def dataType: DataType
 
+  /**
+   * Returns true iff we can cast `from` type to `to` type.
+   */
+  def canCast(from: DataType, to: DataType): Boolean
+
+  /**
+   * Returns the error message if casting from one type to another one is invalid.
+   */
+  def typeCheckFailureMessage: String
+
   override def toString: String = {
     val ansi = if (ansiEnabled) "ansi_" else ""
     s"${ansi}cast($child as ${dataType.simpleString})"
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (Cast.canCast(child.dataType, dataType)) {
+    if (canCast(child.dataType, dataType)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        if (child.dataType.isInstanceOf[NumericType] && dataType.isInstanceOf[TimestampType]) {
-          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}," +
-            "you can enable the casting by setting " +
-            s"${SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key} to true," +
-            "but we strongly recommend using function " +
-            "TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead."
-        } else {
-          s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
-        })
+      TypeCheckResult.TypeCheckFailure(typeCheckFailureMessage)
     }
   }
 
@@ -315,7 +315,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         builder.append("[")
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
-          if (!array.isNullAt(0)) {
+          if (array.isNullAt(0)) {
+            if (!legacyCastToStr) builder.append("null")
+          } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
           var i = 1
@@ -376,7 +378,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
+            if (!legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -446,7 +448,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull)
+      buildCast[UTF8String](_, utfs => {
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId)
+        } else {
+          DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
+        }
+      })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -898,8 +906,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     """
   }
 
-  private def outNullElem(buffer: ExprValue): Block = {
-    if (legacyCastToStr) code"" else code"""$buffer.append(" null");"""
+  private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
+    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
   }
 
   private def writeArrayToStringBuilder(
@@ -925,14 +933,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    ${outNullElem(buffer)}
+       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${outNullElem(buffer)}
+       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
@@ -982,7 +990,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${outNullElem(buffer)}
+       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
@@ -992,7 +1000,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${outNullElem(buffer)}
+       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
@@ -1016,7 +1024,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  ${outNullElem(buffer)}
+         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
          |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |
@@ -1248,15 +1256,22 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         zoneIdClass)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
-        code"""
-          scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
-          if ($longOpt.isDefined()) {
-            $evPrim = ((Long) $longOpt.get()).longValue();
-          } else {
-            $evNull = true;
-          }
-         """
+        if (ansiEnabled) {
+          code"""
+            $evPrim =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampAnsi($c, $zid);
+           """
+        } else {
+          code"""
+            scala.Option<Long> $longOpt =
+              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
+            if ($longOpt.isDefined()) {
+              $evPrim = ((Long) $longOpt.get()).longValue();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
     case BooleanType =>
       (c, evPrim, evNull) => code"$evPrim = $c ? 1L : 0L;"
     case _: IntegralType =>
@@ -1751,6 +1766,18 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     copy(timeZoneId = Option(timeZoneId))
 
   override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
+
+  override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
+    AnsiCast.canCast(from, to)
+  } else {
+    Cast.canCast(from, to)
+  }
+
+  override def typeCheckFailureMessage: String = if (ansiEnabled) {
+    AnsiCast.typeCheckFailureMessage(child.dataType, dataType, SQLConf.ANSI_ENABLED.key, "false")
+  } else {
+    s"cannot cast ${child.dataType.catalogString} to ${dataType.catalogString}"
+  }
 }
 
 /**
@@ -1768,6 +1795,147 @@ case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[St
     copy(timeZoneId = Option(timeZoneId))
 
   override protected val ansiEnabled: Boolean = true
+
+  override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
+
+  // For now, this expression is only used in table insertion.
+  // If there are more scenarios for this expression, we should update the error message on type
+  // check failure.
+  override def typeCheckFailureMessage: String =
+    AnsiCast.typeCheckFailureMessage(child.dataType, dataType,
+      SQLConf.STORE_ASSIGNMENT_POLICY.key, SQLConf.StoreAssignmentPolicy.LEGACY.toString)
+
+}
+
+object AnsiCast {
+  /**
+   * As per section 6.13 "cast specification" in "Information technology — Database languages " +
+   * "- SQL — Part 2: Foundation (SQL/Foundation)":
+   * If the <cast operand> is a <value expression>, then the valid combinations of TD and SD
+   * in a <cast specification> are given by the following table. “Y” indicates that the
+   * combination is syntactically valid without restriction; “M” indicates that the combination
+   * is valid subject to other Syntax Rules in this Sub- clause being satisfied; and “N” indicates
+   * that the combination is not valid:
+   * SD                   TD
+   *     EN AN C D T TS YM DT BO UDT B RT CT RW
+   * EN  Y  Y  Y N N  N  M  M  N   M N  M  N N
+   * AN  Y  Y  Y N N  N  N  N  N   M N  M  N N
+   * C   Y  Y  Y Y Y  Y  Y  Y  Y   M N  M  N N
+   * D   N  N  Y Y N  Y  N  N  N   M N  M  N N
+   * T   N  N  Y N Y  Y  N  N  N   M N  M  N N
+   * TS  N  N  Y Y Y  Y  N  N  N   M N  M  N N
+   * YM  M  N  Y N N  N  Y  N  N   M N  M  N N
+   * DT  M  N  Y N N  N  N  Y  N   M N  M  N N
+   * BO  N  N  Y N N  N  N  N  Y   M N  M  N N
+   * UDT M  M  M M M  M  M  M  M   M M  M  M N
+   * B   N  N  N N N  N  N  N  N   M Y  M  N N
+   * RT  M  M  M M M  M  M  M  M   M M  M  N N
+   * CT  N  N  N N N  N  N  N  N   M N  N  M N
+   * RW  N  N  N N N  N  N  N  N   N N  N  N M
+   *
+   * Where:
+   *   EN  = Exact Numeric
+   *   AN  = Approximate Numeric
+   *   C   = Character (Fixed- or Variable-Length, or Character Large Object)
+   *   D   = Date
+   *   T   = Time
+   *   TS  = Timestamp
+   *   YM  = Year-Month Interval
+   *   DT  = Day-Time Interval
+   *   BO  = Boolean
+   *   UDT  = User-Defined Type
+   *   B   = Binary (Fixed- or Variable-Length or Binary Large Object)
+   *   RT  = Reference type
+   *   CT  = Collection type
+   *   RW  = Row type
+   *
+   * Spark's ANSI mode follows the syntax rules, except it specially allow the following
+   * straightforward type conversions which are disallowed as per the SQL standard:
+   *   - Numeric <=> Boolean
+   *   - String <=> Binary
+   */
+  def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (fromType, toType) if fromType == toType => true
+
+    case (NullType, _) => true
+
+    case (StringType, _: BinaryType) => true
+
+    case (StringType, BooleanType) => true
+    case (_: NumericType, BooleanType) => true
+
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+
+    case (StringType, _: CalendarIntervalType) => true
+
+    case (StringType, DateType) => true
+    case (TimestampType, DateType) => true
+
+    case (_: NumericType, _: NumericType) => true
+    case (StringType, _: NumericType) => true
+    case (BooleanType, _: NumericType) => true
+
+    case (_: NumericType, StringType) => true
+    case (_: DateType, StringType) => true
+    case (_: TimestampType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
+    case (BooleanType, StringType) => true
+    case (BinaryType, StringType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      canCast(fromType, toType) &&
+        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      canCast(fromKey, toKey) &&
+        (!forceNullable(fromKey, toKey)) &&
+        canCast(fromValue, toValue) &&
+        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (fromField, toField) =>
+            canCast(fromField.dataType, toField.dataType) &&
+              resolvableNullability(
+                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
+                toField.nullable)
+        }
+
+    case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case _ => false
+  }
+
+  def typeCheckFailureMessage(
+      from: DataType,
+      to: DataType,
+      fallbackConfKey: String,
+      fallbackConfValue: String): String =
+    (from, to) match {
+      case (_: NumericType, TimestampType) =>
+        // scalastyle:off line.size.limit
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString}.
+           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
+           |""".stripMargin
+
+      case (_: ArrayType, StringType) =>
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can use the function ARRAY_JOIN or set $fallbackConfKey as $fallbackConfValue.
+           |""".stripMargin
+
+      case _ if Cast.canCast(from, to) =>
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
+           | If you have to cast ${from.catalogString} to ${to.catalogString}, you can set $fallbackConfKey as $fallbackConfValue.
+           |""".stripMargin
+
+      case _ => s"cannot cast ${from.catalogString} to ${to.catalogString}"
+      // scalastyle:on line.size.limit
+    }
 }
 
 /**

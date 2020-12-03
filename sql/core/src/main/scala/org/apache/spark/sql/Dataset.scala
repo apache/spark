@@ -21,7 +21,6 @@ import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -63,7 +62,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -232,7 +231,8 @@ class Dataset[T] private[sql](
       case _ =>
         queryExecution.analyzed
     }
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
+        plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
       plan.setTagValue(Dataset.DATASET_ID_TAG, id)
     }
     plan
@@ -260,15 +260,16 @@ class Dataset[T] private[sql](
   private[sql] def resolve(colName: String): NamedExpression = {
     val resolver = sparkSession.sessionState.analyzer.resolver
     queryExecution.analyzed.resolveQuoted(colName, resolver)
-      .getOrElse {
-        val fields = schema.fieldNames
-        val extraMsg = if (fields.exists(resolver(_, colName))) {
-          s"; did you mean to quote the `$colName` column?"
-        } else ""
-        val fieldsStr = fields.mkString(", ")
-        val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-        throw new AnalysisException(errorMsg)
-      }
+      .getOrElse(throw resolveException(colName, schema.fieldNames))
+  }
+
+  private def resolveException(colName: String, fields: Array[String]): AnalysisException = {
+    val extraMsg = if (fields.exists(sparkSession.sessionState.analyzer.resolver(_, colName))) {
+      s"; did you mean to quote the `$colName` column?"
+    } else ""
+    val fieldsStr = fields.mkString(", ")
+    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
+    new AnalysisException(errorMsg)
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -1084,8 +1085,8 @@ class Dataset[T] private[sql](
     }
 
     // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
-    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
+    val lanalyzed = this.queryExecution.analyzed
+    val ranalyzed = right.queryExecution.analyzed
     if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
       return withPlan(plan)
     }
@@ -1093,17 +1094,22 @@ class Dataset[T] private[sql](
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
+    val resolver = sparkSession.sessionState.analyzer.resolver
     val cond = plan.condition.map { _.transform {
       case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
           if a.sameRef(b) =>
         catalyst.expressions.EqualTo(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
+          plan.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
+          plan.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
       case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
         if a.sameRef(b) =>
         catalyst.expressions.EqualNullSafe(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
+          plan.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
+          plan.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
     }}
 
     withPlan {

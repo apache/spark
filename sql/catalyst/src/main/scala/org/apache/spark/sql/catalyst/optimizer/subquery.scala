@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -329,6 +328,8 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
     case q: UnaryNode =>
       rewriteSubQueries(q, q.children)
+    case s: SupportsSubquery =>
+      rewriteSubQueries(s, s.children)
   }
 }
 

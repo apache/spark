@@ -761,7 +761,7 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None, unescapedQuoteHandling=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -900,6 +900,26 @@ class DataStreamReader(OptionUtils):
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        unescapedQuoteHandling : str, optional
+            defines how the CsvParser will handle values with unescaped quotes. If None is
+            set, it uses the default value, ``STOP_AT_DELIMITER``.
+
+            * ``STOP_AT_CLOSING_QUOTE``: If unescaped quotes are found in the input, accumulate
+              the quote character and proceed parsing the value as a quoted value, until a closing
+              quote is found.
+            * ``BACK_TO_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters of the current
+              parsed value until the delimiter is found. If no delimiter is found in the value, the
+              parser will continue accumulating characters from the input until a delimiter or line
+              ending is found.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters until the
+              delimiter or a line ending is found in the input.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, the content parsed
+              for the given value will be skipped and the value set in nullValue will be produced
+              instead.
+            * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException
+              will be thrown.
 
         .. versionadded:: 2.0.0
 
@@ -926,7 +946,8 @@ class DataStreamReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            unescapedQuoteHandling=unescapedQuoteHandling)
         if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:

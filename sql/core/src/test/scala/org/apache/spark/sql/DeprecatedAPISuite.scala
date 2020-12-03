@@ -130,10 +130,10 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
   test("SQLContext.setActive/clearActive") {
     val sc = spark.sparkContext
     val sqlContext = new SQLContext(sc)
-    intercept[UnsupportedOperationException](SQLContext.setActive(sqlContext))
+    SQLContext.setActive(sqlContext)
     assert(SparkSession.getActiveSession === Some(spark))
-    intercept[UnsupportedOperationException](SQLContext.clearActive())
-    assert(SparkSession.getActiveSession === Some(spark))
+    SQLContext.clearActive()
+    assert(SparkSession.getActiveSession === None)
   }
 
   test("SQLContext.applySchema") {

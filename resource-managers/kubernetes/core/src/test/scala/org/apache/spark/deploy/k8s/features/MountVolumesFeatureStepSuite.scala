@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s._
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
@@ -42,7 +42,7 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(configuredPod.container.getVolumeMounts.get(0).getReadOnly === false)
   }
 
-  test("Mounts pesistentVolumeClaims") {
+  test("Mounts persistentVolumeClaims") {
     val volumeConf = KubernetesVolumeSpec(
       "testVolume",
       "/tmp",

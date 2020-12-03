@@ -166,11 +166,11 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
-    val ouputCols = inputColNames.map { inputColName =>
+    val outputCols = inputColNames.map { inputColName =>
       t(col(inputColName))
     }
-    val ouputMetadata = outputColNames.map(outputSchema(_).metadata)
-    dataset.withColumns(outputColNames, ouputCols, ouputMetadata)
+    val outputMetadata = outputColNames.map(outputSchema(_).metadata)
+    dataset.withColumns(outputColNames, outputCols, outputMetadata)
   }
 
   @Since("1.5.0")

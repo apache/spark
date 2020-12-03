@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Checks legitimization of various execution commands.
  */
-case class CommandCheck(conf: SQLConf) extends (LogicalPlan => Unit) {
+object CommandCheck extends (LogicalPlan => Unit) with SQLConfHelper {
 
   override def apply(plan: LogicalPlan): Unit = {
     plan.foreach {

@@ -22,7 +22,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Sort, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -891,6 +891,227 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           """.stripMargin).queryExecution.executedPlan
         val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
         assert(exchanges.size == 2)
+      }
+    }
+  }
+
+  test("SPARK-33399: aliases should be handled properly in PartitioningCollection output" +
+    " partitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t1id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+            HashPartitioning(Seq(k2: AttributeReference), _))) if k1.name == "t1id" =>
+            true
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33399: aliases should be handled properly in HashPartitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t1id, t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id
+            |    FROM t1 LEFT SEMI JOIN t2
+            |    ON t1.id = t2.id
+            |) t12 INNER JOIN t3
+            |WHERE t1id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case HashPartitioning(Seq(a: AttributeReference), _) => a.name == "t1id"
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33399: alias handling should happen properly for RangePartitioning") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      // Plan for this will be Range -> ProjectWithAlias -> HashAggregate -> HashAggregate
+      // if Project normalizes alias in its Range outputPartitioning, then no Exchange should come
+      // in between HashAggregates
+      val planned = df.queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+
+      val projects = planned.collect { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case RangePartitioning(Seq(SortOrder(ar: AttributeReference, _, _, _)), _) =>
+          ar.name == "id1"
+        case _ => false
+      }))
+    }
+  }
+
+  test("SPARK-33399: aliased should be handled properly " +
+    "for partitioning and sortorder involving complex expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).select(col("id").as("id1")).createTempView("t1")
+        spark.range(20).select(col("id").as("id2")).createTempView("t2")
+        spark.range(30).select(col("id").as("id3")).createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t3.id3 as t3id
+            |FROM (
+            |    SELECT t1.id1 as t1id, t2.id2 as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id1 * 10 = t2.id2 * 10
+            |) t12, t3
+            |WHERE t1id * 10 = t3.id3 * 10
+          """.stripMargin).queryExecution.executedPlan
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val exchangeNodes = planned.collect { case e: ShuffleExchangeExec => e }
+        assert(exchangeNodes.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(Multiply(ar1, _, _)), _),
+            HashPartitioning(Seq(Multiply(ar2, _, _)), _))) =>
+            Seq(ar1, ar2) match {
+              case Seq(ar1: AttributeReference, ar2: AttributeReference) =>
+                ar1.name == "t1id" && ar2.name == "id2"
+              case _ =>
+                false
+            }
+          case _ => false
+        }))
+
+      }
+    }
+  }
+
+  test("SPARK-33399: alias handling should happen properly for SinglePartition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df = spark.range(1, 100, 1, 1)
+        .select(col("id").as("id1")).groupBy("id1").count()
+      val planned = df.queryExecution.executedPlan
+      val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+      assert(exchanges.isEmpty)
+
+      val projects = planned.collect { case p: ProjectExec => p }
+      assert(projects.exists(_.outputPartitioning match {
+        case SinglePartition => true
+        case _ => false
+      }))
+    }
+  }
+
+  test("SPARK-33399: No extra exchanges in case of" +
+    " [Inner Join -> Project with aliases -> HashAggregate]") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            |SELECT t1id, t2id
+            |FROM (
+            |  SELECT t1.id as t1id, t2.id as t2id
+            |  FROM t1 INNER JOIN t2
+            |  WHERE t1.id = t2.id
+            |) t12
+            |GROUP BY t1id, t2id
+          """.stripMargin).queryExecution.executedPlan
+        val exchanges = planned.collect { case s: ShuffleExchangeExec => s }
+        assert(exchanges.size == 2)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            k1.name == "t1id" && k2.name == "t2id"
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("SPARK-33400: Normalization of sortOrder should take care of sameOrderExprs") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        spark.range(30).repartition($"id").createTempView("t3")
+        val planned = sql(
+          """
+            |SELECT t2id, t3.id as t3id
+            |FROM (
+            |    SELECT t1.id as t1id, t2.id as t2id
+            |    FROM t1, t2
+            |    WHERE t1.id = t2.id
+            |) t12, t3
+            |WHERE t2id = t3.id
+          """.stripMargin).queryExecution.executedPlan
+
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+
+        val projects = planned.collect { case p: ProjectExec => p }
+        assert(projects.exists(_.outputOrdering match {
+          case Seq(SortOrder(_, Ascending, NullsFirst, sameOrderExprs)) =>
+            sameOrderExprs.size == 1 && sameOrderExprs.head.isInstanceOf[AttributeReference] &&
+              sameOrderExprs.head.asInstanceOf[AttributeReference].name == "t2id"
+          case _ => false
+        }))
+      }
+    }
+  }
+
+  test("sort order doesn't have repeated expressions") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t12.id, t1.id
+            | FROM (SELECT t1.id FROM t1, t2 WHERE t1.id * 2 = t2.id) t12, t1
+            | where 2 * t12.id = t1.id
+        """.stripMargin).queryExecution.executedPlan
+
+        // t12 is already sorted on `t1.id * 2`. and we need to sort it on `2 * t12.id`
+        // for 2nd join. So sorting on t12 can be avoided
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val outputOrdering = planned.outputOrdering
+        assert(outputOrdering.size == 1)
+        // Sort order should have 3 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
+        assert(outputOrdering.head.children.size == 3)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 2)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
       }
     }
   }

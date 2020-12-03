@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
-import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
