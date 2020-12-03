@@ -1262,7 +1262,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("cache support for permanent view") {
+  test("SPARK-33647: cache support for permanent view") {
     withView("v1") {
       spark.catalog.clearCache()
       sql("create or replace view v1 as select 1")

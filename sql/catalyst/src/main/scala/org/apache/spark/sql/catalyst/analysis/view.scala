@@ -73,13 +73,18 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
       }
       // Map the attributes in the query output to the attributes in the view output by index.
       val newOutput = output.zip(queryOutput).map {
-        case (attr, originAttr) if !attr.semanticEquals(originAttr) =>
+        case (attr, originAttr)
+          if attr.name != originAttr.name || attr.dataType != originAttr.dataType =>
           // `CheckAnalysis` already guarantees that the cast is a up-cast for sure.
           Alias(cast(originAttr, attr.dataType), attr.name)(exprId = attr.exprId,
             qualifier = attr.qualifier, explicitMetadata = Some(attr.metadata))
         case (_, originAttr) => originAttr
       }
-      Project(newOutput, child)
+      if (newOutput != queryOutput) {
+        Project(newOutput, child)
+      } else {
+        child
+      }
 
     // The child should have the same output attributes with the View operator, so we simply
     // remove the View operator.
