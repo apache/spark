@@ -1062,7 +1062,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     // transitive=invalidValue will win and treated as false
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
-      "transitive=true&transitive=false&transitive=invalidValue")
+      "transitive=true&transitive=invalidValue")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 

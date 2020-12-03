@@ -80,18 +80,20 @@ private[spark] object DependencyUtils extends Logging {
           s"Invalid query string in ivy uri ${uri.toString}: $uriQuery")
       }
       val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
+
       // Parse transitive parameters (e.g., transitive=true) in an ivy URL, default value is false
-      var transitive = false
-      groupedParams.get("transitive").foreach { params =>
-        if (params.length > 1) {
-          logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
-            " If there are multiple `transitive` parameter, we will select the last one")
-        }
-        params.map(_._2).foreach {
-          case "true" => transitive = true
-          case _ => transitive = false
-        }
+      val transitiveParams = groupedParams.get("transitive")
+      if (transitiveParams.map(_.size).getOrElse(0) > 1) {
+        logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
+          " If there are multiple `transitive` parameter, we will select the last one")
       }
+      val transitive = transitiveParams.flatMap(_.takeRight(1).map { case (_, value) =>
+        value match {
+          case "true" => true
+          case _ => false
+        }
+      }.headOption).getOrElse(false)
+
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
       // in an ivy URL. When download ivy URL jar, Spark won't download transitive jar
       // in a excluded list.
