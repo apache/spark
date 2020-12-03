@@ -2744,8 +2744,8 @@ object SQLConf {
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. " +
-        "This config influences on the following parquet logical types: DATE, TIMESTAMP_MILLIS, " +
-        "TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
       .stringConf
@@ -2776,8 +2776,8 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
-        "This config influences on the following parquet logical types: DATE, TIMESTAMP_MILLIS, " +
-        "TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
       .stringConf
