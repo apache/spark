@@ -2963,7 +2963,7 @@ object LogisticRegressionSuite {
     coefficients1.colIter.zip(coefficients2.colIter).foreach { case (col1: Vector, col2: Vector) =>
       (col1.asBreeze - col2.asBreeze).toArray.toSeq.sliding(2).foreach {
         case Seq(v1, v2) =>
-          if (math.abs(v1) < 1E-5 || math.abs(v2) < 1E-5) {
+          if (math.abs(v1) < 1E-3 || math.abs(v2) < 1E-3) {
             // If one of v1 and v2 is very close to zero, then compare absTol
             assert(v1 ~= v2 absTol 1E-2, s"v1 ~= v2 absTol 0.01 faild: v1=${v1}, v2=${v2}")
           }
