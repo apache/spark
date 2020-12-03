@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
@@ -51,7 +51,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
   }
 
@@ -573,8 +573,9 @@ class ColumnarBoundReference(ordinal: Int, dataType: DataType, nullable: Boolean
 class ColumnarAlias(child: ColumnarExpression, name: String)(
     override val exprId: ExprId = NamedExpression.newExprId,
     override val qualifier: Seq[String] = Seq.empty,
-    override val explicitMetadata: Option[Metadata] = None)
-  extends Alias(child, name)(exprId, qualifier, explicitMetadata)
+    override val explicitMetadata: Option[Metadata] = None,
+    override val deniedMetadataKeys: Seq[String] = Seq.empty)
+  extends Alias(child, name)(exprId, qualifier, explicitMetadata, deniedMetadataKeys)
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
@@ -711,7 +712,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
       new ColumnarAlias(replaceWithColumnarExpression(a.child),
-        a.name)(a.exprId, a.qualifier, a.explicitMetadata)
+        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.deniedMetadataKeys)
     case att: AttributeReference =>
       new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
         att.metadata)(att.exprId, att.qualifier)
@@ -766,7 +767,9 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
 case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
   override def numMappers: Int = delegate.numMappers
   override def numPartitions: Int = delegate.numPartitions
-  override def canChangeNumPartitions: Boolean = delegate.canChangeNumPartitions
+  override def shuffleOrigin: ShuffleOrigin = {
+    delegate.shuffleOrigin
+  }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
     delegate.mapOutputStatisticsFuture
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =

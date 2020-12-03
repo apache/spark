@@ -388,8 +388,12 @@ class DefaultParamsWriter(MLWriter):
         - defaultParamMap (since 2.4.0)
         - (optionally, extra metadata)
 
-        :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
-        :param paramMap:  If given, this is saved in the "paramMap" field.
+        Parameters
+        ----------
+        extraMetadata : dict, optional
+            Extra metadata to be saved at same level as uid, paramMap, etc.
+        paramMap : dict, optional
+            If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
@@ -404,7 +408,9 @@ class DefaultParamsWriter(MLWriter):
         Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
         This is useful for ensemble models which need to save metadata for many sub-models.
 
-        .. note:: :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
+        Notes
+        -----
+        See :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
@@ -491,7 +497,12 @@ class DefaultParamsReader(MLReader):
         """
         Load metadata saved using :py:meth:`DefaultParamsWriter.saveMetadata`
 
-        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
+        Parameters
+        ----------
+        path : str
+        sc : :py:class:`pyspark.SparkContext`
+        expectedClassName : str, optional
+            If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataStr = sc.textFile(metadataPath, 1).first()
@@ -504,8 +515,12 @@ class DefaultParamsReader(MLReader):
         Parse metadata JSON string produced by :py:meth`DefaultParamsWriter._get_metadata_to_save`.
         This is a helper function for :py:meth:`DefaultParamsReader.loadMetadata`.
 
-        :param metadataStr:  JSON string of metadata
-        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
+        Parameters
+        ----------
+        metadataStr : str
+            JSON string of metadata
+        expectedClassName : str, optional
+            If non empty, this is checked against the loaded metadata.
         """
         metadata = json.loads(metadataStr)
         className = metadata['class']
@@ -577,3 +592,41 @@ class HasTrainingSummary(object):
         no summary exists.
         """
         return (self._call_java("summary"))
+
+
+class MetaAlgorithmReadWrite:
+
+    @staticmethod
+    def isMetaEstimator(pyInstance):
+        from pyspark.ml import Estimator, Pipeline
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest
+        return isinstance(pyInstance, Pipeline) or isinstance(pyInstance, OneVsRest) or \
+            (isinstance(pyInstance, Estimator) and isinstance(pyInstance, _ValidatorParams))
+
+    @staticmethod
+    def getAllNestedStages(pyInstance):
+        from pyspark.ml import Pipeline, PipelineModel
+        from pyspark.ml.tuning import _ValidatorParams
+        from pyspark.ml.classification import OneVsRest, OneVsRestModel
+
+        # TODO: We need to handle `RFormulaModel.pipelineModel` here after Pyspark RFormulaModel
+        #  support pipelineModel property.
+        if isinstance(pyInstance, Pipeline):
+            pySubStages = pyInstance.getStages()
+        elif isinstance(pyInstance, PipelineModel):
+            pySubStages = pyInstance.stages
+        elif isinstance(pyInstance, _ValidatorParams):
+            raise ValueError('PySpark does not support nested validator.')
+        elif isinstance(pyInstance, OneVsRest):
+            pySubStages = [pyInstance.getClassifier()]
+        elif isinstance(pyInstance, OneVsRestModel):
+            pySubStages = [pyInstance.getClassifier()] + pyInstance.models
+        else:
+            pySubStages = []
+
+        nestedStages = []
+        for pySubStage in pySubStages:
+            nestedStages.extend(MetaAlgorithmReadWrite.getAllNestedStages(pySubStage))
+
+        return [pyInstance] + nestedStages

@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
 import java.sql.Timestamp
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
@@ -28,7 +26,6 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval

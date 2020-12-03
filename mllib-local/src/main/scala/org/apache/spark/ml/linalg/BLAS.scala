@@ -302,6 +302,8 @@ private[spark] object BLAS extends Serializable {
           j += 1
           prevCol = col
         }
+      case _ =>
+        throw new IllegalArgumentException(s"spr doesn't support vector type ${v.getClass}.")
     }
   }
 

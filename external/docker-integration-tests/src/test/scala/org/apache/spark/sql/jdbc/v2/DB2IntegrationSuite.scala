@@ -73,4 +73,12 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     }.getMessage
     assert(msg1.contains("Cannot update alt_table field ID: double cannot be cast to varchar"))
   }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+      s" TBLPROPERTIES('CCSID'='UNICODE')")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
+  }
 }

@@ -37,8 +37,6 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
-import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -88,8 +86,8 @@ case class AdaptiveSparkPlanExec(
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
-    RemoveRedundantSorts,
     EnsureRequirements,
+    RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
@@ -97,22 +95,12 @@ case class AdaptiveSparkPlanExec(
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(context.subqueryCache),
-    CoalesceShufflePartitions,
+    CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
     OptimizeSkewedJoin,
     OptimizeLocalShuffleReader
   )
-
-  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] =
-    context.qe.sparkPlan match {
-      case _: DataWritingCommandExec | _: V2TableWriteExec =>
-        // SPARK-32932: Local shuffle reader could break partitioning that works best
-        // for the following writing command
-        queryStageOptimizerRules.filterNot(_ == OptimizeLocalShuffleReader)
-      case _ =>
-        queryStageOptimizerRules
-    }
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
@@ -121,10 +109,29 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages()
   )
 
+  // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
+  // original plan contains a repartition operator, we need to preserve the specified partitioning,
+  // whether or not the repartition-introduced shuffle is optimized out because of an underlying
+  // shuffle of the same partitioning. Thus, we need to exclude some `CustomShuffleReaderRule`s
+  // from the final stage, depending on the presence and properties of repartition operators.
+  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
+    val origins = inputPlan.collect {
+      case s: ShuffleExchangeLike => s.shuffleOrigin
+    }
+    val allRules = queryStageOptimizerRules ++ postStageCreationRules
+    allRules.filter {
+      case c: CustomShuffleReaderRule =>
+        origins.forall(c.supportedShuffleOrigins.contains)
+      case _ => true
+    }
+  }
+
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = applyPhysicalRules(
-    inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  @transient private val initialPlan = context.session.withActive {
+    applyPhysicalRules(
+      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+  }
 
   @volatile private var currentPhysicalPlan = initialPlan
 
@@ -247,7 +254,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         result.newPlan,
-        finalStageOptimizerRules ++ postStageCreationRules,
+        finalStageOptimizerRules,
         Some((planChangeLogger, "AQE Final Query Stage Optimization")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))

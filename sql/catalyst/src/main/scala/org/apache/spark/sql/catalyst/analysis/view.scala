@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This file defines view types and analysis rules related to views.
@@ -54,8 +53,6 @@ import org.apache.spark.sql.internal.SQLConf
  * completely resolved during the batch of Resolution.
  */
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
-  override def conf: SQLConf = SQLConf.get
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // The child has the different output attributes with the View operator. Adds a Project over
     // the child of the view.

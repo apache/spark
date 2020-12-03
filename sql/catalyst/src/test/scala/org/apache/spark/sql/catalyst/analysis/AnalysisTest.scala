@@ -34,7 +34,7 @@ trait AnalysisTest extends PlanTest {
   protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Nil
 
   protected def getAnalyzer: Analyzer = {
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
@@ -43,7 +43,7 @@ trait AnalysisTest extends PlanTest {
     catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
     catalog.createGlobalTempView("TaBlE4", TestRelations.testRelation4, overrideIfExists = true)
     catalog.createGlobalTempView("TaBlE5", TestRelations.testRelation5, overrideIfExists = true)
-    new Analyzer(catalog, conf) {
+    new Analyzer(catalog) {
       override val extendedResolutionRules = EliminateSubqueryAliases +: extendedAnalysisRules
     }
   }

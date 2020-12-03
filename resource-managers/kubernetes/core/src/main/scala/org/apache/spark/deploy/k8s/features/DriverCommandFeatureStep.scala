@@ -62,7 +62,11 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def configureForJava(pod: SparkPod, res: String): SparkPod = {
-    val driverContainer = baseDriverContainer(pod, res).build()
+    // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
+    // no uploading takes place here
+    val newResName = KubernetesUtils
+      .renameMainAppResource(resource = res, shouldUploadLocal = false)
+    val driverContainer = baseDriverContainer(pod, newResName).build()
     SparkPod(pod.pod, driverContainer)
   }
 
@@ -73,7 +77,10 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
           .withValue(conf.get(PYSPARK_MAJOR_PYTHON_VERSION))
         .build())
 
-    val pythonContainer = baseDriverContainer(pod, res)
+    // re-write primary resource to be the remote one and upload the related file
+    val newResName = KubernetesUtils
+      .renameMainAppResource(res, Option(conf.sparkConf), true)
+    val pythonContainer = baseDriverContainer(pod, newResName)
       .addAllToEnv(pythonEnvs.asJava)
       .build()
 
@@ -88,7 +95,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
     // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
     val resolvedResource = if (conf.mainAppResource.isInstanceOf[JavaMainAppResource]) {
-      KubernetesUtils.renameMainAppResource(resource, conf.sparkConf)
+      KubernetesUtils.renameMainAppResource(resource, Option(conf.sparkConf), false)
     } else {
       resource
     }

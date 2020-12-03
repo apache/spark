@@ -22,13 +22,15 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, Pod, PodBuilder}
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 object ExecutorLifecycleTestUtils {
 
   val TEST_SPARK_APP_ID = "spark-app-id"
 
-  def failedExecutorWithoutDeletion(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def failedExecutorWithoutDeletion(
+      executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("failed")
         .withStartTime(Instant.now.toString)
@@ -58,8 +60,8 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def pendingExecutor(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def pendingExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("pending")
         .withStartTime(Instant.now.toString)
@@ -67,8 +69,8 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def runningExecutor(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def runningExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("running")
         .withStartTime(Instant.now.toString)
@@ -82,8 +84,9 @@ object ExecutorLifecycleTestUtils {
    * state (terminated with non-zero exit code). This pod is used for unit-testing the
    * spark.kubernetes.executor.checkAllContainers Spark Conf.
    */
-  def runningExecutorWithFailedContainer(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def runningExecutorWithFailedContainer(
+      executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("running")
         .addNewContainerStatus()
@@ -103,32 +106,34 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
-  def succeededExecutor(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def succeededExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("succeeded")
         .endStatus()
       .build()
   }
 
-  def deletedExecutor(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def deletedExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewMetadata()
         .withDeletionTimestamp("523012521")
         .endMetadata()
       .build()
   }
 
-  def unknownExecutor(executorId: Long): Pod = {
-    new PodBuilder(podWithAttachedContainerForId(executorId))
+  def unknownExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()
         .withPhase("unknown")
         .endStatus()
       .build()
   }
 
-  def podWithAttachedContainerForId(executorId: Long): Pod = {
-    val sparkPod = executorPodWithId(executorId)
+  def podWithAttachedContainerForId(
+      executorId: Long,
+      rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
+    val sparkPod = executorPodWithId(executorId, rpId)
     val podWithAttachedContainer = new PodBuilder(sparkPod.pod)
       .editOrNewSpec()
         .addToContainers(sparkPod.container)
@@ -137,13 +142,14 @@ object ExecutorLifecycleTestUtils {
     podWithAttachedContainer
   }
 
-  def executorPodWithId(executorId: Long): SparkPod = {
+  def executorPodWithId(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): SparkPod = {
     val pod = new PodBuilder()
       .withNewMetadata()
         .withName(s"spark-executor-$executorId")
         .addToLabels(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)
         .addToLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .addToLabels(SPARK_EXECUTOR_ID_LABEL, executorId.toString)
+        .addToLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, rpId.toString)
       .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")

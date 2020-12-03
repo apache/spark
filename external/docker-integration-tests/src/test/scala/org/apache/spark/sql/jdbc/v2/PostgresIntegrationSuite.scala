@@ -66,4 +66,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
     }.getMessage
     assert(msg.contains("Cannot update alt_table field ID: string cannot be cast to int"))
   }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+      s" TBLPROPERTIES('TABLESPACE'='pg_default')")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
+  }
 }

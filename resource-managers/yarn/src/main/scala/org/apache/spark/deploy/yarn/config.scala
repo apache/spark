@@ -189,6 +189,15 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
 
+  private[spark] val CLIENT_INCLUDE_DRIVER_LOGS_LINK =
+    ConfigBuilder("spark.yarn.includeDriverLogsLink")
+      .doc("In cluster mode, whether the client application report includes links to the driver "
+          + "container's logs. This requires polling the ResourceManager's REST API, so it "
+          + "places some additional load on the RM.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /* Shared Client-mode AM / Driver configuration. */
 
   private[spark] val AM_MAX_WAIT_TIME = ConfigBuilder("spark.yarn.am.waitTime")

@@ -20,16 +20,14 @@ package org.apache.spark.sql.execution
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, CreateTempViewUsing, RefreshResource}
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, RefreshResource}
+import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.types.StringType
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
@@ -40,26 +38,10 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
 class SparkSqlParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
 
-  val newConf = new SQLConf
-  private lazy val parser = new SparkSqlParser(newConf)
-
-  /**
-   * Normalizes plans:
-   * - CreateTable the createTime in tableDesc will replaced by -1L.
-   */
-  override def normalizePlan(plan: LogicalPlan): LogicalPlan = {
-    plan match {
-      case CreateTable(tableDesc, mode, query) =>
-        val newTableDesc = tableDesc.copy(createTime = -1L)
-        CreateTable(newTableDesc, mode, query)
-      case _ => plan // Don't transform
-    }
-  }
+  private lazy val parser = new SparkSqlParser()
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    val normalized1 = normalizePlan(parser.parsePlan(sqlCommand))
-    val normalized2 = normalizePlan(plan)
-    comparePlans(normalized1, normalized2)
+    comparePlans(parser.parsePlan(sqlCommand), plan)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
@@ -70,9 +52,21 @@ class SparkSqlParserSuite extends AnalysisTest {
     StaticSQLConf
     ConfigEntry.knownConfigs.values.asScala.foreach { config =>
       assertEqual(s"SET ${config.key}", SetCommand(Some(config.key -> None)))
-      if (config.defaultValue.isDefined && config.defaultValueString != null) {
-        assertEqual(s"SET ${config.key}=${config.defaultValueString}",
-          SetCommand(Some(config.key -> Some(config.defaultValueString))))
+      assertEqual(s"SET `${config.key}`", SetCommand(Some(config.key -> None)))
+
+      val defaultValueStr = config.defaultValueString
+      if (config.defaultValue.isDefined && defaultValueStr != null) {
+        assertEqual(s"SET ${config.key}=`$defaultValueStr`",
+          SetCommand(Some(config.key -> Some(defaultValueStr))))
+        assertEqual(s"SET `${config.key}`=`$defaultValueStr`",
+          SetCommand(Some(config.key -> Some(defaultValueStr))))
+
+        if (!defaultValueStr.contains(";")) {
+          assertEqual(s"SET ${config.key}=$defaultValueStr",
+            SetCommand(Some(config.key -> Some(defaultValueStr))))
+          assertEqual(s"SET `${config.key}`=$defaultValueStr",
+            SetCommand(Some(config.key -> Some(defaultValueStr))))
+        }
       }
       assertEqual(s"RESET ${config.key}", ResetCommand(Some(config.key)))
     }
@@ -101,10 +95,11 @@ class SparkSqlParserSuite extends AnalysisTest {
       SetCommand(Some("spark.sql.    key" -> Some("v  a lu e"))))
     assertEqual("SET `spark.sql.    key`=  -1",
       SetCommand(Some("spark.sql.    key" -> Some("-1"))))
+    assertEqual("SET key=", SetCommand(Some("key" -> Some(""))))
 
     val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
-      "'SET key=value'. If you want to include special characters in key, " +
-      "please use quotes, e.g., SET `ke y`=value."
+      "'SET key=value'. If you want to include special characters in key, or include semicolon " +
+      "in value, please use quotes, e.g., SET `ke y`=`v;alue`."
     intercept("SET spark.sql.key value", expectedErrMsg)
     intercept("SET spark.sql.key   'value'", expectedErrMsg)
     intercept("SET    spark.sql.key \"value\" ", expectedErrMsg)
@@ -115,6 +110,8 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("SET spark.sql.   key=value", expectedErrMsg)
     intercept("SET spark.sql   :key=value", expectedErrMsg)
     intercept("SET spark.sql .  key=value", expectedErrMsg)
+    intercept("SET =", expectedErrMsg)
+    intercept("SET =value", expectedErrMsg)
   }
 
   test("Report Error for invalid usage of RESET command") {
@@ -139,6 +136,33 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("RESET spark.sql:   key", expectedErrMsg)
     intercept("RESET spark.sql   .key", expectedErrMsg)
     intercept("RESET spark.sql :  key", expectedErrMsg)
+  }
+
+  test("SPARK-33419: Semicolon handling in SET command") {
+    assertEqual("SET a=1;", SetCommand(Some("a" -> Some("1"))))
+    assertEqual("SET a=1;;", SetCommand(Some("a" -> Some("1"))))
+
+    assertEqual("SET a=`1`;", SetCommand(Some("a" -> Some("1"))))
+    assertEqual("SET a=`1;`", SetCommand(Some("a" -> Some("1;"))))
+    assertEqual("SET a=`1;`;", SetCommand(Some("a" -> Some("1;"))))
+
+    assertEqual("SET `a`=1;;", SetCommand(Some("a" -> Some("1"))))
+    assertEqual("SET `a`=`1;`", SetCommand(Some("a" -> Some("1;"))))
+    assertEqual("SET `a`=`1;`;", SetCommand(Some("a" -> Some("1;"))))
+
+    val expectedErrMsg = "Expected format is 'SET', 'SET key', or " +
+      "'SET key=value'. If you want to include special characters in key, or include semicolon " +
+      "in value, please use quotes, e.g., SET `ke y`=`v;alue`."
+
+    intercept("SET a=1; SELECT 1", expectedErrMsg)
+    intercept("SET a=1;2;;", expectedErrMsg)
+
+    intercept("SET a b=`1;;`",
+      "'a b' is an invalid property key, please use quotes, e.g. SET `a b`=`1;;`")
+
+    intercept("SET `a`=1;2;;",
+      "'1;2;;' is an invalid property value, please use quotes, e.g." +
+        " SET `a`=`1;2;;`")
   }
 
   test("refresh resource") {
@@ -167,110 +191,6 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("CREATE TEMPORARY TABLE t USING parquet LOCATION '/data/tmp/testspark1'",
       CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
         Map("path" -> "/data/tmp/testspark1")))
-  }
-
-  private def createTableUsing(
-      table: String,
-      database: Option[String] = None,
-      tableType: CatalogTableType = CatalogTableType.MANAGED,
-      storage: CatalogStorageFormat = CatalogStorageFormat.empty,
-      schema: StructType = new StructType,
-      provider: Option[String] = Some("parquet"),
-      partitionColumnNames: Seq[String] = Seq.empty,
-      bucketSpec: Option[BucketSpec] = None,
-      mode: SaveMode = SaveMode.ErrorIfExists,
-      query: Option[LogicalPlan] = None): CreateTable = {
-    CreateTable(
-      CatalogTable(
-        identifier = TableIdentifier(table, database),
-        tableType = tableType,
-        storage = storage,
-        schema = schema,
-        provider = provider,
-        partitionColumnNames = partitionColumnNames,
-        bucketSpec = bucketSpec
-      ), mode, query
-    )
-  }
-
-  private def createTable(
-      table: String,
-      database: Option[String] = None,
-      tableType: CatalogTableType = CatalogTableType.MANAGED,
-      storage: CatalogStorageFormat = CatalogStorageFormat.empty.copy(
-        inputFormat = HiveSerDe.sourceToSerDe("textfile").get.inputFormat,
-        outputFormat = HiveSerDe.sourceToSerDe("textfile").get.outputFormat,
-        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
-      schema: StructType = new StructType,
-      provider: Option[String] = Some("hive"),
-      partitionColumnNames: Seq[String] = Seq.empty,
-      comment: Option[String] = None,
-      mode: SaveMode = SaveMode.ErrorIfExists,
-      query: Option[LogicalPlan] = None): CreateTable = {
-    CreateTable(
-      CatalogTable(
-        identifier = TableIdentifier(table, database),
-        tableType = tableType,
-        storage = storage,
-        schema = schema,
-        provider = provider,
-        partitionColumnNames = partitionColumnNames,
-        comment = comment
-      ), mode, query
-    )
-  }
-
-  test("create table - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile",
-      createTable(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-      )
-    )
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
-      "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
-      createTable(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-          .add("c", IntegerType)
-          .add("d", StringType, nullable = true, "test2"),
-        partitionColumnNames = Seq("c", "d")
-      )
-    )
-    assertEqual("CREATE TABLE my_tab(id BIGINT, nested STRUCT<col1: STRING,col2: INT>) " +
-      "STORED AS textfile",
-      createTable(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("id", LongType)
-          .add("nested", (new StructType)
-            .add("col1", StringType)
-            .add("col2", IntegerType)
-          )
-      )
-    )
-    // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
-    // rule in `AnalyzeCreateTable`.
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
-      "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
-      createTable(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-          .add("nested", (new StructType)
-            .add("col1", StringType)
-            .add("col2", IntegerType)
-          ),
-        partitionColumnNames = Seq("nested")
-      )
-    )
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "no viable alternative at input")
   }
 
   test("describe query") {
@@ -417,5 +337,48 @@ class SparkSqlParserSuite extends AnalysisTest {
          |FROM v
         """.stripMargin,
       "LINES TERMINATED BY only supports newline '\\n' right now")
-    }
+  }
+
+  test("CACHE TABLE") {
+    assertEqual(
+      "CACHE TABLE a.b.c",
+      CacheTableCommand(Seq("a", "b", "c"), None, false, Map.empty))
+
+    assertEqual(
+      "CACHE TABLE t AS SELECT * FROM testData",
+      CacheTableCommand(
+        Seq("t"),
+        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
+        false,
+        Map.empty))
+
+    assertEqual(
+      "CACHE LAZY TABLE a.b.c",
+      CacheTableCommand(Seq("a", "b", "c"), None, true, Map.empty))
+
+    assertEqual(
+      "CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')",
+      CacheTableCommand(
+        Seq("a", "b", "c"),
+        None,
+        true,
+        Map("storageLevel" -> "DISK_ONLY")))
+
+    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
+      "It is not allowed to add catalog/namespace prefix a.b")
+  }
+
+  test("UNCACHE TABLE") {
+    assertEqual(
+      "UNCACHE TABLE a.b.c",
+      UncacheTableCommand(Seq("a", "b", "c"), ifExists = false))
+
+    assertEqual(
+      "UNCACHE TABLE IF EXISTS a.b.c",
+      UncacheTableCommand(Seq("a", "b", "c"), ifExists = true))
+  }
+
+  test("CLEAR CACHE") {
+    assertEqual("CLEAR CACHE", ClearCacheCommand)
+  }
 }

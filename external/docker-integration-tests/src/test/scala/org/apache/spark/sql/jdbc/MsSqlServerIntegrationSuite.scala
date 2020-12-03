@@ -28,7 +28,8 @@ import org.apache.spark.tags.DockerTest
  * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
  * {{{
  *   MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
- *     ./build/sbt -Pdocker-integration-tests "testOnly *MsSqlServerIntegrationSuite"
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
  * }}}
  */
 @DockerTest

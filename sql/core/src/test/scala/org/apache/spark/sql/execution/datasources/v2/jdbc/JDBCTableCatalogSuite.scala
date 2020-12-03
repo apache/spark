@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
+import org.apache.log4j.Level
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
@@ -78,8 +80,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     sql("DROP TABLE h2.test.to_drop")
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
     Seq(
-      "h2.test.not_existing_table" -> "Table or view not found: h2.test.not_existing_table",
-      "h2.bad_test.not_existing_table" -> "Table or view not found: h2.bad_test.not_existing_table"
+      "h2.test.not_existing_table" ->
+        "Table or view not found for 'DROP TABLE': h2.test.not_existing_table",
+      "h2.bad_test.not_existing_table" ->
+        "Table or view not found for 'DROP TABLE': h2.bad_test.not_existing_table"
     ).foreach { case (table, expectedMsg) =>
       val msg = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")
@@ -149,21 +153,20 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   test("create a table") {
     withTable("h2.test.new_table") {
-      // TODO (SPARK-32427): Omit USING in CREATE TABLE
-      sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+      sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       checkAnswer(
         sql("SHOW TABLES IN h2.test"),
         Seq(Row("test", "people"), Row("test", "new_table")))
     }
     withTable("h2.test.new_table") {
-      sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+      sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       val msg = intercept[AnalysisException] {
-        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) USING _")
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING)")
       }.getMessage
       assert(msg.contains("Table test.new_table already exists"))
     }
     val exp = intercept[NoSuchNamespaceException] {
-      sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING) USING _")
+      sql("CREATE TABLE h2.bad_test.new_table(i INT, j STRING)")
     }
     assert(exp.getMessage.contains("Failed table creation: bad_test.new_table"))
     assert(exp.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
@@ -172,7 +175,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... add column") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (ID INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (ID INTEGER)")
       sql(s"ALTER TABLE $tableName ADD COLUMNS (C1 INTEGER, C2 STRING)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType()
@@ -202,7 +205,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... rename column") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (id INTEGER, C0 INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (id INTEGER, C0 INTEGER)")
       sql(s"ALTER TABLE $tableName RENAME COLUMN id TO C")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
@@ -227,7 +230,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... drop column") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (C1 INTEGER, C2 INTEGER, c3 INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (C1 INTEGER, C2 INTEGER, c3 INTEGER)")
       sql(s"ALTER TABLE $tableName DROP COLUMN C1")
       sql(s"ALTER TABLE $tableName DROP COLUMN c3")
       val t = spark.table(tableName)
@@ -251,7 +254,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... update column type") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (ID INTEGER, deptno INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (ID INTEGER, deptno INTEGER)")
       sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE DOUBLE")
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE DOUBLE")
       val t = spark.table(tableName)
@@ -280,7 +283,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... update column nullability") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (ID INTEGER NOT NULL, deptno INTEGER NOT NULL) USING _")
+      sql(s"CREATE TABLE $tableName (ID INTEGER NOT NULL, deptno INTEGER NOT NULL)")
       sql(s"ALTER TABLE $tableName ALTER COLUMN ID DROP NOT NULL")
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno DROP NOT NULL")
       val t = spark.table(tableName)
@@ -305,7 +308,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE ... update column comment not supported") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (ID INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (ID INTEGER)")
       val exp = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
       }
@@ -329,7 +332,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("ALTER TABLE case sensitivity") {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER) USING _")
+      sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType().add("c1", IntegerType).add("c2", IntegerType)
       assert(t.schema === expectedSchema)
@@ -389,6 +392,30 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
+    }
+  }
+
+  test("CREATE TABLE with table comment") {
+    withTable("h2.test.new_table") {
+      val logAppender = new LogAppender("table comment")
+      withLogAppender(logAppender) {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING) COMMENT 'this is a comment'")
+      }
+      val createCommentWarning = logAppender.loggingEvents
+        .filter(_.getLevel == Level.WARN)
+        .map(_.getRenderedMessage)
+        .exists(_.contains("Cannot create JDBC table comment"))
+      assert(createCommentWarning === false)
+    }
+  }
+
+  test("CREATE TABLE with table property") {
+    withTable("h2.test.new_table") {
+      val m = intercept[AnalysisException] {
+        sql("CREATE TABLE h2.test.new_table(i INT, j STRING)" +
+          " TBLPROPERTIES('ENGINE'='tableEngineName')")
+      }.cause.get.getMessage
+      assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
 }

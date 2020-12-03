@@ -598,8 +598,7 @@ class HiveDDLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
     }
-    assert(e.message.contains("Must specify a data type for each partition column while creating " +
-      "Hive partitioned table."))
+    assert(e.message.contains("partition column b is not defined in table"))
   }
 
   test("add/drop partition with location - managed table") {
@@ -815,6 +814,11 @@ class HiveDDLSuite
     }
   }
 
+  private def assertAnalysisError(sqlText: String, message: String): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    assert(e.message.contains(message))
+  }
+
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
@@ -892,15 +896,17 @@ class HiveDDLSuite
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
 
-        assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
-
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
 
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
+
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
+          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -2245,8 +2251,8 @@ class HiveDDLSuite
         )
 
         sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
-        assert(spark.table("tab").schema.find(_.name == "c5")
-          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
+        assert(spark.sharedState.externalCatalog.getTable("default", "tab")
+          .schema.find(_.name == "c5").get.dataType == CharType(10))
       }
     }
   }
@@ -2694,8 +2700,7 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err1.contains("Schema may not be specified in a Create Table As Select " +
-      "(CTAS) statement"))
+    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
 
     val err2 = intercept[ParseException] {
       spark.sql(
@@ -2706,8 +2711,7 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err2.contains("Create Partitioned Table As Select cannot specify data type for " +
-      "the partition columns of the target table"))
+    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
   }
 
   test("Hive CTAS with dynamic partition") {
@@ -2776,7 +2780,7 @@ class HiveDDLSuite
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work with provider hive
       e = intercept[AnalysisException] {
@@ -2787,7 +2791,7 @@ class HiveDDLSuite
             |WITH SERDEPROPERTIES ('test' = 'test')
           """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work without 'STORED AS'
       e = intercept[AnalysisException] {
@@ -2799,6 +2803,17 @@ class HiveDDLSuite
           """.stripMargin)
       }.getMessage
       assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+
+      // 'INPUTFORMAT' and 'OUTPUTFORMAT' conflict with 'USING'
+      e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |CREATE TABLE targetDsTable LIKE sourceDsTable USING format
+            |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            """.stripMargin)
+      }.getMessage
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS"))
 
       // row format works with STORED AS hive format (from hive table)
       spark.sql(

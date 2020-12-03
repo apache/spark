@@ -68,7 +68,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         .getOrElse(System.currentTimeMillis())
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a Javascript string literal.
+      // extra layers of escaping in order to embed this in a JavaScript string literal.
       val escapedName = Utility.escape(name)
       val jsEscapedNameForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedName))
       val jsEscapedNameForLabel = StringEscapeUtils.escapeEcmaScript(escapedName)

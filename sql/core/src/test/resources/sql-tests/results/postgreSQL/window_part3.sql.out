@@ -71,7 +71,8 @@ insert into datetimes values
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): Cannot cast 11:00 BST to TimestampType.; line 1 pos 22
 
 
 -- !query

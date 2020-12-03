@@ -23,7 +23,6 @@ import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -130,11 +129,11 @@ class TestHiveContext(
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
-  def this(sc: SparkContext, loadTestTables: Boolean = true) {
+  def this(sc: SparkContext, loadTestTables: Boolean = true) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient) {
+  def this(sc: SparkContext, hiveClient: HiveClient) = {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
@@ -178,7 +177,7 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  def this(sc: SparkContext, loadTestTables: Boolean) {
+  def this(sc: SparkContext, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = None,
@@ -186,7 +185,7 @@ private[hive] class TestHiveSparkSession(
       loadTestTables)
   }
 
-  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) {
+  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) = {
     this(
       sc,
       existingSharedState = Some(new TestHiveSharedState(sc, Some(hiveClient))),
@@ -195,7 +194,7 @@ private[hive] class TestHiveSparkSession(
   }
 
   SparkSession.setDefaultSession(this)
-  SparkSession.setActiveSessionInternal(this)
+  SparkSession.setActiveSession(this)
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
@@ -496,7 +495,10 @@ private[hive] class TestHiveSparkSession(
   def getLoadedTables: collection.mutable.HashSet[String] = sharedState.loadedTables
 
   def loadTestTable(name: String): Unit = {
-    if (!sharedState.loadedTables.contains(name)) {
+    // LOAD DATA does not work on temporary views. Since temporary views are resolved first,
+    // skip loading if there exists a temporary view with the given name.
+    if (sessionState.catalog.getTempView(name).isEmpty &&
+        !sharedState.loadedTables.contains(name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
       sharedState.loadedTables += name
       logDebug(s"Loading test table $name")
@@ -584,17 +586,17 @@ private[hive] class TestHiveQueryExecution(
     logicalPlan: LogicalPlan)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
-  def this(sparkSession: TestHiveSparkSession, sql: String) {
+  def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
   }
 
-  def this(sql: String) {
+  def this(sql: String) = {
     this(TestHive.sparkSession, sql)
   }
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
+      case CacheTableCommand(tbl, _, _, _) => tbl.asTableIdentifier :: Nil
       case _ => Nil
     }
 

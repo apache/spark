@@ -80,7 +80,7 @@ object ThrowableThrower {
 
   // a thread that uses SparkUncaughtExceptionHandler and throws a Throwable by name
   class ThrowerThread(name: String, exitOnUncaughtException: Boolean) extends Thread {
-    override def run() {
+    override def run(): Unit = {
       Thread.setDefaultUncaughtExceptionHandler(
         new SparkUncaughtExceptionHandler(exitOnUncaughtException))
       throw ThrowableTypes.getThrowableByName(name)

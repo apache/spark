@@ -166,13 +166,13 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         )
       }.getMessage
       assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE TEMPORARY TABLE ... USING ... AS query"))
+        error.contains("CREATE TEMPORARY TABLE"))
     }
   }
 
   test("disallows CREATE EXTERNAL TABLE ... USING ... AS query") {
     withTable("t") {
-      val error = intercept[ParseException] {
+      val error = intercept[AnalysisException] {
         sql(
           s"""
              |CREATE EXTERNAL TABLE t USING PARQUET
