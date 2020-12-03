@@ -618,6 +618,24 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
+  @Test (expected = RuntimeException.class)
+  public void testRequestForAbortedShufflePartitionThrowsException() throws IOException {
+    try {
+      testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
+    } catch (Throwable t) {
+      // No more blocks can be merged to this partition.
+    }
+    try {
+      RemoteBlockPushResolver.PushBlockStreamCallback callback =
+        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+          new PushBlockStream(TEST_APP, 0, 10, 0, 0));
+    } catch (Throwable t) {
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_10_0",
+        t.getMessage());
+      throw t;
+    }
+  }
+
   @Test
   public void testFailureWhileTruncatingFiles() throws IOException {
     useTestFiles(true, false);

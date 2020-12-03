@@ -26,7 +26,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -388,10 +390,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       mergeStatuses =
         new MergeStatuses(msg.shuffleId, new RoaringBitmap[0], new int[0], new long[0]);
     } else {
-      List<RoaringBitmap> bitmaps = new LinkedList<>();
-      List<Integer> reduceIds = new LinkedList<>();
-      List<Long> sizes = new LinkedList<>();
-      Iterator<AppShufflePartitionInfo> partitionsIter = shufflePartitions.values().iterator();
+      Collection<AppShufflePartitionInfo> partitionsToFinalize = shufflePartitions.values();
+      List<RoaringBitmap> bitmaps = new ArrayList<>(partitionsToFinalize.size());
+      List<Integer> reduceIds = new ArrayList<>(partitionsToFinalize.size());
+      List<Long> sizes = new ArrayList<>(partitionsToFinalize.size());
+      Iterator<AppShufflePartitionInfo> partitionsIter = partitionsToFinalize.iterator();
       while (partitionsIter.hasNext()) {
         AppShufflePartitionInfo partition = partitionsIter.next();
         synchronized (partition) {
@@ -911,22 +914,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         return;
       }
       chunkTracker.add(mapIndex);
-      try {
-        logger.trace("{} shuffleId {} reduceId {} mapIndex {} write chunk to meta file",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId, mapIndex);
-        if (indexMetaUpdateFailed) {
-          metaFile.getChannel().position(metaFile.getPos());
-        }
-        int chunkTrackerSize = chunkTracker.serializedSizeInBytes();
-        chunkTracker.serialize(metaFile.getDos());
-        metaFile.updatePos(chunkTrackerSize);
-      } catch (IOException ioe) {
-        logger.warn("{} shuffleId {} reduceId {} mapIndex {} update to meta file failed",
-          appShuffleId.appId, appShuffleId.shuffleId, reduceId, mapIndex);
-        // Any exceptions while writing to meta file is propagated to updateChunkInfo so that
-        // the index file position can be reset as well.
-        throw ioe;
+      logger.trace("{} shuffleId {} reduceId {} mapIndex {} write chunk to meta file",
+        appShuffleId.appId, appShuffleId.shuffleId, reduceId, mapIndex);
+      if (indexMetaUpdateFailed) {
+        metaFile.getChannel().position(metaFile.getPos());
       }
+      chunkTracker.serialize(metaFile.getDos());
+      metaFile.updatePos(metaFile.getChannel().position() - metaFile.getPos());
     }
 
     private void incrementIOExceptions() {
@@ -1060,7 +1054,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.dos = dos;
     }
 
-    private void updatePos(int numBytes) {
+    private void updatePos(long numBytes) {
       pos += numBytes;
     }
 
