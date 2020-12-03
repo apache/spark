@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
@@ -267,24 +267,14 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
 
-      val footerFileMetaData =
+      lazy val footerFileMetaData =
         ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
         val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
           pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
-        filters.map {
-          case in @ sources.In(attribute, values) if values.length > pushDownInFilterThreshold =>
-            resultSchema.find { f =>
-              if (isCaseSensitive) f.name.equals(attribute) else f.name.equalsIgnoreCase(attribute)
-            }.map { f =>
-              val (min, max) = TypeUtils.getMinMaxValue(f.dataType, values)
-              sources.And(sources.GreaterThanOrEqual(attribute, min),
-                sources.LessThanOrEqual(attribute, max))
-            }.getOrElse(in)
-          case other => other
-        }
+        filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
           // is used here.

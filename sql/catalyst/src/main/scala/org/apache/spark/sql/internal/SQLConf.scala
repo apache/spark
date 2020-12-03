@@ -216,6 +216,17 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
+  val OPTIMIZER_INSET_REWRITE_MIN_MAX_THRESHOLD =
+    buildConf("spark.sql.optimizer.inSetRewriteMinMaxThreshold")
+      .internal()
+      .doc("The threshold of set size for rewrite it as a min-max filter for pushing down " +
+        "to the data source.")
+      .version("3.1.0")
+      .intConf
+      .checkValue(threshold => threshold >= 0,
+        "The value of spark.sql.optimizer.inSetRewriteMinMaxThreshold must be positive.")
+      .createOptional
+
   val OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD =
     buildConf("spark.sql.optimizer.likeAllConversionThreshold")
       .internal()
@@ -716,8 +727,8 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Spark will push-down a value greater than or equal to its minimum value and " +
-        "less than or equal to its maximum value if its value exceeds this threshold. " +
+        "Large threshold won't necessarily provide much better performance. " +
+        "The experiment argued that 300 is the limit threshold. " +
         "By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
@@ -3027,6 +3038,11 @@ class SQLConf extends Serializable with Logging {
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
+
+  def optimizerInSetRewriteMinMaxThreshold: Int = {
+    getConf(OPTIMIZER_INSET_REWRITE_MIN_MAX_THRESHOLD)
+      .getOrElse(parquetFilterPushDownInFilterThreshold)
+  }
 
   def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
 
