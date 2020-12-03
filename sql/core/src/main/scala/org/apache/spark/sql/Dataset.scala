@@ -2044,6 +2044,10 @@ class Dataset[T] private[sql](
     Limit(Literal(n), logicalPlan)
   }
 
+  def limitRange(start: Int, end: Int): Dataset[T] = withTypedPlan {
+    LimitRange(Literal(start), Literal(end), logicalPlan)
+  }
+
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
    *
