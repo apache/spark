@@ -82,12 +82,12 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
         Files.write(new File(s"$sparkConfDirPath/$f").toPath, content.getBytes))
 
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
-      val expectedLogMessage =
+      val expectedLogMessages =
         Seq(s"Spark configuration files loaded from Some(/opt/spark/conf)") ++ someValidFiles
       runSparkApplicationAndVerifyCompletion(
         appResource = containerLocalSparkDistroExamplesJar,
         mainClass = SPARK_PI_MAIN_CLASS,
-        expectedDriverLogOnCompletion = expectedLogMessage,
+        expectedDriverLogOnCompletion = expectedLogMessages,
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,
