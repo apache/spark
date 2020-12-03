@@ -28,8 +28,8 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import CrossValidator, CrossValidatorModel, ParamGridBuilder, \
     TrainValidationSplit, TrainValidationSplitModel
 from pyspark.sql.functions import rand
-from pyspark.testing.mlutils import DummyLogisticRegression, DummyLogisticRegressionModel, \
-    SparkSessionTestCase
+from pyspark.testing.mlutils import DummyEvaluator, DummyLogisticRegression, \
+    DummyLogisticRegressionModel, SparkSessionTestCase
 
 
 class HasInducedError(Params):
@@ -254,7 +254,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self._run_test_save_load_trained_model(DummyLogisticRegression,
                                                DummyLogisticRegressionModel)
 
-    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls):
+    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls, evaluatorCls):
         temp_path = tempfile.mkdtemp()
         dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
@@ -266,7 +266,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
         lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
-        evaluator = BinaryClassificationEvaluator()
+        evaluator = evaluatorCls()
 
         # test save/load of CrossValidator
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
@@ -285,8 +285,10 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
     def test_save_load_simple_estimator(self):
-        self._run_test_save_load_simple_estimator(LogisticRegression)
-        self._run_test_save_load_simple_estimator(DummyLogisticRegression)
+        self._run_test_save_load_simple_estimator(
+            LogisticRegression, BinaryClassificationEvaluator)
+        self._run_test_save_load_simple_estimator(
+            DummyLogisticRegression, DummyEvaluator)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(
@@ -659,7 +661,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self._run_test_save_load_trained_model(DummyLogisticRegression,
                                                DummyLogisticRegressionModel)
 
-    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls):
+    def _run_test_save_load_simple_estimator(self, LogisticRegressionCls, evaluatorCls):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -672,7 +674,7 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             ["features", "label"])
         lr = LogisticRegressionCls()
         grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
-        evaluator = BinaryClassificationEvaluator()
+        evaluator = evaluatorCls()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
 
@@ -690,8 +692,10 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
     def test_save_load_simple_estimator(self):
-        self._run_test_save_load_simple_estimator(LogisticRegression)
-        self._run_test_save_load_simple_estimator(DummyLogisticRegression)
+        self._run_test_save_load_simple_estimator(
+            LogisticRegression, BinaryClassificationEvaluator)
+        self._run_test_save_load_simple_estimator(
+            DummyLogisticRegression, DummyEvaluator)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(

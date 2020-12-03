@@ -19,6 +19,7 @@ import numpy as np
 
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Transformer, UnaryTransformer
+from pyspark.ml.evaluation import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasRegParam
 from pyspark.ml.classification import Classifier, ClassificationModel
@@ -203,7 +204,7 @@ class DummyLogisticRegressionModel(ClassificationModel, _DummyLogisticRegression
         super(DummyLogisticRegressionModel, self).__init__()
 
     def _transform(self, dataset):
-        # A dummy transform method which always predict label 1
+        # A dummy transform impl which always predict label 1
         from pyspark.sql.functions import array, lit
         from pyspark.ml.functions import array_to_vector
         rawPredCol = self.getRawPredictionCol()
@@ -218,10 +219,12 @@ class DummyLogisticRegressionModel(ClassificationModel, _DummyLogisticRegression
 
     @property
     def numClasses(self):
+        # a dummy implementation for test.
         return 2
 
     @property
     def intercept(self):
+        # a dummy implementation for test.
         return 0.0
 
     # This class only used in test. The following methods/properties are not used in tests.
@@ -238,3 +241,10 @@ class DummyLogisticRegressionModel(ClassificationModel, _DummyLogisticRegression
 
     def predict(self, value):
         raise NotImplementedError()
+
+
+class DummyEvaluator(Evaluator, DefaultParamsReadable, DefaultParamsWritable):
+
+    def _evaluate(self, dataset):
+        # a dummy implementation for test.
+        return 1.0
