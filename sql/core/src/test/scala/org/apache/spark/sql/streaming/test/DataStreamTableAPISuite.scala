@@ -335,7 +335,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
     val sq = dsw
       .option("checkpointLocation", Utils.createTempDir().getCanonicalPath)
-      .table(tableName)
+      .toTable(tableName)
     memory.addData(1, 2, 3)
     sq.processAllAvailable()
 
