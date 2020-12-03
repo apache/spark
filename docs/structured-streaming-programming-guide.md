@@ -1837,7 +1837,7 @@ writeStream
     .start()
 {% endhighlight %}
 
-- **Console sink (for debugging)** - Prints the output to the console/stdout every time there is a trigger. Both, Append and Complete output modes, are supported. This should be used for debugging purposes on low data volumes as the entire output is collected and stored in the driver's memory after every trigger.
+- **Console sink (for debugging)** - Prints the output to the console/stdout every time there is a trigger. Both, Append, Update and Complete output modes, are supported. This should be used for debugging purposes on low data volumes as the entire output is collected and stored in the driver's memory after every trigger.
 
 {% highlight scala %}
 writeStream
@@ -1846,7 +1846,7 @@ writeStream
 {% endhighlight %}
 
 - **Memory sink (for debugging)** - The output is stored in memory as an in-memory table.
-Both, Append and Complete output modes, are supported. This should be used for debugging purposes
+Both, Append, Update and Complete output modes, are supported. This should be used for debugging purposes
 on low data volumes as the entire output is collected and stored in the driver's memory.
 Hence, use it with caution.
 
