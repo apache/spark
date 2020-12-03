@@ -655,7 +655,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       getTempView(table).map {
-        case View(metadata, _, _, _) => metadata
+        case TemporaryViewRelation(metadata) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table),
@@ -664,8 +664,9 @@ class SessionCatalog(
             schema = plan.output.toStructType)
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
+      val a = globalTempViewManager.get(table)
       globalTempViewManager.get(table).map {
-        case View(metadata, _, _, _) => metadata
+        case TemporaryViewRelation(metadata) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
