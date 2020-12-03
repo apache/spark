@@ -210,13 +210,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", ('a like "foo%") || ('a like "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", !('a like "foo%") || !('a like "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !(('a like "foo%") || ('a like "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a likeAny("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a likeAny("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", ('a like "foo%") && ('a like "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", !('a like "foo%") && !('a like "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !(('a like "foo%") && ('a like "b%")))
+    assertEqual("a like all ('foo%', 'b%')", 'a likeAll("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", 'a notLikeAll("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !('a likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       intercept(s"a like $quantifier()", "Expected something between '(' and ')'")

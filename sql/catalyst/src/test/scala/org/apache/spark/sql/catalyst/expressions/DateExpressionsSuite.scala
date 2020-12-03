@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.{ParseException, SimpleDateFormat}
-import java.time.{Instant, LocalDate, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, ZoneId}
 import java.time.format.DateTimeParseException
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
@@ -1014,49 +1014,97 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("creating values of DateType via make_date") {
-    checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
-    checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
-    checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
-    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+    Seq(true, false).foreach({ ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+        checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
+        checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)),
+          null)
+        checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)),
+          null)
+      }
+    })
+
+    // ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(Int.MaxValue), Literal(13),
+        Literal(19)), EmptyRow, "Invalid value for Year")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019),
+        Literal(13), Literal(19)), EmptyRow, "Invalid value for Month")
+      checkExceptionInExpression[DateTimeException](MakeDate(Literal(2019), Literal(7),
+        Literal(32)), EmptyRow, "Invalid value for Day")
+    }
+
+    // non-ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
+      checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+    }
   }
 
   test("creating values of TimestampType via make_timestamp") {
-    var makeTimestampExpr = MakeTimestamp(
-      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
-      Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
     val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
-    checkEvaluation(makeTimestampExpr, expected)
-    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
-    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        var makeTimestampExpr = MakeTimestamp(
+          Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+          Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+        checkEvaluation(makeTimestampExpr, expected)
+        checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+        checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+        checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
-    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+        Seq(
+          (makeTimestampExpr.copy(year = Literal(Int.MaxValue)), "Invalid value for Year"),
+          (makeTimestampExpr.copy(month = Literal(13)), "Invalid value for Month"),
+          (makeTimestampExpr.copy(day = Literal(32)), "Invalid value for Day"),
+          (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
+          (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
+          (makeTimestampExpr.copy(sec = Literal(Decimal(
+            BigDecimal(70.0), 8, 6))), "Invalid value for Second")
+        ).foreach { entry =>
+          if (ansi) {
+            checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
+          } else {
+            checkEvaluation(entry._1, null)
+          }
+        }
 
-    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+          Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+        if (ansi) {
+          checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
+            Decimal(BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+        } else {
+          checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+        }
 
-    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+        makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12), Literal(0),
+          Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+      }
+    }
 
-    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+    // non-ansi test
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+        Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
+    }
 
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
-
-    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-      Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
-
-    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
-      Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
-    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+          Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+        checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
+      }
+    }
   }
 
   test("ISO 8601 week-numbering year") {
@@ -1195,6 +1243,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue)
     checkResult(Int.MaxValue.toLong + 100)
     checkResult(Int.MinValue.toLong - 100)
+  }
+
+  test("UNIX_SECONDS") {
+    checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixSeconds(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+    timestamp = Literal(new Timestamp(-1L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(1999L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+  }
+
+  test("UNIX_MILLIS") {
+    checkEvaluation(UnixMillis(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMillis(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMillis(timestamp), 1000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMillis(timestamp), -1000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMillis(Literal(timestampWithNanos)), 1000L)
+  }
+
+  test("UNIX_MICROS") {
+    checkEvaluation(UnixMicros(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMicros(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMicros(timestamp), 1000000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMicros(timestamp), -1000000L)
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
   }
 
   test("TIMESTAMP_SECONDS") {

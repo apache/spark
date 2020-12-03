@@ -524,6 +524,79 @@ case class MicrosToTimestamp(child: Expression)
   override def prettyName: String = "timestamp_micros"
 }
 
+abstract class TimestampToLongBase extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
+
+  protected def scaleFactor: Long
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+
+  override def dataType: DataType = LongType
+
+  override def nullSafeEval(input: Any): Any = {
+    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    if (scaleFactor == 1) {
+      defineCodeGen(ctx, ev, c => c)
+    } else {
+      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of seconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixSeconds(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = MICROS_PER_SECOND
+
+  override def prettyName: String = "unix_seconds"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of precision.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1000
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixMillis(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = MICROS_PER_MILLIS
+
+  override def prettyName: String = "unix_millis"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of microseconds since 1970-01-01 00:00:00 UTC.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIMESTAMP('1970-01-01 00:00:01Z'));
+       1000000
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+// scalastyle:on line.size.limit
+case class UnixMicros(child: Expression) extends TimestampToLongBase {
+  override def scaleFactor: Long = 1L
+
+  override def prettyName: String = "unix_micros"
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   examples = """
@@ -1789,31 +1862,39 @@ private case class GetTimestamp(
   """,
   group = "datetime_funcs",
   since = "3.0.0")
-case class MakeDate(year: Expression, month: Expression, day: Expression)
+case class MakeDate(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(year: Expression, month: Expression, day: Expression) =
+    this(year, month, day, SQLConf.get.ansiEnabled)
 
   override def children: Seq[Expression] = Seq(year, month, day)
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
   override def dataType: DataType = DateType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
     try {
       val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
       localDateToDays(ld)
     } catch {
-      case _: java.time.DateTimeException => null
+      case _: java.time.DateTimeException if !failOnError => null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day) => {
       s"""
       try {
         ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
       } catch (java.time.DateTimeException e) {
-        ${ev.isNull} = true;
+        $failOnErrorBranch
       }"""
     })
   }
@@ -1860,7 +1941,8 @@ case class MakeTimestamp(
     min: Expression,
     sec: Expression,
     timezone: Option[Expression] = None,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
     with NullIntolerant {
 
@@ -1871,7 +1953,7 @@ case class MakeTimestamp(
       hour: Expression,
       min: Expression,
       sec: Expression) = {
-    this(year, month, day, hour, min, sec, None, None)
+    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled)
   }
 
   def this(
@@ -1882,7 +1964,7 @@ case class MakeTimestamp(
       min: Expression,
       sec: Expression,
       timezone: Expression) = {
-    this(year, month, day, hour, min, sec, Some(timezone), None)
+    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled)
   }
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
@@ -1892,7 +1974,7 @@ case class MakeTimestamp(
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
     timezone.map(_ => StringType)
   override def dataType: DataType = TimestampType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1926,7 +2008,7 @@ case class MakeTimestamp(
       }
       instantToMicros(ldt.atZone(zoneId).toInstant)
     } catch {
-      case _: DateTimeException => null
+      case _: DateTimeException if !failOnError => null
     }
   }
 
@@ -1955,6 +2037,7 @@ case class MakeTimestamp(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
+    val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       s"""
@@ -1978,7 +2061,7 @@ case class MakeTimestamp(
         java.time.Instant instant = ldt.atZone($zoneId).toInstant();
         ${ev.value} = $dtu.instantToMicros(instant);
       } catch (java.time.DateTimeException e) {
-        ${ev.isNull} = true;
+        $failOnErrorBranch
       }"""
     })
   }
