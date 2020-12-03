@@ -2736,6 +2736,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+      .internal()
+      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
+        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
+        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
+        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars.")
+      .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
   val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
@@ -2753,14 +2767,15 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
       .internal()
       .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
-        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
-        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars.")
+        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
+        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
+        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
+        "that are ambiguous between the two calendars. This config is only effective if the " +
+        "writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2780,21 +2795,6 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
-
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
-      .internal()
-      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
-        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
-        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars. This config is only effective if the " +
-        "writer info (like Spark, Hive) of the Parquet files is unknown.")
-      .version("3.1.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
