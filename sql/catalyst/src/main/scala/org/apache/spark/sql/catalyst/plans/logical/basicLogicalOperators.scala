@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -451,6 +452,9 @@ case class View(
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
+
+  override def doCanonicalize(): LogicalPlan =
+    SimplifyCasts(CollapseProject(EliminateView(this))).canonicalized
 }
 
 object View {
