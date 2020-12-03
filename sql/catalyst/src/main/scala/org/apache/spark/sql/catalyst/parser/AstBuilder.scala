@@ -2240,7 +2240,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a Spark DataType but fail ahead w/ Char/Varchar.
    */
   private def failWithCharLikeTypes(ctx: DataTypeContext): DataType = {
-    CharVarcharUtils.failWithCharLikeTypes(typedVisit(ctx))
+    CharVarcharUtils.failWithCharLikeType(typedVisit(ctx))
   }
 
   /**

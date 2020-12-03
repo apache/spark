@@ -53,13 +53,14 @@ object CharVarcharUtils {
    * @return
    */
   def failWithCharLikeTypes(schema: StructType): StructType = {
-    if (schema.exists(f => f.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))) {
+    if (schema.exists(f => hasCharVarchar(f.dataType) ||
+      f.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
     }
     schema
   }
 
-  def failWithCharLikeTypes(dt: DataType): DataType = {
+  def failWithCharLikeType(dt: DataType): DataType = {
     if (hasCharVarchar(dt)) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
     }
