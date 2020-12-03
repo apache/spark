@@ -2968,7 +2968,7 @@ object LogisticRegressionSuite {
             assert(v1 ~= v2 absTol 1E-2)
           }
           else {
-            assert(v1 ~= v2 relTol 1E-3)
+            assert(v1 ~= v2 relTol 1E-2)
           }
       }
     }
