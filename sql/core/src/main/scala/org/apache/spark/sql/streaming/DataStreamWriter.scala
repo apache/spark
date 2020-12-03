@@ -305,6 +305,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * table as new data arrives. A new table will be created if the table not exists. The returned
    * [[StreamingQuery]] object can be used to interact with the stream.
    *
+   * Note, currently the new table creation by this API doesn't fully cover the V2 table.
+   * TODO (SPARK-33638): Full support of v2 table creation
+   *
    * @since 3.1.0
    */
   @throws[TimeoutException]
