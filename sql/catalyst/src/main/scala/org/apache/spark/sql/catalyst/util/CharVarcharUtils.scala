@@ -60,6 +60,12 @@ object CharVarcharUtils {
     schema
   }
 
+  /**
+   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
+   *
+   * @param dt the given struct type
+   * @return
+   */
   def failWithCharLikeType(dt: DataType): DataType = {
     if (hasCharVarchar(dt)) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
@@ -107,7 +113,7 @@ object CharVarcharUtils {
    */
   def getRawType(metadata: Metadata): Option[DataType] = {
     if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
-      Some(CatalystSqlParser.parseRawDataType(
+      Some(CatalystSqlParser.parseDataType(
         metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
     } else {
       None

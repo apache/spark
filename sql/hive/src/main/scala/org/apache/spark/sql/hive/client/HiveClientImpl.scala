@@ -985,7 +985,7 @@ private[hive] object HiveClientImpl extends Logging {
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
-      CatalystSqlParser.parseRawDataType(hc.getType)
+      CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException(

@@ -1197,7 +1197,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(CatalystSqlParser.parseRawDataType(to))
+  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
    * Returns a sort expression based on the descending order of the column.

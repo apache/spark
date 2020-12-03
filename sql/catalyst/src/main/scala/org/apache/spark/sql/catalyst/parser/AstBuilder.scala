@@ -95,17 +95,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    visitSparkDataType(ctx.dataType)
+    typedVisit[DataType](ctx.dataType)
   }
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
       StructType(visitColTypeList(ctx.colTypeList)))
     withOrigin(ctx)(schema)
-  }
-
-  def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    typedVisit[DataType](ctx.dataType())
   }
 
   /* ********************************************************************************************
@@ -1550,7 +1546,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), failWithCharLikeTypes(ctx.dataType))
+    val dataType = typedVisit[DataType](ctx.dataType())
+    CharVarcharUtils.failWithCharLikeType(dataType)
+    Cast(expression(ctx.expression), dataType)
   }
 
   /**
@@ -2224,16 +2222,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           throw pe
       }
     }
-  }
-
-  /* ********************************************************************************************
-   * DataType parsing
-   * ******************************************************************************************** */
-  /**
-   * Create a Spark DataType.
-   */
-  private def visitSparkDataType(ctx: DataTypeContext): DataType = {
-    CharVarcharUtils.replaceCharVarcharWithString(typedVisit(ctx))
   }
 
   /**
