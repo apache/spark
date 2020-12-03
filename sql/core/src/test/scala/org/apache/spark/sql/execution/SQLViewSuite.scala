@@ -811,6 +811,42 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("local temp view refers global temp view") {
+    withGlobalTempView("v1") {
+      withTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE TEMPORARY VIEW v2 AS SELECT * FROM ${globalTempDB}.v1")
+        checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("global temp view refers local temp view") {
+    withTempView("v1") {
+      withGlobalTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
+        checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("creating local temp view should not affect existing table reference") {
+    withTable("t1") {
+      withTempView("t1") {
+        withGlobalTempView("v") {
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t1")
+          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t1")
+          sql("CREATE TEMPORARY VIEW t1 AS SELECT 1")
+          checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v"), Seq(Row(2)))
+        }
+      }
+    }
+  }
+
   test("SPARK-33141: view should be parsed and analyzed with configs set when creating") {
     withTable("t") {
       withView("v1", "v2", "v3", "v4", "v5") {
