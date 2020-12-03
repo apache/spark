@@ -4149,7 +4149,7 @@ case class HasAll(left: Expression, right: Expression)
       })
     } else {
       nullSafeCodeGen(ctx, ev, (array1, array2) => {
-        val expr = ctx.addReferenceObj("arrayContainsArrayExpr", this)
+        val expr = ctx.addReferenceObj("hasAllExpr", this)
         s"${ev.value} = (Boolean)$expr.nullSafeEval($array1, $array2);"
       })
     }
