@@ -670,7 +670,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val tz = Option(conf.sessionLocalTimeZone)
     val expected = Project(Seq(
         Alias(Cast(Symbol("a").int.notNull, IntegerType, tz), "a")(),
-        Alias(Cast(Symbol("b").string, StringType, tz), "b")()),
+        Symbol("b").string),
       relation)
     val res = ViewAnalyzer.execute(view)
     comparePlans(res, expected)
