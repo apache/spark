@@ -291,7 +291,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     val query = inputDF
       .writeStream
       .option("checkpointLocation", checkpointDir.getAbsolutePath)
-      .saveAsTable(tableIdentifier)
+      .toTable(tableIdentifier)
 
     inputData.addData(newInputs: _*)
 
