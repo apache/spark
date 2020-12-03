@@ -271,7 +271,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
         blocks.foreach(blockId => {
           if (failBlock) {
             failBlock = false
-            // Fail the first block with the collision exception.
+            // Fail the first block with the too late exception.
             blockFetchListener.onBlockFetchFailure(blockId, new RuntimeException(
               new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)))
           } else {

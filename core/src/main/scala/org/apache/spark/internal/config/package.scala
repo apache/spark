@@ -2039,16 +2039,17 @@ package object config {
        "larger than this threshold are not pushed to be merged remotely. These shuffle blocks " +
        "will be fetched by the executors in the original manner.")
       .version("3.1.0")
-      .bytesConf(ByteUnit.KiB)
+      .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("800k")
 
   private[spark] val SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH =
     ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
       .doc("The max size of a batch of shuffle blocks to be grouped into a single push request.")
       .version("3.1.0")
-      .bytesConf(ByteUnit.MiB)
-      // 2m is also the default value for TransportConf#memoryMapBytes.
-      // Having this default to 2m will very likely make each batch of block loaded in memory with
-      // memory mapping, which has higher overhead with small MB sized chunk of data.
+      .bytesConf(ByteUnit.BYTE)
+      // 2m is also the default value for TransportConf#memoryMapBytes so it is better to have
+      // the batch size greater than 2m. If it defaults to 2m as well it is very likely that each
+      // batch of block will be loaded in memory with memory mapping, which has higher overhead
+      // with small MB sized chunk of data.
       .createWithDefaultString("3m")
 }

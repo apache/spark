@@ -49,9 +49,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 @Since("3.1.0")
 private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
-  private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH) * 1024
-  private[this] val maxBlockBatchSize =
-    conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH) * 1024 * 1024
+  private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH)
+  private[this] val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH)
   private[this] val maxBytesInFlight =
     conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
   private[this] val maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
@@ -86,18 +85,17 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param partitionLengths array of shuffle block size so we can tell shuffle block
    * @param dep              shuffle dependency to get shuffle ID and the location of remote shuffle
    *                         services to push local shuffle blocks
-   * @param partitionId      map index of the shuffle map task
+   * @param mapIndex      map index of the shuffle map task
    */
   private[shuffle] def initiateBlockPush(
       dataFile: File,
       partitionLengths: Array[Long],
       dep: ShuffleDependency[_, _, _],
-      partitionId: Int): Unit = {
+      mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
-    val mergerLocs = dep.getMergerLocs.map(loc => BlockManagerId("", loc.host, loc.port))
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
-    val requests = prepareBlockPushRequests(numPartitions, partitionId, dep.shuffleId, dataFile,
-      partitionLengths, mergerLocs, transportConf)
+    val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId, dataFile,
+      partitionLengths, dep.getMergerLocs, transportConf)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -118,10 +116,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   }
 
   /**
-   * Since multiple netty client threads could potentially be calling pushUpToMax for the same
+   * Since multiple block push threads could potentially be calling pushUpToMax for the same
    * mapper, we synchronize access to this method so that only one thread can push blocks for
    * a given mapper. This helps to simplify access to the shared states. The down side of this
-   * is that we could unnecessarily block other mappers' block pushes if all netty client threads
+   * is that we could unnecessarily block other mappers' block pushes if all the threads
    * are occupied by block pushes from the same mapper.
    *
    * This code is similar to ShuffleBlockFetcherIterator#fetchUpToMaxBytes in how it throttles
