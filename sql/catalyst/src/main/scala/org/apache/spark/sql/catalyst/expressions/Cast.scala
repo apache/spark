@@ -1907,6 +1907,27 @@ object AnsiCast {
            | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
            |""".stripMargin
 
+      case (TimestampType, _: NumericType) =>
+        // scalastyle:off line.size.limit
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString}.
+           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead.
+           |""".stripMargin
+
+      case (_: NumericType, DateType) =>
+        // scalastyle:off line.size.limit
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString}.
+           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
+           |""".stripMargin
+
+      case (DateType, _: NumericType) =>
+        // scalastyle:off line.size.limit
+        s"""
+           | cannot cast ${from.catalogString} to ${to.catalogString}.
+           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
+           |""".stripMargin
+
       case (_: ArrayType, StringType) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.
