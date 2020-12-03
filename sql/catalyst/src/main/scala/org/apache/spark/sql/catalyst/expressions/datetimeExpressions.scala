@@ -415,7 +415,7 @@ case class DateFromUnixDate(child: Expression) extends UnaryExpression
 
   override def dataType: DataType = DateType
 
-  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Number].intValue()
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Int]
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
@@ -438,7 +438,7 @@ case class UnixDate(child: Expression) extends UnaryExpression
 
   override def dataType: DataType = IntegerType
 
-  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Number].intValue()
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Int]
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
