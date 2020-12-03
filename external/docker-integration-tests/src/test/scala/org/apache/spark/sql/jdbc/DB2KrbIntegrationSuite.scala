@@ -77,7 +77,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     }
   }
 
-  override val connectionTimeout = timeout(5.minutes)
+  override val connectionTimeout = timeout(3.minutes)
 
   override protected def setAuthentication(keytabFile: String, principal: String): Unit = {
     val config = new SecureConnectionProvider.JDBCConfiguration(

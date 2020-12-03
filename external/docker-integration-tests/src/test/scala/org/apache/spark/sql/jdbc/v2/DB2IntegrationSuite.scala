@@ -54,7 +54,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
 
-  override val connectionTimeout = timeout(5.minutes)
+  override val connectionTimeout = timeout(3.minutes)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)

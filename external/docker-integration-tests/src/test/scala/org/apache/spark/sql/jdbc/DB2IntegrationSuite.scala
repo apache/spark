@@ -53,7 +53,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
 
-  override val connectionTimeout = timeout(5.minutes)
+  override val connectionTimeout = timeout(3.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
