@@ -266,22 +266,23 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
-  ignore("CreateTable: without USING clause") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-    val testCatalog = catalog("testcat").asTableCatalog
+  test("CreateTable: without USING clause") {
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> "false") {
+      // unset this config to use the default v2 session catalog.
+      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      val testCatalog = catalog("testcat").asTableCatalog
 
-    sql("CREATE TABLE testcat.t1 (id int)")
-    val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
-    // Spark shouldn't set the default provider for catalog plugins.
-    assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+      sql("CREATE TABLE testcat.t1 (id int)")
+      val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+      // Spark shouldn't set the default provider for catalog plugins.
+      assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
 
-    sql("CREATE TABLE t2 (id int)")
-    val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-      .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
-    // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
-    assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+      sql("CREATE TABLE t2 (id int)")
+      val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+        .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
+      // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+      assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+    }
   }
 
   test("CreateTable/RepalceTable: invalid schema if has interval type") {

@@ -113,6 +113,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         sql(
           s"""
              |CREATE TABLE $table(id string)
+             |USING hive
              |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
            """.stripMargin)
         sql(
@@ -157,6 +158,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
         sql(
           s"""
              |CREATE TABLE $table(id string)
+             |USING hive
              |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
            """.stripMargin)
         sql(
@@ -182,6 +184,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
       sql(
         s"""
            |CREATE TABLE $table (id int)
+           |USING hive
            |PARTITIONED BY (a int, b int)
          """.stripMargin)
       val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
@@ -252,7 +255,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   test("SPARK-32069: Improve error message on reading unexpected directory") {
     withTable("t") {
       withTempDir { f =>
-        sql(s"CREATE TABLE t(i LONG) LOCATION '${f.getAbsolutePath}'")
+        sql(s"CREATE TABLE t(i LONG) USING hive LOCATION '${f.getAbsolutePath}'")
         sql("INSERT INTO t VALUES(1)")
         val dir = new File(f.getCanonicalPath + "/data")
         dir.mkdir()

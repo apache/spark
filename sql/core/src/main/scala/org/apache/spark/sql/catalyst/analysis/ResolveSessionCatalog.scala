@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
@@ -636,11 +636,16 @@ class ResolveSessionCatalog(
       (storageFormat, DDLUtils.HIVE_PROVIDER)
     } else {
       // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
-      // tables if it's a CTAS and `conf.convertCTAS` is true.
-      // TODO: create native data source table by default for non-CTAS.
-      if (ctas && conf.convertCTAS) {
+      // tables if:
+      //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
+      //   2. It's a CTAS and `conf.convertCTAS` is true.
+      val createHiveTableByDefault = conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
+      if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
+        logWarning("A Hive serde table will be created as there is no table provider " +
+          s"specified. You can set ${SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key} to false " +
+          "so that native data source table will be created instead.")
         (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
       }
     }
