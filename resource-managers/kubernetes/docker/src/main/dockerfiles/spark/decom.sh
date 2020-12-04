@@ -25,11 +25,10 @@ date | tee -a ${LOG}
 WORKER_PID=$(ps -o pid -C java | tail -n 1| awk '{ sub(/^[ \t]+/, ""); print }')
 echo "Using worker pid $WORKER_PID"
 kill -s SIGPWR ${WORKER_PID}
-# For now we expect this to timeout, since we don't start exiting the backend.
 echo "Waiting for worker pid to exit"
+sleep 30
 # If the worker does exit stop blocking the cleanup.
-timeout 60 tail --pid=${WORKER_PID} -f /dev/null
+timeout 360 tail --pid=${WORKER_PID} -f /dev/null || sleep 360
 date
 echo "Done"
 date
-sleep 1
