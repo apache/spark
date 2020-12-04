@@ -307,18 +307,18 @@ $(document).ready(function () {
         "</a></div>" +
         "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
         "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
-        "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11' metrics-type='task'> Scheduler Delay</div>" +
-        "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12' metrics-type='task'> Task Deserialization Time</div>" +
-        "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' metrics-type='task'> Shuffle Read Blocked Time</div>" +
-        "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14' metrics-type='task'> Shuffle Remote Reads</div>" +
-        "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21' metrics-type='task'> Shuffle Write Time</div>" +
-        "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' metrics-type='task'> Result Serialization Time</div>" +
-        "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' metrics-type='task'> Getting Result Time</div>" +
-        "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' metrics-type='task'> Peak Execution Memory</div>" +
-        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' metrics-type='executor'> Executor JVMOnHeapMemory / JVMOffHeapMemory</div>" +
-        "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' metrics-type='executor'> Executor OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
-        "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' metrics-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
-        "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' metrics-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
+        "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11' data-metrics-type='task'> Scheduler Delay</div>" +
+        "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12' data-metrics-type='task'> Task Deserialization Time</div>" +
+        "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' data-metrics-type='task'> Shuffle Read Blocked Time</div>" +
+        "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14' data-metrics-type='task'> Shuffle Remote Reads</div>" +
+        "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21' data-metrics-type='task'> Shuffle Write Time</div>" +
+        "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' data-metrics-type='task'> Result Serialization Time</div>" +
+        "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' data-metrics-type='task'> Getting Result Time</div>" +
+        "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' data-metrics-type='task'> Peak Execution Memory</div>" +
+        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' data-metrics-type='executor'> Executor JVMOnHeapMemory / JVMOffHeapMemory</div>" +
+        "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' data-metrics-type='executor'> Executor OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
+        "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' data-metrics-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
+        "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' data-metrics-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
@@ -1045,8 +1045,8 @@ $(document).ready(function () {
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         }
                     } else {
-                        var metricsType = $(this).attr("metrics-type");
-                        if (metricsType === 'task') {
+                        var dataMetricsType = $(this).attr("data-metrics-type");
+                        if (dataMetricsType === 'task') {
                             var column = taskTableSelector.column(para);
                             // Toggle the visibility
                             column.visible(!column.visible());
@@ -1060,7 +1060,7 @@ $(document).ready(function () {
                             }
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
                         }
-                        if (metricsType === "executor") {
+                        if (dataMetricsType === "executor") {
                             var column = executorSummaryTableSelector.column(para);
                             column.visible(!column.visible());
                         }
