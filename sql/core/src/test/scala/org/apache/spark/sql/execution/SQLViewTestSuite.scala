@@ -189,7 +189,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
     for (i <- 1 to 10) {
       viewNames += createView(s"view$i", s"SELECT * FROM ${viewNames.last}")
     }
-    withView(viewNames.reverse: _*) {
+    withView(viewNames.reverse.toSeq: _*) {
       withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
         val e = intercept[AnalysisException] {
           sql(s"SELECT * FROM ${viewNames.last}")
