@@ -220,8 +220,11 @@ case class CreateViewCommand(
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
       child.collect {
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
-          nameParts
-      }.distinct
+          Seq(nameParts)
+        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+          case e: SubqueryExpression => collectTempViews(e.plan)
+        }).flatten
+      }.flatten.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {

@@ -834,13 +834,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("creating local temp view should not affect existing table reference") {
-    withTable("t1") {
-      withTempView("t1") {
+    withTable("t") {
+      withTempView("t") {
         withGlobalTempView("v") {
           val globalTempDB = spark.sharedState.globalTempViewManager.database
-          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t1")
-          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t1")
-          sql("CREATE TEMPORARY VIEW t1 AS SELECT 1")
+          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t")
+          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t")
+          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
           checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v"), Seq(Row(2)))
         }
       }
