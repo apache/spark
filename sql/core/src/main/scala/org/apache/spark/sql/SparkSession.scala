@@ -519,7 +519,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
-    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step = 1, numPartitions = sqlContext.conf.defaultParallelism)
   }
 
   /**
@@ -529,7 +529,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step, numPartitions = sqlContext.conf.defaultParallelism)
   }
 
   /**

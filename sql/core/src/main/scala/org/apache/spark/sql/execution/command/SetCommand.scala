@@ -182,6 +182,8 @@ case class ResetCommand(config: Option[String]) extends RunnableCommand with Ign
         defaults.getAll.foreach { case (k, v) =>
           sparkSession.sessionState.conf.setConfString(k, v)
         }
+        sparkSession.sessionState.conf.setConf(SQLConf.DEFAULT_PARALLELISM,
+          sparkSession.sparkContext.defaultParallelism)
     }
     Seq.empty[Row]
   }
