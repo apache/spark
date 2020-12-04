@@ -63,7 +63,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val errorHandler = createErrorHandler()
   // VisibleForTesting
   private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
-  private[this] var stopPushing = false
 
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
@@ -130,7 +129,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     if (deferredPushRequests.nonEmpty) {
       for ((remoteAddress, defReqQueue) <- deferredPushRequests) {
         while (isRemoteBlockPushable(defReqQueue) &&
-          !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front) && !stopPushing) {
+          !isRemoteAddressMaxedOut(remoteAddress, defReqQueue.front)) {
           val request = defReqQueue.dequeue()
           logDebug(s"Processing deferred push request for $remoteAddress with "
             + s"${request.blocks.length} blocks")
@@ -143,7 +142,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     }
 
     // Process any regular push requests if possible.
-    while (isRemoteBlockPushable(pushRequests) && !stopPushing) {
+    while (isRemoteBlockPushable(pushRequests)) {
       val request = pushRequests.dequeue()
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
@@ -304,7 +303,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     }
     if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
       logDebug(s"Received after merge is finalized from $address. Not pushing any more blocks.")
-      stopPushing = true
       return false
     } else {
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
