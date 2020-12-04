@@ -99,8 +99,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      StructType(visitColTypeList(ctx.colTypeList)))
+    val schema = StructType(visitColTypeList(ctx.colTypeList))
     withOrigin(ctx)(schema)
   }
 
@@ -1547,7 +1546,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    val dataType = CharVarcharUtils.failOrWarnWithCharLikeType(rawDataType, fail = false)
+    val dataType = CharVarcharUtils.warnIfHasCharLikeType(rawDataType)
     Cast(expression(ctx.expression), dataType)
   }
 

@@ -56,7 +56,7 @@ case class ScalaUDF(
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
-  CharVarcharUtils.failOrWarnWithCharLikeType(dataType)
+  CharVarcharUtils.failIfHasCharLikeType(dataType)
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

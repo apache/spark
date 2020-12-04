@@ -49,13 +49,9 @@ object CharVarcharUtils extends Logging {
 
   /**
    * Validate the given schema to fail if it contains char or varchar types
-   *
-   * @param schema the given struct type
-   * @return
    */
-  def failWithCharLikeTypes(schema: StructType): StructType = {
-    if (schema.exists(f => hasCharVarchar(f.dataType) ||
-      f.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))) {
+  def failIfHasCharLikeTypes(schema: StructType): StructType = {
+    if (schema.exists(f => hasCharVarchar(f.dataType))) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
     }
     schema
@@ -63,20 +59,22 @@ object CharVarcharUtils extends Logging {
 
   /**
    * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
-   *
-   * @param dt the given struct type
-   * @return
    */
-  def failOrWarnWithCharLikeType(dt: DataType, fail: Boolean = true): DataType = {
+  def failIfHasCharLikeType(dt: DataType): Unit = {
     if (hasCharVarchar(dt)) {
-      if (fail) {
-        throw new AnalysisException(s"Cannot use char/varchar type in this caller")
-      } else {
-        logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
-          " Spark 3.1, they become actual individual type of their own, you should use string" +
-          " instead for potential consistency reason")
-        replaceCharVarcharWithString(dt)
-      }
+      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+    }
+  }
+
+  /**
+   * Validate the given [[DataType]] to warn if it is char or varchar types or contains nested ones
+   */
+  def warnIfHasCharLikeType(dt: DataType): DataType = {
+    if (hasCharVarchar(dt)) {
+      logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
+        " Spark 3.1, they become actual individual type of their own, you should use string" +
+        " instead for potential consistency reason")
+      replaceCharVarcharWithString(dt)
     } else {
       dt
     }

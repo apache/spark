@@ -250,8 +250,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
   checkDataTypeFromJson(CharType(1))
+  checkDataTypeFromDDL(CharType(1))
 
   checkDataTypeFromJson(VarcharType(10))
+  checkDataTypeFromDDL(VarcharType(11))
 
   val metadata = new MetadataBuilder()
     .putString("name", "age")
