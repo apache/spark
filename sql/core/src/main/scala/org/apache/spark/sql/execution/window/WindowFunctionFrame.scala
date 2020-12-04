@@ -150,12 +150,10 @@ class FrameLessOffsetWindowFunctionFrame(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
+    offset: Int,
+    ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
-
-  /** Whether null values of input expression are included in or eliminated from the calculation. */
-  private val ignoreNulls = expressions.head.ignoreNulls
 
   /** The input expression of Lead/Lag. */
   private lazy val inputExpression = expressions.toSeq.map(_.input).head

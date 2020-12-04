@@ -116,13 +116,17 @@ trait WindowExecBase extends UnaryExecNode {
    * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression)
+    type FrameKey = (String, FrameType, Expression, Expression, Expression)
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
-      val key = (tpe, fr.frameType, fr.lower, fr.upper)
+      val key = fn match {
+        case f: FrameLessOffsetWindowFunction if f.ignoreNulls =>
+          (tpe, fr.frameType, fr.lower, fr.upper, f.canonicalized)
+        case _ => (tpe, fr.frameType, fr.lower, fr.upper, null)
+      }
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
@@ -136,8 +140,8 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: FrameLessOffsetWindowFunction => collect(
-              s"FRAME_LESS_OFFSET_${f.ignoreNulls}_${f.input.prettyName}", f.fakeFrame, e, f)
+            case f: FrameLessOffsetWindowFunction =>
+              collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
             case f: OffsetWindowFunction if !f.ignoreNulls &&
               frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
               frame.upper match {
@@ -180,7 +184,7 @@ trait WindowExecBase extends UnaryExecNode {
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Frameless offset Frame
-          case (pattern, _, IntegerLiteral(offset), _) if pattern.startsWith("FRAME_LESS_OFFSET") =>
+          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
             target: InternalRow =>
               new FrameLessOffsetWindowFunctionFrame(
                 target,
@@ -190,8 +194,9 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _) =>
+                offset,
+                expr != null)
+          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
@@ -203,7 +208,7 @@ trait WindowExecBase extends UnaryExecNode {
                   MutableProjection.create(expressions, schema),
                 offset)
             }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
@@ -217,13 +222,13 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
@@ -232,7 +237,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
             target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
@@ -241,7 +246,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper) =>
+          case ("AGGREGATE", frameType, lower, upper, _) =>
             target: InternalRow => {
               new SlidingWindowFunctionFrame(
                 target,
