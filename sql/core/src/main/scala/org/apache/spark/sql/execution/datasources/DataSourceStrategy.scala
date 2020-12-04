@@ -619,9 +619,7 @@ object DataSourceStrategy
 
       case inSet @ expressions.InSet(e, set) =>
         val minMaxFilter = if (set.size > conf.optimizerInSetRewriteMinMaxThreshold) {
-          val (min, max) = TypeUtils.getMinMaxValue(e.dataType, set.toArray)
-          Seq(expressions.GreaterThanOrEqual(e, Literal.create(min, e.dataType)),
-            expressions.LessThanOrEqual(e, Literal.create(max, e.dataType)))
+          TypeUtils.rewriteToMinMaxFilter(inSet)
         } else {
           Seq.empty
         }

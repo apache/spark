@@ -767,11 +767,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           if useAdvanced =>
         Some(convertInToOr(name, values))
 
-      case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
-        val dataType = child.dataType
-        val (min, max) = TypeUtils.getMinMaxValue(dataType, values.toArray)
-        convert(And(GreaterThanOrEqual(child, Literal(min, dataType)),
-          LessThanOrEqual(child, Literal(max, dataType))))
+      case in @ InSet(_, values) if useAdvanced && values.size > inSetThreshold =>
+        convert(TypeUtils.rewriteToMinMaxFilter(in).reduceLeft(And))
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
