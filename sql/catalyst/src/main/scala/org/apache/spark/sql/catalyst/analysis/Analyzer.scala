@@ -105,7 +105,8 @@ object FakeV2SessionCatalog extends TableCatalog {
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    referredTempViewNames: Seq[Seq[String]] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -117,10 +118,14 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
+  def withAnalysisContext[A](
+      catalogAndNamespace: Seq[String], referredTempViewNames: Seq[Seq[String]])(f: => A): A = {
     val originContext = value.get()
     val context = AnalysisContext(
-      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
+      catalogAndNamespace,
+      originContext.nestedViewDepth + 1,
+      originContext.relationCache,
+      referredTempViewNames)
     set(context)
     try f finally { set(originContext) }
   }
@@ -838,6 +843,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
+  private def referredTempViewNames: Seq[Seq[String]] = AnalysisContext.get.referredTempViewNames
 
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
@@ -882,7 +888,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView) return None
+      if (isResolvingView && !referredTempViewNames.contains(identifier)) return None
 
       val tmpView = identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
@@ -894,14 +900,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
           s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
-      tmpView
+      tmpView.map(ResolveRelations.resolveViews)
     }
   }
 
   // If we are resolving relations insides views, we need to expand single-part relation names with
   // the current catalog and namespace of when the view was created.
   private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    if (!isResolvingView) return nameParts
+    if (!isResolvingView || referredTempViewNames.contains(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
       AnalysisContext.get.catalogAndNamespace :+ nameParts.head
@@ -1022,23 +1028,24 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, _, child) if !child.resolved =>
+      case view @ View(desc, isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
-          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
-            view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
-              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
-              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
-              "around this.")
+        val newChild = AnalysisContext.withAnalysisContext(
+          desc.viewCatalogAndNamespace, desc.viewReferredTempViewNames) {
+            if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+              view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
+                s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
+                s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to " +
+                "work around this.")
+            }
+            SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
+              executeSameContext(child)
+            }
           }
-          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs)) {
-            executeSameContext(child)
-          }
-        }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))

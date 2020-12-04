@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -759,6 +760,89 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
         sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
         checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
+      }
+    }
+  }
+
+  test("temporary view should ignore useCurrentSQLConfigsForView config") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      withTempView("v1") {
+        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        withSQLConf(
+          USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
+          ANSI_ENABLED.key -> "true") {
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(null)))
+        }
+      }
+    }
+  }
+
+  test("alter temporary view should follow current storeAnalyzedPlanForView config") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      withView("v1") {
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT * FROM t")
+          Seq(4, 6, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          val e = intercept[SparkException] {
+            sql("SELECT * FROM v1").collect()
+          }.getMessage
+          assert(e.contains("does not exist"))
+        }
+
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {
+          // alter view from legacy to non-legacy config
+          sql("ALTER VIEW v1 AS SELECT * FROM t")
+          Seq(1, 3, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(1), Row(3), Row(5)))
+        }
+
+        withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+          // alter view from non-legacy to legacy config
+          sql("ALTER VIEW v1 AS SELECT * FROM t")
+          Seq(2, 4, 6).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
+          val e = intercept[SparkException] {
+            sql("SELECT * FROM v1").collect()
+          }.getMessage
+          assert(e.contains("does not exist"))
+        }
+      }
+    }
+  }
+
+  test("local temp view refers global temp view") {
+    withGlobalTempView("v1") {
+      withTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE GLOBAL TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE TEMPORARY VIEW v2 AS SELECT * FROM ${globalTempDB}.v1")
+        checkAnswer(sql("SELECT * FROM v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("global temp view refers local temp view") {
+    withTempView("v1") {
+      withGlobalTempView("v2") {
+        val globalTempDB = spark.sharedState.globalTempViewManager.database
+        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
+        sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
+        checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))
+      }
+    }
+  }
+
+  test("creating local temp view should not affect existing table reference") {
+    withTable("t") {
+      withTempView("t") {
+        withGlobalTempView("v") {
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t")
+          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t")
+          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
+          checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v"), Seq(Row(2)))
+        }
       }
     }
   }

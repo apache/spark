@@ -335,6 +335,10 @@ class InMemoryTable(
     }
   }
 
+  override def canDeleteWhere(filters: Array[Filter]): Boolean = {
+    InMemoryTable.supportsFilters(filters)
+  }
+
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
@@ -357,6 +361,14 @@ object InMemoryTable {
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
       }
+    }
+  }
+
+  def supportsFilters(filters: Array[Filter]): Boolean = {
+    filters.flatMap(splitAnd).forall {
+      case _: EqualTo => true
+      case _: IsNotNull => true
+      case _ => false
     }
   }
 

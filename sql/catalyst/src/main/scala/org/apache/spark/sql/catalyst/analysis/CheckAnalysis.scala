@@ -407,7 +407,7 @@ trait CheckAnalysis extends PredicateHelper {
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
           // throw an AnalysisException, too.
-          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+          case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
             val queryColumnNames = desc.viewQueryColumnNames
             val queryOutput = if (queryColumnNames.nonEmpty) {
               if (output.length != queryColumnNames.length) {
@@ -996,11 +996,11 @@ trait CheckAnalysis extends PredicateHelper {
   private def checkAlterTablePartition(
       table: Table, parts: Seq[PartitionSpec]): Unit = {
     (table, parts) match {
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
       case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
         failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
+      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
+        failAnalysis("PartitionSpecs are not resolved")
 
       // Skip atomic partition tables
       case (_: SupportsAtomicPartitionManagement, _) =>
