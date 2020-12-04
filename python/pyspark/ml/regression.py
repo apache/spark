@@ -1491,7 +1491,7 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
-                  impuriy="variance", featureSubsetStrategy="all", validationTol=0.01,
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
                   weightCol=None):
         """

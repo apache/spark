@@ -216,18 +216,6 @@ object SQLConf {
         "for using switch statements in InSet must be non-negative and less than or equal to 600")
       .createWithDefault(400)
 
-  val OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD =
-    buildConf("spark.sql.optimizer.likeAllConversionThreshold")
-      .internal()
-      .doc("Configure the maximum size of the pattern sequence in like all. Spark will convert " +
-        "the logical combination of like to avoid StackOverflowError. 200 is an empirical value " +
-        "that will not cause StackOverflowError.")
-      .version("3.1.0")
-      .intConf
-      .checkValue(threshold => threshold >= 0, "The maximum size of pattern sequence " +
-        "in like all must be non-negative")
-      .createWithDefault(200)
-
   val PLAN_CHANGE_LOG_LEVEL = buildConf("spark.sql.planChangeLog.level")
     .internal()
     .doc("Configures the log level for logging the change from the original plan to the new " +
@@ -509,7 +497,7 @@ object SQLConf {
         "'spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes'")
       .version("3.0.0")
       .intConf
-      .checkValue(_ > 0, "The skew factor must be positive.")
+      .checkValue(_ >= 0, "The skew factor cannot be negative.")
       .createWithDefault(5)
 
   val SKEW_JOIN_SKEWED_PARTITION_THRESHOLD =
@@ -1415,6 +1403,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val USE_DEPRECATED_KAFKA_OFFSET_FETCHING =
+    buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
+      .internal()
+      .doc("When true, the deprecated Consumer based offset fetching used which could cause " +
+        "infinite wait in Spark queries. Such cases query restart is the only workaround. " +
+        "For further details please see Offset Fetching chapter of Structured Streaming Kafka " +
+        "Integration Guide.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED =
     buildConf("spark.sql.streaming.statefulOperator.checkCorrectness.enabled")
       .internal()
@@ -1480,6 +1479,24 @@ object SQLConf {
       .checkValue(depth => depth > 0, "The maximum depth of a view reference in a nested view " +
         "must be positive.")
       .createWithDefault(100)
+
+  val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
+    buildConf("spark.sql.legacy.useCurrentConfigsForView")
+      .internal()
+      .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
+        "ones will be applied during the parsing and analysis phases of the view resolution.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STORE_ANALYZED_PLAN_FOR_VIEW =
+    buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
+      .internal()
+      .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
+        "temporary view")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
@@ -2201,11 +2218,12 @@ object SQLConf {
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
-      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
-      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -2728,20 +2746,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
-      .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars.")
-      .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
-
   val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .internal()
@@ -2756,15 +2760,17 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
-        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2781,6 +2787,24 @@ object SQLConf {
         "that are ambiguous between the two calendars. This config is only effective if the " +
         "writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
+      .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2913,6 +2937,15 @@ object SQLConf {
     .stringConf
     .createWithDefault("")
 
+  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
+    buildConf("spark.sql.legacy.createHiveTableByDefault")
+      .internal()
+      .doc("When set to true, CREATE TABLE syntax without USING or STORED AS will use Hive " +
+        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key} as the table provider.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3028,8 +3061,6 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
-
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
@@ -3055,6 +3086,8 @@ class SQLConf extends Serializable with Logging {
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
@@ -3414,6 +3447,10 @@ class SQLConf extends Serializable with Logging {
   def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
