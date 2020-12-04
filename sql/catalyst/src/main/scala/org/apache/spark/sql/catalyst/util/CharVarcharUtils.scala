@@ -47,10 +47,18 @@ object CharVarcharUtils extends Logging {
     })
   }
 
+
+  /**
+   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
+   */
+  def hasCharVarchar(dt: DataType): Boolean = {
+    dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
+  }
+
   /**
    * Validate the given schema to fail if it contains char or varchar types
    */
-  def failIfHasCharLikeTypes(schema: StructType): StructType = {
+  def failIfHasCharVarcharInSchema(schema: StructType): StructType = {
     if (schema.exists(f => hasCharVarchar(f.dataType))) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
     }
@@ -60,31 +68,10 @@ object CharVarcharUtils extends Logging {
   /**
    * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
    */
-  def failIfHasCharLikeType(dt: DataType): Unit = {
+  def failIfHasCharVarchar(dt: DataType): Unit = {
     if (hasCharVarchar(dt)) {
       throw new AnalysisException(s"Cannot use char/varchar type in this caller")
     }
-  }
-
-  /**
-   * Validate the given [[DataType]] to warn if it is char or varchar types or contains nested ones
-   */
-  def warnIfHasCharLikeType(dt: DataType): DataType = {
-    if (hasCharVarchar(dt)) {
-      logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
-        " Spark 3.1, they become actual individual type of their own, you should use string" +
-        " instead for potential consistency reason")
-      replaceCharVarcharWithString(dt)
-    } else {
-      dt
-    }
-  }
-
-  /**
-   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
-   */
-  def hasCharVarchar(dt: DataType): Boolean = {
-    dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
   }
 
   /**
@@ -102,6 +89,21 @@ object CharVarcharUtils extends Logging {
     case _: CharType => StringType
     case _: VarcharType => StringType
     case _ => dt
+  }
+
+  /**
+   * Replaces CharType/VarcharType with StringType recursively in the given data type, with a
+   * warning message if it has char or varchar types
+   */
+  def logWarningAndReplaceCharVarcharWithString(dt: DataType): DataType = {
+    if (hasCharVarchar(dt)) {
+      logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
+        " Spark 3.1, they become actual individual type of their own, you should use string" +
+        " instead for potential consistency reason")
+      replaceCharVarcharWithString(dt)
+    } else {
+      dt
+    }
   }
 
   /**
