@@ -95,6 +95,10 @@ java.lang.NumberFormatException: invalid input syntax for type numeric: a
 SELECT CAST(2147483648L AS INT);
 java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 
+SELECT CAST(DATE'2020-01-01' AS INT)
+org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
+To convert values from date to int, you can use function UNIX_DATE instead.
+
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
 +--------------+
@@ -109,6 +113,13 @@ SELECT CAST(2147483648L AS INT);
 +-----------------------+
 |            -2147483648|
 +-----------------------+
+
+SELECT CAST(DATE'2020-01-01' AS INT)
++------------------------------+
+|CAST(DATE '2020-01-01' AS INT)|
++------------------------------+
+|                          null|
++------------------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
