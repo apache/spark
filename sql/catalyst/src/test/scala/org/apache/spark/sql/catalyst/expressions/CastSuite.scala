@@ -855,8 +855,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     verifyCastFailure(cast(Literal(0L), TimestampType), Some(errorMsg))
 
     val timestampLiteral = Literal(1L, TimestampType)
+    errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
     numericTypes.foreach { numericType =>
-      errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
       verifyCastFailure(cast(timestampLiteral, numericType), Some(errorMsg))
     }
   }
@@ -867,8 +867,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     var errorMsg = "you can use function DATE_FROM_UNIX_DATE instead"
     verifyCastFailure(cast(Literal(0L), DateType), Some(errorMsg))
     val dateLiteral = Literal(1, DateType)
+    errorMsg = "you can use function UNIX_DATE instead"
     numericTypes.foreach { numericType =>
-      errorMsg = "you can use function UNIX_DATE instead"
       verifyCastFailure(cast(dateLiteral, numericType), Some(errorMsg))
     }
   }
