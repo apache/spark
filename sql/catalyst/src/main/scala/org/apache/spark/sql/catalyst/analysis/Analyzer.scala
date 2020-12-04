@@ -860,14 +860,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
       case u @ UnresolvedTable(ident, cmd) =>
         lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(QueryCompilationErrors.expectedTableNotTempViewError(ident.quoted, cmd, u))
+          u.failAnalysis(QueryCompilationErrors.expectTableNotTempViewError(ident.quoted, cmd, u))
         }
         u
       case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
         lookupTempView(ident)
           .map { _ =>
             if (!allowTempView) {
-              u.failAnalysis(QueryCompilationErrors.expectedTableOrPermanentViewNotTempViewError(
+              u.failAnalysis(QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
                 ident.quoted, cmd, u))
             }
             ResolvedView(ident.asIdentifier, isTemp = true)
@@ -1049,7 +1049,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         EliminateSubqueryAliases(relation) match {
           case v: View =>
-            table.failAnalysis(QueryCompilationErrors.insertingIntoViewNotAllowedError(
+            table.failAnalysis(QueryCompilationErrors.insertIntoViewNotAllowedError(
               v.desc.identifier, table))
           case other => i.copy(table = other)
         }
@@ -1062,9 +1062,9 @@ class Analyzer(override val catalogManager: CatalogManager)
               .map(EliminateSubqueryAliases(_))
               .map {
                 case v: View => write.failAnalysis(
-                  QueryCompilationErrors.writingIntoViewNotAllowedError(v.desc.identifier, write))
+                  QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, write))
                 case u: UnresolvedCatalogRelation => write.failAnalysis(QueryCompilationErrors.
-                  writingIntoV1TableNotAllowedError(u.tableMeta.identifier, write))
+                  writeIntoV1TableNotAllowedError(u.tableMeta.identifier, write))
                 case r: DataSourceV2Relation => write.withNewTable(r)
                 case other => throw new IllegalStateException(
                   "[BUG] unexpected plan returned by `lookupRelation`: " + other)
@@ -1079,7 +1079,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case u @ UnresolvedTable(identifier, cmd) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView =>
-            u.failAnalysis(QueryCompilationErrors.expectsTableNotViewError(v, cmd, u))
+            u.failAnalysis(QueryCompilationErrors.expectTableNotViewError(v, cmd, u))
           case table => table
         }.getOrElse(u)
 

@@ -185,12 +185,12 @@ object QueryCompilationErrors {
       "did not appear in any aggregate function.")
   }
 
-  def expectedTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
+  def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
       t.origin.line, t.origin.startPosition)
   }
 
-  def expectedTableOrPermanentViewNotTempViewError(
+  def expectTableOrPermanentViewNotTempViewError(
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
       t.origin.line, t.origin.startPosition)
@@ -204,22 +204,22 @@ object QueryCompilationErrors {
       "around this.", t.origin.line, t.origin.startPosition)
   }
 
-  def insertingIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def insertIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"Inserting into a view is not allowed. View: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
 
-  def writingIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"Writing into a view is not allowed. View: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
 
-  def writingIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
+  def writeIntoV1TableNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"Cannot write into v1 table: $identifier.",
       t.origin.line, t.origin.startPosition)
   }
 
-  def expectsTableNotViewError(v: ResolvedView, cmd: String, t: TreeNode[_]): Throwable = {
+  def expectTableNotViewError(v: ResolvedView, cmd: String, t: TreeNode[_]): Throwable = {
     val viewStr = if (v.isTemp) "temp view" else "view"
     new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.",
       t.origin.line, t.origin.startPosition)
