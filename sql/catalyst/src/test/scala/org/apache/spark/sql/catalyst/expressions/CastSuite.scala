@@ -850,18 +850,26 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(TimestampType)
+    var errorMsg =
+      "you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead"
+    verifyCastFailure(cast(Literal(0L), TimestampType), Some(errorMsg))
+
     val timestampLiteral = Literal(1L, TimestampType)
+    errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampLiteral, numericType))
+      verifyCastFailure(cast(timestampLiteral, numericType), Some(errorMsg))
     }
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(DateType)
+    var errorMsg = "you can use function DATE_FROM_UNIX_DATE instead"
+    verifyCastFailure(cast(Literal(0L), DateType), Some(errorMsg))
     val dateLiteral = Literal(1, DateType)
+    errorMsg = "you can use function UNIX_DATE instead"
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(dateLiteral, numericType))
+      verifyCastFailure(cast(dateLiteral, numericType), Some(errorMsg))
     }
   }
 
