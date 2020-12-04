@@ -461,10 +461,8 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
   }
 
   test("invalidate char/varchar in udf's result type") {
-    spark.udf.register("testchar", () => "B", VarcharType(1))
-    spark.udf.register("testchar2", (x: String) => x, VarcharType(1))
-    failWithInvalidCharUsage(spark.sql("select testchar()"))
-    failWithInvalidCharUsage(spark.sql("select testchar2('b')"))
+    failWithInvalidCharUsage(spark.udf.register("testchar", () => "B", VarcharType(1)))
+    failWithInvalidCharUsage(spark.udf.register("testchar2", (x: String) => x, VarcharType(1)))
   }
 }
 

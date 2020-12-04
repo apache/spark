@@ -84,11 +84,10 @@ object CharVarcharUtils extends Logging {
    * Replaces CharType/VarcharType with StringType recursively in the given data type, with a
    * warning message if it has char or varchar types
    */
-  def logWarningAndReplaceCharVarcharWithString(dt: DataType): DataType = {
+  def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
     if (hasCharVarchar(dt)) {
-      logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
-        " Spark 3.1, they become actual individual type of their own and can be used in the" +
-        " table schema only, you should use string instead here for potential consistency reason")
+      logWarning("The Spark cast operator does not support char/varchar type and simply treat" +
+        " them as string type. Please use string type directly to avoid confusion.")
       replaceCharVarcharWithString(dt)
     } else {
       dt

@@ -1546,7 +1546,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    val dataType = CharVarcharUtils.logWarningAndReplaceCharVarcharWithString(rawDataType)
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     Cast(expression(ctx.expression), dataType)
   }
 

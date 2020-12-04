@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 import org.apache.spark.util.Utils
 
@@ -55,8 +54,6 @@ case class ScalaUDF(
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
-
-  CharVarcharUtils.failIfHasCharVarchar(dataType)
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
