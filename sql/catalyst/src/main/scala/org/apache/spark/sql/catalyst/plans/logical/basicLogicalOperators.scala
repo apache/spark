@@ -483,9 +483,6 @@ object View {
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
-    // We should respect the current maxNestedViewDepth cause the view resolving are executed
-    // from top to down.
-    sqlConf.setConf(SQLConf.MAX_NESTED_VIEW_DEPTH, activeConf.maxNestedViewDepth)
     sqlConf
   }
 
