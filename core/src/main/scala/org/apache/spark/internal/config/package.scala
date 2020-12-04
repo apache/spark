@@ -597,6 +597,17 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
+  private[spark] val FILE_INSERT_STATUS_LOG_FLAG =
+    ConfigBuilder("spark.file.insert.status.log.flag")
+      .internal()
+      .doc("When hive sql executes to generate HDFS data, " +
+        "it will print status information, which is more friendly to user interaction. " +
+        "Spark sql is compatible with this. If the configuration is true, " +
+        "related status information will also be printed. " +
+        "If it is false, it will not print.")
+      .booleanConf
+      .createWithDefault(true);
+
   private[spark] val BARRIER_SYNC_TIMEOUT =
     ConfigBuilder("spark.barrier.sync.timeout")
       .doc("The timeout in seconds for each barrier() call from a barrier task. If the " +
