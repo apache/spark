@@ -315,10 +315,10 @@ $(document).ready(function () {
         "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' data-metrics-type='task'> Result Serialization Time</div>" +
         "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' data-metrics-type='task'> Getting Result Time</div>" +
         "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' data-metrics-type='task'> Peak Execution Memory</div>" +
-        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' data-metrics-type='executor'> Executor JVMOnHeapMemory / JVMOffHeapMemory</div>" +
-        "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' data-metrics-type='executor'> Executor OnHeapExecutionMemory / OffHeapExecutionMemory</div>" +
-        "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' data-metrics-type='executor'> Executor OnHeapStorageMemory / OffHeapStorageMemory</div>" +
-        "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' data-metrics-type='executor'> Executor DirectPoolMemory / MappedPoolMemory</div>" +
+        "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' data-metrics-type='executor'> Peak JVM Memory OnHeap / OffHeap</div>" +
+        "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' data-metrics-type='executor'> Peak Execution Memory OnHeap / OffHeap</div>" +
+        "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' data-metrics-type='executor'> Peak Storage Memory OnHeap / OffHeap</div>" +
+        "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' data-metrics-type='executor'> Peak Pool Memory Direct / Mapped</div>" +
         "</div>");
 
     $('#scheduler_delay').attr("data-toggle", "tooltip")
@@ -491,14 +491,10 @@ $(document).ready(function () {
                             data : function (row, type) {
                                 var peakMemoryMetrics = row.peakMemoryMetrics
                                 if (typeof peakMemoryMetrics !== 'undefined') {
-                                    var jvmHeapMemory = peakMemoryMetrics.JVMHeapMemory;
-                                    if (jvmHeapMemory < 0) {
-                                        jvmHeapMemory = 0;
-                                    }
                                     if (type !== 'display')
-                                        return jvmHeapMemory;
+                                        return peakMemoryMetrics.JVMOnHeapMemory;
                                     else
-                                        return (formatBytes(jvmHeapMemory, type) + ' / ' +
+                                        return (formatBytes(peakMemoryMetrics.JVMOnHeapMemory, type) + ' / ' +
                                             formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
                                 } else {
                                     if (type !== 'display') {
