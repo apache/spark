@@ -33,7 +33,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   def notSupportsTableComment: Boolean = false
 
   def testUpdateColumnNullability(tbl: String): Unit = {
-    sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL) USING _")
+    sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
     var t = spark.table(s"$catalogName.alt_table")
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
@@ -62,7 +62,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... add new columns") {
     withTable(s"$catalogName.alt_table") {
-      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING) USING _")
+      sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
       var expectedSchema = new StructType().add("ID", StringType)
       assert(t.schema === expectedSchema)
@@ -89,7 +89,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
 
   test("SPARK-33034: ALTER TABLE ... drop column") {
     withTable(s"$catalogName.alt_table") {
-      sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 STRING, c3 INTEGER) USING _")
+      sql(s"CREATE TABLE $catalogName.alt_table (C1 INTEGER, C2 STRING, c3 INTEGER)")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
@@ -127,7 +127,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   test("SPARK-33034: ALTER TABLE ... rename column") {
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL," +
-        s" ID1 STRING NOT NULL, ID2 STRING NOT NULL) USING _")
+        s" ID1 STRING NOT NULL, ID2 STRING NOT NULL)")
       testRenameColumn(s"$catalogName.alt_table")
       // Rename to already existing column
       val msg = intercept[AnalysisException] {
@@ -157,7 +157,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     withTable(s"$catalogName.new_table") {
       val logAppender = new LogAppender("table comment")
       withLogAppender(logAppender) {
-        sql(s"CREATE TABLE $catalogName.new_table(i INT) USING _ COMMENT 'this is a comment'")
+        sql(s"CREATE TABLE $catalogName.new_table(i INT) COMMENT 'this is a comment'")
       }
       val createCommentWarning = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
@@ -170,7 +170,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
   test("CREATE TABLE with table property") {
     withTable(s"$catalogName.new_table") {
       val m = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $catalogName.new_table (i INT) USING _ TBLPROPERTIES('a'='1')")
+        sql(s"CREATE TABLE $catalogName.new_table (i INT) TBLPROPERTIES('a'='1')")
       }.message
       assert(m.contains("Failed table creation"))
       testCreateTableWithProperty(s"$catalogName.new_table")
