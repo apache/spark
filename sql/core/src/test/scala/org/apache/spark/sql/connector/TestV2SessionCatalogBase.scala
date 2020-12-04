@@ -85,7 +85,7 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       properties
     }
     val created = super.createTable(ident, schema, partitions, propsWithLocation)
-    val t = newTable(created.name(), schema, partitions, properties)
+    val t = newTable(created.name(), schema, partitions, propsWithLocation)
     addTable(ident, t)
     t
   }
