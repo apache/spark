@@ -25,7 +25,7 @@ class FetchIteratorSuite extends SparkFunSuite {
     for (_ <- 0 until maxRowCount if fetchIter.hasNext) yield fetchIter.next()
   }
 
-  test("Test fetchNext and fetchPrior") {
+  test("SPARK-33655: Test fetchNext and fetchPrior") {
     val testData = 0 until 10
 
     def iteratorTest(fetchIter: FetchIterator[Int]): Unit = {
@@ -89,7 +89,7 @@ class FetchIteratorSuite extends SparkFunSuite {
     iteratorTest(new IterableFetchIterator[Int](testData))
   }
 
-  test("Test fetchAbsolute") {
+  test("SPARK-33655: Test fetchAbsolute") {
     val testData = 0 until 10
 
     def iteratorTest(fetchIter: FetchIterator[Int]): Unit = {
