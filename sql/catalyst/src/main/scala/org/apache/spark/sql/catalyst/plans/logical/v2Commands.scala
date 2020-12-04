@@ -714,6 +714,4 @@ case class CacheTable(
     multipartIdentifier: Seq[String],
     query: Option[LogicalPlan],
     isLazy: Boolean,
-    options: Map[String, String]) extends Command {
-  override def children: Seq[LogicalPlan] = query.map(_ :: Nil).getOrElse(Nil)
-}
+    options: Map[String, String]) extends Command

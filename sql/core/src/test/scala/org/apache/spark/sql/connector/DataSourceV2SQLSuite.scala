@@ -777,6 +777,7 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
         checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
         sql(s"DROP TABLE $t")
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
       }

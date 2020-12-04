@@ -29,16 +29,15 @@ import org.apache.spark.storage.StorageLevel
 
 case class CacheTableExec(
     relation: LogicalPlan,
-    createTempView: Boolean,
     multipartIdentifier: Seq[String],
+    query: Option[LogicalPlan],
     isLazy: Boolean,
     options: Map[String, String]) extends V2CommandExec {
   override def run(): Seq[InternalRow] = {
     val sparkSession = sqlContext.sparkSession
     val relationName = multipartIdentifier.quoted
-
-    val df = if (createTempView) {
-      Dataset.ofRows(sparkSession, relation).createTempView(relationName)
+    val df = if (query.isDefined) {
+      Dataset.ofRows(sparkSession, query.get).createTempView(relationName)
       sparkSession.table(relationName)
     } else {
       Dataset.ofRows(sparkSession, relation)
