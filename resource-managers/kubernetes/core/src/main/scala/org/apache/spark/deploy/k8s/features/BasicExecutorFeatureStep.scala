@@ -24,6 +24,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, PYSPARK_EXECUTOR_MEMORY}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -31,7 +32,7 @@ import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorExtraClasspath = kubernetesConf.get(EXECUTOR_CLASS_PATH)
@@ -161,6 +162,22 @@ private[spark] class BasicExecutorFeatureStep(
           .endResources()
         .build()
     }.getOrElse(executorContainer)
+    val containerWithLifecycle =
+      if (!kubernetesConf.workerDecommissioning) {
+        logInfo("Decommissioning not enabled, skipping shutdown script")
+        containerWithLimitCores
+      } else {
+        logInfo("Adding decommission script to lifecycle")
+        new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
+          .withNewPreStop()
+            .withNewExec()
+              .addToCommand("/opt/decom.sh")
+            .endExec()
+          .endPreStop()
+          .endLifecycle()
+          .build()
+      }
+
     val driverPod = kubernetesConf.roleSpecificConf.driverPod
     val ownerReference = driverPod.map(pod =>
       new OwnerReferenceBuilder()
@@ -185,7 +202,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    SparkPod(executorPod, containerWithLimitCores)
+    SparkPod(executorPod, containerWithLifecycle)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty
