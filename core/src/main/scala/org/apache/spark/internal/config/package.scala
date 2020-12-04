@@ -2040,7 +2040,7 @@ package object config {
        "will be fetched by the executors in the original manner.")
       .version("3.1.0")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefaultString("800k")
+      .createWithDefaultString("1m")
 
   private[spark] val SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH =
     ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
