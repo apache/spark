@@ -1639,7 +1639,9 @@ class SparkContext(config: SparkConf) extends Logging {
           UriBuilder.fromUri(new URI(key)).fragment(uri.getFragment).build().toString,
           timestamp).isEmpty) {
       logInfo(s"Added archive $path at $key with timestamp $timestamp")
-      val uriToDownload = UriBuilder.fromUri(new URI(key)).fragment(null).build()
+      // If the scheme is file, use URI to simply copy instead of downloading.
+      val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
+      val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
         env.securityManager, hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(

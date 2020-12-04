@@ -1245,6 +1245,75 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue.toLong - 100)
   }
 
+  test("DATE_FROM_UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        DateFromUnixDate(Literal(value.intValue())),
+        LocalDate.ofEpochDay(value.intValue()))
+    }
+    // test null input
+    checkEvaluation(DateFromUnixDate(Literal(null, IntegerType)), null)
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        UnixDate(Literal(LocalDate.ofEpochDay(value.intValue()))),
+        value.intValue())
+    }
+    // test null input
+    checkEvaluation(UnixDate(Literal(null, DateType)), null)
+    // test various inputs
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_SECONDS") {
+    checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixSeconds(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // -1ms is considered to be in -1st second, as 0-999ms is in 0th second.
+    timestamp = Literal(new Timestamp(-1L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixSeconds(timestamp), -1L)
+    // Truncates higher levels of precision
+    timestamp = Literal(new Timestamp(1999L))
+    checkEvaluation(UnixSeconds(timestamp), 1L)
+  }
+
+  test("UNIX_MILLIS") {
+    checkEvaluation(UnixMillis(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMillis(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMillis(timestamp), 1000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMillis(timestamp), -1000L)
+    // Truncates higher levels of precision
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(999999)
+    checkEvaluation(UnixMillis(Literal(timestampWithNanos)), 1000L)
+  }
+
+  test("UNIX_MICROS") {
+    checkEvaluation(UnixMicros(Literal(null, TimestampType)), null)
+    var timestamp = Literal(new Timestamp(0L))
+    checkEvaluation(UnixMicros(timestamp), 0L)
+    timestamp = Literal(new Timestamp(1000L))
+    checkEvaluation(UnixMicros(timestamp), 1000000L)
+    timestamp = Literal(new Timestamp(-1000L))
+    checkEvaluation(UnixMicros(timestamp), -1000000L)
+    val timestampWithNanos = new Timestamp(1000L)
+    timestampWithNanos.setNanos(1000) // 1 microsecond
+    checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(

@@ -166,13 +166,13 @@ case class MakeInterval(
   extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
-    years: Expression,
-    months: Expression,
-    weeks: Expression,
-    days: Expression,
-    hours: Expression,
-    mins: Expression,
-    sec: Expression) = {
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      sec: Expression) = {
     this(years, months, weeks, days, hours, mins, sec, SQLConf.get.ansiEnabled)
   }
   def this(

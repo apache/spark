@@ -87,8 +87,8 @@ object FakeV2SessionCatalog extends TableCatalog {
 }
 
 /**
- * Provides a way to keep state during the analysis, this enables us to decouple the concerns
- * of analysis environment from the catalog.
+ * Provides a way to keep state during the analysis, mostly for resolving views. This enables us to
+ * decouple the concerns of analysis environment from the catalog.
  * The state that is kept here is per-query.
  *
  * Note this is thread local.
@@ -98,14 +98,23 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
  * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
  *                      that the table is resolved only once if a table is used multiple times
  *                      in a query.
+ * @param referredTempViewNames All the temp view names referred by the current view we are
+ *                              resolving. It's used to make sure the relation resolution is
+ *                              consistent between view creation and view resolution. For example,
+ *                              if `t` was a permanent table when the current view was created, it
+ *                              should still be a permanent table when resolving the current view,
+ *                              even if a temp view `t` has been created.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
+    maxNestedViewDepth: Int = -1,
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    referredTempViewNames: Seq[Seq[String]] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -117,10 +126,20 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
+  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
     val originContext = value.get()
+    val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
+      // Here we start to resolve views, get `maxNestedViewDepth` from configs.
+      SQLConf.get.maxNestedViewDepth
+    } else {
+      originContext.maxNestedViewDepth
+    }
     val context = AnalysisContext(
-      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
+      viewDesc.viewCatalogAndNamespace,
+      originContext.nestedViewDepth + 1,
+      maxNestedViewDepth,
+      originContext.relationCache,
+      viewDesc.viewReferredTempViewNames)
     set(context)
     try f finally { set(originContext) }
   }
@@ -838,6 +857,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
+  private def referredTempViewNames: Seq[Seq[String]] = AnalysisContext.get.referredTempViewNames
 
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
@@ -882,7 +902,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView) return None
+      if (isResolvingView && !referredTempViewNames.contains(identifier)) return None
 
       val tmpView = identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
@@ -894,14 +914,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
           s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
-      tmpView
+      tmpView.map(ResolveRelations.resolveViews)
     }
   }
 
   // If we are resolving relations insides views, we need to expand single-part relation names with
   // the current catalog and namespace of when the view was created.
   private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    if (!isResolvingView) return nameParts
+    if (!isResolvingView || referredTempViewNames.contains(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
       AnalysisContext.get.catalogAndNamespace :+ nameParts.head
@@ -1022,20 +1042,22 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, _, child) if !child.resolved =>
+      case view @ View(desc, isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
-          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
+        val newChild = AnalysisContext.withAnalysisContext(desc) {
+          val nestedViewDepth = AnalysisContext.get.nestedViewDepth
+          val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
+          if (nestedViewDepth > maxNestedViewDepth) {
             view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
-              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
-              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
-              "around this.")
+              s"view resolution depth ($maxNestedViewDepth). Analysis is aborted to " +
+              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to " +
+              "work around this.")
           }
-          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs)) {
+          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
             executeSameContext(child)
           }
         }

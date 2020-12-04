@@ -357,7 +357,13 @@ NULL
 #' @examples
 #' \dontrun{
 #' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
-#' head(select(df, vector_to_array(df$features)))
+#' head(
+#'   withColumn(
+#'     withColumn(df, "array", vector_to_array(df$features)),
+#'     "vector",
+#'     array_to_vector(column("array"))
+#'   )
+#' )
 #' }
 NULL
 
@@ -4605,6 +4611,24 @@ setMethod("timestamp_seconds",
           function(x) {
             jc <- callJStatic(
               "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{array_to_vector} Converts a column of array of numeric type into
+#' a column of dense vectors in MLlib
+#'
+#' @rdname column_ml_functions
+#' @aliases array_to_vector array_to_vector,Column-method
+#' @note array_to_vector since 3.1.0
+setMethod("array_to_vector",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "array_to_vector",
+              x@jc
             )
             column(jc)
           })

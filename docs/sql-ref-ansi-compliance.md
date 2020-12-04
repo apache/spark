@@ -21,7 +21,8 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. For example, Spark will throw an exception at runtime instead of returning null results if the inputs to a SQL operator/function are invalid. Some ANSI dialect features may be not from the ANSI SQL standard directly, but their behaviors align with ANSI SQL's style.
+
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
@@ -95,6 +96,10 @@ java.lang.NumberFormatException: invalid input syntax for type numeric: a
 SELECT CAST(2147483648L AS INT);
 java.lang.ArithmeticException: Casting 2147483648 to int causes overflow
 
+SELECT CAST(DATE'2020-01-01' AS INT)
+org.apache.spark.sql.AnalysisException: cannot resolve 'CAST(DATE '2020-01-01' AS INT)' due to data type mismatch: cannot cast date to int.
+To convert values from date to int, you can use function UNIX_DATE instead.
+
 -- `spark.sql.ansi.enabled=false` (This is a default behaviour)
 SELECT CAST('a' AS INT);
 +--------------+
@@ -109,6 +114,13 @@ SELECT CAST(2147483648L AS INT);
 +-----------------------+
 |            -2147483648|
 +-----------------------+
+
+SELECT CAST(DATE'2020-01-01' AS INT)
++------------------------------+
+|CAST(DATE '2020-01-01' AS INT)|
++------------------------------+
+|                          null|
++------------------------------+
 
 -- Examples of store assignment rules
 CREATE TABLE t (v INT);
