@@ -2921,6 +2921,15 @@ object SQLConf {
     .stringConf
     .createWithDefault("")
 
+  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
+    buildConf("spark.sql.legacy.createHiveTableByDefault")
+      .internal()
+      .doc("When set to true, CREATE TABLE syntax without USING or STORED AS will use Hive " +
+        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key} as the table provider.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *

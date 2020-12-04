@@ -400,6 +400,52 @@ case class DayOfYear(child: Expression) extends GetDateField {
   override val funcName = "getDayInYear"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(days) - Create date from the number of days since 1970-01-01.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       1970-01-02
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class DateFromUnixDate(child: Expression) extends UnaryExpression
+  with ImplicitCastInputTypes with NullIntolerant {
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Int]
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, c => c)
+
+  override def prettyName: String = "date_from_unix_date"
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the number of days since 1970-01-01.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(DATE("1970-01-02"));
+       1
+  """,
+  group = "datetime_funcs",
+  since = "3.1.0")
+case class UnixDate(child: Expression) extends UnaryExpression
+  with ExpectsInputTypes with NullIntolerant {
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override def nullSafeEval(input: Any): Any = input.asInstanceOf[Int]
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, c => c)
+
+  override def prettyName: String = "unix_date"
+}
+
 abstract class IntegralToTimestampBase extends UnaryExpression
   with ExpectsInputTypes with NullIntolerant {
 

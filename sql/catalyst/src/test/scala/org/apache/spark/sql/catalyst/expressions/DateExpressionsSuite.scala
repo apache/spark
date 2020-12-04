@@ -1245,6 +1245,30 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Int.MinValue.toLong - 100)
   }
 
+  test("DATE_FROM_UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        DateFromUnixDate(Literal(value.intValue())),
+        LocalDate.ofEpochDay(value.intValue()))
+    }
+    // test null input
+    checkEvaluation(DateFromUnixDate(Literal(null, IntegerType)), null)
+    // test integral input
+    testIntegralInput(testIntegralFunc)
+  }
+
+  test("UNIX_DATE") {
+    def testIntegralFunc(value: Number): Unit = {
+      checkEvaluation(
+        UnixDate(Literal(LocalDate.ofEpochDay(value.intValue()))),
+        value.intValue())
+    }
+    // test null input
+    checkEvaluation(UnixDate(Literal(null, DateType)), null)
+    // test various inputs
+    testIntegralInput(testIntegralFunc)
+  }
+
   test("UNIX_SECONDS") {
     checkEvaluation(UnixSeconds(Literal(null, TimestampType)), null)
     var timestamp = Literal(new Timestamp(0L))
