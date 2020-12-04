@@ -87,12 +87,8 @@ private[spark] object DependencyUtils extends Logging {
         logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
           " If there are multiple `transitive` parameter, we will select the last one")
       }
-      val transitive = transitiveParams.flatMap(_.takeRight(1).map { case (_, value) =>
-        value match {
-          case "true" => true
-          case _ => false
-        }
-      }.headOption).getOrElse(false)
+      val transitive =
+        transitiveParams.flatMap(_.takeRight(1).map(_._2 == "true").headOption).getOrElse(false)
 
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
       // in an ivy URL. When download ivy URL jar, Spark won't download transitive jar
