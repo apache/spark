@@ -31,7 +31,7 @@ ARG k8s_tests=kubernetes/tests
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules libnss3 && \
+    apt install -y bash tini libc6 libpam-modules libnss3 procps && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/work-dir && \
     touch /opt/spark/RELEASE && \
@@ -45,6 +45,7 @@ COPY ${spark_jars} /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY ${img_path}/spark/entrypoint.sh /opt/
+COPY ${img_path}/spark/decom.sh /opt/
 COPY examples /opt/spark/examples
 COPY ${k8s_tests} /opt/spark/tests
 COPY data /opt/spark/data
@@ -52,5 +53,9 @@ COPY data /opt/spark/data
 ENV SPARK_HOME /opt/spark
 
 WORKDIR /opt/spark/work-dir
+
+RUN chmod g+w /opt/spark/work-dir
+RUN chmod a+x /opt/decom.sh
+
 
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
