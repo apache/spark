@@ -268,21 +268,12 @@ private[jdbc] class JDBCRDD(
   private def getAggregateColumnsList(sb: StringBuilder, compiledAgg: Array[String]) = {
     val colDataTypeMap: Map[String, StructField] = columns.zip(schema.fields).toMap
     val newColsBuilder = ArrayBuilder.make[String]
-    for (col1 <- columns) {
-      var found = false
-      for (col2 <- compiledAgg) {
-        if (contains(col2, col1, true)) {
-          newColsBuilder += col2
-          found = true
-        }
-      }
-      if (!found) {
-        for (groupBy <- aggregation.groupByExpressions) {
-          if (contains(groupBy, col1.substring(1, col1.length - 1), false)) {
-            newColsBuilder += col1;
-          }
-        }
-      }
+    for (col <- compiledAgg) {
+      newColsBuilder += col
+
+    }
+    for (groupBy <- aggregation.groupByExpressions) {
+      newColsBuilder += JdbcDialects.get(url).quoteIdentifier(groupBy)
     }
     val newColumns = newColsBuilder.result
     sb.append(", ").append(newColumns.mkString(", "))
@@ -339,18 +330,6 @@ private[jdbc] class JDBCRDD(
         }
       } else {
         updatedSchema = updatedSchema.add(colDataTypeMap.get(c).get)
-      }
-    }
-  }
-
-  private def contains(s1: String, s2: String, checkParathesis: Boolean): Boolean = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      if (checkParathesis) s1.contains("(" + s2) else s1.contains(s2)
-    } else {
-      if (checkParathesis) {
-        s1.toLowerCase(Locale.ROOT).contains("(" + s2.toLowerCase(Locale.ROOT))
-      } else {
-        s1.toLowerCase(Locale.ROOT).contains(s2.toLowerCase(Locale.ROOT))
       }
     }
   }

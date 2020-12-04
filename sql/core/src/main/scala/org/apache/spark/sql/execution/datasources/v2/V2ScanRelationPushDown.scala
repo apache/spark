@@ -84,21 +84,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
             val aggOutput = aggOutputBuilder.result
 
             val newOutputBuilder = ArrayBuilder.make[AttributeReference]
-            for (col1 <- output) {
-              var found = false
-              for (col2 <- aggOutput) {
-                  if (contains(col2.name, col1.name, true)) {
-                    newOutputBuilder += col2
-                    found = true
-                  }
-              }
-              if (!found) {
-                for (groupBy <- aggregation.groupByExpressions) {
-                  if (contains(groupBy, col1.name, false)) {
-                    newOutputBuilder += col1
-                  }
-                }
-              }
+            for (col <- aggOutput) {
+              newOutputBuilder += col
+            }
+            for (groupBy <- groupingExpressions) {
+                newOutputBuilder += groupBy.asInstanceOf[AttributeReference]
             }
             val newOutput = newOutputBuilder.result
 
@@ -208,18 +198,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
       withFilter
     }
     withProjection
-  }
-
-  private def contains(s1: String, s2: String, checkParathesis: Boolean): Boolean = {
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      if (checkParathesis) s1.contains("(" + s2) else s1.contains(s2)
-    } else {
-      if (checkParathesis) {
-        s1.toLowerCase(Locale.ROOT).contains("(" + s2.toLowerCase(Locale.ROOT))
-      } else {
-        s1.toLowerCase(Locale.ROOT).contains(s2.toLowerCase(Locale.ROOT))
-      }
-    }
   }
 }
 

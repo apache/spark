@@ -249,6 +249,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     val df7 = sql("select MIN(SALARY), MIN(BONUS), SUM(SALARY * BONUS) FROM h2.test.employee")
     // df7.explain(true)
     checkAnswer(df7, Seq(Row(9000, 1000, 48200000)))
+
+    val df8 = sql("select BONUS, SUM(SALARY+BONUS), SALARY FROM h2.test.employee" +
+      " GROUP BY SALARY, BONUS")
+    // df8.explain(true)
+    checkAnswer(df8, Seq(Row(1000, 11000, 10000), Row(1200, 13200, 12000),
+      Row(1200, 10200, 9000), Row(1300, 11300, 10000)))
   }
 
   test("read/write with partition info") {
