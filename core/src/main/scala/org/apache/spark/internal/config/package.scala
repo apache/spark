@@ -817,6 +817,18 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val FILE_INSERT_STATUS_LOG_FLAG =
+    ConfigBuilder("spark.file.insert.status.log.flag")
+      .internal()
+      .doc("When hive sql executes to generate HDFS data, " +
+        "it will print status information, which is more friendly to user interaction. " +
+        "Spark sql is compatible with this. If the configuration is true, " +
+        "related status information will also be printed. " +
+        "If it is false, it will not print.")
+      .booleanConf
+      .createWithDefault(true);
+
+
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =
     ConfigBuilder("spark.files.fetchFailure.unRegisterOutputOnHost")
       .doc("Whether to un-register all the outputs on the host in condition that we receive " +

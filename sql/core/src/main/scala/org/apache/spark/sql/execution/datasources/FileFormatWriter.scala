@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
@@ -222,6 +222,28 @@ object FileFormatWriter extends Logging {
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
+
+      val insertStats : String = try {
+        description.statsTrackers.map{
+          s =>
+            val header = s"File stats [ "
+            val metrics = s.asInstanceOf[BasicWriteJobStatsTracker].metrics
+            val inner = metrics.map{
+              p => p._1 + "=" + p._2.value
+            }.mkString("; ")
+            header + inner + " ]\n"
+        }.mkString("\n")
+      } catch {
+        case e: Exception => logWarning("Exception write logs error", e)
+          ""
+      }
+
+      if (!sparkSession.sparkContext.getConf.get(config.FILE_INSERT_STATUS_LOG_FLAG)) {
+        print(insertStats)
+      } else {
+        System.err.print(insertStats)
+      }
+
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
