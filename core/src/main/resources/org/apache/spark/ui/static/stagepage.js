@@ -489,38 +489,79 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.JVMHeapMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.JVMOffHeapMemory, type));
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                 if (type !== 'display')
-                                     return row.peakMemoryMetrics.OnHeapExecutionMemory;
-                                 else
-                                     return (formatBytes(row.peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
-                                         formatBytes(row.peakMemoryMetrics.OffHeapExecutionMemory, type));
-                            }
-                        },
-                        {
-                            data : function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.OnHeapStorageMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
+                                var peakMemoryMetrics = row.peakMemoryMetrics
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    var jvmHeapMemory = peakMemoryMetrics.JVMHeapMemory;
+                                    if (jvmHeapMemory < 0) {
+                                        jvmHeapMemory = 0;
+                                    }
+                                    if (type !== 'display')
+                                        return jvmHeapMemory;
+                                    else
+                                        return (formatBytes(jvmHeapMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
                                 }
+
+                            }
                         },
                         {
                             data : function (row, type) {
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.DirectPoolMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.MappedPoolMemory, type));
+                                 var peakMemoryMetrics = row.peakMemoryMetrics
+                                 if (typeof peakMemoryMetrics !== 'undefined') {
+                                     if (type !== 'display')
+                                         return peakMemoryMetrics.OnHeapExecutionMemory;
+                                     else
+                                         return (formatBytes(peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                             formatBytes(peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                 } else {
+                                     if (type !== 'display') {
+                                         return 0;
+                                     } else {
+                                         return '0.0 B / 0.0 B';
+                                     }
+                                  }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapStorageMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                            formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.DirectPoolMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.MappedPoolMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         }
                     ],

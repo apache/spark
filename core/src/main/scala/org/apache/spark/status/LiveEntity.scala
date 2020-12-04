@@ -386,7 +386,7 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isExcluded,
-      Some(peakExecutorMetrics),
+      Some(peakExecutorMetrics).filter(_.isSet),
       isExcluded)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
