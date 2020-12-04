@@ -90,13 +90,13 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
   Seq(Explode(_), PosExplode(_)).foreach { f =>
      val createArrayExplode = f(CreateArray(Seq('c1)))
-     test("Don't infer filters from CreateArray " + createArrayExplode) {
+     test("SPARK-33544: Don't infer filters from CreateArray " + createArrayExplode) {
        val originalQuery = testRelation.generate(createArrayExplode).analyze
        val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
        comparePlans(optimized, originalQuery)
      }
      val createMapExplode = f(CreateMap(Seq('c1, 'c2)))
-     test("Don't infer filters from CreateMap " + createMapExplode) {
+     test("SPARK-33544: Don't infer filters from CreateMap " + createMapExplode) {
        val originalQuery = testRelation.generate(createMapExplode).analyze
        val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
        comparePlans(optimized, originalQuery)
@@ -105,7 +105,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
 
    Seq(Inline(_)).foreach { f =>
      val createArrayStructExplode = f(CreateArray(Seq(CreateStruct(Seq('c1)))))
-     test("Don't infer filters from CreateArray " + createArrayStructExplode) {
+     test("SPARK-33544: Don't infer filters from CreateArray " + createArrayStructExplode) {
        val originalQuery = testRelation.generate(createArrayStructExplode).analyze
        val optimized = OptimizeInferAndConstantFold.execute(originalQuery)
        comparePlans(optimized, originalQuery)

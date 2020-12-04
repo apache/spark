@@ -45,7 +45,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
     case _: Literal => true
-    case _: NoSideEffect => e.children.forall(hasNoSideEffect)
+    case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
     case _ => false
   }
 

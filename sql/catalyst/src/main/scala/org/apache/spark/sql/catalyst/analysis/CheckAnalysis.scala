@@ -999,11 +999,11 @@ trait CheckAnalysis extends PredicateHelper {
   private def checkAlterTablePartition(
       table: Table, parts: Seq[PartitionSpec]): Unit = {
     (table, parts) match {
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
       case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
         failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
+      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
+        failAnalysis("PartitionSpecs are not resolved")
 
       // Skip atomic partition tables
       case (_: SupportsAtomicPartitionManagement, _) =>

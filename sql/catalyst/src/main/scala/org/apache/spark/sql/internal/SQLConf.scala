@@ -2209,11 +2209,12 @@ object SQLConf {
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
-      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
-      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -2920,6 +2921,15 @@ object SQLConf {
     .version("3.1.0")
     .stringConf
     .createWithDefault("")
+
+  val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
+    buildConf("spark.sql.legacy.createHiveTableByDefault")
+      .internal()
+      .doc("When set to true, CREATE TABLE syntax without USING or STORED AS will use Hive " +
+        s"instead of the value of ${DEFAULT_DATA_SOURCE_NAME.key} as the table provider.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.

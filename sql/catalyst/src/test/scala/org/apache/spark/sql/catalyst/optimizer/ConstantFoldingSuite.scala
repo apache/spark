@@ -264,7 +264,7 @@ class ConstantFoldingSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-33544: Constant folding test with sideaffects") {
+  test("SPARK-33544: Constant folding test with side effects") {
     val originalQuery =
       testRelation
         .select('a)
