@@ -50,8 +50,8 @@ trait CheckAnalysis extends PredicateHelper {
     throw new AnalysisException(msg)
   }
 
-  protected def failAnalysis(t: Throwable): Nothing = {
-    throw t
+  protected def failAnalysis(error: Throwable): Nothing = {
+    throw error
   }
 
   protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {

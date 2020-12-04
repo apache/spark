@@ -2061,7 +2061,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
-                    failAnalysis(QueryCompilationErrors.filterInAggregateFunctionInvalidError)
+                    failAnalysis(QueryCompilationErrors.nonDeterministicFilterInAggregateError)
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
@@ -2598,7 +2598,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       } else if (names.isEmpty) {
         elementAttrs
       } else {
-        failAnalysis(QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+        failAnalysis(QueryCompilationErrors.aliasesNumberNotMatchUDTFOutputError(
           elementAttrs.size, names.mkString(",")))
       }
     }
@@ -2790,7 +2790,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
           // WindowExpression. If we reach here, we have a bug.
-          failAnalysis(QueryCompilationErrors.expressionWithMultiWindowExpressionError(
+          failAnalysis(QueryCompilationErrors.expressionWithMultiWindowExpressionsError(
             expr, distinctWindowSpec))
         } else {
           val spec = distinctWindowSpec.head
@@ -3023,7 +3023,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
         failAnalysis(QueryCompilationErrors.
-          specifyWindowFrameForFrameLessOffsetWindowFunctionError(wf.prettyName))
+          cannotSpecifyWindowFrameError(wf.prettyName))
       case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
         failAnalysis(QueryCompilationErrors.windowFrameNotMatchRequiredFrameError(f, wf.frame))

@@ -258,7 +258,7 @@ object QueryCompilationErrors {
       s"but $prettyName is not an aggregate function")
   }
 
-  def filterInAggregateFunctionInvalidError(): Throwable = {
+  def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")
   }
@@ -270,7 +270,7 @@ object QueryCompilationErrors {
       s"number of columns: $outputSize.", t.origin.line, t.origin.startPosition)
   }
 
-  def distinctOrFilterOnlyWithAggregateFunctionError(
+  def aliasesNumberNotMatchUDTFOutputError(
       aliasesSize: Int, aliasesNames: String): Throwable = {
     new AnalysisException("The number of aliases supplied in the AS clause does not " +
       s"match the number of columns output by the UDTF expected $aliasesSize " +
@@ -290,7 +290,7 @@ object QueryCompilationErrors {
     new AnalysisException(s"$expr does not have any WindowExpression.")
   }
 
-  def expressionWithMultiWindowExpressionError(
+  def expressionWithMultiWindowExpressionsError(
       expr: NamedExpression, distinctWindowSpec: Seq[WindowSpecDefinition]): Throwable = {
     new AnalysisException(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
       s"Please file a bug report with this error message, stack trace, and the query.")
@@ -304,7 +304,7 @@ object QueryCompilationErrors {
     new AnalysisException("It is not allowed to use window functions inside HAVING clause")
   }
 
-  def specifyWindowFrameForFrameLessOffsetWindowFunctionError(prettyName: String): Throwable = {
+  def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {
     new AnalysisException(s"Cannot specify window frame for $prettyName function")
   }
 
