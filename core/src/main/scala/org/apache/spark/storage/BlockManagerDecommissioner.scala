@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark._
@@ -102,7 +103,7 @@ private[storage] class BlockManagerDecommissioner(
                         blockId,
                         buffer,
                         StorageLevel.DISK_ONLY,
-                        null)// class tag, we don't need for shuffle
+                        ClassTag.Any)// class tag, we don't need for shuffle
                       logInfo(s"Migrated sub block ${blockId}")
                     }
                     logInfo(s"Migrated ${shuffleBlockInfo} to ${peer}")
