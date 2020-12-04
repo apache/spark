@@ -243,36 +243,39 @@ function createRowMetadataForColumn(colKey, data, checkboxId) {
 }
 
 function reselectCheckboxesBasedOnTaskTableState() {
-    var allChecked = true;
-    var taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
-    if ((typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) || typeof executorSummaryTableSelector !== 'undefined') {
-        if (typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
-            for (var k = 0; k < optionalColumns.length; k++) {
-                if (taskTableSelector.column(optionalColumns[k]).visible()) {
-                    $("#box-"+optionalColumns[k]).prop('checked', true);
-                    taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
-                    taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
-                } else {
-                    allChecked = false;
-                }
-            }
-         }
-         createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableCurrentFilteredArray);
+  var taskSummaryHasSelected = false;
+  var executorSummaryHasSelected = false;
+  var allTaskSummaryChecked = true;
+  var allExecutorSummaryChecked = true;
+  var taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+  if (typeof taskTableSelector !== 'undefined' && taskSummaryMetricsTableCurrentStateArray.length > 0) {
+      for (var k = 0; k < optionalColumns.length; k++) {
+          if (taskTableSelector.column(optionalColumns[k]).visible()) {
+              taskSummaryHasSelected = true;
+              $("#box-" + optionalColumns[k]).prop('checked', true);
+              taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
+              taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
+          } else {
+              allTaskSummaryChecked = false;
+          }
+      }
+      createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableCurrentFilteredArray);
+  }
 
-        if (typeof executorSummaryTableSelector !== 'undefined') {
-            for (var k = 0; k < executorOptionalColumns.length; k++) {
-                if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
-                    $("#executor-box-"+executorOptionalColumns[k]).prop('checked', true);
-                } else {
-                    allChecked = false;
-                }
-            }
-        }
+  if (typeof executorSummaryTableSelector !== 'undefined') {
+      for (var k = 0; k < executorOptionalColumns.length; k++) {
+          if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
+              executorSummaryHasSelected = true;
+              $("#executor-box-" + executorOptionalColumns[k]).prop('checked', true);
+          } else {
+              allExecutorSummaryChecked = false;
+          }
+      }
+  }
 
-        if (allChecked) {
-            $("#box-0").prop('checked', true);
-        }
-    }
+  if ((taskSummaryHasSelected || executorSummaryHasSelected) && allTaskSummaryChecked && allExecutorSummaryChecked) {
+      $("#box-0").prop('checked', true);
+  }
 }
 
 function getStageAttemptId() {
