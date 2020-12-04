@@ -36,7 +36,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SignalUtils, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -59,6 +59,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   @volatile private var decommissioned = false
 
   override def onStart() {
+    logInfo("Registering PWR handler.")
+    SignalUtils.register("PWR")(decommissionSelf)
+
+
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
@@ -227,22 +231,22 @@ private[spark] class CoarseGrainedExecutorBackend(
             Thread.sleep(sleep_time)
             if (executor == null || executor.numRunningTasks == 0) {
               if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
-                logInfo("No running tasks, checking migrations")
+                logError("No running tasks, checking migrations")
                 val (migrationTime, allBlocksMigrated) = env.blockManager.lastMigrationInfo()
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
                 // since the start of computing it.
                 if (allBlocksMigrated && (migrationTime > lastTaskRunningTime)) {
-                  logInfo("No running tasks, all blocks migrated, stopping.")
-                  exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                  logError("No running tasks, all blocks migrated, stopping.")
+                  exitExecutor(0, "Finished decommissioning blocks migrated", notifyDriver = true)
                 } else {
-                  logInfo("All blocks not yet migrated.")
+                  logError("All blocks not yet migrated.")
                 }
               } else {
-                logInfo("No running tasks, no block migration configured, stopping.")
-                exitExecutor(0, "Finished decommissioning", notifyDriver = true)
+                logError("No running tasks, no block migration configured, stopping.")
+                exitExecutor(0, "Finished decommissioning no migration", notifyDriver = true)
               }
             } else {
-              logInfo(s"Blocked from shutdown by running ${executor.numRunningTasks} tasks")
+              logError(s"Blocked from shutdown by running ${executor.numRunningTasks} tasks")
               // If there is a running task it could store blocks, so make sure we wait for a
               // migration loop to complete after the last task is done.
               // Note: this is only advanced if there is a running task, if there
