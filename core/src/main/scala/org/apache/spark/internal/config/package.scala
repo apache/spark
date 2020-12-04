@@ -2047,8 +2047,8 @@ package object config {
       .doc("The max size of a batch of shuffle blocks to be grouped into a single push request.")
       .version("3.1.0")
       .bytesConf(ByteUnit.BYTE)
-      // 2m is also the default value for TransportConf#memoryMapBytes so it is better to have
-      // the batch size greater than 2m. If it defaults to 2m as well it is very likely that each
+      // Default is 3m because it is greater than 2m which is the default value for
+      // TransportConf#memoryMapBytes. If this defaults to 2m as well it is very likely that each
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")

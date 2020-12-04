@@ -334,6 +334,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     def runPendingTasks(): Unit = {
+      // This ensures that all the submitted tasks - updateStateAndCheckIfPushMore and pushUpToMax
+      // are run synchronously.
       while (!tasks.isEmpty) {
         tasks.take().run()
       }
