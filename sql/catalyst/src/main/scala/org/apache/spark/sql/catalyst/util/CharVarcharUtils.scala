@@ -47,22 +47,11 @@ object CharVarcharUtils extends Logging {
     })
   }
 
-
   /**
    * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
    */
   def hasCharVarchar(dt: DataType): Boolean = {
     dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
-  }
-
-  /**
-   * Validate the given schema to fail if it contains char or varchar types
-   */
-  def failIfHasCharVarcharInSchema(schema: StructType): StructType = {
-    if (schema.exists(f => hasCharVarchar(f.dataType))) {
-      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
-    }
-    schema
   }
 
   /**

@@ -348,9 +348,10 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
+    CharVarcharUtils.failIfHasCharVarchar(schema)
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = RowEncoder(CharVarcharUtils.failIfHasCharVarcharInSchema(schema))
+    val encoder = RowEncoder(schema)
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -366,7 +367,8 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD.rdd, CharVarcharUtils.failIfHasCharVarcharInSchema(schema))
+    CharVarcharUtils.failIfHasCharVarchar(schema)
+    createDataFrame(rowRDD.rdd, schema)
   }
 
   /**
@@ -379,9 +381,9 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
-    val validatedSchema = CharVarcharUtils.failIfHasCharVarcharInSchema(schema)
+    CharVarcharUtils.failIfHasCharVarchar(schema)
     Dataset.ofRows(self,
-      LocalRelation.fromExternalRows(validatedSchema.toAttributes, rows.asScala.toSeq))
+      LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
   }
 
   /**
