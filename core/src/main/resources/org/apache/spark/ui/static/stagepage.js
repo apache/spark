@@ -252,7 +252,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
         for (var k = 0; k < optionalColumns.length; k++) {
             if (taskTableSelector.column(optionalColumns[k]).visible()) {
                 taskSummaryHasSelected = true;
-                $("#box-" + optionalColumns[k]).prop('checked', true);
+                $("#box-"+optionalColumns[k]).prop('checked', true);
                 taskSummaryMetricsTableCurrentStateArray.push(taskSummaryMetricsTableArray.filter(row => (row.checkboxId).toString() == optionalColumns[k])[0]);
                 taskSummaryMetricsTableCurrentFilteredArray = taskSummaryMetricsTableCurrentStateArray.slice();
             } else {
@@ -266,7 +266,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
         for (var k = 0; k < executorOptionalColumns.length; k++) {
             if (executorSummaryTableSelector.column(executorOptionalColumns[k]).visible()) {
                 executorSummaryHasSelected = true;
-                $("#executor-box-" + executorOptionalColumns[k]).prop('checked', true);
+                $("#executor-box-"+executorOptionalColumns[k]).prop('checked', true);
             } else {
                 allExecutorSummaryChecked = false;
             }
