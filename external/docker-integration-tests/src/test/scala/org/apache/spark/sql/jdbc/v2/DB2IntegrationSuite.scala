@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -51,6 +53,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
+
+  override val connectionTimeout = timeout(3.minutes)
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
