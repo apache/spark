@@ -353,10 +353,6 @@ a.expandbutton {
   width: 180px;
 }
 
-.executor-jvm-metrics-checkbox-div {
-  width: 480px;
-}
-
 #active-tasks-table th {
   border-top: 1px solid #dddddd;
   border-bottom: 1px solid #dddddd;
