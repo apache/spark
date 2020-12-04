@@ -254,7 +254,7 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 15px;
 }
 
@@ -263,7 +263,7 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 30px;
   min-height: 100vh;
 }

@@ -38,7 +38,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors",
         "Final accumulator value is: 100"),
@@ -69,7 +69,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING_CLEANUP,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors"),
       appArgs = Array.empty[String],
@@ -104,7 +104,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_SCALE,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors"),
       appArgs = Array.empty[String],

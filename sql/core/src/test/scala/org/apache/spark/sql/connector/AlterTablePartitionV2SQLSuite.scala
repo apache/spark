@@ -141,7 +141,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+      assert(
+        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
     }
   }
 
@@ -161,7 +162,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       spark.sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
       assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(partTable.asPartitionable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+      assert(
+        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
     }
   }
 
@@ -241,6 +243,22 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       assert(partTable.partitionExists(expectedPartition))
       sql(s" ALTER TABLE $t DROP PARTITION ($partSpec)")
       assert(!partTable.partitionExists(expectedPartition))
+    }
+  }
+
+  test("SPARK-33650: add/drop partition into a table which doesn't support partition management") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING _")
+      Seq(
+        s"ALTER TABLE $t ADD PARTITION (id=1)",
+        s"ALTER TABLE $t DROP PARTITION (id=1)"
+      ).foreach { alterTable =>
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(alterTable)
+        }.getMessage
+        assert(errMsg.contains(s"Table $t can not alter partitions"))
+      }
     }
   }
 }

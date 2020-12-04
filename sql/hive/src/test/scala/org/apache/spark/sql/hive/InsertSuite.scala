@@ -277,7 +277,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
       withTable("partitioned") {
-        sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+        sql("CREATE TABLE partitioned (id bigint, data string) USING hive " +
+          "PARTITIONED BY (part string)")
         val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
           .toDF("id", "data", "part")
 

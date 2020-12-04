@@ -198,7 +198,7 @@ object SparkBuild extends PomBuild {
   )
 
   // Silencer: Scala compiler plugin for warning suppression
-  // Aim: enable fatal warnings, but supress ones related to using of deprecated APIs
+  // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
   // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
   // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
@@ -222,7 +222,7 @@ object SparkBuild extends PomBuild {
           "-Xfatal-warnings",
           "-deprecation",
           "-Ywarn-unused-import",
-          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and supress them
+          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and suppress them
         )
       } else {
         Seq(
@@ -327,7 +327,7 @@ object SparkBuild extends PomBuild {
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
 
-    // To prevent intermittent compliation failures, see also SPARK-33297
+    // To prevent intermittent compilation failures, see also SPARK-33297
     // Apparently we can remove this when we use JDK 11.
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
   )
