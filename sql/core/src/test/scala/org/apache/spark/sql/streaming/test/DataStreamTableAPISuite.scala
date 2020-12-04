@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableCatalog, InMemoryTableSessionCatalog}
@@ -39,6 +39,7 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
@@ -175,21 +176,24 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   test("write: write to table with custom catalog & no namespace") {
     val tableIdentifier = "testcat.table_name"
 
-    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
-    checkAnswer(spark.table(tableIdentifier), Seq.empty)
+    withTable(tableIdentifier) {
+      spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
+      checkAnswer(spark.table(tableIdentifier), Seq.empty)
 
-    runTestWithStreamAppend(tableIdentifier)
+      runTestWithStreamAppend(tableIdentifier)
+    }
   }
 
   test("write: write to table with custom catalog & namespace") {
     spark.sql("CREATE NAMESPACE testcat.ns")
-
     val tableIdentifier = "testcat.ns.table_name"
 
-    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
-    checkAnswer(spark.table(tableIdentifier), Seq.empty)
+    withTable(tableIdentifier) {
+      spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
+      checkAnswer(spark.table(tableIdentifier), Seq.empty)
 
-    runTestWithStreamAppend(tableIdentifier)
+      runTestWithStreamAppend(tableIdentifier)
+    }
   }
 
   test("write: write to table with default session catalog") {
@@ -200,35 +204,19 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     spark.sql("CREATE NAMESPACE ns")
 
     val tableIdentifier = "ns.table_name"
-    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING $v2Source")
-    checkAnswer(spark.table(tableIdentifier), Seq.empty)
+    withTable(tableIdentifier) {
+      spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING $v2Source")
+      checkAnswer(spark.table(tableIdentifier), Seq.empty)
 
-    runTestWithStreamAppend(tableIdentifier)
+      runTestWithStreamAppend(tableIdentifier)
+    }
   }
 
   test("write: write to non-exist table with custom catalog") {
     val tableIdentifier = "testcat.nonexisttable"
-    spark.sql("CREATE NAMESPACE testcat.ns")
 
-    withTempDir { checkpointDir =>
-      val exc = intercept[NoSuchTableException] {
-        runStreamQueryAppendMode(tableIdentifier, checkpointDir, Seq.empty, Seq.empty)
-      }
-      assert(exc.getMessage.contains("nonexisttable"))
-    }
-  }
-
-  test("write: write to file provider based table isn't allowed yet") {
-    val tableIdentifier = "table_name"
-
-    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING parquet")
-    checkAnswer(spark.table(tableIdentifier), Seq.empty)
-
-    withTempDir { checkpointDir =>
-      val exc = intercept[AnalysisException] {
-        runStreamQueryAppendMode(tableIdentifier, checkpointDir, Seq.empty, Seq.empty)
-      }
-      assert(exc.getMessage.contains("doesn't support streaming write"))
+    withTable(tableIdentifier) {
+      runTestWithStreamAppend(tableIdentifier)
     }
   }
 
@@ -262,8 +250,107 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       val exc = intercept[AnalysisException] {
         runStreamQueryAppendMode(viewIdentifier, checkpointDir, Seq.empty, Seq.empty)
       }
-      assert(exc.getMessage.contains("doesn't support streaming write"))
+      assert(exc.getMessage.contains(s"Streaming into views $viewIdentifier is not supported"))
     }
+  }
+
+  test("write: write to an external table") {
+    withTempDir { dir =>
+      val tableName = "stream_test"
+      withTable(tableName) {
+        checkForStreamTable(Some(dir), tableName)
+      }
+    }
+  }
+
+  test("write: write to a managed table") {
+    val tableName = "stream_test"
+    withTable(tableName) {
+      checkForStreamTable(None, tableName)
+    }
+  }
+
+  test("write: write to an external table with existing path") {
+    withTempDir { dir =>
+      val tableName = "stream_test"
+      withTable(tableName) {
+        // The file written by batch will not be seen after the table was written by a streaming
+        // query. This is because we loads files from the metadata log instead of listing them
+        // using HDFS API.
+        Seq(4, 5, 6).toDF("value").write.format("parquet")
+          .option("path", dir.getCanonicalPath).saveAsTable(tableName)
+
+        checkForStreamTable(Some(dir), tableName)
+      }
+    }
+  }
+
+  test("write: write to a managed table with existing path") {
+    val tableName = "stream_test"
+    withTable(tableName) {
+      // The file written by batch will not be seen after the table was written by a streaming
+      // query. This is because we loads files from the metadata log instead of listing them
+      // using HDFS API.
+      Seq(4, 5, 6).toDF("value").write.format("parquet").saveAsTable(tableName)
+
+      checkForStreamTable(None, tableName)
+    }
+  }
+
+  test("write: write to an external path and create table") {
+    withTempDir { dir =>
+      val tableName = "stream_test"
+      withTable(tableName) {
+        // The file written by batch will not be seen after the table was written by a streaming
+        // query. This is because we loads files from the metadata log instead of listing them
+        // using HDFS API.
+        Seq(4, 5, 6).toDF("value").write
+          .mode("append").format("parquet").save(dir.getCanonicalPath)
+
+        checkForStreamTable(Some(dir), tableName)
+      }
+    }
+  }
+
+  test("write: write to table with different format shouldn't be allowed") {
+    val tableName = "stream_test"
+
+    spark.sql(s"CREATE TABLE $tableName (id bigint, data string) USING json")
+    checkAnswer(spark.table(tableName), Seq.empty)
+
+    withTempDir { checkpointDir =>
+      val exc = intercept[AnalysisException] {
+        runStreamQueryAppendMode(tableName, checkpointDir, Seq.empty, Seq.empty)
+      }
+      assert(exc.getMessage.contains("The input source(parquet) is different from the table " +
+        s"$tableName's data source provider(json)"))
+    }
+  }
+
+  private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
+    val memory = MemoryStream[Int]
+    val dsw = memory.toDS().writeStream.format("parquet")
+    dir.foreach { output =>
+      dsw.option("path", output.getCanonicalPath)
+    }
+    val sq = dsw
+      .option("checkpointLocation", Utils.createTempDir().getCanonicalPath)
+      .toTable(tableName)
+    memory.addData(1, 2, 3)
+    sq.processAllAvailable()
+
+    checkDataset(
+      spark.table(tableName).as[Int],
+      1, 2, 3)
+    val catalogTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+    val path = if (dir.nonEmpty) {
+      dir.get
+    } else {
+      new File(catalogTable.location)
+    }
+    checkDataset(
+      spark.read.format("parquet").load(path.getCanonicalPath).as[Int],
+      1, 2, 3)
   }
 
   private def runTestWithStreamAppend(tableIdentifier: String) = {
