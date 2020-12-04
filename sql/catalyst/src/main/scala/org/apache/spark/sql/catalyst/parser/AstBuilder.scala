@@ -28,7 +28,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, IntervalUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
@@ -488,7 +488,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
-      val value = Option(pVal.constant).map(visitStringConstant)
+      val value = Option(pVal.constant).map(visitConstantToString)
       name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
@@ -509,30 +509,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  private def convertTypedLiteralToString(literal: Literal): String = literal match {
-    case Literal(data: Int, _: DateType) =>
-      DateFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone)).format(data)
-    case Literal(data: Long, _: TimestampType) =>
-      TimestampFormatter.getFractionFormatter(getZoneId(SQLConf.get.sessionLocalTimeZone))
-        .format(data)
-    case Literal(data: CalendarInterval, _: CalendarIntervalType) => data.toString
-    case Literal(data: Array[Byte], _: BinaryType) =>
-      UTF8String.fromBytes(data).toString
-    case Literal(_, dataType) =>
-      throw new IllegalArgumentException(s"Literals of type '$dataType' are not" +
-        " supported when use typed literal as partition col value.")
-  }
-
   /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.
    */
-  protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
-    ctx match {
-      case l: TypeConstructorContext => convertTypedLiteralToString(visitTypeConstructor(l))
-      case s: StringLiteralContext => createString(s)
-      case o => o.getText
+  protected def visitConstantToString(ctx: ConstantContext): String = withOrigin(ctx) {
+    expression(ctx) match {
+      case l: Literal if l.value == null => null
+      case l: Literal =>
+        Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone))
+          .eval(InternalRow.apply(l.value)).toString
+      case _ =>
+        throw new IllegalArgumentException("Only support convert Literal to string when visit" +
+          " partition spec value")
     }
   }
 

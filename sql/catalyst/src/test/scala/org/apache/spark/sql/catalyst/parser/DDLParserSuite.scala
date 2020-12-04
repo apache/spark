@@ -2578,6 +2578,7 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
+        Seq.empty[String],
         UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))),
         overwrite = false, ifPartitionNotExists = false)
     }
