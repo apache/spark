@@ -59,7 +59,7 @@ object CharVarcharUtils extends Logging {
    */
   def failIfHasCharVarchar(dt: DataType): Unit = {
     if (hasCharVarchar(dt)) {
-      throw new AnalysisException(s"Cannot use char/varchar type in this caller")
+      throw new AnalysisException(s"char/varchar type can only be used in the table schema")
     }
   }
 
@@ -87,8 +87,8 @@ object CharVarcharUtils extends Logging {
   def logWarningAndReplaceCharVarcharWithString(dt: DataType): DataType = {
     if (hasCharVarchar(dt)) {
       logWarning("In Spark 3.0 and earlier, char/varchar is as same as string type, since" +
-        " Spark 3.1, they become actual individual type of their own, you should use string" +
-        " instead for potential consistency reason")
+        " Spark 3.1, they become actual individual type of their own and can be used in the" +
+        " table schema only, you should use string instead here for potential consistency reason")
       replaceCharVarcharWithString(dt)
     } else {
       dt

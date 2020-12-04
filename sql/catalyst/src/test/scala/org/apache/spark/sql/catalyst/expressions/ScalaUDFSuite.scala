@@ -22,11 +22,10 @@ import java.util.Locale
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{CharType, DecimalType, IntegerType, StringType, VarcharType}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType}
 
 class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -88,13 +87,6 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(BigDecimal("12345678901234567890.123")) :: Nil,
         Option(resolvedEncoder[java.math.BigDecimal]()) :: Nil)
       checkEvaluation(udf, null)
-    }
-  }
-
-  test("forbid char like data types in ScalaUDF") {
-    Seq(CharType(1), VarcharType(1)).foreach { dt =>
-      val e = intercept[AnalysisException](ScalaUDF(() => "a", dt, Nil))
-      assert(e.getMessage === "Cannot use char/varchar type in this caller;")
     }
   }
 }

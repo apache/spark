@@ -382,8 +382,7 @@ class SparkSession private(
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     CharVarcharUtils.failIfHasCharVarchar(schema)
-    Dataset.ofRows(self,
-      LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
   }
 
   /**

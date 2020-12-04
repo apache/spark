@@ -438,16 +438,13 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
     assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
   }
 
-  test("user-specified schema in functions") {
-    val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
-    checkAnswer(df, Row(Row("str")))
-    val schema = df.schema.head.dataType.asInstanceOf[StructType]
-    assert(schema.map(_.dataType) == Seq(StringType))
+  test("invalidate char/varchar in functions") {
+    failWithInvalidCharUsage(sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')"""))
   }
 
   def failWithInvalidCharUsage[T](fn: => T): Unit = {
     val e = intercept[AnalysisException](fn)
-    assert(e.getMessage contains "Cannot use char/varchar type")
+    assert(e.getMessage contains "char/varchar type can only be used in the table schema")
   }
 
   test("invalidate char/varchar in SparkSession createDataframe") {
