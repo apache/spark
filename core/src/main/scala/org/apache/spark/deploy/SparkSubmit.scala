@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
 import java.util.jar.JarInputStream
+import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -387,10 +388,18 @@ private[spark] class SparkSubmit extends Logging {
         // Executors will get the jars from the Spark file server.
         // Explicitly download the related files here
         args.jars = renameResourcesToLocalFS(args.jars, localJars)
-        val localFiles = Option(args.files).map {
+        val filesLocalFiles = Option(args.files).map {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
-        args.files = renameResourcesToLocalFS(args.files, localFiles)
+        val archiveLocalFiles = Option(args.archives).map { uri =>
+          val resolvedUri = Utils.resolveURI(uri)
+          val downloadedUri = downloadFileList(
+            UriBuilder.fromUri(resolvedUri).fragment(null).build().toString,
+            targetDir, sparkConf, hadoopConf, secMgr)
+          UriBuilder.fromUri(downloadedUri).fragment(resolvedUri.getFragment).build().toString
+        }.orNull
+        args.files = renameResourcesToLocalFS(args.files, filesLocalFiles)
+        args.archives = renameResourcesToLocalFS(args.archives, archiveLocalFiles)
         args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }

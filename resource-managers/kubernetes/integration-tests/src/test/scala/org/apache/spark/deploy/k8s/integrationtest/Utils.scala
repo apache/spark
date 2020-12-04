@@ -25,6 +25,8 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import okhttp3.Response
+import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.utils.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.apache.hadoop.util.VersionInfo
@@ -148,5 +150,25 @@ object Utils extends Logging {
     IOUtils.copy(fis, zipOut)
     IOUtils.closeQuietly(fis)
     IOUtils.closeQuietly(zipOut)
+  }
+
+  def createTarGzFile(inFile: String, outFile: String): Unit = {
+    val fileToTarGz = new File(inFile)
+    Utils.tryWithResource(
+      new FileInputStream(fileToTarGz)
+    ) { fis =>
+      Utils.tryWithResource(
+        new TarArchiveOutputStream(
+          new GzipCompressorOutputStream(
+            new FileOutputStream(
+              new File(outFile))))
+      ) { tOut =>
+        val tarEntry = new TarArchiveEntry(fileToTarGz, fileToTarGz.getName)
+        tOut.putArchiveEntry(tarEntry)
+        IOUtils.copy(fis, tOut)
+        tOut.closeArchiveEntry()
+        tOut.finish()
+      }
+    }
   }
 }
