@@ -140,10 +140,10 @@ private[spark] class Executor(
     executorMetricsSource.foreach(_.register(env.metricsSystem))
     env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   } else {
-    // This enable the registration of the executor source in local mode.
+    // This enables the registration of the executor source in local mode.
     // The actual registration happens in SparkContext,
     // it cannot be done here as the appId is not available yet
-    Executor.executorSourceLocalModeOnly = executorSource
+    env.executorSourceLocalModeOnly = executorSource
   }
 
   // Whether to load classes in user jars before those in Spark jars
@@ -1018,9 +1018,6 @@ private[spark] object Executor {
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
   // used instead.
   val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
-
-  // Used to store executorSource, for local mode only
-  var executorSourceLocalModeOnly: ExecutorSource = null
 
   /**
    * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether
