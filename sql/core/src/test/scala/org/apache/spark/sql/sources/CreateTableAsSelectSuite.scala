@@ -170,7 +170,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("allow CREATE EXTERNAL TABLE ... USING ... AS query if location is specified") {
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE ... USING ... if location is specified") {
     withTable("t") {
       sql(
         s"""

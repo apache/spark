@@ -662,7 +662,7 @@ class ResolveSessionCatalog(
       comment: Option[String],
       storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
-    val tableType = if (external) {
+    val tableType = if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED

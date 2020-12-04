@@ -88,7 +88,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
     val storage = DataSource.buildStorageFormatFromOptions(toOptions(tableProperties.toMap))
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val isExternal = properties.containsKey(TableCatalog.PROP_EXTERNAL)
-    val tableType = if (isExternal) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
+    val tableType = if (isExternal || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,

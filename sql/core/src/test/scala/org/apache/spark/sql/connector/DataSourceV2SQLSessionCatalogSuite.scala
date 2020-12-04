@@ -80,7 +80,7 @@ class DataSourceV2SQLSessionCatalogSuite
     }
   }
 
-  test("allow CREATE EXTERNAL TABLE without LOCATION") {
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE without LOCATION") {
     withTable("t") {
       val prop = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY + "=true"
       // The following should not throw AnalysisException.
