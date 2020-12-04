@@ -342,7 +342,7 @@ private[spark] class LiveExecutor(val executorId: String, _addTime: Long) extend
       executorLogs,
       memoryMetrics,
       excludedInStages,
-      Some(peakExecutorMetrics).filter(_.isSet),
+      peakExecutorMetrics,
       attributes,
       resources,
       resourceProfileId,
@@ -386,7 +386,7 @@ private class LiveExecutorStageSummary(
       metrics.memoryBytesSpilled,
       metrics.diskBytesSpilled,
       isExcluded,
-      Some(peakExecutorMetrics),
+      peakExecutorMetrics,
       isExcluded)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
@@ -493,7 +493,7 @@ private class LiveStage extends LiveEntity {
       executorSummary = None,
       killedTasksSummary = killedSummary,
       resourceProfileId = info.resourceProfileId,
-      Some(peakExecutorMetrics).filter(_.isSet))
+      peakExecutorMetrics)
   }
 
   override protected def doUpdate(): Any = {

@@ -1532,12 +1532,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     expectedValues.foreach { case (id, metrics) =>
       check[ExecutorSummaryWrapper](id) { exec =>
         assert(exec.info.id === id)
-        exec.info.peakMemoryMetrics match {
-          case Some(actual) =>
-            checkExecutorMetrics(metrics, actual)
-          case _ =>
-            assert(false)
-        }
+        checkExecutorMetrics(metrics, exec.info.peakMemoryMetrics)
       }
     }
 
@@ -1600,12 +1595,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     for ((id, metrics) <- expectedValues) {
       check[ExecutorSummaryWrapper](id) { exec =>
         assert(exec.info.id === id)
-        exec.info.peakMemoryMetrics match {
-          case Some(actual) =>
-            checkExecutorMetrics(metrics, actual)
-          case _ =>
-            assert(false)
-        }
+        checkExecutorMetrics(metrics, exec.info.peakMemoryMetrics)
       }
     }
 
@@ -1646,12 +1636,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // check stage level peak executor metric values for each stage
     for ((stageId, expectedMetrics) <- expectedStageValues) {
       check[StageDataWrapper](Array(stageId, 0)) { stage =>
-        stage.info.peakExecutorMetrics match {
-          case Some(actual) =>
-            checkExecutorMetrics(expectedMetrics.peakExecutorMetrics, actual)
-          case None =>
-            assert(false)
-        }
+        checkExecutorMetrics(expectedMetrics.peakExecutorMetrics, stage.info.peakExecutorMetrics)
       }
     }
 
@@ -1661,7 +1646,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       expectedStageValues.get(exec.stageId) match {
         case Some(stageValue) =>
           (stageValue.executorMetrics.get(exec.executorId), exec.info.peakMemoryMetrics) match {
-            case (Some(expected), Some(actual)) =>
+            case (Some(expected), actual) =>
               checkExecutorMetrics(expected, actual)
             case _ =>
               assert(false)

@@ -86,7 +86,7 @@ class ExecutorStageSummary private[spark](
     val isBlacklistedForStage: Boolean,
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakMemoryMetrics: Option[ExecutorMetrics],
+    val peakMemoryMetrics: ExecutorMetrics,
     val isExcludedForStage: Boolean)
 
 class ExecutorSummary private[spark](
@@ -119,7 +119,7 @@ class ExecutorSummary private[spark](
     val blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakMemoryMetrics: Option[ExecutorMetrics],
+    val peakMemoryMetrics: ExecutorMetrics,
     val attributes: Map[String, String],
     val resources: Map[String, ResourceInformation],
     val resourceProfileId: Int,
@@ -134,40 +134,38 @@ class MemoryMetrics private[spark](
 
 /** deserializer for peakMemoryMetrics: convert map to ExecutorMetrics */
 private[spark] class ExecutorMetricsJsonDeserializer
-    extends JsonDeserializer[Option[ExecutorMetrics]] {
+    extends JsonDeserializer[ExecutorMetrics] {
   override def deserialize(
       jsonParser: JsonParser,
-      deserializationContext: DeserializationContext): Option[ExecutorMetrics] = {
-    val metricsMap = jsonParser.readValueAs[Option[Map[String, Long]]](
-      new TypeReference[Option[Map[String, java.lang.Long]]] {})
-    metricsMap.map(metrics => new ExecutorMetrics(metrics))
+      deserializationContext: DeserializationContext): ExecutorMetrics = {
+    val metrics = jsonParser.readValueAs[Map[String, Long]](
+      new TypeReference[Map[String, java.lang.Long]] {})
+    new ExecutorMetrics(metrics)
   }
 
-  override def getNullValue(ctxt: DeserializationContext): Option[ExecutorMetrics] = {
-    None
+  override def getNullValue(ctxt: DeserializationContext): ExecutorMetrics = {
+    null
   }
 }
 /** serializer for peakMemoryMetrics: convert ExecutorMetrics to map with metric name as key */
 private[spark] class ExecutorMetricsJsonSerializer
-    extends JsonSerializer[Option[ExecutorMetrics]] {
+    extends JsonSerializer[ExecutorMetrics] {
   override def serialize(
-      metrics: Option[ExecutorMetrics],
+      metrics: ExecutorMetrics,
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
-    if (metrics.isEmpty) {
+    if (metrics == null) {
       jsonGenerator.writeNull()
     } else {
-      metrics.foreach { m: ExecutorMetrics =>
-        val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
-          metric -> m.getMetricValue(metric)
-        }
-        jsonGenerator.writeObject(metricsMap)
+      val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+        metric -> metrics.getMetricValue(metric)
       }
+      jsonGenerator.writeObject(metricsMap)
     }
   }
 
-  override def isEmpty(provider: SerializerProvider, value: Option[ExecutorMetrics]): Boolean =
-    value.isEmpty
+  override def isEmpty(provider: SerializerProvider, value: ExecutorMetrics): Boolean =
+    value == null
 }
 
 class JobData private[spark](
@@ -279,7 +277,7 @@ class StageData private[spark](
     val resourceProfileId: Int,
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakExecutorMetrics: Option[ExecutorMetrics])
+    val peakExecutorMetrics: ExecutorMetrics)
 
 class TaskData private[spark](
     val taskId: Long,
