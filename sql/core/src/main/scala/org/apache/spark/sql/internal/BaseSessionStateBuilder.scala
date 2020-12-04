@@ -241,6 +241,9 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
+      override def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] =
+        super.dataSourceRewriteRules ++ customDataSourceRewriteRules
+
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
     }
@@ -263,6 +266,14 @@ abstract class BaseSessionStateBuilder(
    * Note that this may NOT depend on the `optimizer` function.
    */
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Custom rules for rewriting data source plans to add to the Optimizer. Prefer overriding
+   * this instead of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Planner that converts optimized logical plans to physical plans.

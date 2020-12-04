@@ -59,7 +59,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)
     assert(t.schema === expectedSchema)
@@ -75,7 +75,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+    sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('CCSID'='UNICODE')")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)

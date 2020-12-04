@@ -975,6 +975,11 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       }
     }
   }
+
+  test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
+    checkExceptionInExpression[ArithmeticException](
+      cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
+  }
 }
 
 /**
