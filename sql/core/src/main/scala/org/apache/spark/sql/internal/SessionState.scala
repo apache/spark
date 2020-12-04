@@ -78,8 +78,6 @@ private[sql] class SessionState(
     val columnarRules: Seq[ColumnarRule],
     val queryStagePrepRules: Seq[Rule[SparkPlan]]) {
 
-  conf.setConf(SQLConf.DEFAULT_PARALLELISM, sharedState.sparkContext.defaultParallelism)
-
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
 

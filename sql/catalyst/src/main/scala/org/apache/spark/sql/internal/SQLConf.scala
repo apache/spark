@@ -392,7 +392,7 @@ object SQLConf {
     .version("3.1.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.default.parallelism must be positive.")
-    .createWithDefault(1)
+    .createOptional
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
@@ -3134,7 +3134,7 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
-  def defaultParallelism: Int = getConf(DEFAULT_PARALLELISM)
+  def defaultParallelism: Option[Int] = getConf(DEFAULT_PARALLELISM)
 
   def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
