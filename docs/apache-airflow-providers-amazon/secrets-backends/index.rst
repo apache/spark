@@ -1,4 +1,3 @@
-
  .. Licensed to the Apache Software Foundation (ASF) under one
     or more contributor license agreements.  See the NOTICE file
     distributed with this work for additional information
@@ -16,20 +15,13 @@
     specific language governing permissions and limitations
     under the License.
 
-``apache-airflow-providers-hashicorp``
-======================================
 
-Content
--------
 
-.. toctree::
-    :maxdepth: 1
-    :caption: Guides
-
-    Secrets backends <secrets-backends/hashicorp-vault>
+Secret Backends
+===============
 
 .. toctree::
     :maxdepth: 1
-    :caption: References
+    :glob:
 
-    Python API <_api/airflow/providers/hashicorp/index>
+    *
