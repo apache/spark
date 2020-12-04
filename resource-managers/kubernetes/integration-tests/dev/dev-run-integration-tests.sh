@@ -75,7 +75,8 @@ while (( "$#" )); do
       shift
       ;;
     *)
-      break
+      echo "Unexpected $1"
+      exit 1
       ;;
   esac
   shift
