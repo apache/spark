@@ -19,6 +19,8 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -52,6 +54,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
   }
 
+  override val connectionTimeout = timeout(3.minutes)
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -59,7 +63,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)
     assert(t.schema === expectedSchema)
@@ -75,7 +79,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   }
 
   override def testCreateTableWithProperty(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INT) USING _" +
+    sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('CCSID'='UNICODE')")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)

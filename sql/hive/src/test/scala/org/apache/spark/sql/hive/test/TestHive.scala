@@ -327,20 +327,22 @@ private[hive] class TestHiveSparkSession(
   }
 
   if (loadTestTables) {
+    def createTableSQL(tblName: String): String = {
+      s"CREATE TABLE $tblName (key INT, value STRING) STORED AS textfile"
+    }
     // The test tables that are defined in the Hive QTestUtil.
     // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
     // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
     @transient
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
-        "CREATE TABLE src (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
-        "CREATE TABLE src1 (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src1").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
-        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart")} PARTITIONED BY (ds STRING, hr STRING)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
@@ -349,8 +351,7 @@ private[hive] class TestHiveSparkSession(
         }
       }),
       TestTable("srcpart1", () => {
-        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart1")} PARTITIONED BY (ds STRING, hr INT)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'

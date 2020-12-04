@@ -89,7 +89,8 @@ trait AliasHelper {
         a.copy(child = trimAliases(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
-          explicitMetadata = Some(a.metadata))
+          explicitMetadata = Some(a.metadata),
+          deniedMetadataKeys = a.deniedMetadataKeys)
       case a: MultiAlias =>
         a.copy(child = trimAliases(a.child))
       case other => trimAliases(other)

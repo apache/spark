@@ -73,7 +73,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", DecimalType(10, 0))
     assert(t.schema === expectedSchema)

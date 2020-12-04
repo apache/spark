@@ -16,14 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.io.{BufferedWriter, File, FileWriter}
+import java.io.File
 import java.net.URL
+import java.nio.file.Files
 
-import scala.io.{BufferedSource, Source}
-
-import io.fabric8.kubernetes.api.model._
-
-import org.apache.spark.internal.config
+import scala.io.Source
 
 private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.{k8sTestTag, SPARK_PI_MAIN_CLASS}
@@ -38,18 +35,21 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j.properties"
 
     try {
-      val writer = new BufferedWriter(new FileWriter(logConfFilePath))
-      writer.write(content)
-      writer.close()
+      Files.write(new File(logConfFilePath).toPath, content.getBytes)
 
       sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j.debug")
+      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j.debug")
+
+      val log4jExpectedLog =
+        s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties"
 
       runSparkApplicationAndVerifyCompletion(
         appResource = containerLocalSparkDistroExamplesJar,
         mainClass = SPARK_PI_MAIN_CLASS,
-        expectedLogOnCompletion = (Seq("DEBUG",
-          s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties",
+        expectedDriverLogOnCompletion = (Seq("DEBUG",
+          log4jExpectedLog,
           "Pi is roughly 3")),
+        expectedExecutorLogOnCompletion = Seq(log4jExpectedLog),
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,

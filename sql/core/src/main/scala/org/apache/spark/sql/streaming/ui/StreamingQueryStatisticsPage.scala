@@ -58,8 +58,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = parent.statusListener.allQueryStatus.find { case q =>
-      q.runId.equals(UUID.fromString(parameterId))
+    val query = parent.store.allQueryUIData.find { uiData =>
+      uiData.summary.runId.equals(UUID.fromString(parameterId))
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
@@ -109,34 +109,35 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <script>{Unparsed(js)}</script>
   }
 
-  def generateBasicInfo(query: StreamingQueryUIData): Seq[Node] = {
-    val duration = if (query.isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.startTimestamp)
+  def generateBasicInfo(uiData: StreamingQueryUIData): Seq[Node] = {
+    val duration = if (uiData.summary.isActive) {
+      val durationMs = System.currentTimeMillis() - uiData.summary.startTimestamp
+      SparkUIUtils.formatDurationVerbose(durationMs)
     } else {
-      withNoProgress(query, {
-        val end = query.lastProgress.timestamp
-        val start = query.recentProgress.head.timestamp
+      withNoProgress(uiData, {
+        val end = uiData.lastProgress.timestamp
+        val start = uiData.recentProgress.head.timestamp
         SparkUIUtils.formatDurationVerbose(
           parseProgressTimestamp(end) - parseProgressTimestamp(start))
       }, "-")
     }
 
-    val name = UIUtils.getQueryName(query)
-    val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
+    val name = UIUtils.getQueryName(uiData)
+    val numBatches = withNoProgress(uiData, { uiData.lastProgress.batchId + 1L }, 0)
     <div>Running batches for
       <strong>
         {duration}
       </strong>
       since
       <strong>
-        {SparkUIUtils.formatDate(query.startTimestamp)}
+        {SparkUIUtils.formatDate(uiData.summary.startTimestamp)}
       </strong>
       (<strong>{numBatches}</strong> completed batches)
     </div>
     <br />
     <div><strong>Name: </strong>{name}</div>
-    <div><strong>Id: </strong>{query.id}</div>
-    <div><strong>RunId: </strong>{query.runId}</div>
+    <div><strong>Id: </strong>{uiData.summary.id}</div>
+    <div><strong>RunId: </strong>{uiData.summary.runId}</div>
     <br />
   }
 
