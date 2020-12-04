@@ -4009,8 +4009,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = withExpr {
-    CharVarcharUtils.failIfHasCharVarchar(schema)
-    JsonToStructs(schema, options, e.expr)
+    JsonToStructs(CharVarcharUtils.failIfHasCharVarchar(schema), options, e.expr)
   }
 
   /**
@@ -4042,8 +4041,7 @@ object functions {
    * @since 2.2.0
    */
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
-    CharVarcharUtils.failIfHasCharVarchar(schema)
-    from_json(e, schema, options.asScala.toMap)
+    from_json(e, CharVarcharUtils.failIfHasCharVarchar(schema), options.asScala.toMap)
   }
 
   /**
@@ -4396,8 +4394,8 @@ object functions {
    * @since 3.0.0
    */
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column = withExpr {
-    CharVarcharUtils.failIfHasCharVarchar(schema)
-    CsvToStructs(schema, options, e.expr)
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    CsvToStructs(replaced, options, e.expr)
   }
 
   /**

@@ -19,8 +19,11 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
 
@@ -438,31 +441,80 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
     assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
   }
 
-  test("invalidate char/varchar in functions") {
-    failWithInvalidCharUsage(sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')"""))
-  }
-
   def failWithInvalidCharUsage[T](fn: => T): Unit = {
     val e = intercept[AnalysisException](fn)
     assert(e.getMessage contains "char/varchar type can only be used in the table schema")
   }
 
+  test("invalidate char/varchar in functions") {
+    failWithInvalidCharUsage(sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')"""))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      val df = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+      checkAnswer(df, Row(Row("str")))
+      val schema = df.schema.head.dataType.asInstanceOf[StructType]
+      assert(schema.map(_.dataType) == Seq(StringType))
+    }
+  }
+
   test("invalidate char/varchar in SparkSession createDataframe") {
-    val ds = spark.range(10).toDF()
+    val df = spark.range(10).map(_.toString).toDF()
     val schema = new StructType().add("id", CharType(5))
-    failWithInvalidCharUsage(spark.createDataFrame(ds.collectAsList(), schema))
-    failWithInvalidCharUsage(spark.createDataFrame(ds.rdd, schema))
-    failWithInvalidCharUsage(spark.createDataFrame(ds.toJavaRDD, schema))
+    failWithInvalidCharUsage(spark.createDataFrame(df.collectAsList(), schema))
+    failWithInvalidCharUsage(spark.createDataFrame(df.rdd, schema))
+    failWithInvalidCharUsage(spark.createDataFrame(df.toJavaRDD, schema))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      val df1 = spark.createDataFrame(df.collectAsList(), schema)
+      checkAnswer(df1, df)
+      assert(df1.schema.head.dataType === StringType)
+    }
   }
 
   test("invalidate char/varchar in spark.read.schema") {
     failWithInvalidCharUsage(spark.read.schema(new StructType().add("id", CharType(5))))
     failWithInvalidCharUsage(spark.read.schema("id char(5)"))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      val ds = spark.range(10).map(_.toString)
+      val df1 = spark.read.schema(new StructType().add("id", CharType(5))).csv(ds)
+      assert(df1.schema.map(_.dataType) == Seq(StringType))
+      val df2 = spark.read.schema("id char(5)").csv(ds)
+      assert(df2.schema.map(_.dataType) == Seq(StringType))
+
+      def checkSchema(df: DataFrame): Unit = {
+        val schemas = df.queryExecution.analyzed.collect {
+          case l: LogicalRelation => l.relation.schema
+          case d: DataSourceV2Relation => d.table.schema()
+        }
+        assert(schemas.length == 1)
+        assert(schemas.head.map(_.dataType) == Seq(StringType))
+      }
+
+      // user-specified schema in DataFrameReader: DSV1
+      checkSchema(spark.read.schema(new StructType().add("id", CharType(5)))
+        .format(classOf[SimpleInsertSource].getName).load())
+      checkSchema(spark.read.schema("id char(5)")
+        .format(classOf[SimpleInsertSource].getName).load())
+
+      // user-specified schema in DataFrameReader: DSV2
+      checkSchema(spark.read.schema(new StructType().add("id", CharType(5)))
+        .format(classOf[SchemaRequiredDataSource].getName).load())
+      checkSchema(spark.read.schema("id char(5)")
+        .format(classOf[SchemaRequiredDataSource].getName).load())
+    }
   }
 
   test("invalidate char/varchar in udf's result type") {
     failWithInvalidCharUsage(spark.udf.register("testchar", () => "B", VarcharType(1)))
     failWithInvalidCharUsage(spark.udf.register("testchar2", (x: String) => x, VarcharType(1)))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      spark.udf.register("testchar", () => "B", VarcharType(1))
+      spark.udf.register("testchar2", (x: String) => x, VarcharType(1))
+      val df1 = spark.sql("select testchar()")
+      checkAnswer(df1, Row("B"))
+      assert(df1.schema.head.dataType === StringType)
+      val df2 = spark.sql("select testchar2('abc')")
+      checkAnswer(df2, Row("abc"))
+      assert(df2.schema.head.dataType === StringType)
+    }
   }
 }
 

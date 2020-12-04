@@ -22,7 +22,6 @@ import org.apache.spark.sql.{Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
 import org.apache.spark.sql.types.DataType
 
@@ -96,8 +95,6 @@ private[spark] case class SparkUserDefinedFunction(
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
-
-  CharVarcharUtils.failIfHasCharVarchar(dataType)
 
   @scala.annotation.varargs
   override def apply(exprs: Column*): Column = {

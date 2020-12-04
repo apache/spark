@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object CharVarcharUtils extends Logging {
@@ -57,9 +58,11 @@ object CharVarcharUtils extends Logging {
   /**
    * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
    */
-  def failIfHasCharVarchar(dt: DataType): Unit = {
-    if (hasCharVarchar(dt)) {
+  def failIfHasCharVarchar(dt: DataType): DataType = {
+    if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
       throw new AnalysisException(s"char/varchar type can only be used in the table schema")
+    } else {
+      replaceCharVarcharWithString(dt)
     }
   }
 

@@ -33,7 +33,6 @@ object ExprUtils {
         case s: UTF8String if s != null =>
           val dataType = DataType.fromDDL(s.toString)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
-          dataType
         case _ => throw new AnalysisException(
           s"The expression '${exp.sql}' is not a valid schema string.")
       }
