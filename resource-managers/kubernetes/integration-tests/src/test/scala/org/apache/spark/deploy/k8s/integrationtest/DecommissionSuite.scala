@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import io.fabric8.kubernetes.api.model.Pod
+
 import org.apache.spark.internal.config
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
@@ -31,10 +33,15 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      .set("spark.kubernetes.memoryOverheadFactor", "0.6")
+      .set("spark.executor.memory", "1g")
+      .set("spark.driver.memory", "1g")
       // Ensure we have somewhere to migrate our data too
-      .set("spark.executor.instances", "3")
+      .set("spark.executor.instances", "2")
+      // Allocation batch size is 1
+      .set("spark.kubernetes.allocation.batch.size", "1")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
-      .set("spark.storage.decommission.replicationReattemptInterval", "1")
+      .set("spark.storage.decommission.replicationReattemptInterval", "5")
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
@@ -45,12 +52,15 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         "Finished decommissioning",
         "Final accumulator value is: 100"),
       appArgs = Array.empty[String],
-      driverPodChecker = doBasicDriverPyPodCheck,
-      executorPodChecker = doBasicExecutorPyPodCheck,
+      driverPodChecker = noopCheck,
+      executorPodChecker = noopCheck,
       appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       decommissioningTest = true)
+  }
+
+  protected def noopCheck(pod: Pod): Unit = {
   }
 }
 
