@@ -795,13 +795,15 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [dept_id#x, dept_name#x, state#x]
+:                 +- SubqueryAlias DEPT
+:                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+         +- SubqueryAlias EMP
+            +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 ;
 
 
@@ -821,13 +823,15 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [dept_id#x, dept_name#x, state#x]
+:                 +- SubqueryAlias DEPT
+:                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+         +- SubqueryAlias EMP
+            +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 ;
 
 
@@ -846,13 +850,15 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [dept_id#x, dept_name#x, state#x]
+:                 +- SubqueryAlias DEPT
+:                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+         +- SubqueryAlias EMP
+            +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 ;
 
 
@@ -871,13 +877,15 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [dept_id#x, dept_name#x, state#x]
+:                 +- SubqueryAlias DEPT
+:                    +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+         +- SubqueryAlias EMP
+            +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 ;
 
 
