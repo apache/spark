@@ -21,7 +21,8 @@ license: |
 
 Since Spark 3.0, Spark SQL introduces two experimental options to comply with the SQL standard: `spark.sql.ansi.enabled` and `spark.sql.storeAssignmentPolicy` (See a table below for details).
 
-When `spark.sql.ansi.enabled` is set to `true`, Spark SQL follows the standard in basic behaviours (e.g., arithmetic operations, type conversion, SQL functions and SQL parsing).
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. For example, Spark will throw an exception at runtime instead of returning null results if the inputs to a SQL operator/function are invalid. Some ANSI dialect features may be not from the ANSI SQL standard directly, but their behaviors align with ANSI SQL's style.
+
 Moreover, Spark SQL has an independent option to control implicit casting behaviours when inserting rows in a table.
 The casting behaviours are defined as store assignment rules in the standard.
 
@@ -136,12 +137,17 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
+  - `to_date` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
 
 ### SQL Operators
 
 The behavior of some SQL operators can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `array_col[index]`: This operator throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
+  - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
 
 ### SQL Keywords
 

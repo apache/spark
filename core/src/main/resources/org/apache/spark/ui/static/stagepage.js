@@ -70,7 +70,7 @@ function stageEndPoint(appId) {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + appAttemptId + "/stages/" + stageId;
         }
     }
-    return location.origin + "/api/v1/applications/" + appId + "/stages/" + stageId;
+    return uiRoot + "/api/v1/applications/" + appId + "/stages/" + stageId;
 }
 
 function getColumnNameForTaskMetricSummary(columnKey) {

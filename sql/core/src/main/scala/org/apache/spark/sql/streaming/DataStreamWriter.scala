@@ -304,7 +304,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 3.1.0
    */
   @throws[TimeoutException]
-  def saveAsTable(tableName: String): StreamingQuery = {
+  def toTable(tableName: String): StreamingQuery = {
     this.source = SOURCE_NAME_TABLE
     this.tableName = tableName
     startInternal(None)

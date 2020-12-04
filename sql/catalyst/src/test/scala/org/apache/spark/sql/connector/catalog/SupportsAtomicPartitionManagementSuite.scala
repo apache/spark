@@ -47,34 +47,38 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     newCatalog
   }
 
+  private def hasPartitions(table: SupportsPartitionManagement): Boolean = {
+    !table.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty
+  }
+
   test("createPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     partTable.createPartitions(
       partIdents,
       Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(InternalRow.apply("3")))
     assert(partTable.partitionExists(InternalRow.apply("4")))
 
     partTable.dropPartition(InternalRow.apply("3"))
     partTable.dropPartition(InternalRow.apply("4"))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("createPartitions failed if partition already exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
@@ -85,42 +89,42 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(!partTable.partitionExists(InternalRow.apply("3")))
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("dropPartitions") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     partTable.createPartitions(
       partIdents,
       Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(InternalRow.apply("3")))
     assert(partTable.partitionExists(InternalRow.apply("4")))
 
     partTable.dropPartitions(partIdents)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("dropPartitions failed if partition not exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("4")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
     assert(!partTable.dropPartitions(partIdents))
     assert(partTable.partitionExists(partIdent))
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 }

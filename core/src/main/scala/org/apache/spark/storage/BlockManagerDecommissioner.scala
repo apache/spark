@@ -39,6 +39,7 @@ private[storage] class BlockManagerDecommissioner(
     conf: SparkConf,
     bm: BlockManager) extends Logging {
 
+  private val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
@@ -114,6 +115,8 @@ private[storage] class BlockManagerDecommissioner(
                       // driver a no longer referenced RDD with shuffle files.
                       if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
                         logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
+                      } else if (fallbackStorage.isDefined) {
+                        fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
                       } else {
                         throw e
                       }

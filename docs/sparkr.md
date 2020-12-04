@@ -671,7 +671,7 @@ Arrow R library is available on CRAN and it can be installed as below.
 ```bash
 Rscript -e 'install.packages("arrow", repos="https://cloud.r-project.org/")'
 ```
-Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more detials.
+Please refer [the official documentation of Apache Arrow](https://arrow.apache.org/docs/r/) for more details.
 
 Note that you must ensure that Arrow R package is installed and available on all cluster nodes.
 The current supported minimum version is 1.0.0; however, this might change between the minor releases since Arrow optimization in SparkR is experimental.

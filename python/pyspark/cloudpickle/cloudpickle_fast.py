@@ -6,7 +6,7 @@ previous Python implementation of the Pickler class. Because this functionality
 is only available for Python versions 3.8+, a lot of backward-compatibility
 code is also removed.
 
-Note that the C Pickler sublassing API is CPython-specific. Therefore, some
+Note that the C Pickler subclassing API is CPython-specific. Therefore, some
 guards present in cloudpickle.py that were written to handle PyPy specificities
 are not present in cloudpickle_fast.py
 """
@@ -179,7 +179,7 @@ def _class_getstate(obj):
     clsdict.pop('__weakref__', None)
 
     if issubclass(type(obj), abc.ABCMeta):
-        # If obj is an instance of an ABCMeta subclass, dont pickle the
+        # If obj is an instance of an ABCMeta subclass, don't pickle the
         # cache/negative caches populated during isinstance/issubclass
         # checks, but pickle the list of registered subclasses of obj.
         clsdict.pop('_abc_cache', None)
@@ -407,7 +407,7 @@ def _class_reduce(obj):
 
 
 def _function_setstate(obj, state):
-    """Update the state of a dynaamic function.
+    """Update the state of a dynamic function.
 
     As __closure__ and __globals__ are readonly attributes of a function, we
     cannot rely on the native setstate routine of pickle.load_build, that calls
@@ -556,7 +556,7 @@ class CloudPickler(Pickler):
         # `dispatch` attribute.  Earlier versions of the protocol 5 CloudPickler
         # used `CloudPickler.dispatch` as a class-level attribute storing all
         # reducers implemented by cloudpickle, but the attribute name was not a
-        # great choice given the meaning of `Cloudpickler.dispatch` when
+        # great choice given the meaning of `CloudPickler.dispatch` when
         # `CloudPickler` extends the pure-python pickler.
         dispatch = dispatch_table
 
@@ -630,7 +630,7 @@ class CloudPickler(Pickler):
                 return self._function_reduce(obj)
             else:
                 # fallback to save_global, including the Pickler's
-                # distpatch_table
+                # dispatch_table
                 return NotImplemented
 
     else:

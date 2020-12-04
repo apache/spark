@@ -457,7 +457,7 @@ class RankingMetrics(JavaModelWrapper):
         """
         Returns the mean average precision (MAP) of all the queries.
         If a query has an empty ground truth set, the average precision will be zero and
-        a log warining is generated.
+        a log warning is generated.
         """
         return self.call("meanAveragePrecision")
 
@@ -466,7 +466,7 @@ class RankingMetrics(JavaModelWrapper):
         """
         Returns the mean average precision (MAP) at first k ranking of all the queries.
         If a query has an empty ground truth set, the average precision will be zero and
-        a log warining is generated.
+        a log warning is generated.
         """
         return self.call("meanAveragePrecisionAt", int(k))
 

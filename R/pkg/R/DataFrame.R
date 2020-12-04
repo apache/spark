@@ -2772,7 +2772,7 @@ setMethod("merge",
 #' Creates a list of columns by replacing the intersected ones with aliases
 #'
 #' Creates a list of columns by replacing the intersected ones with aliases.
-#' The name of the alias column is formed by concatanating the original column name and a suffix.
+#' The name of the alias column is formed by concatenating the original column name and a suffix.
 #'
 #' @param x a SparkDataFrame
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
@@ -3231,7 +3231,7 @@ setMethod("describe",
 #' \item stddev
 #' \item min
 #' \item max
-#' \item arbitrary approximate percentiles specified as a percentage (eg, "75\%")
+#' \item arbitrary approximate percentiles specified as a percentage (e.g., "75\%")
 #' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
 #' approximate quartiles (percentiles at 25\%, 50\%, and 75\%), and max.
@@ -3743,7 +3743,7 @@ setMethod("histogram",
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
-#' @param tableName yhe name of the table in the external database.
+#' @param tableName the name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.

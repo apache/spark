@@ -712,8 +712,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
-          "the partition columns of the target table"))
+        assert(e.contains("Partition column types may not be specified in Create Table As Select"))
       }
     }
   }
@@ -2027,6 +2026,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql(
             """
               |CREATE TABLE part_table (c STRING)
+              |STORED AS textfile
               |PARTITIONED BY (d STRING)
             """.stripMargin)
           sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +

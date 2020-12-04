@@ -1425,11 +1425,13 @@ test_that("column functions", {
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
   c26 <- timestamp_seconds(c1) + vector_to_array(c) +
-    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+    vector_to_array(c, "float32") + vector_to_array(c, "float64") +
+    array_to_vector(c)
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
     desc_nulls_first(c1) + desc_nulls_last(c1)
+  c29 <- acosh(c1) + asinh(c1) + atanh(c1)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -2092,7 +2094,7 @@ test_that("higher order functions", {
     createDataFrame(data.frame(id = 1)),
     expr("CAST(array(1.0, 2.0, -3.0, -4.0) AS array<double>) xs"),
     expr("CAST(array(0.0, 3.0, 48.0) AS array<double>) ys"),
-    expr("array('FAILED', 'SUCCEDED') as vs"),
+    expr("array('FAILED', 'SUCCEEDED') as vs"),
     expr("map('foo', 1, 'bar', 2) as mx"),
     expr("map('foo', 42, 'bar', -1, 'baz', 0) as my")
   )
@@ -3666,7 +3668,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
     }
 
     # Computes the arithmetic mean of the second column by grouping
-    # on the first and third columns. Output the groupping value and the average.
+    # on the first and third columns. Output the grouping value and the average.
     schema <-  structType(structField("a", "integer"), structField("c", "string"),
                           structField("avg", "double"))
     df3 <- gapply(
@@ -3964,7 +3966,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                paste("Error in listFunctions : analysis error - Database",
                      "'zxwtyswklpf_db' does not exist"))
 
-  # recoverPartitions does not work with tempory view
+  # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
                "no such table - Table or view 'cars' not found in database 'default'")
   expect_error(refreshTable("cars"), NA)
