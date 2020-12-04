@@ -454,7 +454,7 @@ case class View(
 
   override def doCanonicalize(): LogicalPlan = {
     def sameOutput(
-      outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
+        outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
       outerProject.length == innerProject.length &&
         outerProject.zip(innerProject).forall {
           case(outer, inner) => outer.name == inner.name && outer.dataType == inner.dataType
