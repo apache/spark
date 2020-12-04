@@ -25,6 +25,8 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -337,6 +339,40 @@ case class CatalogTable(
     )
   }
 
+  /**
+   * Return temporary view names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.1.0).
+   */
+  def viewReferredTempViewNames: Seq[Seq[String]] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_VIEW_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          "corrupted view referred temp view names in catalog", cause = Some(e))
+    }
+  }
+
+  /**
+   * Return temporary function names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.1.0).
+   */
+  def viewReferredTempFunctionNames: Seq[String] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_FUNCTION_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          "corrupted view referred temp functions names in catalog", cause = Some(e))
+    }
+  }
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -432,6 +468,9 @@ object CatalogTable {
   val VIEW_QUERY_OUTPUT_PREFIX = VIEW_PREFIX + "query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
+
+  val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
+  val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
 }
 
 /**
@@ -663,6 +702,15 @@ case class UnresolvedCatalogRelation(
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
     override val isStreaming: Boolean = false) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
+ * and will be transformed to `View` during analysis
+ */
+case class TemporaryViewRelation(tableMeta: CatalogTable) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }

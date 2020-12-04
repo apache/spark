@@ -1629,6 +1629,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     // so remove them from sparkConf here for yarn mode.
     conf.remove(JARS)
     conf.remove(FILES)
+    conf.remove(ARCHIVES)
 
     new Client(new ClientArguments(args), conf, null).run()
   }

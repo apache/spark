@@ -1294,6 +1294,14 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
+  val STATE_SCHEMA_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
+      .doc("When true, Spark will validate the state schema against schema on existing state and " +
+        "fail query if it's incompatible.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
       .internal()
@@ -1485,6 +1493,15 @@ object SQLConf {
       .internal()
       .doc("When true, SQL Configs of the current active SparkSession instead of the captured " +
         "ones will be applied during the parsing and analysis phases of the view resolution.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STORE_ANALYZED_PLAN_FOR_VIEW =
+    buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
+      .internal()
+      .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
+        "temporary view")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -2737,20 +2754,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
-      .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars.")
-      .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
-
   val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .internal()
@@ -2765,15 +2768,17 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
-        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2790,6 +2795,24 @@ object SQLConf {
         "that are ambiguous between the two calendars. This config is only effective if the " +
         "writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
+      .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -3063,6 +3086,8 @@ class SQLConf extends Serializable with Logging {
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
+
+  def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
@@ -3434,6 +3459,8 @@ class SQLConf extends Serializable with Logging {
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
+
+  def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

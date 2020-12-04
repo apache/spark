@@ -665,6 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)

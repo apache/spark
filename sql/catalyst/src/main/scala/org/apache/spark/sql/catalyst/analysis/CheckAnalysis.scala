@@ -410,7 +410,7 @@ trait CheckAnalysis extends PredicateHelper {
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
           // throw an AnalysisException, too.
-          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+          case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
             val queryColumnNames = desc.viewQueryColumnNames
             val queryOutput = if (queryColumnNames.nonEmpty) {
               if (output.length != queryColumnNames.length) {

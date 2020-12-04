@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -437,6 +438,7 @@ case class InsertIntoDir(
  */
 case class View(
     desc: CatalogTable,
+    isTempView: Boolean,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
@@ -451,21 +453,52 @@ case class View(
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
+
+  override def doCanonicalize(): LogicalPlan = {
+    def sameOutput(
+      outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
+      outerProject.length == innerProject.length &&
+        outerProject.zip(innerProject).forall {
+          case(outer, inner) => outer.name == inner.name && outer.dataType == inner.dataType
+        }
+    }
+
+    val eliminated = EliminateView(this) match {
+      case Project(viewProjectList, child @ Project(queryProjectList, _))
+        if sameOutput(viewProjectList, queryProjectList) =>
+        child
+      case other => other
+    }
+    eliminated.canonicalized
+  }
 }
 
 object View {
-  def effectiveSQLConf(configs: Map[String, String]): SQLConf = {
+  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
     val activeConf = SQLConf.get
-    if (activeConf.useCurrentSQLConfigsForView) return activeConf
+    // For temporary view, we always use captured sql configs
+    if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
     for ((k, v) <- configs) {
       sqlConf.settings.put(k, v)
     }
-    // We should respect the current maxNestedViewDepth cause the view resolving are executed
-    // from top to down.
-    sqlConf.setConf(SQLConf.MAX_NESTED_VIEW_DEPTH, activeConf.maxNestedViewDepth)
     sqlConf
+  }
+
+  def fromCatalogTable(
+      metadata: CatalogTable, isTempView: Boolean, parser: ParserInterface): View = {
+    val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+    val viewConfigs = metadata.viewSQLConfigs
+    val viewPlan =
+      SQLConf.withExistingConf(effectiveSQLConf(viewConfigs, isTempView = isTempView)) {
+        parser.parsePlan(viewText)
+      }
+    View(
+      desc = metadata,
+      isTempView = isTempView,
+      output = metadata.schema.toAttributes,
+      child = viewPlan)
   }
 }
 
