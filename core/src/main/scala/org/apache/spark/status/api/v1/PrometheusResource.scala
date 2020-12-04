@@ -75,36 +75,36 @@ private[v1] class PrometheusResource extends ApiRequestContext {
         sb.append(s"${prefix}totalOffHeapStorageMemory_bytes$labels " +
           s"${m.totalOffHeapStorageMemory}\n")
       }
-      val metrics = executor.peakMemoryMetrics
-      val names = Array(
-        "JVMHeapMemory",
-        "JVMOffHeapMemory",
-        "OnHeapExecutionMemory",
-        "OffHeapExecutionMemory",
-        "OnHeapStorageMemory",
-        "OffHeapStorageMemory",
-        "OnHeapUnifiedMemory",
-        "OffHeapUnifiedMemory",
-        "DirectPoolMemory",
-        "MappedPoolMemory",
-        "ProcessTreeJVMVMemory",
-        "ProcessTreeJVMRSSMemory",
-        "ProcessTreePythonVMemory",
-        "ProcessTreePythonRSSMemory",
-        "ProcessTreeOtherVMemory",
-        "ProcessTreeOtherRSSMemory"
-      )
-      names.foreach { name =>
-        sb.append(s"$prefix${name}_bytes$labels ${metrics.getMetricValue(name)}\n")
-      }
-      Seq("MinorGCCount", "MajorGCCount").foreach { name =>
-        sb.append(s"$prefix${name}_total$labels ${metrics.getMetricValue(name)}\n")
-      }
-      Seq("MinorGCTime", "MajorGCTime").foreach { name =>
-        sb.append(s"$prefix${name}_seconds_total$labels ${metrics.getMetricValue(name) * 0.001}\n")
+      executor.peakMemoryMetrics.foreach { m =>
+        val names = Array(
+          "JVMHeapMemory",
+          "JVMOffHeapMemory",
+          "OnHeapExecutionMemory",
+          "OffHeapExecutionMemory",
+          "OnHeapStorageMemory",
+          "OffHeapStorageMemory",
+          "OnHeapUnifiedMemory",
+          "OffHeapUnifiedMemory",
+          "DirectPoolMemory",
+          "MappedPoolMemory",
+          "ProcessTreeJVMVMemory",
+          "ProcessTreeJVMRSSMemory",
+          "ProcessTreePythonVMemory",
+          "ProcessTreePythonRSSMemory",
+          "ProcessTreeOtherVMemory",
+          "ProcessTreeOtherRSSMemory"
+        )
+        names.foreach { name =>
+          sb.append(s"$prefix${name}_bytes$labels ${m.getMetricValue(name)}\n")
+        }
+        Seq("MinorGCCount", "MajorGCCount").foreach { name =>
+          sb.append(s"$prefix${name}_total$labels ${m.getMetricValue(name)}\n")
+        }
+        Seq("MinorGCTime", "MajorGCTime").foreach { name =>
+          sb.append(s"$prefix${name}_seconds_total$labels ${m.getMetricValue(name) * 0.001}\n")
+        }
       }
     }
-
     sb.toString
   }
 }
