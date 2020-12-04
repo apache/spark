@@ -87,7 +87,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite
     pyImage = s"$imageRepo/spark-py:$imageTag"
     rImage = s"$imageRepo/spark-r:$imageTag"
 
-    val sparkDistroExamplesJarFile: File = sparkHomeDir.resolve(Paths.get("examples", "jars"))
+    val sparkExamplesJarDir = sparkHomeDir.resolve(Paths.get("examples", "jars"))
+    require(sparkExamplesJarDir.toFile.isDirectory,
+      s"No directory found for spark examples specified at $sparkExamplesJarDir.")
+    val sparkDistroExamplesJarFile: File = sparkExamplesJarDir
       .toFile
       .listFiles(new PatternFilenameFilter(Pattern.compile("^spark-examples_.*\\.jar$")))(0)
     containerLocalSparkDistroExamplesJar = s"local:///opt/spark/examples/jars/" +
@@ -259,7 +262,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite
             case Action.MODIFIED =>
               execPods(name) = resource
             case Action.ADDED =>
-                          case Action.ADDED =>
               logDebug(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
@@ -284,7 +286,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite
                 // Delete the pod to simulate cluster scale down/migration.
                 // This will allow the pod to remain up for the grace period
                 kubernetesTestComponents.kubernetesClient.pods()
-                  .withName(name).delete()
+                  .withName(name).withGracePeriod(120).delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
                 // Make sure this pod is deleted
                 Eventually.eventually(TIMEOUT, INTERVAL) {
