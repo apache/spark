@@ -1034,7 +1034,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           desc.viewCatalogAndNamespace, desc.viewReferredTempViewNames) {
             if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
               view.failAnalysis(QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-                desc.identifier, conf.maxNestedViewDepth, view))
+              desc.identifier, conf.maxNestedViewDepth, view))
             }
             SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
               executeSameContext(child)
