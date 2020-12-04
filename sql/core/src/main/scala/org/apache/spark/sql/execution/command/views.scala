@@ -110,7 +110,7 @@ case class CreateViewCommand(
 
     // When creating a permanent view, not allowed to reference temporary objects.
     // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
-    verifyTemporaryObjectsNotExists(catalog)
+    verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
       val samePlan = catalog.getTempView(name.table).exists {
@@ -127,7 +127,13 @@ case class CreateViewCommand(
       // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
         TemporaryViewRelation(
-          prepareTemporaryView(name, sparkSession, analyzedPlan, aliasedPlan.schema, catalog))
+          prepareTemporaryView(
+            name,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
       } else {
         aliasedPlan
       }
@@ -148,7 +154,13 @@ case class CreateViewCommand(
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
         TemporaryViewRelation(
-          prepareTemporaryView(viewIdent, sparkSession, analyzedPlan, aliasedPlan.schema, catalog))
+          prepareTemporaryView(
+            viewIdent,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
       } else {
         aliasedPlan
       }
@@ -185,58 +197,6 @@ case class CreateViewCommand(
       catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
-  }
-
-  /**
-   * Permanent views are not allowed to reference temp objects, including temp function and views
-   */
-  private def verifyTemporaryObjectsNotExists(catalog: SessionCatalog): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    if (!isTemporary) {
-      val (tempViews, tempFunctions) = collectTemporaryObjects(catalog)
-      tempViews.foreach { nameParts =>
-        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-          s"referencing a temporary view ${nameParts.quoted}. " +
-          "Please create a temp view instead by CREATE TEMP VIEW")
-      }
-      tempFunctions.foreach { funcName =>
-        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-          s"referencing a temporary function `${funcName}`")
-      }
-    }
-  }
-
-
-  /**
-   * Collect all temporary views and functions and return the identifiers separately
-   * This func traverses the unresolved plan `child`. Below are the reasons:
-   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
-   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
-   * added/generated from a temporary view.
-   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-   * package (e.g., HiveGenericUDF).
-   */
-  private def collectTemporaryObjects(catalog: SessionCatalog): (Seq[Seq[String]], Seq[String]) = {
-    def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
-      child.collect {
-        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
-          Seq(nameParts)
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
-          case e: SubqueryExpression => collectTempViews(e.plan)
-        }).flatten
-      }.flatten.distinct
-    }
-
-    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      child.collect {
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
-          case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
-            Seq(e.name.funcName)
-        }).flatten
-      }.flatten.distinct
-    }
-    (collectTempViews(child), collectTempFunctions(child))
   }
 
   /**
@@ -282,34 +242,6 @@ case class CreateViewCommand(
       comment = comment
     )
   }
-
-  /**
-   * Returns a [[CatalogTable]] that contains information for temporary view.
-   * Generate the view-specific properties(e.g. view default database, view query output
-   * column names) and store them as properties in the CatalogTable, and also creates
-   * the proper schema for the view.
-   */
-  private def prepareTemporaryView(
-      viewName: TableIdentifier,
-      session: SparkSession,
-      analyzedPlan: LogicalPlan,
-      viewSchema: StructType,
-      catalog: SessionCatalog): CatalogTable = {
-
-    val (tempViews, tempFunctions) = collectTemporaryObjects(catalog)
-    // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
-    // generating temporary view properties
-    val newProperties = generateViewProperties(
-      Map.empty, session, analyzedPlan, viewSchema.fieldNames, tempViews, tempFunctions)
-
-    CatalogTable(
-      identifier = viewName,
-      tableType = CatalogTableType.VIEW,
-      storage = CatalogStorageFormat.empty,
-      schema = viewSchema,
-      viewText = originalText,
-      properties = newProperties)
-  }
 }
 
 /**
@@ -352,17 +284,9 @@ case class AlterViewAsCommand(
       analyzedPlan
     } else {
       checkCyclicViewReference(analyzedPlan, Seq(name), name)
-
-      val properties = generateViewProperties(
-        Map.empty, session, analyzedPlan, analyzedPlan.schema.fieldNames)
-
-      TemporaryViewRelation(CatalogTable(
-        identifier = name,
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = analyzedPlan.schema,
-        viewText = Some(originalText),
-        properties = properties))
+      TemporaryViewRelation(
+        prepareTemporaryView(
+          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText), query))
     }
     session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
@@ -603,5 +527,93 @@ object ViewHelper {
         case _ => // Do nothing.
       }
     }
+  }
+
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  def verifyTemporaryObjectsNotExists(
+      catalog: SessionCatalog,
+      isTemporary: Boolean,
+      name: TableIdentifier,
+      child: LogicalPlan): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    if (!isTemporary) {
+      val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
+      tempViews.foreach { nameParts =>
+        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+          s"referencing a temporary view ${nameParts.quoted}. " +
+          "Please create a temp view instead by CREATE TEMP VIEW")
+      }
+      tempFunctions.foreach { funcName =>
+        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+          s"referencing a temporary function `${funcName}`")
+      }
+    }
+  }
+
+  /**
+   * Collect all temporary views and functions and return the identifiers separately
+   * This func traverses the unresolved plan `child`. Below are the reasons:
+   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+   * added/generated from a temporary view.
+   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+   * package (e.g., HiveGenericUDF).
+   */
+  private def collectTemporaryObjects(
+      catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
+    def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
+      child.collect {
+        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
+          Seq(nameParts)
+        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+          case e: SubqueryExpression => collectTempViews(e.plan)
+        }).flatten
+      }.flatten.distinct
+    }
+
+    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
+      child.collect {
+        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+          case e: SubqueryExpression => collectTempFunctions(e.plan)
+          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
+            Seq(e.name.funcName)
+        }).flatten
+      }.flatten.distinct
+    }
+    (collectTempViews(child), collectTempFunctions(child))
+  }
+
+
+  /**
+   * Returns a [[CatalogTable]] that contains information for temporary view.
+   * Generate the view-specific properties(e.g. view default database, view query output
+   * column names) and store them as properties in the CatalogTable, and also creates
+   * the proper schema for the view.
+   */
+  def prepareTemporaryView(
+      viewName: TableIdentifier,
+      session: SparkSession,
+      analyzedPlan: LogicalPlan,
+      viewSchema: StructType,
+      originalText: Option[String],
+      child: LogicalPlan): CatalogTable = {
+
+    val catalog = session.sessionState.catalog
+    val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
+    // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
+    // generating temporary view properties
+    val newProperties = generateViewProperties(
+      Map.empty, session, analyzedPlan, viewSchema.fieldNames, tempViews, tempFunctions)
+
+    CatalogTable(
+      identifier = viewName,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = viewSchema,
+      viewText = originalText,
+      properties = newProperties)
   }
 }
