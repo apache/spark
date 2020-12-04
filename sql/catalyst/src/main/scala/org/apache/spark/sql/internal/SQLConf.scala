@@ -2537,7 +2537,9 @@ object SQLConf {
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars.")
+        "ancient dates/timestamps that are ambiguous between the two calendars. " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. Spark always performs rebasing for the INT96 type.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2552,7 +2554,9 @@ object SQLConf {
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. Spark always performs rebasing for the INT96 type.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
