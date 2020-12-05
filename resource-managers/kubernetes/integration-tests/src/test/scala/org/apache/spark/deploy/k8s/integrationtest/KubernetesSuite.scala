@@ -522,7 +522,8 @@ class KubernetesSuite extends SparkFunSuite
         .pods()
         .withLabel("spark-app-locator", appLocator)
         .withLabel("spark-role", "executor")
-        .list().getItems.asScala.isEmpty)
+        .list()
+        .getItems.isEmpty)
     }
   }
 }
