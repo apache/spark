@@ -489,6 +489,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.SQLQueryTestSuite",
     "org.apache.spark.sql.hive.client.HadoopVersionInfoSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperationSuite",
+    "org.apache.spark.sql.hive.thriftserver.HiveThriftHttpServerSuite",
     "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite",
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
