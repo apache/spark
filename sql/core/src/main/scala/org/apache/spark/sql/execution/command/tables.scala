@@ -311,9 +311,6 @@ case class LoadDataCommand(
         sparkSession.sessionState.conf.resolver)
     }
 
-    if (targetTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
-    }
     if (DDLUtils.isDatasourceTable(targetTable)) {
       throw new AnalysisException(
         s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
@@ -451,10 +448,6 @@ case class TruncateTableCommand(
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
-    }
-    if (table.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
