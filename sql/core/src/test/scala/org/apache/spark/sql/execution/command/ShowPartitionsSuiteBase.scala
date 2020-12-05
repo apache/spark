@@ -158,7 +158,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
         sql(s"""
           |CREATE TABLE $t (price int, qty int, year int, month int)
           |$defaultUsing
-          |partitioned by (year, month)""".stripMargin)
+          |PARTITIONED BY (year, month)""".stripMargin)
         sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
         Seq(
           true -> "PARTITION(year = 2015, month = 1)",
