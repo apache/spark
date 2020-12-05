@@ -1841,7 +1841,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DeleteFrom: should refresh caches referencing the table") {
+  test("SPARK-33652: DeleteFrom should refresh caches referencing the table") {
     val t = "testcat.ns1.ns2.tbl"
     val view = "view"
     withTable(t) {
