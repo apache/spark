@@ -1005,25 +1005,17 @@ case class ShowPartitionsCommand(
 
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
 
+    /**
+     * Normalizes the partition spec w.r.t the partition columns and case sensitivity settings,
+     * and validates the spec by making sure all the referenced columns are
+     * defined as partitioning columns in table definition. An AnalysisException exception is
+     * thrown if the partitioning spec is invalid.
+     */
     val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
       table.partitionColumnNames,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver))
-
-    /**
-     * Validate the partitioning spec by making sure all the referenced columns are
-     * defined as partitioning columns in table definition. An AnalysisException exception is
-     * thrown if the partitioning spec is invalid.
-     */
-    if (normalizedSpec.isDefined) {
-      val badColumns = normalizedSpec.get.keySet.filterNot(table.partitionColumnNames.contains)
-      if (badColumns.nonEmpty) {
-        val badCols = badColumns.mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
-      }
-    }
 
     val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
     partNames.map(Row(_))
