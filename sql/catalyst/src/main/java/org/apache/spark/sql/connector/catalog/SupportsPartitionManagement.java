@@ -81,8 +81,13 @@ public interface SupportsPartitionManagement extends Table {
      */
     default boolean partitionExists(InternalRow ident) {
         String[] partitionNames = partitionSchema().names();
-        String[] requiredNames = Arrays.copyOfRange(partitionNames, 0, ident.numFields());
-        return listPartitionIdentifiers(requiredNames, ident).length > 0;
+        if (ident.numFields() == partitionNames.length) {
+          return listPartitionIdentifiers(partitionNames, ident).length > 0;
+        } else {
+          throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
+            ") in the partition identifier is not equal to the partition schema length (" +
+            partitionNames.length + "). The identifier cannot identify one partition.");
+        }
     }
 
     /**
