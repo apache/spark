@@ -27,10 +27,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultUsing: String = "USING parquet"
 
-  override protected def wrongPartitionColumnsError(columns: String*): String = {
-    s"Non-partitioning column(s) ${columns.mkString("[", ", ", "]")} are specified"
-  }
-
   test("show everything in the default database") {
     val table = "dateTable"
     withTable(table) {

@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -28,7 +29,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
   protected def version: String
   protected def catalog: String
   protected def defaultUsing: String
-  protected def wrongPartitionColumnsError(columns: String*): String
   // Gets the schema of `SHOW PARTITIONS`
   private val showSchema: StructType = new StructType().add("partition", StringType, false)
   protected def runShowPartitionsSql(sqlText: String, expected: Seq[Row]): Unit = {
@@ -94,7 +94,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
         val errMsg = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $table PARTITION(abcd=2015, xyz=1)")
         }.getMessage
-        assert(errMsg.contains(wrongPartitionColumnsError("abcd", "xyz")))
+        assert(errMsg.contains("abcd is not a valid partition column"))
       }
     }
   }
@@ -146,6 +146,30 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
           s"show partitions $table",
           Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
           Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-33667: case sensitivity of partition spec") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val t = s"$catalog.ns.part_table"
+      withTable(t) {
+        sql(s"""
+          |CREATE TABLE $t (price int, qty int, year int, month int)
+          |$defaultUsing
+          |PARTITIONED BY (year, month)""".stripMargin)
+        sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+        Seq(
+          true -> "PARTITION(year = 2015, month = 1)",
+          false -> "PARTITION(YEAR = 2015, Month = 1)"
+        ).foreach { case (caseSensitive, partitionSpec) =>
+          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+            runShowPartitionsSql(
+              s"SHOW PARTITIONS $t $partitionSpec",
+              Row("year=2015/month=1") :: Nil)
+          }
+        }
       }
     }
   }
