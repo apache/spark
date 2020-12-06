@@ -150,7 +150,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("case sensitivity of partition spec") {
+  test("SPARK-33667: case sensitivity of partition spec") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       val t = s"$catalog.ns.part_table"
