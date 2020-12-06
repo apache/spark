@@ -221,7 +221,7 @@ object SQLConf {
       .internal()
       .doc("The threshold of set size for rewrite it as a min-max filter for pushing down " +
         "to the data source.")
-      .version("3.1.0")
+      .version("3.2.0")
       .intConf
       .checkValue(threshold => threshold >= 0,
         "The value of spark.sql.optimizer.inSetRewriteMinMaxThreshold must be positive.")
