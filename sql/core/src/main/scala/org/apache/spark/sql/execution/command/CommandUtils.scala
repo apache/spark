@@ -391,7 +391,7 @@ object CommandUtils extends Logging {
     try {
       sparkSession.catalog.uncacheTable(name)
     } catch {
-      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+      case NonFatal(e) => logWarning(s"Exception when attempting to uncache $name", e)
     }
   }
 }
