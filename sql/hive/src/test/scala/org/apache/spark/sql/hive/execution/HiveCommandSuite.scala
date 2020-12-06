@@ -419,7 +419,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message2 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
       }.getMessage
-      assert(message2.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
+      assert(message2.contains("abcd is not a valid partition column"))
 
       val message3 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
