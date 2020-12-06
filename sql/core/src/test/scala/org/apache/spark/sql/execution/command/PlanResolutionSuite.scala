@@ -1714,14 +1714,16 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("create hive external table - location must be specified") {
-    val exc = intercept[AnalysisException] {
-      parseAndResolve("CREATE EXTERNAL TABLE my_tab STORED AS parquet")
+  test("create hive external table") {
+    val withoutLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet"
+    parseAndResolve(withoutLoc) match {
+      case ct: CreateTable =>
+        assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.tableDesc.storage.locationUri.isEmpty)
     }
-    assert(exc.getMessage.contains("CREATE EXTERNAL TABLE must be accompanied by LOCATION"))
 
-    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    parseAndResolve(query) match {
+    val withLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
+    parseAndResolve(withLoc) match {
       case ct: CreateTable =>
         assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
         assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))

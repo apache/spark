@@ -662,17 +662,7 @@ class ResolveSessionCatalog(
       comment: Option[String],
       storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
-    if (external) {
-      if (DDLUtils.isHiveTable(Some(provider))) {
-        if (location.isEmpty) {
-          throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
-        }
-      } else {
-        throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
-      }
-    }
-
-    val tableType = if (location.isDefined) {
+    val tableType = if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
