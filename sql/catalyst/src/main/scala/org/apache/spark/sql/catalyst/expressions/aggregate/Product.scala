@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType, NumericType }
 
 
@@ -38,7 +37,7 @@ import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType, Nume
   """,
   group = "agg_funcs",
   since = "3.2.0")
-case class Product(child: Expression, scale: Double=1.0)
+case class Product(child: Expression, scale: Double = 1.0)
     extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = child :: Nil

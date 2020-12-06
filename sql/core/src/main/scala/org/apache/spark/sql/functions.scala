@@ -716,7 +716,7 @@ object functions {
    * @group agg_funcs
    * @since 3.2.0
    */
-  def product(e: Column, scale: Double=1.0): Column =
+  def product(e: Column, scale: Double = 1.0): Column =
     withAggregateFunction { new Product(e.expr, scale) }
 
   /**
