@@ -389,7 +389,7 @@ object SQLConf {
   val DEFAULT_PARALLELISM = buildConf("spark.sql.default.parallelism")
     .doc("The number of parallelism for Spark SQL, the default value is " +
       "`spark.default.parallelism`.")
-    .version("3.1.0")
+    .version("3.2.0")
     .intConf
     .checkValue(_ > 0, "The value of spark.sql.default.parallelism must be positive.")
     .createOptional
