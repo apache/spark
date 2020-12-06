@@ -3718,6 +3718,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+    withTable("string_tbl") {
+      sql("CREATE TABLE string_tbl USING parquet SELECT 'm@ca' AS s")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM string_tbl").collect()
+      }
+      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
+        "the escape character is not allowed to precede '@'"))
+
+      checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM string_tbl"), Row(true))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
