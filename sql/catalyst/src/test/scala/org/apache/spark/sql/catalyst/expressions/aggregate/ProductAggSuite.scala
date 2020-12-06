@@ -28,7 +28,7 @@ class ProductAggSuite extends SparkFunSuite {
   val evaluatorWithScale = DeclarativeAggregateEvaluator(Product(input, 2.0), Seq(input))
 
   test("empty buffer") {
-    assert(evaluator.initialize() === InternalRow(null, false))
+    assert(evaluator.initialize() === InternalRow(null))
   }
 
   test("update") {
@@ -37,7 +37,7 @@ class ProductAggSuite extends SparkFunSuite {
       InternalRow(3.0),
       InternalRow(-5.0),
       InternalRow(7.0) )
-    assert(result === InternalRow(210.0, true))
+    assert(result === InternalRow(210.0))
   }
 
   test("update - with scale") {
@@ -46,27 +46,72 @@ class ProductAggSuite extends SparkFunSuite {
       InternalRow(3.0),
       InternalRow(-5.0),
       InternalRow(7.0) )
-    assert(result === InternalRow(210.0 * (1 << 4), true))
+    assert(result === InternalRow(210.0 * (1 << 4)))
   }
 
-  test("update - ignore nulls") {
+  test("update - with nulls") {
     val result1 = evaluator.update(
       InternalRow(null),
       InternalRow(11.0),
       InternalRow(null),
       InternalRow(13.0) )
-    assert(result1 === InternalRow(143.0, true))
+    assert(result1 === InternalRow(143.0))
 
     val result2 = evaluator.update(
       InternalRow(null),
       InternalRow(null))
-    assert(result2 === InternalRow(null, false))
+    assert(result2 === InternalRow(null))
 
     val result3 = evaluatorWithScale.update(
       InternalRow(null),
       InternalRow(17.0))
-    assert(result2 === InternalRow(34.0, false))
+    assert(result3 === InternalRow(34.0))
   }
 
-  // FIXME - add tests for merge & extraction methods
+  test("merge") {
+    // Empty
+    val p0 = evaluator.initialize()
+    assert(evaluator.merge(p0) === InternalRow(null))
+
+    // Singleton
+    val p1 = evaluator.update(InternalRow(7.0), InternalRow(11.0))
+    assert(evaluator.merge(p1) === p1)
+
+    // Pair
+    val p2 = evaluator.update(InternalRow(17.0), InternalRow(19.0))
+    assert(evaluator.merge(p1, p2) === InternalRow((7 * 11 * 17 * 19).toDouble))
+    assert(evaluator.merge(p1, p2) === evaluator.merge(p2, p1))
+
+    // Mixtures with empty
+    assert(evaluator.merge(p1, p0, p2) === evaluator.merge(p1, p2))
+    assert(evaluator.merge(p0, p2, p1) === evaluator.merge(p1, p2))
+  }
+
+  test("merge - with nulls") {
+    val p0 = evaluatorWithScale.update(InternalRow(null), InternalRow(null))
+    val p1 = evaluatorWithScale.update(InternalRow(5.0), InternalRow(null))
+    val p2 = evaluatorWithScale.update(InternalRow(null), InternalRow(7.0))
+
+    assert(evaluator.merge(p0, p0) === p0)
+    assert(evaluator.merge(p0, p1) === p1)
+    assert(evaluator.merge(p2, p0) === p2)
+
+    assert(evaluator.merge(p2, p1, p0) === InternalRow((5 * 7 * 4).toDouble))
+  }
+
+  test("eval") {
+    // Null
+    assert(evaluator.eval(InternalRow(null)) === InternalRow(null))
+    assert(evaluatorWithScale.eval(InternalRow(null)) === InternalRow(null))
+
+    // Empty
+    assert(evaluator.eval(evaluator.initialize()) === InternalRow(null))
+    assert(evaluatorWithScale.eval(evaluatorWithScale.initialize()) === InternalRow(null))
+
+    // Non-trivial
+    val p1 = evaluator.update(InternalRow(2.0), InternalRow(3.0))
+    val p2 = evaluatorWithScale.update(InternalRow(5.0), InternalRow(7.0), InternalRow(11.0))
+    val m12 = evaluator.merge(p1, p2)
+    assert(evaluator.eval(m12) === InternalRow((2.0 * 3 * 5 * 7 * 11) * (1 << 3)))
+  }
 }
