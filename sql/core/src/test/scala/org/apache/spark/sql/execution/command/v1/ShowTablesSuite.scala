@@ -112,7 +112,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
 }
 
 class ShowTablesSuite extends ShowTablesSuiteBase with SharedSparkSession {
-  test("show partitions from a datasource table") {
+  test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
