@@ -262,7 +262,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("not fully specified partition spec") {
+  test("SPARK-33676: not fully specified partition spec") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
       sql(s"""
