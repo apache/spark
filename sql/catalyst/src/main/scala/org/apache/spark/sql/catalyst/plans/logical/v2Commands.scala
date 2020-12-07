@@ -485,9 +485,6 @@ case class ShowTableExtended(
     partitionSpec: Option[PartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = namespace :: Nil
 
-  override lazy val resolved: Boolean =
-    childrenResolved && partitionSpec.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
