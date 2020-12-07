@@ -14,27 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming.ui
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+package org.apache.spark.deploy.history
 
-private[sql] class StreamingQueryTab(
-    val store: StreamingQueryStatusStore,
-    sparkUI: SparkUI) extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.History.HISTORY_LOG_DIR
+import org.apache.spark.util.ManualClock
 
-  override val name = "Structured Streaming"
-
-  val parent = sparkUI
-
-  attachPage(new StreamingQueryPage(this))
-  attachPage(new StreamingQueryStatisticsPage(this))
-  parent.attachTab(this)
-
-  parent.addStaticHandler(StreamingQueryTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-private[sql] object StreamingQueryTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+object Utils {
+  def withFsHistoryProvider(logDir: String)(fn: FsHistoryProvider => Unit): Unit = {
+    var provider: FsHistoryProvider = null
+    try {
+      val clock = new ManualClock()
+      val conf = new SparkConf().set(HISTORY_LOG_DIR, logDir)
+      val provider = new FsHistoryProvider(conf, clock)
+      provider.checkForLogs()
+      fn(provider)
+    } finally {
+      if (provider != null) {
+        provider.stop()
+        provider = null
+      }
+    }
+  }
 }
