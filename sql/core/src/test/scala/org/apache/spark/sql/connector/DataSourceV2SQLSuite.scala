@@ -2588,15 +2588,11 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testNotSupportedV2Command(
-      sqlCommand: String,
-      sqlParams: String,
-      sqlCommandInMessage: Option[String] = None): Unit = {
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
-    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
