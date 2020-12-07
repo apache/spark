@@ -118,7 +118,8 @@ public class HiveSQLException extends SQLException {
     TStatus tStatus = new TStatus(TStatusCode.ERROR_STATUS);
     tStatus.setSqlState(getSQLState());
     tStatus.setErrorCode(getErrorCode());
-    tStatus.setErrorMessage(getMessage());
+    tStatus.setErrorMessage(org.apache.hadoop.util.StringUtils
+      .stringifyException(this));
     tStatus.setInfoMessages(toString(this));
     return tStatus;
   }
@@ -133,7 +134,8 @@ public class HiveSQLException extends SQLException {
       return ((HiveSQLException)e).toTStatus();
     }
     TStatus tStatus = new TStatus(TStatusCode.ERROR_STATUS);
-    tStatus.setErrorMessage(e.getMessage());
+    tStatus.setErrorMessage(org.apache.hadoop.util.StringUtils
+      .stringifyException(e));
     tStatus.setInfoMessages(toString(e));
     return tStatus;
   }
