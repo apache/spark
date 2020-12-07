@@ -22,7 +22,6 @@ import java.nio.charset.MalformedInputException
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.SortedSet
 import scala.collection.mutable
 import scala.io.{Codec, Source}
 
@@ -54,34 +53,6 @@ private[spark] object KubernetesClientUtils extends Logging {
     propertiesWriter.toString
   }
 
-  object StringLengthOrdering extends Ordering[(String, String)] {
-    override def compare(x: (String, String), y: (String, String)): Int = {
-      // compare based on file length and break the tie with string comparison of keys
-      // (i.e. file names).
-      val lenCompare = (x._1.length + x._2.length) - (y._1.length + y._2.length)
-      if (lenCompare == 0) {
-        x._1.compareTo(y._1)
-      } else {
-        lenCompare
-      }
-    }
-  }
-
-  def truncateToSize(seq: Seq[(String, String)], maxSize: Long): Map[String, String] = {
-    // First order the entries in order of their size.
-    // Skip entries if the resulting Map size exceeds maxSize.
-    val ordering: Ordering[(String, String)] = StringLengthOrdering
-    val sortedSet = SortedSet[(String, String)](seq: _*)(ordering)
-    var i: Int = 0
-    val map = mutable.HashMap[String, String]()
-    for (item <- sortedSet) {
-      i += item._1.length + item._2.length
-      if (i < maxSize) {
-        map.put(item._1, item._2)
-      }
-    }
-    map.toMap
-  }
   /**
    * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
    */
@@ -121,29 +92,48 @@ private[spark] object KubernetesClientUtils extends Logging {
       .build()
   }
 
-  private def loadSparkConfDirFiles(conf: SparkConf): Map[String, String] = {
+  private def orderFilesBySize(confFiles: Seq[File]): Seq[File] = {
+    val fileToFileSizePairs = confFiles.map(f => (f, f.getName.length + f.length()))
+    // sort first by name and then by length, so that during tests we have consistent results.
+    fileToFileSizePairs.sortBy(f => f._1).sortBy(f => f._2).map(_._1)
+  }
+
+  // exposed for testing
+  private[submit] def loadSparkConfDirFiles(conf: SparkConf): Map[String, String] = {
     val confDir = Option(conf.getenv(ENV_SPARK_CONF_DIR)).orElse(
       conf.getOption("spark.home").map(dir => s"$dir/conf"))
+    val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
     if (confDir.isDefined) {
-      val confFiles = listConfFiles(confDir.get, conf.get(Config.CONFIG_MAP_MAXSIZE))
-      val filesSeq: Seq[Option[(String, String)]] = confFiles.map { file =>
+      val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
+      val orderedConfFiles = orderFilesBySize(confFiles)
+      var i: Long = 0
+      val truncatedMap = mutable.HashMap[String, String]()
+      for (file <- orderedConfFiles) {
+        var source: Source = Source.fromString("") // init with empty source.
         try {
-          val source = Source.fromFile(file)(Codec.UTF8)
-          val mapping = Some(file.getName -> source.mkString)
-          source.close()
-          mapping
+          source = Source.fromFile(file)(Codec.UTF8)
+          val (fileName, fileContent) = file.getName -> source.mkString
+          if (fileContent.length > 0) {
+            i = i + (fileName.length + fileContent.length)
+            if (i < maxSize) {
+              truncatedMap.put(fileName, fileContent)
+            }
+          }
         } catch {
           case e: MalformedInputException =>
-            logWarning(s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}.", e)
+            i = i - (file.getName.length + file.length)
+            logWarning(
+              s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
             None
+        } finally {
+          source.close()
         }
       }
-      val truncatedMap = truncateToSize(filesSeq.flatten, conf.get(Config.CONFIG_MAP_MAXSIZE))
       if (truncatedMap.nonEmpty) {
         logInfo(s"Spark configuration files loaded from $confDir :" +
           s" ${truncatedMap.keys.mkString(",")}")
       }
-      truncatedMap
+      truncatedMap.toMap
     } else {
       Map.empty[String, String]
     }
