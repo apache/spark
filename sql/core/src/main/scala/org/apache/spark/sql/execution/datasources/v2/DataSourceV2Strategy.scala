@@ -208,7 +208,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(table, _, output) =>
+        case DataSourceV2ScanRelation(r, _, output) =>
+          val table = r.table
           if (condition.exists(SubqueryExpression.hasSubquery)) {
             throw new AnalysisException(
               s"Delete by condition with subquery is not supported: $condition")
@@ -227,7 +228,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
               s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
           }
 
-          DeleteFromTableExec(table.asDeletable, filters) :: Nil
+          DeleteFromTableExec(table.asDeletable, filters, refreshCache(r)) :: Nil
         case _ =>
           throw new AnalysisException("DELETE is only supported with v2 tables.")
       }
