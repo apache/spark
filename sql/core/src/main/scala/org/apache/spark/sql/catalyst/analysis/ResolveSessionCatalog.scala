@@ -384,14 +384,20 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(ns.head), pattern)
 
-    case ShowTableStatement(ns, pattern, partitionsSpec) =>
-      val db = ns match {
-        case Some(ns) if ns.length != 1 =>
-          throw new AnalysisException(
-            s"The database name is not valid: ${ns.quoted}")
-        case _ => ns.map(_.head)
+    case ShowTableExtended(
+        SessionCatalogAndNamespace(_, ns),
+        pattern,
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+      assert(ns.nonEmpty)
+      if (ns.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${ns.quoted}")
       }
-      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
+      ShowTablesCommand(
+        databaseName = Some(ns.head),
+        tableIdentifierPattern = Some(pattern),
+        isExtended = true,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>

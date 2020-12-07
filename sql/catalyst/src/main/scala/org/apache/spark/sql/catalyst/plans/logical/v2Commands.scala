@@ -481,7 +481,7 @@ case class ShowTables(
  */
 case class ShowTableExtended(
     namespace: LogicalPlan,
-    pattern: Option[String],
+    pattern: String,
     partitionSpec: Option[PartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = namespace :: Nil
 

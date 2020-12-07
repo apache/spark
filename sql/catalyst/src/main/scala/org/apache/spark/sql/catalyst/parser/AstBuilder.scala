@@ -3199,13 +3199,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[ShowTableStatement]] command.
+   * Create a [[ShowTableExtended]] command.
    */
   override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowTableStatement(
-      Option(ctx.ns).map(visitMultipartIdentifier),
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    ShowTableExtended(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       string(ctx.pattern),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+      partitionKeys)
   }
 
   /**

@@ -386,15 +386,6 @@ case class InsertIntoStatement(
 }
 
 /**
- * A SHOW TABLE EXTENDED statement, as parsed from SQL.
- */
-case class ShowTableStatement(
-    namespace: Option[Seq[String]],
-    pattern: String,
-    partitionSpec: Option[TablePartitionSpec])
-  extends ParsedStatement
-
-/**
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
