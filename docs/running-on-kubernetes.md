@@ -222,7 +222,7 @@ The app jar file will be uploaded to the S3 and then when the driver is launched
 to the driver pod and will be added to its classpath. Spark will generate a subdir under the upload path with a random name
 to avoid conflicts with spark apps running in parallel. User could manage the subdirs created according to his needs.
 
-The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars` and `spark.files`.
+The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars`, `spark.files` and `spark.archives`.
 
 Important: all client-side dependencies will be uploaded to the given path with a flat directory structure so
 file names must be unique otherwise files will be overwritten. Also make sure in the derived k8s image default ivy dir
