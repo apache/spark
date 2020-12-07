@@ -823,7 +823,7 @@ object SQLConf {
       .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
-  
+
   val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
     buildConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
@@ -3186,7 +3186,7 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruningInSetThreshold: Int =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD)
-  
+
   def metastorePartitionLimit: Int = getConf(HIVE_METASTORE_PARTITION_LIMIT)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
