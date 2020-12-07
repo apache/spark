@@ -15,6 +15,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import importlib
 import logging
 import sys
 import unittest
@@ -216,6 +217,45 @@ class TestPluginsManager:
             assert "my_fake_module not found" in received_logs
             assert "Failed to import plugin test-entrypoint" in received_logs
             assert ("test.plugins.test_plugins_manager", "my_fake_module not found") in import_errors.items()
+
+    def test_registering_plugin_macros(self, request):
+        """
+        Tests whether macros that originate from plugins are being registered correctly.
+        """
+        from airflow import macros
+        from airflow.plugins_manager import integrate_macros_plugins
+
+        def cleanup_macros():
+            """Reloads the airflow.macros module such that the symbol table is reset after the test."""
+            # We're explicitly deleting the module from sys.modules and importing it again
+            # using import_module() as opposed to using importlib.reload() because the latter
+            # does not undo the changes to the airflow.macros module that are being caused by
+            # invoking integrate_macros_plugins()
+            del sys.modules['airflow.macros']
+            importlib.import_module('airflow.macros')
+
+        request.addfinalizer(cleanup_macros)
+
+        def custom_macro():
+            return 'foo'
+
+        class MacroPlugin(AirflowPlugin):
+            name = 'macro_plugin'
+            macros = [custom_macro]
+
+        with mock_plugin_manager(plugins=[MacroPlugin()]):
+            # Ensure the macros for the plugin have been integrated.
+            integrate_macros_plugins()
+            # Test whether the modules have been created as expected.
+            plugin_macros = importlib.import_module(f"airflow.macros.{MacroPlugin.name}")
+            for macro in MacroPlugin.macros:
+                # Verify that the macros added by the plugin are being set correctly
+                # on the plugin's macro module.
+                assert hasattr(plugin_macros, macro.__name__)
+            # Verify that the symbol table in airflow.macros has been updated with an entry for
+            # this plugin, this is necessary in order to allow the plugin's macros to be used when
+            # rendering templates.
+            assert hasattr(macros, MacroPlugin.name)
 
 
 class TestPluginsDirectorySource(unittest.TestCase):
