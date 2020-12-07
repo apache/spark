@@ -95,7 +95,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
               if (forceCancel.get()) {
                 assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
               } else {
-                assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2900)
+                assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
               }
             case _ =>
           }
