@@ -277,7 +277,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveNoopDropTable) ++
+      Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
@@ -887,6 +887,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
+      case u @ UnresolvedView(ident, cmd) =>
+        lookupTempView(ident).map { _ =>
+          ResolvedView(ident.asIdentifier, isTemp = true)
+        }
+        .getOrElse(u)
       case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
         lookupTempView(ident)
           .map { _ =>
@@ -976,6 +981,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
+
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd) =>
+        u.failAnalysis(
+          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
+          "because view support in v2 catalog has not been implemented yet. " +
+          s"$cmd expects a view.")
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
@@ -1109,6 +1120,12 @@ class Analyzer(override val catalogManager: CatalogManager)
             val viewStr = if (v.isTemp) "temp view" else "view"
             u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.")
           case table => table
+        }.getOrElse(u)
+
+      case u @ UnresolvedView(identifier, cmd) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView => v
+          case _ => u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view.")
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>

@@ -419,9 +419,9 @@ case class DropTable(
 }
 
 /**
- * The logical plan for handling non-existing table for DROP TABLE command.
+ * The logical plan for no-op command handling non-existing table.
  */
-case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
+case class NoopCommand(multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command.
@@ -705,4 +705,13 @@ case class ShowPartitions(
 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("partition", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the DROP VIEW command.
+ */
+case class DropView(
+    child: LogicalPlan,
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
 }
