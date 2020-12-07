@@ -435,10 +435,15 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       assert(df.schema.map(_.dataType) == Seq(StringType))
     }
 
-    assertNoCharType(spark.range(1).select($"id".cast("char(5)")))
-    assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
-    assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
-    assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
+    val logAppender = new LogAppender("The Spark cast operator does not support char/varchar" +
+      " type and simply treats them as string type. Please use string type directly to avoid" +
+      " confusion.")
+    withLogAppender(logAppender) {
+      assertNoCharType(spark.range(1).select($"id".cast("char(5)")))
+      assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
+      assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
+      assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
+    }
   }
 
   def failWithInvalidCharUsage[T](fn: => T): Unit = {
