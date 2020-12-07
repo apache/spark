@@ -343,8 +343,10 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       AddKafkaData(Set(topic), 1, 2, 3),
       CheckAnswer(2, 3, 4),
       AssertOnQuery { query =>
-        val recordsRead = query.recentProgress.map(_.numInputRows).sum
-        recordsRead == 3
+        eventually(timeout(10.seconds)) {
+          val recordsRead = query.recentProgress.map(_.numInputRows).sum
+          recordsRead == 3
+        }
       }
     )
   }
@@ -780,22 +782,26 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
       checkQuery(AssertOnQuery { q =>
-        assert(q.availableOffsets.iterator.size == 1)
-        // The kafka source is scanned twice because of self-join
-        assert(q.recentProgress.map(_.numInputRows).sum == 8)
-        true
+        eventually(timeout(10.seconds)) {
+          assert(q.availableOffsets.iterator.size == 1)
+          // The kafka source is scanned twice because of self-join
+          assert(q.recentProgress.map(_.numInputRows).sum == 8)
+          true
+        }
       })
     }
 
     withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
       checkQuery(AssertOnQuery { q =>
-        assert(q.availableOffsets.iterator.size == 1)
-        assert(q.lastExecution.executedPlan.collect {
-          case r: ReusedExchangeExec => r
-        }.length == 1)
-        // The kafka source is scanned only once because of exchange reuse.
-        assert(q.recentProgress.map(_.numInputRows).sum == 4)
-        true
+        eventually(timeout(10.seconds)) {
+          assert(q.availableOffsets.iterator.size == 1)
+          assert(q.lastExecution.executedPlan.collect {
+            case r: ReusedExchangeExec => r
+          }.length == 1)
+          // The kafka source is scanned only once because of exchange reuse.
+          assert(q.recentProgress.map(_.numInputRows).sum == 4)
+          true
+        }
       })
     }
   }

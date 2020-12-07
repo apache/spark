@@ -314,7 +314,9 @@ class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
     try {
       input.addData("1", "2", "3")
       verifyResult(writer) {
-        assert(writer.recentProgress.exists(_.sink.numOutputRows == 3L))
+        eventually(timeout(10.seconds)) {
+          assert(writer.recentProgress.exists(_.sink.numOutputRows == 3L))
+        }
       }
     } finally {
       writer.stop()
