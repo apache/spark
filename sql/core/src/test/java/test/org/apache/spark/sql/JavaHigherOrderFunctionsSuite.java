@@ -35,6 +35,8 @@ import org.apache.spark.sql.RowFactory;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
+import scala.reflect.ClassTag;
+
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaHigherOrderFunctionsSuite {
@@ -53,7 +55,7 @@ public class JavaHigherOrderFunctionsSuite {
                 Object expectedValue = expectedRow.get(j);
                 Object actualValue = actualRow.get(j);
                 if (expectedValue != null && expectedValue.getClass().isArray()) {
-                    actualValue = actualValue.getClass().getMethod("array").invoke(actualValue);
+                    actualValue = ((scala.collection.Seq<?>) actualValue).toArray(ClassTag.AnyRef());
                     Assert.assertArrayEquals((Object[]) expectedValue, (Object[]) actualValue);
                 } else {
                     Assert.assertEquals(expectedValue, actualValue);
