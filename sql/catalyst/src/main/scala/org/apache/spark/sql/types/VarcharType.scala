@@ -32,6 +32,6 @@ case class VarcharType(length: Int) extends AtomicType {
 
   override def defaultSize: Int = length
   override def typeName: String = s"varchar($length)"
-  override def toString: String = s"CharType($length)"
+  override def toString: String = s"VarcharType($length)"
   private[spark] override def asNullable: VarcharType = this
 }

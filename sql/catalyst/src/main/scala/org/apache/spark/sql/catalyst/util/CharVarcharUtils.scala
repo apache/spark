@@ -19,11 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-object CharVarcharUtils {
+object CharVarcharUtils extends Logging {
 
   private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
@@ -53,6 +56,19 @@ object CharVarcharUtils {
   }
 
   /**
+   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
+   */
+  def failIfHasCharVarchar(dt: DataType): DataType = {
+    if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
+      throw new AnalysisException("char/varchar type can only be used in the table schema. " +
+        s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
+        s" treat them as string type as same as Spark 3.0 and earlier")
+    } else {
+      replaceCharVarcharWithString(dt)
+    }
+  }
+
+  /**
    * Replaces CharType/VarcharType with StringType recursively in the given data type.
    */
   def replaceCharVarcharWithString(dt: DataType): DataType = dt match {
@@ -67,6 +83,24 @@ object CharVarcharUtils {
     case _: CharType => StringType
     case _: VarcharType => StringType
     case _ => dt
+  }
+
+  /**
+   * Replaces CharType/VarcharType with StringType recursively in the given data type, with a
+   * warning message if it has char or varchar types
+   */
+  def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
+    if (SQLConf.get.charVarcharAsString) {
+      replaceCharVarcharWithString(dt)
+    } else if (hasCharVarchar(dt)) {
+      logWarning("The Spark cast operator does not support char/varchar type and simply treats" +
+        " them as string type. Please use string type directly to avoid confusion. Otherwise," +
+        s" you can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark treat" +
+        s" them as string type as same as Spark 3.0 and earlier")
+      replaceCharVarcharWithString(dt)
+    } else {
+      dt
+    }
   }
 
   /**
@@ -85,7 +119,7 @@ object CharVarcharUtils {
    */
   def getRawType(metadata: Metadata): Option[DataType] = {
     if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
-      Some(CatalystSqlParser.parseRawDataType(
+      Some(CatalystSqlParser.parseDataType(
         metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
     } else {
       None
