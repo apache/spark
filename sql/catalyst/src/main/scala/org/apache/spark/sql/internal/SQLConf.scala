@@ -374,6 +374,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DEFAULT_PARALLELISM = buildConf("spark.sql.default.parallelism")
+    .doc("The number of parallelism for Spark SQL, the default value is " +
+      "`spark.default.parallelism`.")
+    .version("3.2.0")
+    .intConf
+    .checkValue(_ > 0, "The value of spark.sql.default.parallelism must be positive.")
+    .createOptional
+
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
@@ -3159,6 +3167,8 @@ class SQLConf extends Serializable with Logging {
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
+
+  def defaultParallelism: Option[Int] = getConf(DEFAULT_PARALLELISM)
 
   def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
