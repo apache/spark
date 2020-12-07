@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.ui
 
 import java.util.UUID
 
+import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.sql.streaming.ui.{StreamingQueryData, StreamingQueryProgressWrapper, StreamingQueryUIData}
 import org.apache.spark.status.KVUtils
 import org.apache.spark.util.kvstore.KVStore
@@ -42,12 +43,26 @@ class StreamingQueryStatusStore(store: KVStore) {
     KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
   }
 
+  def getStreamingQueryProgressData(runId: UUID): Option[Array[StreamingQueryProgress]] = {
+    try {
+      Some(retrieveStreamingQueryProgress(runId))
+    } catch {
+      case _: NoSuchElementException => None
+    }
+  }
+
   private def makeUIData(summary: StreamingQueryData): StreamingQueryUIData = {
-    val runId = summary.runId.toString
+    try {
+      StreamingQueryUIData(summary, retrieveStreamingQueryProgress(summary.runId))
+    } catch {
+      case _: NoSuchElementException =>
+        throw new Exception(s"Failed to find streaming query ${summary.runId}.")
+    }
+  }
+
+  private def retrieveStreamingQueryProgress(runId: UUID): Array[StreamingQueryProgress] = {
     val view = store.view(classOf[StreamingQueryProgressWrapper])
-      .index("runId").first(runId).last(runId)
-    val recentProgress = KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
-      .map(_.progress).sortBy(_.timestamp).toArray
-    StreamingQueryUIData(summary, recentProgress)
+      .index("runId").first(runId.toString).last(runId.toString)
+    KVUtils.viewToSeq(view, Int.MaxValue)(_ => true).map(_.progress).sortBy(_.timestamp).toArray
   }
 }

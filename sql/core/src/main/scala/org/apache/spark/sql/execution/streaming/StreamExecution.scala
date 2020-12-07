@@ -42,10 +42,12 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTrunc
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
+import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /** States for [[StreamExecution]]'s lifecycle. */
@@ -93,6 +95,9 @@ abstract class StreamExecution(
   private val initializationLatch = new CountDownLatch(1)
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
+
+  protected val store = new StreamingQueryStatusStore(
+    sparkSession.sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore])
 
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
