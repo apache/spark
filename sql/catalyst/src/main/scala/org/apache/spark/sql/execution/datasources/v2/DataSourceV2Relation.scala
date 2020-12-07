@@ -111,16 +111,16 @@ case class DataSourceV2Relation(
  * plan. This ensures that the stats that are used by the optimizer account for the filters and
  * projection that will be pushed down.
  *
- * @param table a DSv2 [[Table]]
+ * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
  */
 case class DataSourceV2ScanRelation(
-    table: Table,
+    relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
 
-  override def name: String = table.name()
+  override def name: String = relation.table.name()
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"

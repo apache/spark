@@ -266,22 +266,23 @@ class DataSourceV2SQLSuite
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
-  ignore("CreateTable: without USING clause") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-    val testCatalog = catalog("testcat").asTableCatalog
+  test("CreateTable: without USING clause") {
+    withSQLConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key -> "false") {
+      // unset this config to use the default v2 session catalog.
+      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      val testCatalog = catalog("testcat").asTableCatalog
 
-    sql("CREATE TABLE testcat.t1 (id int)")
-    val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
-    // Spark shouldn't set the default provider for catalog plugins.
-    assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
+      sql("CREATE TABLE testcat.t1 (id int)")
+      val t1 = testCatalog.loadTable(Identifier.of(Array(), "t1"))
+      // Spark shouldn't set the default provider for catalog plugins.
+      assert(!t1.properties.containsKey(TableCatalog.PROP_PROVIDER))
 
-    sql("CREATE TABLE t2 (id int)")
-    val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
-      .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
-    // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
-    assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+      sql("CREATE TABLE t2 (id int)")
+      val t2 = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
+        .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
+      // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
+      assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
+    }
   }
 
   test("CreateTable/RepalceTable: invalid schema if has interval type") {
@@ -1811,6 +1812,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DeleteFrom: delete with unsupported predicates") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id > 3 AND p > 3")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains(s"Cannot delete from table $t"))
+    }
+  }
+
   test("DeleteFrom: DELETE is only supported with v2 tables") {
     // unset this config to use the default v2 session catalog.
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
@@ -1823,6 +1838,22 @@ class DataSourceV2SQLSuite
       }
 
       assert(exc.getMessage.contains("DELETE is only supported with v2 tables"))
+    }
+  }
+
+  test("SPARK-33652: DeleteFrom should refresh caches referencing the table") {
+    val t = "testcat.ns1.ns2.tbl"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+        sql(s"CACHE TABLE view AS SELECT id FROM $t")
+        assert(spark.table(view).count() == 3)
+
+        sql(s"DELETE FROM $t WHERE id = 2")
+        assert(spark.table(view).count() == 1)
+      }
     }
   }
 

@@ -163,6 +163,18 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
+  test("SPARK-33615: Launcher client archives", k8sTestTag, MinikubeTag) {
+    tryDepsTest {
+      val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
+      Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tar.gz")
+      sparkAppConf.set("spark.archives", s"$HOST_PATH/$fileName.tar.gz#test_tar_gz")
+      val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
+      runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
+        appArgs = Array(s"test_tar_gz/$fileName"),
+        timeout = Option(DEPS_TIMEOUT))
+    }
+  }
+
   test("Launcher python client dependencies using a zip file", k8sTestTag, MinikubeTag) {
     val inDepsFile = Utils.getTestFileAbsolutePath("py_container_checks.py", sparkHomeDir)
     val outDepsFile = s"${inDepsFile.substring(0, inDepsFile.lastIndexOf("."))}.zip"

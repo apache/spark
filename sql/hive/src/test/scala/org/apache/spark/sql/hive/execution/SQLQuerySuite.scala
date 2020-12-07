@@ -2026,6 +2026,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql(
             """
               |CREATE TABLE part_table (c STRING)
+              |STORED AS textfile
               |PARTITIONED BY (d STRING)
             """.stripMargin)
           sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +

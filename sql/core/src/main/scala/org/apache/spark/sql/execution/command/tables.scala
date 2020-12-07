@@ -879,6 +879,9 @@ case class ShowTablesCommand(
       // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
       // should have been thrown by the sql parser.
       val table = catalog.getTableMetadata(TableIdentifier(tableIdentifierPattern.get, Some(db)))
+
+      DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW TABLE EXTENDED")
+
       val tableIdent = table.identifier
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         partitionSpec.get,
@@ -1006,20 +1009,18 @@ case class ShowPartitionsCommand(
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
 
     /**
-     * Validate the partitioning spec by making sure all the referenced columns are
+     * Normalizes the partition spec w.r.t the partition columns and case sensitivity settings,
+     * and validates the spec by making sure all the referenced columns are
      * defined as partitioning columns in table definition. An AnalysisException exception is
      * thrown if the partitioning spec is invalid.
      */
-    if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(table.partitionColumnNames.contains)
-      if (badColumns.nonEmpty) {
-        val badCols = badColumns.mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
-      }
-    }
+    val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
+      partitionSpec,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver))
 
-    val partNames = catalog.listPartitionNames(tableName, spec)
+    val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
     partNames.map(Row(_))
   }
 }

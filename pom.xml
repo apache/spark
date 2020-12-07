@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.1.0-SNAPSHOT</version>
+  <version>3.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -250,6 +250,7 @@
     -->
     <spark.test.home>${session.executionRootDirectory}</spark.test.home>
     <spark.test.webdriver.chrome.driver></spark.test.webdriver.chrome.driver>
+    <spark.test.docker.keepContainer>false</spark.test.docker.keepContainer>
 
     <CodeCacheSize>1g</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -2626,6 +2627,7 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.test.webdriver.chrome.driver>${spark.test.webdriver.chrome.driver}</spark.test.webdriver.chrome.driver>
+              <spark.test.docker.keepContainer>${spark.test.docker.keepContainer}</spark.test.docker.keepContainer>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
