@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -464,7 +464,7 @@ case class RenameTable(
     newIdent: Identifier) extends Command
 
 /**
- * The logical plan of the SHOW TABLE command.
+ * The logical plan of the SHOW TABLES command.
  */
 case class ShowTables(
     namespace: LogicalPlan,
@@ -474,6 +474,25 @@ case class ShowTables(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TABLE EXTENDED command.
+ */
+case class ShowTableExtended(
+    namespace: LogicalPlan,
+    pattern: Option[String],
+    partitionSpec: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = namespace :: Nil
+
+  override lazy val resolved: Boolean =
+    childrenResolved && partitionSpec.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)(),
+    AttributeReference("information", StringType, nullable = false)())
 }
 
 /**
