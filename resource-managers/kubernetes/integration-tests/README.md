@@ -10,14 +10,14 @@ is subject to change. Note that currently the integration tests only run with Ja
 
 The simplest way to run the integration tests is to install and run Minikube, then run the following:
 
-    dev/dev-run-integration-tests.sh
+	dev/dev-run-integration-tests.sh
 
 For Java 8u251+, `HTTP2_DISABLE=true` and `spark.kubernetes.driverEnv.HTTP2_DISABLE=true` are required additionally for fabric8 `kubernetes-client` library to talk to Kubernetes clusters. This prevents `KubernetesClientException` when `kubernetes-client` library uses `okhttp` library internally.
 
 The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
-run with a minimum of 3 CPUs and 4G of memory:
+run with a minimum of 4 CPUs and 8G of memory:
 
-    minikube start --cpus 3 --memory 4096
+	minikube start --cpus 4 --memory 8096
 
 You can download Minikube [here](https://github.com/kubernetes/minikube/releases).
 
@@ -31,11 +31,11 @@ By default, the test framework will build new Docker images on every test execut
 and it is written to file at `target/imageTag.txt`. To reuse the images built in a previous run, or to use a Docker image tag
 that you have built by other means already, pass the tag to the test script:
 
-    dev/dev-run-integration-tests.sh --image-tag <tag>
+	dev/dev-run-integration-tests.sh --image-tag <tag>
 
 where if you still want to use images that were built before by the test framework:
 
-    dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
+	dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
 
 ## Spark Distribution Under Test
 

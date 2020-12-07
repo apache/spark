@@ -117,6 +117,7 @@ private[storage] class BlockManagerDecommissioner(
                       if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
                         logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
                       } else {
+                        logError(s"Got an error migrating ${shuffleBlockInfo}")
                         throw e
                       }
                   }
@@ -124,6 +125,7 @@ private[storage] class BlockManagerDecommissioner(
               } else {
                 logError(s"Skipping block ${shuffleBlockInfo} because it has failed ${retryCount}")
               }
+              logInfo(s"Incrementing number of migrated shuffles.")
               numMigratedShuffles.incrementAndGet()
           }
         }

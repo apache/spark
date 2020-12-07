@@ -425,7 +425,7 @@ private[spark] class BlockManager(
   override def putBlockDataAsStream(
       blockId: BlockId,
       level: StorageLevel,
-    classTag: ClassTag[_]): StreamCallbackWithID = {
+      classTag: ClassTag[_]): StreamCallbackWithID = {
 
     if (isDecommissioning()) {
        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
@@ -1692,6 +1692,7 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
+    logInfo("Stopping the block manager")
     decommissioner.foreach(_.stop())
     blockTransferService.close()
     if (shuffleClient ne blockTransferService) {
