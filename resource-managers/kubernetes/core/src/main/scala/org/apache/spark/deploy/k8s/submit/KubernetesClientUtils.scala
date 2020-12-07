@@ -58,8 +58,12 @@ private[spark] object KubernetesClientUtils extends Logging {
     override def compare(x: (String, String), y: (String, String)): Int = {
       // compare based on file length and break the tie with string comparison of keys
       // (i.e. file names).
-      (x._1.length + x._2.length).compare(y._1.length + y._2.length) * 10 +
+      val lenCompare = (x._1.length + x._2.length) - (y._1.length + y._2.length)
+      if (lenCompare == 0) {
         x._1.compareTo(y._1)
+      } else {
+        lenCompare
+      }
     }
   }
 
