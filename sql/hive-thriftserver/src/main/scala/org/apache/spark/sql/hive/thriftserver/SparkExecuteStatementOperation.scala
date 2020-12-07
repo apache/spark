@@ -142,9 +142,13 @@ private[hive] class SparkExecuteStatementOperation(
     setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
-    if (order.equals(FetchOrientation.FETCH_FIRST)) iter.fetchAbsolute(0)
-    else if (order.equals(FetchOrientation.FETCH_PRIOR)) iter.fetchPrior(maxRowsL)
-    else iter.fetchNext()
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      iter.fetchAbsolute(0)
+    } else if (order.equals(FetchOrientation.FETCH_PRIOR)) {
+      iter.fetchPrior(maxRowsL)
+    } else {
+      iter.fetchNext()
+    }
     resultRowSet.setStartOffset(iter.getPosition)
     if (!iter.hasNext) {
       resultRowSet
