@@ -1495,7 +1495,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val rightRes = rightAttributes
           .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
         f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
-      // intersect/except will be rewritten to join at the begininng of optimizer. Here we need to
+      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))

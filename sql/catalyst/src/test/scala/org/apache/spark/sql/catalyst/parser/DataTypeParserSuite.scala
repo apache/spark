@@ -124,8 +124,8 @@ class DataTypeParserSuite extends SparkFunSuite {
   unsupported("struct<x int, y string>")
 
   test("Do not print empty parentheses for no params") {
-    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
-    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+    assert(intercept("unknown").getMessage.contains("unknown is not supported"))
+    assert(intercept("unknown(1,2,3)").getMessage.contains("unknown(1,2,3) is not supported"))
   }
 
   // DataType parser accepts certain reserved keywords.

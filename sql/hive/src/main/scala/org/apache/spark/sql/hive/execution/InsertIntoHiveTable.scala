@@ -172,7 +172,7 @@ case class InsertIntoHiveTable(
     table.bucketSpec match {
       case Some(bucketSpec) =>
         // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
+        // table's bucketing i.e. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
         // set to false
         val enforceBucketingConfig = "hive.enforce.bucketing"
         val enforceSortingConfig = "hive.enforce.sorting"

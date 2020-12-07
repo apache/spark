@@ -1145,7 +1145,7 @@ object SQLConf {
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("This config determines the fallback behavior of several codegen generators " +
-      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
       "this config works only for tests.")
@@ -1570,7 +1570,7 @@ object SQLConf {
   val JSON_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
       .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
-        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "unnecessary columns from from_json, simplifying from_json + to_json, to_json + " +
         "named_struct(from_json.col1, from_json.col2, ....).")
       .version("3.1.0")
       .booleanConf
@@ -2058,7 +2058,7 @@ object SQLConf {
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
       .doc("When true (default), establishing the result type of an arithmetic operation " +
-        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, i.e. rounding the " +
         "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
         "is returned in those cases, as previously.")
       .version("2.3.1")

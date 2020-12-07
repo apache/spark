@@ -172,7 +172,7 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
  * TODO:
  * Currently this rule can push down the left semi or left anti joins to either
  * left or right leg of the child join. This matches the behaviour of `PushPredicateThroughJoin`
- * when the lefi semi or left anti join is in expression form. We need to explore the possibility
+ * when the left semi or left anti join is in expression form. We need to explore the possibility
  * to push the left semi/anti joins to both legs of join if the join condition refers to
  * both left and right legs of the child join.
  */

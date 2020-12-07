@@ -49,7 +49,7 @@ public class ColumnDescriptor {
 
   public static ColumnDescriptor newPrimitiveColumnDescriptor(String name, String comment, Type type, int position) {
     // Current usage looks like it's only for metadata columns, but if that changes then
-    // this method may need to require a type qualifiers aruments.
+    // this method may need to require a type qualifiers arguments.
     return new ColumnDescriptor(name, comment, new TypeDescriptor(type), position);
   }
 
