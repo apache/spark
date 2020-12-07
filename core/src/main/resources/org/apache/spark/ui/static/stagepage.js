@@ -492,9 +492,9 @@ $(document).ready(function () {
                                 var peakMemoryMetrics = row.peakMemoryMetrics
                                 if (typeof peakMemoryMetrics !== 'undefined') {
                                     if (type !== 'display')
-                                        return peakMemoryMetrics.JVMOnHeapMemory;
+                                        return peakMemoryMetrics.JVMHeapMemory;
                                     else
-                                        return (formatBytes(peakMemoryMetrics.JVMOnHeapMemory, type) + ' / ' +
+                                        return (formatBytes(peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
                                             formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
                                 } else {
                                     if (type !== 'display') {
