@@ -1368,7 +1368,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("DROP VIEW dbx.tab1")
     }
     assert(
-      e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+      e.getMessage.contains("dbx.tab1 is a table. 'DROP VIEW' expects a view."))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {

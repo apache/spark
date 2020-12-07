@@ -78,6 +78,14 @@ class PlanResolutionSuite extends AnalysisTest {
     V1Table(t)
   }
 
+  private val view: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.tableType).thenReturn(CatalogTableType.VIEW)
+    when(t.provider).thenReturn(Some(v1Format))
+    V1Table(t)
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -101,6 +109,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table" => table
         case "v2Table1" => table
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
+        case "view" => view
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -677,6 +686,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewIdent1 = TableIdentifier("view", Option("db"))
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"))
+    val tempViewName = "v"
+    val tempViewIdent = TableIdentifier("v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -686,6 +697,10 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(viewIdent2, ifExists = false, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
   }
 
   test("drop view in v2 catalog") {
