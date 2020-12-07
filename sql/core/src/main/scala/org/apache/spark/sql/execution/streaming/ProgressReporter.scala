@@ -108,7 +108,11 @@ trait ProgressReporter extends Logging {
 
   /** Returns the most recent query progress update or null if there were no progress updates. */
   def lastProgress: StreamingQueryProgress = {
-    store.getStreamingQueryProgressData(runId).map(_.last).orNull
+    if (recentProgress.isEmpty) {
+      null
+    } else {
+      recentProgress.last
+    }
   }
 
   /** Begins recording statistics about query progress for a given trigger. */
