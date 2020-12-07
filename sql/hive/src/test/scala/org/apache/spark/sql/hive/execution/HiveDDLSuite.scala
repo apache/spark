@@ -2854,4 +2854,11 @@ class HiveDDLSuite
       assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
     }
   }
+
+  test("SPARK-33686: Spark SQL unrecognized `db.tbl`") {
+    withTable("t1", "t2") {
+      sql("create table `default.t1` (c1 int);")
+      sql("create table `default`.`t2` (c1 int);")
+    }
+  }
 }

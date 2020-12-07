@@ -1192,7 +1192,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitTableIdentifier(
       ctx: TableIdentifierContext): TableIdentifier = withOrigin(ctx) {
-    TableIdentifier(ctx.table.getText, Option(ctx.db).map(_.getText))
+    var db = Option(ctx.db).map(_.getText)
+    var tbl = ctx.table.getText
+    if (db.isEmpty && 0 < tbl.indexOf(".") && tbl.indexOf(".") < tbl.length - 1) {
+      db = Option(tbl.substring(0, tbl.indexOf(".")))
+      tbl = tbl.substring(tbl.indexOf(".") + 1)
+    }
+    TableIdentifier(tbl, db)
   }
 
   /**
