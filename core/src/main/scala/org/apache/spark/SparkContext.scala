@@ -1925,6 +1925,7 @@ class SparkContext(config: SparkConf) extends Logging {
             // Since `new Path(path).toUri` will lose query information,
             // so here we use `URI.create(path)`
             DependencyUtils.resolveMavenDependencies(URI.create(path))
+              .map(e => env.rpcEnv.fileServer.addJar(new File(e)))
           case _ => checkRemoteJarFile(path)
         }
         (jarPaths, uriSchema)
