@@ -332,7 +332,13 @@ case class Invoke(
       val invokeMethod = if (method.isDefined) {
         method.get
       } else {
-        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+        // try to find an appropriate method among ancestors in case of error
+        try {
+          obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+        } catch {
+          case _: NoSuchMethodException =>
+            obj.getClass.getMethod(functionName, argClasses: _*)
+        }
       }
       invoke(obj, invokeMethod, arguments, input, dataType)
     }
