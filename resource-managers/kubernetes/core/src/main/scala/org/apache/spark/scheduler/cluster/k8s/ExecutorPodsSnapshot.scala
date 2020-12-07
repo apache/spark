@@ -16,6 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.util.Locale
+
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -60,6 +62,8 @@ object ExecutorPodsSnapshot extends Logging {
           PodRunning(pod)
         case "failed" =>
           PodFailed(pod)
+        case "terminating" =>
+          PodTerminating(pod)
         case "succeeded" =>
           PodSucceeded(pod)
         case _ =>
@@ -70,5 +74,12 @@ object ExecutorPodsSnapshot extends Logging {
     }
   }
 
-  private def isDeleted(pod: Pod): Boolean = pod.getMetadata.getDeletionTimestamp != null
+  private def isDeleted(pod: Pod): Boolean = {
+    (pod.getMetadata.getDeletionTimestamp != null &&
+      (
+        pod.getStatus == null ||
+        pod.getStatus.getPhase == null ||
+        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+      ))
+  }
 }
