@@ -704,31 +704,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("restrict the nested level of a view") {
-    val viewNames = Array.range(0, 11).map(idx => s"view$idx")
-    withView(viewNames: _*) {
-      sql("CREATE VIEW view0 AS SELECT * FROM jt")
-      Array.range(0, 10).foreach { idx =>
-        sql(s"CREATE VIEW view${idx + 1} AS SELECT * FROM view$idx")
-      }
-
-      withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
-        val e = intercept[AnalysisException] {
-          sql("SELECT * FROM view10")
-        }.getMessage
-        assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
-          "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
-          s"of ${MAX_NESTED_VIEW_DEPTH.key} to work around this."))
-      }
-
-      val e = intercept[IllegalArgumentException] {
-        withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "0") {}
-      }.getMessage
-      assert(e.contains("The maximum depth of a view reference in a nested view must be " +
-        "positive."))
-    }
-  }
-
   test("permanent view should be case-preserving") {
     withView("v") {
       sql("CREATE VIEW v AS SELECT 1 as aBc")

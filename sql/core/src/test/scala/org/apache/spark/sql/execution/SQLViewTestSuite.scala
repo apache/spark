@@ -121,7 +121,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change current database should not change view behavior") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT * from t")
+      val viewName = createView("v1", "SELECT * FROM t")
       withView(viewName) {
         withTempDatabase { db =>
           sql(s"USE $db")
@@ -135,7 +135,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("view should read the new data if table is updated") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT c1 from t", Seq("c1"))
+      val viewName = createView("v1", "SELECT c1 FROM t", Seq("c1"))
       withView(viewName) {
         Seq(9, 7, 8).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
         checkViewOutput(viewName, Seq(Row(9), Row(7), Row(8)))
@@ -146,7 +146,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("add column for table should not affect view output") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT * from t")
+      val viewName = createView("v1", "SELECT * FROM t")
       withView(viewName) {
         sql("ALTER TABLE t ADD COLUMN (c2 INT)")
         checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
@@ -157,8 +157,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("check cyclic view reference on CREATE OR REPLACE VIEW") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName1 = createView("v1", "SELECT * from t")
-      val viewName2 = createView("v2", s"SELECT * from $viewName1")
+      val viewName1 = createView("v1", "SELECT * FROM t")
+      val viewName2 = createView("v2", s"SELECT * FROM $viewName1")
       withView(viewName2, viewName1) {
         val e = intercept[AnalysisException] {
           createView("v1", s"SELECT * FROM $viewName2", replace = true)
@@ -171,13 +171,31 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("check cyclic view reference on ALTER VIEW") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName1 = createView("v1", "SELECT * from t")
-      val viewName2 = createView("v2", s"SELECT * from $viewName1")
+      val viewName1 = createView("v1", "SELECT * FROM t")
+      val viewName2 = createView("v2", s"SELECT * FROM $viewName1")
       withView(viewName2, viewName1) {
         val e = intercept[AnalysisException] {
           sql(s"ALTER VIEW $viewName1 AS SELECT * FROM $viewName2")
         }.getMessage
         assert(e.contains("Recursive view"))
+      }
+    }
+  }
+
+  test("restrict the nested level of a view") {
+    val viewNames = scala.collection.mutable.ArrayBuffer.empty[String]
+    val view0 = createView("view0", "SELECT 1")
+    viewNames += view0
+    for (i <- 1 to 10) {
+      viewNames += createView(s"view$i", s"SELECT * FROM ${viewNames.last}")
+    }
+    withView(viewNames.reverse.toSeq: _*) {
+      withSQLConf(MAX_NESTED_VIEW_DEPTH.key -> "10") {
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT * FROM ${viewNames.last}")
+        }.getMessage
+        assert(e.contains("exceeds the maximum view resolution depth (10)"))
+        assert(e.contains(s"Increase the value of ${MAX_NESTED_VIEW_DEPTH.key}"))
       }
     }
   }

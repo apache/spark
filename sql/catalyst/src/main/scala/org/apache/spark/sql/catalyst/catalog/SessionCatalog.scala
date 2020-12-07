@@ -318,6 +318,11 @@ class SessionCatalog(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean,
       validateLocation: Boolean = true): Unit = {
+    val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
+    if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
+      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+    }
+
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
