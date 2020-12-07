@@ -941,8 +941,7 @@ object SQLConf {
     buildConf("spark.sql.thriftServer.forceCancel")
       .doc("When true, all the job of query will be cancelled and running tasks will be" +
         "interrupted. When false, all the job of query will be cancelled but running task" +
-        "will be remained until finished. Note that, this config must be set before query" +
-        "otherwise it doesn't help.")
+        "will be remained until finished.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
