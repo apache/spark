@@ -100,10 +100,10 @@ private[spark] object Config extends Logging {
       .createWithDefault(Nil)
 
   val CONFIG_MAP_MAXSIZE =
-    ConfigBuilder("spark.kubernetes.configMap.maxsize")
+    ConfigBuilder("spark.kubernetes.configMap.maxSize")
       .doc("Max size limit for a config map. This is configurable as per" +
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
-      .version("3.1.0")
+      .version("3.2.0")
       .longConf
       .createWithDefault(1573000) // 1.5 MiB
 

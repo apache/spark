@@ -74,14 +74,12 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
     val binaryContent: Array[Byte] = (1 to 10000).map(_.toByte).toArray
     val someValidFiles = Seq("config.xml", "log4j.properties", "utf8.txt")
     try {
-
       filesToGenerateBinary.foreach(f =>
         Files.write(new File(s"$sparkConfDirPath/$f").toPath, binaryContent))
 
       someValidFiles.foreach(f =>
         Files.write(new File(s"$sparkConfDirPath/$f").toPath, content.getBytes))
 
-      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
       val expectedLogMessages =
         Seq(s"Spark configuration files loaded from Some(/opt/spark/conf)") ++ someValidFiles
       runSparkApplicationAndVerifyCompletion(

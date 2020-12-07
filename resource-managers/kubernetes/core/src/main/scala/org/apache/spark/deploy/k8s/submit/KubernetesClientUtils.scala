@@ -56,7 +56,8 @@ private[spark] object KubernetesClientUtils extends Logging {
 
   object StringLengthOrdering extends Ordering[(String, String)] {
     override def compare(x: (String, String), y: (String, String)): Int = {
-      // compare based on file length and break the tie with string comparison of keys.
+      // compare based on file length and break the tie with string comparison of keys
+      // (i.e. file names).
       (x._1.length + x._2.length).compare(y._1.length + y._2.length) * 10 +
         x._1.compareTo(y._1)
     }
@@ -66,12 +67,12 @@ private[spark] object KubernetesClientUtils extends Logging {
     // First order the entries in order of their size.
     // Skip entries if the resulting Map size exceeds maxSize.
     val ordering: Ordering[(String, String)] = StringLengthOrdering
-    val sortedSet = SortedSet[(String, String)](seq : _*)(ordering)
+    val sortedSet = SortedSet[(String, String)](seq: _*)(ordering)
     var i: Int = 0
     val map = mutable.HashMap[String, String]()
     for (item <- sortedSet) {
       i += item._1.length + item._2.length
-      if ( i < maxSize) {
+      if (i < maxSize) {
         map.put(item._1, item._2)
       }
     }
@@ -129,13 +130,15 @@ private[spark] object KubernetesClientUtils extends Logging {
           mapping
         } catch {
           case e: MalformedInputException =>
-            logWarning(s"skipped a non UTF-8 encoded file ${file.getAbsolutePath}.", e)
+            logWarning(s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}.", e)
             None
         }
       }
       val truncatedMap = truncateToSize(filesSeq.flatten, conf.get(Config.CONFIG_MAP_MAXSIZE))
-      logInfo(s"Spark configuration files loaded from $confDir :" +
-        s" ${truncatedMap.keys.mkString(",")}")
+      if (truncatedMap.nonEmpty) {
+        logInfo(s"Spark configuration files loaded from $confDir :" +
+          s" ${truncatedMap.keys.mkString(",")}")
+      }
       truncatedMap
     } else {
       Map.empty[String, String]
@@ -143,18 +146,18 @@ private[spark] object KubernetesClientUtils extends Logging {
   }
 
   private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
-    // At the moment configmaps does not support storing binary content.
+    // At the moment configmaps do not support storing binary content.
     // configMaps do not allow for size greater than 1.5 MiB(configurable).
     // https://etcd.io/docs/v3.4.0/dev-guide/limit/
     // We exclude all the template files and user provided spark conf or properties,
     // and binary files (e.g. jars and zip). Spark properties are resolved in a different step.
-    def test(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
+    def testIfTooLargeOrBinary(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
       f.getName.matches(".*\\.(gz|zip|jar|tar)") ||
       f.getName.matches(".*\\.template") ||
       f.getName.matches("spark.*(conf|properties)")
 
     val fileFilter = (f: File) => {
-      f.isFile && !test(f)
+      f.isFile && !testIfTooLargeOrBinary(f)
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
