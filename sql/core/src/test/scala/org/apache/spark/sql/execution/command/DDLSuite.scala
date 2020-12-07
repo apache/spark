@@ -3073,6 +3073,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-33670: show partitions from a datasource table") {
+    import testImplicits._
+    val t = "part_datasrc"
+    withTable(t) {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
+      assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
