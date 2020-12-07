@@ -943,7 +943,7 @@ object SQLConf {
         "interrupted. When false, all the job of query will be cancelled but running task" +
         "will be remained until finished. Note that, this config must be set before query" +
         "otherwise it doesn't help.")
-      .version("3.1.0")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
 
