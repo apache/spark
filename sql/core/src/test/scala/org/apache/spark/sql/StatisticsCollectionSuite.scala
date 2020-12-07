@@ -671,4 +671,24 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
   }
+
+  test("analyze all tables in a specific database") {
+    withTempDir { dir =>
+      withTable("t1", "t2") {
+        spark.range(10).write.saveAsTable("t1")
+        sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+          "AS SELECT * FROM range(20)")
+        withView("v1") {
+          sql(s"CREATE VIEW v1 AS SELECT * FROM t1")
+          sql(s"ANALYZE TABLES IN default COMPUTE STATISTICS NOSCAN")
+          checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
+          checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+
+          sql(s"ANALYZE TABLES COMPUTE STATISTICS")
+          checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
+          checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+        }
+      }
+    }
+  }
 }

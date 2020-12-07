@@ -3548,6 +3548,25 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create an [[AnalyzeTables]].
+   * Example SQL for analyzing all tables in default database:
+   * {{{
+   *   ANALYZE TABLES IN default COMPUTE STATISTICS;
+   * }}}
+   */
+  override def visitAnalyzeTables(ctx: AnalyzeTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifier != null &&
+      ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
+        ctx.identifier())
+    }
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    AnalyzeTables(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      noScan = ctx.identifier != null)
+  }
+
+  /**
    * Create a [[RepairTableStatement]].
    *
    * For example:
