@@ -26,6 +26,8 @@ case class PodRunning(pod: Pod) extends ExecutorPodState
 
 case class PodPending(pod: Pod) extends ExecutorPodState
 
+case class PodTerminating(pod: Pod) extends ExecutorPodState
+
 sealed trait FinalPodState extends ExecutorPodState
 
 case class PodSucceeded(pod: Pod) extends FinalPodState
