@@ -230,11 +230,7 @@ object QueryCompilationErrors {
       "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
   }
 
-  def starInExplodeOrJsonTupleOrUDTFInvalidError(): Throwable = {
-    new AnalysisException("Invalid usage of '*' in explode/json_tuple/UDTF")
-  }
-
-  def starInExpressionInvalidError(prettyName: String): Throwable = {
+  def invalidStarUsageError(prettyName: String): Throwable = {
     new AnalysisException(s"Invalid usage of '*' in expression '$prettyName'")
   }
 
@@ -296,12 +292,8 @@ object QueryCompilationErrors {
       s"Please file a bug report with this error message, stack trace, and the query.")
   }
 
-  def windowFunctionsNotAllowedInsideWhereClauseError(): Throwable = {
-    new AnalysisException("It is not allowed to use window functions inside WHERE clause")
-  }
-
-  def windowFunctionsNotAllowedInsideHavingClauseError(): Throwable = {
-    new AnalysisException("It is not allowed to use window functions inside HAVING clause")
+  def windowFunctionNotAllowedError(): Throwable = {
+    new AnalysisException("It is not allowed to use window functions inside WHERE/HAVING clause")
   }
 
   def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {

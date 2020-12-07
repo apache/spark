@@ -50,10 +50,6 @@ trait CheckAnalysis extends PredicateHelper {
     throw new AnalysisException(msg)
   }
 
-  protected def failAnalysis(error: Throwable): Nothing = {
-    throw error
-  }
-
   protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
     exprs.flatMap(_.collect {
       case e: Generator => e
