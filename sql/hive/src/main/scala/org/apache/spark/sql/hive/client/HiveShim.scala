@@ -1300,11 +1300,12 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = {
+      predicates: Seq[Expression],
+      timeZoneId: String): Seq[Partition] = {
 
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
-    val filter = convertFilters(table, predicates)
+    val filter = convertFilters(table, predicates, timeZoneId)
 
     val limit = SQLConf.get.metastorePartitionLimit
     if (limit > -1) {
