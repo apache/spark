@@ -549,6 +549,12 @@ object LikeSimplification extends Rule[LogicalPlan] {
         Literal(null, BooleanType)
       } else {
         pattern.toString match {
+          // There are three different situations when pattern containing escapeChar:
+          // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
+          // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
+          // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
+          // Although there are patterns can be optimized if we handle the escape first, we just
+          // skip this rule if pattern contains any escapeChar for simplicity.
           case p if p.contains(escapeChar) => l
           case startsWith(prefix) =>
             StartsWith(input, Literal(prefix))
