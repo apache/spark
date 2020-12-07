@@ -1107,6 +1107,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("SPARK-32330: Preserve shuffled hash join build side partitioning") {
     withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
@@ -1130,6 +1131,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
     // Test broadcast hash join
     withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50") {
       Seq("inner", "left_outer").foreach(joinType => {
         val plan = df1.join(df2, $"k1" === $"k2", joinType)
@@ -1253,6 +1255,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       withSQLConf(
         // Set broadcast join threshold and number of shuffle partitions,
         // as shuffled hash join depends on these two configs.
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val smjDF = df1.join(df2, joinExprs, "full")
@@ -1284,7 +1287,9 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     )
     inputDFs.foreach { case (df1, df2, joinType) =>
       // Test broadcast hash join
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val bhjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
         assert(bhjCodegenDF.queryExecution.executedPlan.collect {
           case WholeStageCodegenExec(_ : BroadcastHashJoinExec) => true

@@ -27,6 +27,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class Person(id: Int, name: String, age: Int)
@@ -48,6 +49,7 @@ class SqlResourceWithActualMetricsSuite extends SharedSparkSession with SQLMetri
 
   override def sparkConf: SparkConf = {
     super.sparkConf.set("spark.ui.enabled", "true")
+    super.sparkConf.set(ADAPTIVE_EXECUTION_ENABLED.key, "false")
   }
 
   test("Check Sql Rest Api Endpoints") {
