@@ -29,7 +29,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.util.{Random, Try}
+import scala.util.Try
 
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -1207,7 +1207,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   protected def extraConf: Seq[String] = Nil
 
-  protected def serverStartCommand(port: Int) = {
+  protected def serverStartCommand(): Seq[String] = {
     val portConf = if (mode == ServerMode.binary) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {
@@ -1240,7 +1240,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
        |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
-       |  --hiveconf $portConf=$port
+       |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
        |  --conf spark.ui.enabled=false
@@ -1262,7 +1262,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
-  private def startThriftServer(port: Int, attempt: Int) = {
+  private def startThriftServer(attempt: Int) = {
     warehousePath = Utils.createTempDir()
     warehousePath.delete()
     metastorePath = Utils.createTempDir()
@@ -1274,17 +1274,15 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     logPath = null
     logTailingProcess = null
 
-    val command = serverStartCommand(port)
+    val command = serverStartCommand()
 
     diagnosisBuffer ++=
       s"""
          |### Attempt $attempt ###
          |HiveThriftServer2 command line: $command
-         |Listening port: $port
+         |Listening port: 0
          |System user: $user
        """.stripMargin.split("\n")
-
-    logInfo(s"Trying to start HiveThriftServer2: port=$port, mode=$mode, attempt=$attempt")
 
     logPath = {
       val lines = Utils.executeAndGetOutput(
@@ -1312,7 +1310,11 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     // Ensures that the following "tail" command won't fail.
     logPath.createNewFile()
-    val successLines = Seq(THRIFT_BINARY_SERVICE_LIVE, THRIFT_HTTP_SERVICE_LIVE)
+    val successLines = if (mode == ServerMode.http) {
+      THRIFT_HTTP_SERVICE_LIVE
+    } else {
+      THRIFT_BINARY_SERVICE_LIVE
+    }
 
     logTailingProcess = {
       val command = s"/usr/bin/env tail -n +0 -f ${logPath.getCanonicalPath}".split(" ")
@@ -1321,14 +1323,15 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val captureOutput = (line: String) => diagnosisBuffer.synchronized {
         diagnosisBuffer += line
 
-        successLines.foreach { r =>
-          if (line.contains(r)) {
-            serverStarted.trySuccess(())
-          }
+        if (line.contains(successLines)) {
+          listeningPort = line.split(" on port ")(1).split(' ').head.toInt
+          logInfo(s"Started HiveThriftServer2: port=$listeningPort, mode=$mode, attempt=$attempt")
+          serverStarted.trySuccess(())
+          ()
         }
       }
 
-        val process = builder.start()
+      val process = builder.start()
 
       new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
       new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()
@@ -1379,16 +1382,14 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    // Chooses a random port between 10000 and 19999
-    listeningPort = 10000 + Random.nextInt(10000)
     diagnosisBuffer.clear()
 
     // Retries up to 3 times with different port numbers if the server fails to start
-    (1 to 3).foldLeft(Try(startThriftServer(listeningPort, 0))) { case (started, attempt) =>
+    (1 to 3).foldLeft(Try(startThriftServer(0))) { case (started, attempt) =>
       started.orElse {
         listeningPort += 1
         stopThriftServer()
-        Try(startThriftServer(listeningPort, attempt))
+        Try(startThriftServer(attempt))
       }
     }.recover {
       case cause: Throwable =>
