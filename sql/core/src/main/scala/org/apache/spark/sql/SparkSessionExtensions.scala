@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
+ * <li>Data Source Rewrite Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -202,7 +203,7 @@ class SparkSessionExtensions {
   private[this] val dataSourceRewriteRules = mutable.Buffer.empty[RuleBuilder]
 
   private[sql] def buildDataSourceRewriteRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    dataSourceRewriteRules.map(_.apply(session))
+    dataSourceRewriteRules.map(_.apply(session)).toSeq
   }
 
   /**
