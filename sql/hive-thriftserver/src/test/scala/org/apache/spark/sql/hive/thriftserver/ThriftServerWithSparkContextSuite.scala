@@ -103,19 +103,14 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       spark.sparkContext.addSparkListener(listener)
       try {
         statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
-        statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=false")
-        forceCancel.set(false)
-        val e1 = intercept[SQLException] {
-          statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
-        }.getMessage
-        assert(e1.contains("Query timed out"))
-
-        statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=true")
-        forceCancel.set(true)
-        val e2 = intercept[SQLException] {
-          statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
-        }.getMessage
-        assert(e2.contains("Query timed out"))
+        Seq(true, false).foreach { force =>
+          statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=$force")
+          forceCancel.set(force)
+          val e1 = intercept[SQLException] {
+            statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+          }.getMessage
+          assert(e1.contains("Query timed out"))
+        }
       } finally {
         spark.sparkContext.removeSparkListener(listener)
       }
