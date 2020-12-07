@@ -111,6 +111,7 @@ else
     verify_db_connection "${AIRFLOW__CORE__SQL_ALCHEMY_CONN}"
 fi
 
+
 # The Bash and python commands still should verify the basic connections so they are run after the
 # DB check but before the broker check
 if [[ ${AIRFLOW_COMMAND} == "bash" ]]; then
@@ -125,7 +126,7 @@ elif [[ ${AIRFLOW_COMMAND} == "airflow" ]]; then
 fi
 
 # Note: the broker backend configuration concerns only a subset of Airflow components
-if [[ ${AIRFLOW_COMMAND} =~ ^(scheduler|worker|flower)$ ]]; then
+if [[ ${AIRFLOW_COMMAND} =~ ^(scheduler|celery|worker|flower)$ ]]; then
     if [[ -n "${AIRFLOW__CELERY__BROKER_URL_CMD=}" ]]; then
         verify_db_connection "$(eval "$AIRFLOW__CELERY__BROKER_URL_CMD")"
     else
@@ -136,6 +137,4 @@ if [[ ${AIRFLOW_COMMAND} =~ ^(scheduler|worker|flower)$ ]]; then
     fi
 fi
 
-
-# Run the command
-exec airflow "${@}"
+exec "airflow" "${@}"
