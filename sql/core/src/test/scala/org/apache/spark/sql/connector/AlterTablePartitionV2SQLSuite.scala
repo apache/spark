@@ -261,4 +261,24 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-33676: not fully specified partition spec") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, part0 int, part1 string)
+        |USING foo
+        |PARTITIONED BY (part0, part1)""".stripMargin)
+      Seq(
+        s"ALTER TABLE $t ADD PARTITION (part0 = 1)",
+        s"ALTER TABLE $t DROP PARTITION (part0 = 1)"
+      ).foreach { alterTable =>
+        val errMsg = intercept[AnalysisException] {
+          sql(alterTable)
+        }.getMessage
+        assert(errMsg.contains("Partition spec is invalid. " +
+          "The spec (part0) must match the partition spec (part0, part1)"))
+      }
+    }
+  }
 }
