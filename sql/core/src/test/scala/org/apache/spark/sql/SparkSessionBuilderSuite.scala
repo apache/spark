@@ -382,11 +382,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(spark2.conf.get(custom) === "c1")
     spark2.sql("RESET")
     assert(spark2.conf.get(wh) === "./data0",
-      "The warehouse dir should be respect after RESET to global")
+      "The warehouse dir in shared state should be respect after RESET")
     assert(spark2.conf.get(td) === "bob",
       "Static sql configs in shared state should be respect after RESET")
     assert(spark2.conf.get(custom) === "c2",
-      "Dynamic sql configs in shared state should be respect after RESET")
+      "Dynamic sql configs in session initial configs should be respect after RESET")
 
   }
 }
