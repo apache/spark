@@ -3005,7 +3005,9 @@ object SQLConf {
         s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
       DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
-          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
+      DeprecatedConfig(CONVERT_CTAS.key, "3.1",
+        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
