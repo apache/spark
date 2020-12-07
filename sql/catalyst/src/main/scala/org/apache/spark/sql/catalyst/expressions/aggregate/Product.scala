@@ -69,21 +69,19 @@ case class Product(child: Expression, scale: Double = 1.0)
     // (1.0 by default) so that the client has some control over overflow
     // when multiplying together many child values, without needing
     // to explicitly rescale a Column beforehand.
-    scale match {
-      case 1.0 =>
-        if (child.nullable) {
-          Seq(coalesce(coalesce(product, one) * child.cast(resultType),
-                       product))
-        } else {
-          Seq(coalesce(product, one) * child.cast(resultType))
-        }
-      case _ =>
-        if (child.nullable) {
-          Seq(coalesce(coalesce(product, one) * scale * child.cast(resultType),
-                       product))
-        } else {
-          Seq(coalesce(product, one) * scale * child.cast(resultType))
-        }
+
+    val castChild = child.cast(resultType)
+
+    val protoResult =
+      coalesce(product, one) * (scale match {
+                                        case 1.0 =>   castChild
+                                        case -1.0 =>  -castChild
+                                        case _ =>     castChild * scale })
+
+    if (child.nullable) {
+      Seq(coalesce(protoResult, product))
+    } else {
+      Seq(protoResult)
     }
   }
 
