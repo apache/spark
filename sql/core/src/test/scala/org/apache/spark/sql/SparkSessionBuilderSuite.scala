@@ -22,8 +22,9 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -36,6 +37,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     SparkSession.clearActiveSession()
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearDefaultSession()
+    SharedState.GLOBAL_SHARED_STATE.set(null)
   }
 
   test("create with config options and propagate them to SparkContext and SparkSession") {
@@ -334,5 +336,57 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(spark2.conf.get(wh) === sharedWH)
     assert(spark2.conf.get(td) === sharedTD)
     assert(spark2.conf.get(custom) === sharedCustom)
+  }
+
+  test("SPARK-32991: RESET should work properly with multi threads") {
+    val wh = "spark.sql.warehouse.dir"
+    val td = "spark.sql.globalTempDatabase"
+    val custom = "spark.sql.custom"
+    val spark = ThreadUtils.runInNewThread("new session 0", false) {
+      SparkSession.builder()
+        .master("local")
+        .config(wh, "./data0")
+        .config(td, "bob")
+        .config(custom, "c0")
+        .getOrCreate()
+    }
+
+    spark.sql(s"SET $custom=c1")
+    assert(spark.conf.get(custom) === "c1")
+    spark.sql("RESET")
+    assert(spark.conf.get(wh) === "./data0",
+      "The warehouse dir in shared state should be respect after RESET")
+    assert(spark.conf.get(td) === "bob",
+      "Static sql configs in shared state should be respect after RESET")
+    assert(spark.conf.get(custom) === "c0",
+      "Dynamic sql configs in shared state should be respect after RESET")
+
+    val spark1 = ThreadUtils.runInNewThread("new session 1", false) {
+      SparkSession.builder().getOrCreate()
+    }
+
+    assert(spark === spark1)
+
+    SparkSession.clearDefaultSession()
+    val spark2 = ThreadUtils.runInNewThread("new session 2", false) {
+      SparkSession.builder()
+        .master("local")
+        .config(wh, "./data1")
+        .config(td, "alice")
+        .config(custom, "c2")
+        .getOrCreate()
+    }
+
+    assert(spark2 !== spark)
+    spark2.sql(s"SET $custom=c1")
+    assert(spark2.conf.get(custom) === "c1")
+    spark2.sql("RESET")
+    assert(spark2.conf.get(wh) === "./data0",
+      "The warehouse dir should be respect after RESET to global")
+    assert(spark2.conf.get(td) === "bob",
+      "Static sql configs in shared state should be respect after RESET")
+    assert(spark2.conf.get(custom) === "c2",
+      "Dynamic sql configs in shared state should be respect after RESET")
+
   }
 }

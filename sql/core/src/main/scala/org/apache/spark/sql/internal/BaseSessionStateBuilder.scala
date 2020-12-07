@@ -97,9 +97,9 @@ abstract class BaseSessionStateBuilder(
       cloned
     }.getOrElse {
       val conf = new SQLConf
-      mergeSparkConf(conf, session.sparkContext.conf)
-      options.foreach {
-        case (k, v) => conf.setConfString(k, v)
+      mergeSparkConf(conf, session.sharedState.conf)
+      for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
+        conf.setConfString(k, v)
       }
       conf
     }
