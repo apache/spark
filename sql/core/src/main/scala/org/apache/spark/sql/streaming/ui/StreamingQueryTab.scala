@@ -17,11 +17,10 @@
 package org.apache.spark.sql.streaming.ui
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.ui.StreamingQueryStatusStore
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[sql] class StreamingQueryTab(
-    val store: StreamingQueryStatusStore,
+    val statusListener: StreamingQueryStatusListener,
     sparkUI: SparkUI) extends SparkUITab(sparkUI, "StreamingQuery") with Logging {
 
   override val name = "Structured Streaming"
