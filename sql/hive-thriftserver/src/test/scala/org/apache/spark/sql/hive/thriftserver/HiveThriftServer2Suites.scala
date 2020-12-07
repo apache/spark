@@ -41,6 +41,7 @@ import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
@@ -60,7 +61,7 @@ object TestData {
   val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
 }
 
-class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
+class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
@@ -935,7 +936,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 }
 
-class SingleSessionSuite extends HiveThriftJdbcTest {
+class SingleSessionSuite extends HiveThriftServer2Test {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
@@ -1046,7 +1047,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   }
 }
 
-class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
+class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test{
   var tempScratchDir: File = _
 
   override protected def beforeAll(): Unit = {
@@ -1079,7 +1080,7 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftJdbcTest{
   }
 }
 
-class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
+class HiveThriftHttpServerSuite extends HiveThriftServer2Test {
   override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
@@ -1120,62 +1121,6 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 
 object ServerMode extends Enumeration {
   val binary, http = Value
-}
-
-abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
-  Utils.classForName(classOf[HiveDriver].getCanonicalName)
-
-  private def jdbcUri = if (mode == ServerMode.http) {
-    s"""jdbc:hive2://localhost:$serverPort/
-       |default?
-       |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice;
-       |${hiveConfList}#${hiveVarList}
-     """.stripMargin.split("\n").mkString.trim
-  } else {
-    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
-  }
-
-  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      tableNames.foreach { name =>
-        // TODO: Need a better way to drop the view.
-        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
-          statements(0).execute(s"DROP VIEW IF EXISTS $name")
-        } else {
-          statements(0).execute(s"DROP TABLE IF EXISTS $name")
-        }
-      }
-      statements.foreach(_.close())
-      connections.foreach(_.close())
-    }
-  }
-
-  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
-    val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      dbNames.foreach { name =>
-        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
-      }
-      statements.foreach(_.close())
-      connections.foreach(_.close())
-    }
-  }
-
-  def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
-    withMultipleConnectionJdbcStatement(tableNames: _*)(f)
-  }
 }
 
 abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
@@ -1220,7 +1165,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=DEBUG, console
+        """log4j.rootCategory=INFO, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
@@ -1242,7 +1187,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
-       |  --driver-java-options -Dlog4j.debug
+       |  --driver-java-options -Dlog4j.info
        |  --conf spark.ui.enabled=false
        |  ${extraConf.mkString("\n")}
      """.stripMargin.split("\\s+").toSeq
@@ -1387,9 +1332,13 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     // Retries up to 3 times with different port numbers if the server fails to start
     (1 to 3).foldLeft(Try(startThriftServer(0))) { case (started, attempt) =>
       started.orElse {
-        listeningPort += 1
         stopThriftServer()
-        Try(startThriftServer(attempt))
+        Try {
+          startThriftServer(attempt)
+          eventually(timeout(30.seconds), interval(1.seconds)) {
+            withJdbcStatement() { _.execute("SELECT 1") }
+          }
+        }
       }
     }.recover {
       case cause: Throwable =>
@@ -1403,10 +1352,65 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   override protected def afterAll(): Unit = {
     try {
+      dumpLogs()
       stopThriftServer()
       logInfo("HiveThriftServer2 stopped")
     } finally {
       super.afterAll()
     }
+  }
+
+  Utils.classForName(classOf[HiveDriver].getCanonicalName)
+
+  private def jdbcUri = if (mode == ServerMode.http) {
+    s"""jdbc:hive2://localhost:$serverPort/
+       |default?
+       |hive.server2.transport.mode=http;
+       |hive.server2.thrift.http.path=cliservice;
+       |${hiveConfList}#${hiveVarList}
+     """.stripMargin.split("\n").mkString.trim
+  } else {
+    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
+  }
+
+  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      tableNames.foreach { name =>
+        // TODO: Need a better way to drop the view.
+        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
+          statements(0).execute(s"DROP VIEW IF EXISTS $name")
+        } else {
+          statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        }
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
+    val user = System.getProperty("user.name")
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val statements = connections.map(_.createStatement())
+
+    try {
+      statements.zip(fs).foreach { case (s, f) => f(s) }
+    } finally {
+      dbNames.foreach { name =>
+        statements(0).execute(s"DROP DATABASE IF EXISTS $name")
+      }
+      statements.foreach(_.close())
+      connections.foreach(_.close())
+    }
+  }
+
+  def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
+    withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }
 }
