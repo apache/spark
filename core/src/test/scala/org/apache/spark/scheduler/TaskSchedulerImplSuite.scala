@@ -1919,7 +1919,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(manager.copiesRunning.take(2) === Array(1, 1))
   }
 
-  test("test delay scheduling for barrier TaskSetManager") {
+  test("SPARK-24818: test delay scheduling for barrier TaskSetManager") {
     val clock = new ManualClock()
     val sched = setupTaskSchedulerForLocalityTests(clock)
 
@@ -1946,7 +1946,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(tsm.taskInfos(tasks.head.taskId).taskLocality === TaskLocality.NODE_LOCAL)
   }
 
-  test("test resource revert of barrier TaskSetManager") {
+  test("SPARK-24818: test resource revert of barrier TaskSetManager") {
     val clock = new ManualClock()
     val sched = setupTaskSchedulerForLocalityTests(clock)
 
