@@ -51,8 +51,7 @@ case class LocalTableScanExec(
     } else {
       val numSlices = math.min(
         unsafeRows.length,
-        conf.filesMinPartitionNum.orElse(sqlContext.conf.defaultParallelism)
-          .getOrElse(sqlContext.sparkContext.defaultParallelism))
+        conf.defaultParallelism.getOrElse(sqlContext.sparkContext.defaultParallelism))
       sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
     }
   }
