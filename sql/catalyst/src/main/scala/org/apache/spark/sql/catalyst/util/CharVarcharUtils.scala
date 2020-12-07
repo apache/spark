@@ -183,9 +183,9 @@ object CharVarcharUtils extends Logging {
 
   private def raiseError(expr: Expression, typeName: String, length: Int): Expression = {
     val errorMsg = Concat(Seq(
-      Literal("input string '"),
-      expr,
-      Literal(s"' exceeds $typeName type length limitation: $length")))
+      Literal("input string of length "),
+      Cast(Length(expr), StringType),
+      Literal(s" exceeds $typeName type length limitation: $length")))
     Cast(RaiseError(errorMsg), StringType)
   }
 
