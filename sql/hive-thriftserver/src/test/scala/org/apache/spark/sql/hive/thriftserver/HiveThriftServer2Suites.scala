@@ -1397,6 +1397,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         throw cause
     }.get
 
+    dumpLogs()
     logInfo(s"HiveThriftServer2 started successfully")
   }
 
