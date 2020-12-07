@@ -90,14 +90,12 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val forceCancel = new AtomicBoolean(false)
       val listener = new SparkListener {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-          taskEnd.reason match {
-            case _: TaskKilled =>
-              if (forceCancel.get()) {
-                assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
-              } else {
-                assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
-              }
-            case _ =>
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          if (forceCancel.get()) {
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          } else {
+            // avoid accuracy, we check 2s instead of 3s.
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
           }
         }
       }
