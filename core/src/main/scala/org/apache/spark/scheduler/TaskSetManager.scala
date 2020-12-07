@@ -157,6 +157,11 @@ private[spark] class TaskSetManager(
   // same time for a barrier stage.
   private[scheduler] def isBarrier = taskSet.tasks.nonEmpty && taskSet.tasks(0).isBarrier
 
+  // Barrier tasks that are pending to launch in a single resourceOffers round. Tasks will only get
+  // launched when all tasks are added to this pending list in a single round. Otherwise, we'll
+  // revert everything we did during task scheduling.
+  private[scheduler] val barrierPendingLaunchTasks = new HashMap[Int, BarrierPendingLaunchTask]()
+
   // Store tasks waiting to be scheduled by locality preferences
   private[scheduler] val pendingTasks = new PendingTasksByLocality()
 
@@ -302,7 +307,7 @@ private[spark] class TaskSetManager(
         // Speculatable task should only be launched when at most one copy of the
         // original task is running
         if (!successful(index)) {
-          if (copiesRunning(index) == 0) {
+          if (copiesRunning(index) == 0 && !barrierPendingLaunchTasks.contains(index)) {
             return Some(index)
           } else if (speculative && copiesRunning(index) == 1) {
             return Some(index)
@@ -411,8 +416,10 @@ private[spark] class TaskSetManager(
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
    *
-   * @return Tuple containing:
-   *         (TaskDescription of launched task if any, rejected resource due to delay scheduling?)
+   * @return Triple containing:
+   *         (TaskDescription of launched task if any,
+   *         rejected resource due to delay scheduling?,
+   *         dequeued task index)
    */
   @throws[TaskNotSerializableException]
   def resourceOffer(
@@ -420,7 +427,7 @@ private[spark] class TaskSetManager(
       host: String,
       maxLocality: TaskLocality.TaskLocality,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
-    : (Option[TaskDescription], Boolean) =
+    : (Option[TaskDescription], Boolean, Int) =
   {
     val offerExcluded = taskSetExcludelistHelperOpt.exists { excludeList =>
       excludeList.isNodeExcludedForTaskSet(host) ||
@@ -439,75 +446,107 @@ private[spark] class TaskSetManager(
         }
       }
 
+      var dequeuedTaskIndex: Option[Int] = None
       val taskDescription =
         dequeueTask(execId, host, allowedLocality)
           .map { case (index, taskLocality, speculative) =>
-        // Found a task; do some bookkeeping and return a task description
-        val task = tasks(index)
-        val taskId = sched.newTaskId()
-        // Do various bookkeeping
-        copiesRunning(index) += 1
-        val attemptNum = taskAttempts(index).size
-        val info = new TaskInfo(taskId, index, attemptNum, curTime,
-          execId, host, taskLocality, speculative)
-        taskInfos(taskId) = info
-        taskAttempts(index) = info :: taskAttempts(index)
-        if (legacyLocalityWaitReset && maxLocality != TaskLocality.NO_PREF) {
-          resetDelayScheduleTimer(Some(taskLocality))
-        }
-        // Serialize and return the task
-        val serializedTask: ByteBuffer = try {
-          ser.serialize(task)
-        } catch {
-          // If the task cannot be serialized, then there's no point to re-attempt the task,
-          // as it will always fail. So just abort the whole task-set.
-          case NonFatal(e) =>
-            val msg = s"Failed to serialize task $taskId, not attempting to retry it."
-            logError(msg, e)
-            abort(s"$msg Exception during serialization: $e")
-            throw new TaskNotSerializableException(e)
-        }
-        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
-          !emittedTaskSizeWarning) {
-          emittedTaskSizeWarning = true
-          logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
-            s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
-        }
-        addRunningTask(taskId)
-
-        // We used to log the time it takes to serialize the task, but task size is already
-        // a good proxy to task serialization time.
-        // val timeTaken = clock.getTime() - startTime
-        val tName = taskName(taskId)
-        logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
-          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
-          s"taskResourceAssignments ${taskResourceAssignments}")
-
-        sched.dagScheduler.taskStarted(task, info)
-        new TaskDescription(
-          taskId,
-          attemptNum,
-          execId,
-          tName,
-          index,
-          task.partitionId,
-          addedFiles,
-          addedJars,
-          addedArchives,
-          task.localProperties,
-          taskResourceAssignments,
-          serializedTask)
-      }
+            dequeuedTaskIndex = Some(index)
+            if (legacyLocalityWaitReset && maxLocality != TaskLocality.NO_PREF) {
+              resetDelayScheduleTimer(Some(taskLocality))
+            }
+            if (isBarrier) {
+              barrierPendingLaunchTasks(index) =
+                BarrierPendingLaunchTask(
+                  execId,
+                  host,
+                  index,
+                  taskLocality,
+                  taskResourceAssignments)
+              // return null since the TaskDescription for the barrier task is not ready yet
+              null
+            } else {
+              prepareLaunchingTask(
+                execId,
+                host,
+                index,
+                taskLocality,
+                speculative,
+                taskResourceAssignments,
+                curTime)
+            }
+          }
       val hasPendingTasks = pendingTasks.all.nonEmpty || pendingSpeculatableTasks.all.nonEmpty
       val hasScheduleDelayReject =
         taskDescription.isEmpty &&
           maxLocality == TaskLocality.ANY &&
           hasPendingTasks
-      (taskDescription, hasScheduleDelayReject)
+      (taskDescription, hasScheduleDelayReject, dequeuedTaskIndex.getOrElse(-1))
     } else {
-      (None, false)
+      (None, false, -1)
     }
+  }
+
+  def prepareLaunchingTask(
+      execId: String,
+      host: String,
+      index: Int,
+      taskLocality: TaskLocality.Value,
+      speculative: Boolean,
+      taskResourceAssignments: Map[String, ResourceInformation],
+      launchTime: Long): TaskDescription = {
+    // Found a task; do some bookkeeping and return a task description
+    val task = tasks(index)
+    val taskId = sched.newTaskId()
+    // Do various bookkeeping
+    copiesRunning(index) += 1
+    val attemptNum = taskAttempts(index).size
+    val info = new TaskInfo(taskId, index, attemptNum, launchTime,
+      execId, host, taskLocality, speculative)
+    taskInfos(taskId) = info
+    taskAttempts(index) = info :: taskAttempts(index)
+    // Serialize and return the task
+    val serializedTask: ByteBuffer = try {
+      ser.serialize(task)
+    } catch {
+      // If the task cannot be serialized, then there's no point to re-attempt the task,
+      // as it will always fail. So just abort the whole task-set.
+      case NonFatal(e) =>
+        val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+        logError(msg, e)
+        abort(s"$msg Exception during serialization: $e")
+        throw new TaskNotSerializableException(e)
+    }
+    if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
+      !emittedTaskSizeWarning) {
+      emittedTaskSizeWarning = true
+      logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+        s"(${serializedTask.limit() / 1024} KiB). The maximum recommended task size is " +
+        s"${TaskSetManager.TASK_SIZE_TO_WARN_KIB} KiB.")
+    }
+    addRunningTask(taskId)
+
+    // We used to log the time it takes to serialize the task, but task size is already
+    // a good proxy to task serialization time.
+    // val timeTaken = clock.getTime() - startTime
+    val tName = taskName(taskId)
+    logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
+      s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
+      s"taskResourceAssignments ${taskResourceAssignments}")
+
+    sched.dagScheduler.taskStarted(task, info)
+    new TaskDescription(
+      taskId,
+      attemptNum,
+      execId,
+      tName,
+      index,
+      task.partitionId,
+      addedFiles,
+      addedJars,
+      addedArchives,
+      task.localProperties,
+      taskResourceAssignments,
+      serializedTask)
   }
 
   def taskName(tid: Long): String = {
@@ -1191,4 +1230,17 @@ private[scheduler] class PendingTasksByLocality {
   val forRack = new HashMap[String, ArrayBuffer[Int]]
   // Set containing all pending tasks (also used as a stack, as above).
   val all = new ArrayBuffer[Int]
+}
+
+private[scheduler] case class BarrierPendingLaunchTask(
+    execId: String,
+    host: String,
+    index: Int,
+    taskLocality: TaskLocality.TaskLocality,
+    assignedResources: Map[String, ResourceInformation]) {
+  // Stored the corresponding index of the WorkerOffer which is responsible to launch the task.
+  // Used to revert the assigned resources (e.g., cores, custome resources) when the barrier
+  // task set doesn't launch successfully in a single resourceOffers round.
+  var assignedOfferIndex: Int = _
+  var assignedCores: Int = 0
 }
