@@ -2957,8 +2957,10 @@ object SQLConf {
   val LEGACY_CHAR_VARCHAR_AS_STRING =
     buildConf("spark.sql.legacy.charVarcharAsString")
       .internal()
-      .doc("When true, the parser will not fail to parse char and varchar type but treat it as" +
-        " string type")
+      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
+        " APIs that accept or parse data types as parameters, e.g." +
+        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
+        " string type as Spark 3.0 and earlier.")
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -60,7 +60,9 @@ object CharVarcharUtils extends Logging {
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
     if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw new AnalysisException("char/varchar type can only be used in the table schema")
+      throw new AnalysisException("char/varchar type can only be used in the table schema. " +
+        s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
+        s" treat them as string type as same as Spark 3.0 and earlier")
     } else {
       replaceCharVarcharWithString(dt)
     }
@@ -88,9 +90,13 @@ object CharVarcharUtils extends Logging {
    * warning message if it has char or varchar types
    */
   def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
-    if (hasCharVarchar(dt)) {
+    if (SQLConf.get.charVarcharAsString) {
+      replaceCharVarcharWithString(dt)
+    } else if (hasCharVarchar(dt)) {
       logWarning("The Spark cast operator does not support char/varchar type and simply treats" +
-        " them as string type. Please use string type directly to avoid confusion.")
+        " them as string type. Please use string type directly to avoid confusion. Otherwise," +
+        s" you can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark treat" +
+        s" them as string type as same as Spark 3.0 and earlier")
       replaceCharVarcharWithString(dt)
     } else {
       dt
