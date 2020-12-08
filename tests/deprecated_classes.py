@@ -1324,6 +1324,10 @@ OPERATORS = [
         "airflow.operators.latest_only.LatestOnlyOperator",
         "airflow.operators.latest_only_operator.LatestOnlyOperator",
     ),
+    (
+        "airflow.operators.subdag.SubDagOperator",
+        "airflow.operators.subdag_operator.SubDagOperator",
+    ),
 ]
 
 SECRETS = [
