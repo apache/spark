@@ -120,7 +120,7 @@ public class ExternalShuffleBlockResolver {
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
       .weigher(new Weigher<File, ShuffleIndexInformation>() {
         public int weigh(File file, ShuffleIndexInformation indexInfo) {
-          return indexInfo.getSize();
+          return file.getAbsolutePath().length() + indexInfo.getSize();
         }
       })
       .build(indexCacheLoader);
