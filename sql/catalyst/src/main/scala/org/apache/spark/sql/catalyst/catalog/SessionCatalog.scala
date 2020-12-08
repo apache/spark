@@ -1484,16 +1484,29 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
+
+    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
-    if (name.database.isEmpty && functionRegistry.functionExists(name)) {
+    if (!isResolvingView && name.database.isEmpty && functionRegistry.functionExists(name)) {
       // This function has been already loaded into the function registry.
       return functionRegistry.lookupFunction(name, children)
     }
 
+    val currentDatabase = if (isResolvingView) {
+      AnalysisContext.get.catalogAndNamespace match {
+        case Seq(_, db) => db
+        case other =>
+          throw new AnalysisException(
+            s"Unsupported catalog and namespace '$other' for function '$name'")
+      }
+    } else {
+      getCurrentDatabase
+    }
+
     // If the name itself is not qualified, add the current database to it.
-    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val database = formatDatabaseName(name.database.getOrElse(currentDatabase))
     val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName)) {
