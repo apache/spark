@@ -721,16 +721,18 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("drop view") {
+    val cmd = "DROP VIEW"
+    val hint = Some("Please use DROP TABLE instead.")
     parseCompare(s"DROP VIEW testcat.db.view",
-      DropView(UnresolvedView(Seq("testcat", "db", "view"), "DROP VIEW"), ifExists = false))
+      DropView(UnresolvedView(Seq("testcat", "db", "view"), cmd, hint), ifExists = false))
     parseCompare(s"DROP VIEW db.view",
-      DropView(UnresolvedView(Seq("db", "view"), "DROP VIEW"), ifExists = false))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS db.view",
-      DropView(UnresolvedView(Seq("db", "view"), "DROP VIEW"), ifExists = true))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = true))
     parseCompare(s"DROP VIEW view",
-      DropView(UnresolvedView(Seq("view"), "DROP VIEW"), ifExists = false))
+      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS view",
-      DropView(UnresolvedView(Seq("view"), "DROP VIEW"), ifExists = true))
+      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = true))
   }
 
   private def testCreateOrReplaceDdl(
