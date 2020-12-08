@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.SQLViewSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NullType, StructType}
 
 /**
@@ -72,9 +73,13 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           withTable("tab1") {
             (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
 
-            // temporary view
-            sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
-            checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
+            // TODO: temporary function support for temporary view with sql text stored will
+            // be fixed in another PR
+            withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
+              // temporary view
+              sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
+              checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
+            }
 
             // permanent view
             val e = intercept[AnalysisException] {

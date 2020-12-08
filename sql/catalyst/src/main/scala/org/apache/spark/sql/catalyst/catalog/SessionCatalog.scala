@@ -1484,26 +1484,28 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
-
-    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
-    if (name.database.isEmpty && functionRegistry.functionExists(name) &&
-      !(isResolvingView && isTemporaryFunction(name))) {
-      // This function has been already loaded into the function registry.
-      return functionRegistry.lookupFunction(name, children)
+    if (name.database.isEmpty && functionRegistry.functionExists(name)) {
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // We lookup function without database in two cases:
+      // 1. the function is not a temporary function
+      // 2. the function is a temporary function but we are not resolving view
+      if (!isTemporaryFunction(name) || !isResolvingView) {
+        // This function has been already loaded into the function registry.
+        return functionRegistry.lookupFunction(name, children)
+      }
     }
 
-    val currentDatabase = if (isResolvingView) {
-      AnalysisContext.get.catalogAndNamespace match {
-        case Seq(_, db) => db
-        case other =>
-          throw new AnalysisException(
-            s"Unsupported catalog and namespace '$other' for function '$name'")
-      }
-    } else {
-      getCurrentDatabase
+    // Get the database from AnalysisContext if it's defined, otherwise, use current database
+    val currentDatabase = AnalysisContext.get.catalogAndNamespace match {
+      case Seq() => getCurrentDatabase
+      case Seq(_, db) => db
+      case Seq(catalog, namespace @ _*) =>
+        throw new AnalysisException(
+          s"Unsupported catalog ${catalog} and " +
+            s"namespace '${namespace.mkString("[", ".", "]")}' for function '$name'")
     }
 
     // If the name itself is not qualified, add the current database to it.
