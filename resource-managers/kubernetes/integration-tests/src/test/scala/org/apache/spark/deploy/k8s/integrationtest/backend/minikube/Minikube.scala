@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 
@@ -34,6 +34,7 @@ private[spark] object Minikube extends Logging {
   private val MINIKUBE_VM_PREFIX = "minikubeVM: "
   private val MINIKUBE_PREFIX = "minikube: "
   private val MINIKUBE_PATH = ".minikube"
+  private val MINIKUBE_APISERVER_CERT_PATH = ".minikube"
 
   def logVersion(): Unit = {
     logInfo(executeMinikube("version").mkString("\n"))
@@ -68,15 +69,24 @@ private[spark] object Minikube extends Logging {
   def getKubernetesClient: DefaultKubernetesClient = {
     val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
+    val (apiServerCertPath, apiServerKeyPath) =
+      if (Files.exists(Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt"))) {
+        // For Minikube <1.9
+        (Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt"),
+          Paths.get(userHome, MINIKUBE_PATH, "apiserver.key"))
+      } else {
+        // For Minikube >=1.9
+        val profile = executeMinikube("profile")(0)
+        (Paths.get(userHome, MINIKUBE_PATH, "profiles", profile, "apiserver.crt"),
+          Paths.get(userHome, MINIKUBE_PATH, "profiles", profile, "apiserver.key"))
+      }
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
       .withCaCertFile(
         Paths.get(userHome, MINIKUBE_PATH, "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt").toFile.getAbsolutePath)
-      .withClientKeyFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.key").toFile.getAbsolutePath)
+      .withClientCertFile(apiServerCertPath.toFile.getAbsolutePath)
+      .withClientKeyFile(apiServerKeyPath.toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)
   }
