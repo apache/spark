@@ -339,13 +339,6 @@ case class AlterViewAsStatement(
     query: LogicalPlan) extends ParsedStatement
 
 /**
- * A DROP VIEW statement, as parsed from SQL.
- */
-case class DropViewStatement(
-    viewName: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
