@@ -184,7 +184,7 @@ class OrcFileFormat
         Iterator.empty
       } else {
         // ORC predicate pushdown
-        if (orcFilterPushDown) {
+        if (orcFilterPushDown && filters.nonEmpty) {
           OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
             OrcFilters.createFilter(fileSchema, filters).foreach { f =>
               OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
