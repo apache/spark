@@ -145,6 +145,47 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Alias in different projects have same exprID..!") {
+    val tr1 = LocalRelation('a.int, 'b.string, 'c.int, 'd.int)
+    val y = tr1.where('c.attr + 'a.attr > 10).select('a, 'a.as('a1),
+      'a.as('a2), 'b.as('b1), 'c, 'c.as('c1), Literal(1).as("one"),
+      Literal(1).as("one_")
+    ).where('b1.attr > 10).select( Literal(1).as("one"),
+      Literal(1).as("one_"), 'b1.attr).
+      where('one.attr != Literal(0)).analyze
+    var exprId1: Option[ExprId] = None
+    var exprId2: Option[ExprId] = None
+    val bugify = y.transformUp {
+      case p@Project(pl, child) => if (exprId1.isEmpty) {
+        exprId1 = pl.find(_.name == "one").map(_.asInstanceOf[Alias].exprId)
+        exprId2 = pl.find(_.name == "one_").map(_.asInstanceOf[Alias].exprId)
+        p
+      } else {
+        val newPl = pl.map(ne => if (ne.name == "one") {
+          val al = ne.asInstanceOf[Alias]
+          Alias(al.child, al.name)(exprId1.get)
+        } else if (ne.name == "one_") {
+          val al = ne.asInstanceOf[Alias]
+          Alias(al.child, al.name)(exprId2.get)
+        } else ne )
+        Project(newPl, child)
+      }
+      case f: Filter if exprId1.isDefined => f.transformExpressionsUp {
+        case expr: Expression => expr.transformUp {
+          case at: AttributeReference if at.name == "one" => at.withExprId(exprId1.get)
+          case at: AttributeReference if at.name == "one_" => at.withExprId(exprId2.get)
+        }
+      }
+    }.analyze
+
+    assert(bugify.resolved)
+    val optimized = GetOptimizer(OptimizerTypes.NO_PUSH_DOWN_ONLY_PRUNING).
+      execute(bugify)
+    val topConstraint = optimized.constraints
+    // there should not be any trivial constraint present
+    trivialConstraintAbsenceChecker(topConstraint)
+  }
+
   test("new filter pushed down on Join Node") {
     val tr1 = LocalRelation('a.int, 'b.string, 'c.int)
     val tr2 = LocalRelation('x.int, 'y.string, 'z.int)

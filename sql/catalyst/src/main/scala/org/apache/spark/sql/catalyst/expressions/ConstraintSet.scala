@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import ConstraintSetImplicit._
+
+import scala.collection.{mutable, GenTraversableOnce}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-
-
 
 /**
  * This class stores the constraints available at each node.
@@ -144,20 +142,54 @@ class ConstraintSet private(
       copy ++ other.map(_.clone())
     }
 
-    val (newAttribList, newExpEquivList, canonicalizeUsing) = that match {
+    def removeAnyResidualDuplicateAttribute(newAttribList: Seq[mutable.Buffer[Expression]]):
+    (Seq[mutable.Buffer[Expression]], Boolean)
+    = {
+      val allAttribs = newAttribList.flatten
+      var foundEmptyBuff = false
+      var foundDuplicates = false
+      allAttribs.foreach(attrib => {
+        val buffs = newAttribList.filter(buff => buff.exists(_.canonicalized ==
+          attrib.canonicalized))
+        if (buffs.size > 1) {
+          foundDuplicates = true
+          val rests = buffs.drop(1)
+          rests.foreach(buff => {
+            ConstraintSet.removeCanonicalizedExpressionFromBuffer(buff, attrib)
+            if (buff.isEmpty) {
+              foundEmptyBuff = true
+            }
+          })
+        }
+      })
+      (if (foundEmptyBuff) {
+        newAttribList.filterNot(_.isEmpty)
+      } else {
+        newAttribList
+      }) -> foundDuplicates
+    }
+
+    val (newAttribList, newExpEquivList) = that match {
       case thatX: ConstraintSet =>
         (unionEquivList(this.attribRefBasedEquivalenceList, thatX.attribRefBasedEquivalenceList),
-          unionEquivList(this.expressionBasedEquivalenceList, thatX.expressionBasedEquivalenceList),
-          thatX)
+          unionEquivList(this.expressionBasedEquivalenceList, thatX.expressionBasedEquivalenceList))
       case _ => (this.attribRefBasedEquivalenceList.map(_.clone()),
-        this.expressionBasedEquivalenceList.map(_.clone()), this)
+        this.expressionBasedEquivalenceList.map(_.clone()))
     }
-    val newSet = new ConstraintSet(this.baseSet.clone(), this.originals.clone(), newAttribList,
+    val (cleanedAttribList, foundDuplicates) = removeAnyResidualDuplicateAttribute(newAttribList)
+    if (foundDuplicates) {
+      val errorMessage = s"Found same attribute ref present in more than 1 buffers." +
+        s"This indicates either a faulty plan involving same dataframe reference self joined" +
+        s"without alias or something murkier"
+      if (Utils.isTesting) {
+        throw new IllegalStateException(errorMessage)
+      } else {
+        logError(errorMessage)
+      }
+    }
+    val newSet = new ConstraintSet(this.baseSet.clone(), this.originals.clone(), cleanedAttribList,
       newExpEquivList)
-    that.foreach(ele => {
-      val conditionedElement = canonicalizeUsing.convertToCanonicalizedIfRequired(ele)
-      newSet.add(conditionedElement)
-    })
+    ConstraintSet.addFiltersToConstraintSet(that, newSet)
     newSet
   }
 
@@ -252,8 +284,20 @@ class ConstraintSet private(
         groupHeadToGroupMap.get(key) match {
           case Some(seq) => seq += al.toAttribute
           case None =>
-            val temp: mutable.Buffer[Expression] = mutable.ArrayBuffer(al.child, al.toAttribute)
-            groupHeadToGroupMap += al.child -> temp
+            // if key is a literal then it is observed that the Alias may have
+            // an exprID which is somehow getting repeated across multiple nodes.
+            // However the code below checks for presence of the alias's exprID
+            // irrespective of the Alias's child is Literal or any general Expression.
+            // (At this point cannot completely rule out repetition of non Literals Alias)
+            // In such case even if the key is not in groupHead , the exprId might still be
+            // in attribute reference list. So before creating a new entry in the map
+            // check if the exprId of the alias is present in the attribute equivalence list.
+            // If it is present already, skip its entry
+            if (!this.attribRefBasedEquivalenceList.exists(buff => buff.exists(_.canonicalized ==
+              al.toAttribute.canonicalized))) {
+              val temp: mutable.Buffer[Expression] = mutable.ArrayBuffer(al.child, al.toAttribute)
+              groupHeadToGroupMap += al.child -> temp
+            }
         }
       case _ =>  // not expected
     })
@@ -290,7 +334,7 @@ class ConstraintSet private(
 
     exprBasedEquivalenceList.foreach(buffer => {
       val expr = buffer.head
-      if (!existingAttribGroupHead.exists(_.canonicalized == expr.canonicalized)) {
+      if (!existingAttribGroupHead.contains(expr.canonicalized)) {
         val newConstraintOpt = if (expr.references.isEmpty) {
           buffer.remove(0)
           expr match {
@@ -307,21 +351,25 @@ class ConstraintSet private(
       }
     })
 
-    // remove all mapping sof constants as the expression
-    val newExprBasedEquivalenceList = exprBasedEquivalenceList.filter(buff =>
-      buff.head.references.nonEmpty && buff.size > 1)
-
+    // remove all mappings of constants as the expression
+    // also identify those elements which are plain attribute based only
+    // so that we transfer them to attribute ref list
+    val (attribsOnly, newExprBasedEquivalenceList) = exprBasedEquivalenceList.filter(buff =>
+      buff.head.references.nonEmpty && buff.size > 1).partition(_.head match {
+      case _: Attribute => true
+      case _ => false
+    })
     // Now filter the attribBasedEquivalenceList which only has 1 element
     // This is because if there is only 1 element in the buffer, it cannot
     // be of any help in making a constraint survive, in case that attribute
     // is not part of output set, so no point in keeping it in the attribute
     // equivalence list.
-    val newAttribBasedEquivalenceList = attribBasedEquivalenceList.filter(_.size > 1)
+    val newAttribBasedEquivalenceList = (attribBasedEquivalenceList ++ attribsOnly).
+      filter(_.size > 1)
     val canonicalized = updatedFilterExprs.map(_.canonicalized).toMutableSet(mutable.Set)
-    // To debug PRISM-77994, logging error instead of asserting
-    // assert(canonicalized.size == updatedFilterExprs.size)
+
     if (canonicalized.size != updatedFilterExprs.size) {
-      this.logError(s"ConstraintSet::updateConstraints:PRISM-77994: Canonicalized filter" +
+      this.logError(s"ConstraintSet::updateConstraints: Canonicalized filter" +
         s"expression set not matching with updated filter expressions, indicating duplicate" +
         s" filters.")
       val duplicateFilters = mutable.ArrayBuffer[Seq[Expression]]()
@@ -337,7 +385,7 @@ class ConstraintSet private(
         assert(false, errorMessage)
       } else {
         duplicateFilters.foreach(duplicates => {
-          logError(s"ConstraintSet::updateConstraints:PRISM-77994: duplicate filters" +
+          logError(s"ConstraintSet::updateConstraints: duplicate filters" +
             s" = ${duplicates.mkString("::")}")
           duplicates.drop(1).foreach(x => {
             val indx = updatedFilterExprs.indexWhere(_ == x)
@@ -392,7 +440,17 @@ class ConstraintSet private(
                 case _: Attribute => true
                 case _ => false
               })
-              attribBasedEquivalenceList += buff
+              if (buff.nonEmpty) {
+                val preexistingExprs = buff.filter(expr => attribBasedEquivalenceList.exists(
+                  buffx => buffx.exists(_.canonicalized == expr.canonicalized)))
+                preexistingExprs.foreach(expr => {
+                  val index = buff.indexWhere(_.canonicalized == expr.canonicalized)
+                  buff.remove(index)
+                })
+                if (buff.nonEmpty) {
+                  attribBasedEquivalenceList += buff
+                }
+              }
               mutable.Buffer.empty[Expression]
             } else {
               buff
@@ -405,7 +463,7 @@ class ConstraintSet private(
           buff
         }
       } else {
-        attribsRemoved.foreach(ConstraintSet.removeCanonicalizedAttribute(buff, _))
+        attribsRemoved.foreach(ConstraintSet.removeCanonicalizedExpressionFromBuffer(buff, _))
         buff
       }
     }).filter(_.size > 1)
@@ -479,7 +537,8 @@ class ConstraintSet private(
             }
           }
           // remove any attributes which may be in position other than 0 in the buffer
-          attribsRemoved.foreach(x => ConstraintSet.removeCanonicalizedAttribute(buff, x))
+          attribsRemoved.foreach(x => ConstraintSet.removeCanonicalizedExpressionFromBuffer(buff,
+            x))
           // if there is no replacement and the attribute being removed
           // was the only one present, then the buffer is purged
           // else replaced by updated key
@@ -499,7 +558,7 @@ class ConstraintSet private(
           groupHeadToGroupMap.foreach {
             case (key, buffer) => val initialHead = buffer.head
               // The operation below should not touch the head of any buffer
-              ConstraintSet.removeCanonicalizedAttribute(buffer, attrib)
+              ConstraintSet.removeCanonicalizedExpressionFromBuffer(buffer, attrib)
               // To debug PRISM-77994 disabling the assert instead and logging & recovering
               // assert(buffer.nonEmpty)
               if (buffer.isEmpty || initialHead != buffer.head) {
@@ -530,11 +589,13 @@ class ConstraintSet private(
   }
 
   override def withNewConstraints(filters: ExpressionSet): ConstraintSet = {
-    new ConstraintSet(filters.map(_.canonicalized).toMutableSet(mutable.Set),
-      filters.toMutableBuffer(mutable.Buffer),
+     val newConstraintSet = new ConstraintSet(mutable.Buffer[Expression](),
       this.attribRefBasedEquivalenceList.map(_.clone()),
       this.expressionBasedEquivalenceList.map(_.clone))
+    ConstraintSet.addFiltersToConstraintSet(filters, newConstraintSet)
+    newConstraintSet
   }
+
 
   override def attributesRewrite(mapping: AttributeMap[Attribute]): ConstraintSet = {
     val transformer: PartialFunction[Expression, Expression] = {
@@ -545,8 +606,10 @@ class ConstraintSet private(
       buff.map(x => x.transformUp(transformer)))
     val newExpBasedEquiList = this.expressionBasedEquivalenceList.map(buff =>
       buff.map(x => x.transformUp(transformer)))
-    new ConstraintSet(newOriginals.map(_.canonicalized).toMutableSet(mutable.Set),
-      newOriginals, newAttribBasedEquiList, newExpBasedEquiList)
+    val newConstraintSet = new ConstraintSet(mutable.Buffer[Expression](),
+      newAttribBasedEquiList, newExpBasedEquiList)
+    ConstraintSet.addFiltersToConstraintSet(newOriginals, newConstraintSet)
+    newConstraintSet
   }
 
   /**
@@ -579,15 +642,21 @@ class ConstraintSet private(
         .map(x => {
           val seqContainingAttrib = this.attribRefBasedEquivalenceList
             .filter(buff => buff.exists(_.canonicalized == x.canonicalized))
-          assert(seqContainingAttrib.isEmpty || seqContainingAttrib.size == 1)
+          if(!(seqContainingAttrib.isEmpty || seqContainingAttrib.size == 1)) {
+            val errorMessage = s"Attribute $x found in" +
+              s" more than 1 buffers"
+            if (Utils.isTesting) {
+              throw new IllegalStateException(errorMessage)
+            } else {
+              this.logWarning(errorMessage)
+            }
+          }
           if (seqContainingAttrib.nonEmpty) {
             x -> seqContainingAttrib.head.head
           } else {
             x -> null
           }
-        })
-        .filter(_._2 ne null)
-        .toMap
+        }).filter{ case(_, replacement) => replacement ne null}.toMap
       val canonicalizedExp = elem.transformUp {
         case att: Attribute => substitutables.getOrElse(att, att)
       }
@@ -734,18 +803,24 @@ class ConstraintSet private(
 }
 
 object ConstraintSet {
-  def removeCanonicalizedAttribute(
-    buff: mutable.Buffer[Expression],
-    attr: Attribute
-  ): Unit = {
+  def removeCanonicalizedExpressionFromBuffer( buff: mutable.Buffer[Expression], expr: Expression):
+  Unit = {
     var keepGoing = true
     while (keepGoing) {
-      val indx = buff.indexWhere(_.canonicalized == attr.canonicalized)
+      val indx = buff.indexWhere(_.canonicalized == expr.canonicalized)
       if (indx == -1) {
         keepGoing = false
       } else {
         buff.remove(indx)
       }
     }
+  }
+
+  private def addFiltersToConstraintSet(filters: GenTraversableOnce[Expression],
+    constraintSet: ConstraintSet): Unit = {
+    filters.foreach(expr => {
+      val conditionedElement = constraintSet.convertToCanonicalizedIfRequired(expr)
+      constraintSet.add(conditionedElement)
+    })
   }
 }
