@@ -939,9 +939,8 @@ object SQLConf {
 
   val THRIFTSERVER_FORCE_CANCEL =
     buildConf("spark.sql.thriftServer.interruptOnCancel")
-      .doc("When true, if a running query has been cancelled then all running tasks will be" +
-        "interrupted. When false, if a running query has been cancelled then all running task " +
-        "will be remained until finished.")
+      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
+        "When false, all running tasks will be remained until finished.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
