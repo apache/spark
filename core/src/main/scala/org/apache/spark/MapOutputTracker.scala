@@ -55,14 +55,15 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = this.synchronized {
     try {
-      val mapStatusOpt = mapStatuses.find(_.mapId == mapId)
-      mapStatusOpt match {
-        case Some(mapStatus) =>
+      val mapStatus = mapStatuses(mapId.toInt)
+      mapStatus match {
+        case null =>
+          logWarning(s"Asked to update map output ${mapId} for untracked map status :(")
+          logWarning(s"Our statuses are ${mapStatuses.toList}")
+        case _ =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
-        case None =>
-          logWarning(s"Asked to update map output ${mapId} for untracked map status.")
       }
     } catch {
       case e: java.lang.NullPointerException =>

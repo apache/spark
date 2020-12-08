@@ -52,6 +52,12 @@ object ExecutorPodsSnapshot extends Logging {
 
   private def toState(pod: Pod): ExecutorPodState = {
     if (isDeleted(pod)) {
+      logInfo(s"Pod ${pod} is deleted")
+      if (pod.getStatus != null && pod.getStatus.getPhase != null) {
+        logInfo(s"Delete pod has phase ${pod.getStatus.getPhase}")
+      } else {
+        logInfo(s"Deleted pod is missing status or phase.")
+      }
       PodDeleted(pod)
     } else {
       val phase = pod.getStatus.getPhase.toLowerCase
@@ -79,7 +85,10 @@ object ExecutorPodsSnapshot extends Logging {
       (
         pod.getStatus == null ||
         pod.getStatus.getPhase == null ||
-        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+          (pod.getStatus.getPhase.toLowerCase != "terminating" &&
+           pod.getStatus.getPhase.toLowerCase != "running" &&
+           pod.getStatus.getPhase.toLowerCase != "pending"
+          )
       ))
   }
 }
