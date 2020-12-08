@@ -2132,11 +2132,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
            |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
            |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
         """.stripMargin)
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
-      }
-      assert(
-        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
+       val num =
+         sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+       assert(num === 2)
     }
   }
 
