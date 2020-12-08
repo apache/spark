@@ -471,6 +471,16 @@ package object config {
         "cache block replication should be positive.")
       .createWithDefaultString("30s")
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.path")
+      .doc("The location for fallback storage during block manager decommissioning. " +
+        "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
+        "The storage should be managed by TTL because Spark will not clean it up.")
+      .version("3.1.0")
+      .stringConf
+      .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
+      .createOptional
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -494,7 +504,7 @@ package object config {
       .version("0.7.0")
       .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+      .createOptional
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
@@ -1803,6 +1813,16 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val ARCHIVES = ConfigBuilder("spark.archives")
+    .version("3.1.0")
+    .doc("Comma-separated list of archives to be extracted into the working directory of each " +
+      "executor. .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory " +
+      "name to unpack via adding '#' after the file name to unpack, for example, " +
+      "'file.zip#directory'. This configuration is experimental.")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
   private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
     .version("1.5.0")
     .stringConf
@@ -1945,6 +1965,17 @@ package object config {
       .version("3.0.1")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
+    ConfigBuilder("spark.executor.killOnFatalError.depth")
+      .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
+        "error to check whether it should kill an executor. 0 means not checking any fatal " +
+        "error, 1 means checking only the exception but not the cause, and so on.")
+      .internal()
+      .version("3.1.0")
+      .intConf
+      .checkValue(_ >= 0, "needs to be a non-negative value")
+      .createWithDefault(5)
 
   private[spark] val PUSH_BASED_SHUFFLE_ENABLED =
     ConfigBuilder("spark.shuffle.push.enabled")

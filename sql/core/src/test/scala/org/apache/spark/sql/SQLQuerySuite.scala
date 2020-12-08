@@ -1316,7 +1316,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
-  test("oder by asc by default when not specify ascending and descending") {
+  test("order by asc by default when not specify ascending and descending") {
     checkAnswer(
       sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
@@ -2812,7 +2812,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+  test("SPARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
@@ -3092,7 +3092,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           assert(scan.isInstanceOf[ParquetScan])
           assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
         case _ =>
-          fail(s"unknow format $format")
+          fail(s"unknown format $format")
       }
     }
 
@@ -3716,6 +3716,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
         checkAnswer(sql(statement), Row("v1"))
       }
+    }
+  }
+
+  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+    withTempView("df") {
+      Seq("m@ca").toDF("s").createOrReplaceTempView("df")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+      }
+      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
+        "the escape character is not allowed to precede '@'"))
+
+      checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
     }
   }
 }

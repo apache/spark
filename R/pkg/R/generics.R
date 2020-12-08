@@ -838,6 +838,10 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 #' @name NULL
 setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
 
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("array_to_vector", function(x) { standardGeneric("array_to_vector") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("array_transform", function(x, f) { standardGeneric("array_transform") })

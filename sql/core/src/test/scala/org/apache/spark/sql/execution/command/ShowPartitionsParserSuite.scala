@@ -17,25 +17,30 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.ShowPartitionsStatement
+import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
   test("SHOW PARTITIONS") {
+    val commandName = "SHOW PARTITIONS"
     Seq(
-      "SHOW PARTITIONS t1" -> ShowPartitionsStatement(Seq("t1"), None),
-      "SHOW PARTITIONS db1.t1" -> ShowPartitionsStatement(Seq("db1", "t1"), None),
+      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName), None),
+      "SHOW PARTITIONS db1.t1" -> ShowPartitions(
+        UnresolvedTable(Seq("db1", "t1"), commandName), None),
       "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
-        ShowPartitionsStatement(
-          Seq("t1"),
-          Some(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue"))),
-      "SHOW PARTITIONS a.b.c" -> ShowPartitionsStatement(Seq("a", "b", "c"), None),
+        ShowPartitions(
+          UnresolvedTable(Seq("t1"), commandName),
+          Some(UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))),
+      "SHOW PARTITIONS a.b.c" -> ShowPartitions(
+        UnresolvedTable(Seq("a", "b", "c"), commandName), None),
       "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
-        ShowPartitionsStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10")))
+        ShowPartitions(
+          UnresolvedTable(Seq("a", "b", "c"), commandName),
+          Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))))
     ).foreach { case (sql, expected) =>
       val parsed = parsePlan(sql)
       comparePlans(parsed, expected)

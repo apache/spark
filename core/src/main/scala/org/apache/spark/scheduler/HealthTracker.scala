@@ -32,7 +32,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * additional logic for exclusion of executors and nodes for individual tasks and stages which
  * works in concert with the logic here.
  *
- * The tracker needs to deal with a variety of workloads, eg.:
+ * The tracker needs to deal with a variety of workloads, e.g.:
  *
  *  * bad user code -- this may lead to many task failures, but that should not count against
  *      individual executors
@@ -362,7 +362,7 @@ private[scheduler] class HealthTracker (
      * Apply the timeout to individual tasks.  This is to prevent one-off failures that are very
      * spread out in time (and likely have nothing to do with problems on the executor) from
      * triggering exlusion.  However, note that we do *not* remove executors and nodes from
-     * being excluded as we expire individual task failures -- each have their own timeout.  Eg.,
+     * being excluded as we expire individual task failures -- each have their own timeout.  E.g.,
      * suppose:
      *  * timeout = 10, maxFailuresPerExec = 2
      *  * Task 1 fails on exec 1 at time 0

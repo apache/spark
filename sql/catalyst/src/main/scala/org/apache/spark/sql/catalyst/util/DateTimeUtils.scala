@@ -189,7 +189,7 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def microsToMillis(micros: Long): Long = {
-    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // When the timestamp is negative i.e before 1970, we need to adjust the milliseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
     Math.floorDiv(micros, MICROS_PER_MILLIS)
@@ -361,6 +361,15 @@ object DateTimeUtils {
       Some(instantToMicros(instant))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
+    val timestamp = stringToTimestamp(s, timeZoneId)
+    if (timestamp.isEmpty) {
+      throw new DateTimeException(s"Cannot cast $s to TimestampType.")
+    } else {
+      timestamp.get
     }
   }
 

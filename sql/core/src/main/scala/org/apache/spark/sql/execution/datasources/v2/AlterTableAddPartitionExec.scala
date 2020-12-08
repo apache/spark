@@ -37,20 +37,20 @@ case class AlterTableAddPartitionExec(
 
   override protected def run(): Seq[InternalRow] = {
     val (existsParts, notExistsParts) =
-      partSpecs.partition(p => table.partitionExists(p.spec))
+      partSpecs.partition(p => table.partitionExists(p.ident))
 
     if (existsParts.nonEmpty && !ignoreIfExists) {
       throw new PartitionsAlreadyExistException(
-        table.name(), existsParts.map(_.spec), table.partitionSchema())
+        table.name(), existsParts.map(_.ident), table.partitionSchema())
     }
 
     notExistsParts match {
       case Seq() => // Nothing will be done
       case Seq(partitionSpec) =>
         val partProp = partitionSpec.location.map(loc => "location" -> loc).toMap
-        table.createPartition(partitionSpec.spec, partProp.asJava)
+        table.createPartition(partitionSpec.ident, partProp.asJava)
       case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        val partIdents = notExistsParts.map(_.spec)
+        val partIdents = notExistsParts.map(_.ident)
         val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
         table.asAtomicPartitionable
           .createPartitions(
