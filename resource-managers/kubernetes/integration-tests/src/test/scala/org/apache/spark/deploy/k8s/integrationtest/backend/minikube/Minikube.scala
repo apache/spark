@@ -130,7 +130,7 @@ private[spark] object Minikube extends Logging {
 
   def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
-      Array("bash", "-c", s"minikube $action ${args.mkString(" ")}"),
+      Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
       MINIKUBE_STARTUP_TIMEOUT_SECONDS).filter{x =>
       !x.contains("There is a newer version of minikube") &&
       !x.contains("https://github.com/kubernetes")
