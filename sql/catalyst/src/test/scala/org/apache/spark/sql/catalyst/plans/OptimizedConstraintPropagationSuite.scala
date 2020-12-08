@@ -152,7 +152,7 @@ class OptimizedConstraintPropagationSuite extends ConstraintPropagationSuite {
       Literal(1).as("one_")
     ).where('b1.attr > 10).select( Literal(1).as("one"),
       Literal(1).as("one_"), 'b1.attr).
-      where('one.attr != Literal(0)).analyze
+      where('one.attr > 1).analyze
     var exprId1: Option[ExprId] = None
     var exprId2: Option[ExprId] = None
     val bugify = y.transformUp {
