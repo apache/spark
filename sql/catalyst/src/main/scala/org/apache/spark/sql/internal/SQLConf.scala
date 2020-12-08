@@ -3308,14 +3308,9 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerInSetSwitchThreshold: Int = getConf(OPTIMIZER_INSET_SWITCH_THRESHOLD)
 
-<<<<<<< HEAD
-=======
-  def optimizerLikeAllConversionThreshold: Int = getConf(OPTIMIZER_LIKE_ALL_CONVERSION_THRESHOLD)
-
   def useOptimizedConstraintPropagation: Boolean =
     getConf(OPTIMIZER_CONSTRAINT_PROPAGATION_OPTIMIZED)
 
->>>>>>> 862d57aefe... Changes to fix SPARK-33152
   def planChangeLogLevel: String = getConf(PLAN_CHANGE_LOG_LEVEL)
 
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
