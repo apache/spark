@@ -24,7 +24,6 @@ import java.util.Map;
 
 
 import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.rpc.thrift.TOperationHandle;
 
 public interface ICLIService {
 
@@ -98,8 +97,6 @@ public interface ICLIService {
 
   String getDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String owner, String renewer) throws HiveSQLException;
-
-  String getQueryId(TOperationHandle operationHandle) throws HiveSQLException;
 
   void cancelDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException;
