@@ -21,19 +21,25 @@ from airflow.utils import timezone
 from airflow.utils.decorators import apply_defaults
 
 
-class TimeSensor(BaseSensorOperator):
+class TimeDeltaSensor(BaseSensorOperator):
     """
-    Waits until the specified time of the day.
+    Waits for a timedelta after the task's execution_date + schedule_interval.
+    In Airflow, the daily task stamped with ``execution_date``
+    2016-01-01 can only start running on 2016-01-02. The timedelta here
+    represents the time after the execution period has closed.
 
-    :param target_time: time after which the job succeeds
-    :type target_time: datetime.time
+    :param delta: time length to wait after execution_date before succeeding
+    :type delta: datetime.timedelta
     """
 
     @apply_defaults
-    def __init__(self, *, target_time, **kwargs):
+    def __init__(self, *, delta, **kwargs):
         super().__init__(**kwargs)
-        self.target_time = target_time
+        self.delta = delta
 
     def poke(self, context):
-        self.log.info('Checking if the time (%s) has come', self.target_time)
-        return timezone.make_naive(timezone.utcnow(), self.dag.timezone).time() > self.target_time
+        dag = context['dag']
+        target_dttm = dag.following_schedule(context['execution_date'])
+        target_dttm += self.delta
+        self.log.info('Checking if the time (%s) has come', target_dttm)
+        return timezone.utcnow() > target_dttm
