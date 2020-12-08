@@ -404,7 +404,7 @@ object SQLConf {
       "middle of query execution, based on accurate runtime statistics.")
     .version("1.6.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
