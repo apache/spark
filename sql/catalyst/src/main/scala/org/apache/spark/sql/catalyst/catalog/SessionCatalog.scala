@@ -1489,7 +1489,8 @@ class SessionCatalog(
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
-    if (!isResolvingView && name.database.isEmpty && functionRegistry.functionExists(name)) {
+    if (name.database.isEmpty && functionRegistry.functionExists(name) &&
+      !(isResolvingView && isTemporaryFunction(name))) {
       // This function has been already loaded into the function registry.
       return functionRegistry.lookupFunction(name, children)
     }
