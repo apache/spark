@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
