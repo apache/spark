@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
+import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requireExactMatchedPartitionSpec}
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
@@ -35,11 +35,21 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r @ AlterTableAddPartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
+      val partitionSchema = table.partitionSchema()
+      r.copy(parts = resolvePartitionSpecs(
+        table.name,
+        partSpecs,
+        partitionSchema,
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableDropPartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
+      val partitionSchema = table.partitionSchema()
+      r.copy(parts = resolvePartitionSpecs(
+        table.name,
+        partSpecs,
+        partitionSchema,
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
       r.copy(pattern = resolvePartitionSpecs(
@@ -51,7 +61,8 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
   private def resolvePartitionSpecs(
       tableName: String,
       partSpecs: Seq[PartitionSpec],
-      partSchema: StructType): Seq[ResolvedPartitionSpec] =
+      partSchema: StructType,
+      checkSpec: TablePartitionSpec => Unit = _ => ()): Seq[ResolvedPartitionSpec] =
     partSpecs.map {
       case unresolvedPartSpec: UnresolvedPartitionSpec =>
         val normalizedSpec = normalizePartitionSpec(
@@ -59,6 +70,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
           partSchema.map(_.name),
           tableName,
           conf.resolver)
+        checkSpec(normalizedSpec)
         val partitionNames = normalizedSpec.keySet
         val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
         ResolvedPartitionSpec(

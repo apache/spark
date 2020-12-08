@@ -237,8 +237,7 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(ns.head, location)
 
-    // v1 RENAME TABLE supports temp view.
-    case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
+    case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.

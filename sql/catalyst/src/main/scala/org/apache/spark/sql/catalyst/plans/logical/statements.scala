@@ -339,14 +339,6 @@ case class AlterViewAsStatement(
     query: LogicalPlan) extends ParsedStatement
 
 /**
- * ALTER TABLE ... RENAME TO command, as parsed from SQL.
- */
-case class RenameTableStatement(
-    oldName: Seq[String],
-    newName: Seq[String],
-    isView: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

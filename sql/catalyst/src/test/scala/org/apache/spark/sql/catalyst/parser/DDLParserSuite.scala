@@ -961,7 +961,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: mutiple property changes are not allowed") {
+  test("alter table: multiple property changes are not allowed") {
     intercept[ParseException] {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
         "TYPE bigint COMMENT 'new comment'")}
@@ -1106,10 +1106,16 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table/view: rename table/view") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = false))
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = true))
   }
 
   test("describe table column") {

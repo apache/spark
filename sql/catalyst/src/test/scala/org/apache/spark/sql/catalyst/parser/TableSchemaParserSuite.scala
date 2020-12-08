@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types._
 
 class TableSchemaParserSuite extends SparkFunSuite {
@@ -69,8 +68,7 @@ class TableSchemaParserSuite extends SparkFunSuite {
             StructField("arrAy", ArrayType(DoubleType)) ::
             StructField("anotherArray", ArrayType(CharType(9))) :: Nil)) :: Nil)
 
-    assert(parse(tableSchemaString) ===
-      CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedDataType))
+    assert(parse(tableSchemaString) === expectedDataType)
   }
 
   // Negative cases

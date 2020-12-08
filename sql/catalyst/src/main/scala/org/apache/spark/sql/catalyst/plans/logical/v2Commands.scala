@@ -458,12 +458,14 @@ case class AlterTable(
 }
 
 /**
- * The logical plan of the ALTER TABLE RENAME command.
+ * The logical plan of the ALTER [TABLE|VIEW] ... RENAME TO command.
  */
 case class RenameTable(
-    catalog: TableCatalog,
-    oldIdent: Identifier,
-    newIdent: Identifier) extends Command
+    child: LogicalPlan,
+    newName: Seq[String],
+    isView: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
  * The logical plan of the SHOW TABLE command.

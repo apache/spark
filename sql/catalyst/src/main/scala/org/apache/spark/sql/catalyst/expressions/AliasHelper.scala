@@ -64,7 +64,7 @@ trait AliasHelper {
 
   /**
    * Replace all attributes, that reference an alias, with the aliased expression,
-   * but keep the name of the outmost attribute.
+   * but keep the name of the outermost attribute.
    */
   protected def replaceAliasButKeepName(
      expr: NamedExpression,
