@@ -639,13 +639,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("bucketed_table")
       val tbl = spark.table("bucketed_table")
-      val agged = tbl.groupBy("i", "j").agg(max("k"))
+      val aggregated = tbl.groupBy("i", "j").agg(max("k"))
 
       checkAnswer(
-        agged.sort("i", "j"),
+        aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -679,13 +680,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
       val tbl = spark.table("bucketed_table")
-      val agged = tbl.groupBy("i", "j").agg(max("k"))
+      val aggregated = tbl.groupBy("i", "j").agg(max("k"))
 
       checkAnswer(
-        agged.sort("i", "j"),
+        aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -806,9 +808,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 
-      val agged = spark.table("bucketed_table").groupBy("i").count()
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
       val error = intercept[Exception] {
-        agged.count()
+        aggregated.count()
       }
 
       assert(error.getCause().toString contains "Invalid bucket file")

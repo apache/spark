@@ -1946,9 +1946,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("SourceFileArchiver - fail when base archive path matches source pattern") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
-    def assertThrowIllegalArgumentException(sourcePatttern: Path, baseArchivePath: Path): Unit = {
+    def assertThrowIllegalArgumentException(sourcePattern: Path, baseArchivePath: Path): Unit = {
       intercept[IllegalArgumentException] {
-        new SourceFileArchiver(fakeFileSystem, sourcePatttern, fakeFileSystem, baseArchivePath)
+        new SourceFileArchiver(fakeFileSystem, sourcePattern, fakeFileSystem, baseArchivePath)
       }
     }
 

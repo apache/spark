@@ -685,6 +685,6 @@ object StreamExecution {
 
 /**
  * A special thread to run the stream query. Some codes require to run in the QueryExecutionThread
- * and will use `classOf[QueryxecutionThread]` to check.
+ * and will use `classOf[QueryExecutionThread]` to check.
  */
 abstract class QueryExecutionThread(name: String) extends UninterruptibleThread(name)
