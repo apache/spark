@@ -3834,7 +3834,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[RenameTableStatement]] command.
+   * Create a [[RenameTable]] command.
    *
    * For example:
    * {{{
@@ -3843,10 +3843,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    RenameTableStatement(
-      visitMultipartIdentifier(ctx.from),
+    val isView = ctx.VIEW != null
+    val relationStr = if (isView) "VIEW" else "TABLE"
+    RenameTable(
+      UnresolvedTableOrView(
+        visitMultipartIdentifier(ctx.from),
+        s"ALTER $relationStr ... RENAME TO"),
       visitMultipartIdentifier(ctx.to),
-      ctx.VIEW != null)
+      isView)
   }
 
   /**
