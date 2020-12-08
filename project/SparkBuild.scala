@@ -654,7 +654,10 @@ object DependencyOverrides {
  */
 object ExcludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
+    excludeDependencies ++= Seq(
+      ExclusionRule("javax.ws.rs", "jsr311-api")
+    )
   )
 }
 
