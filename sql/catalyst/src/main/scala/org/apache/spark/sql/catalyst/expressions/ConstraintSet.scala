@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import ConstraintSetImplicit._
-
 import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
+
+import ConstraintSetImplicit._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
