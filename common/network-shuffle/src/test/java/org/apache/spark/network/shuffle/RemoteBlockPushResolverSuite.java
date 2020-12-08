@@ -451,7 +451,6 @@ public class RemoteBlockPushResolverSuite {
   @Test
   public void testRecoverIndexFileAfterIOExceptionsInFinalize() throws IOException {
     useTestFiles(true, false);
-    registerExecutor(TEST_APP, prepareLocalDirs(localDirs));
     RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, 0, 0, 0, 0));

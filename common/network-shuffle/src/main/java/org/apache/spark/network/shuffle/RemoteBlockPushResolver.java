@@ -885,7 +885,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      */
     void updateChunkInfo(long chunkOffset, int mapIndex) throws IOException {
       try {
-        logger.trace("{} shuffleId {} reduceId {} updated index current {} updated {}",
+        logger.trace("{} shuffleId {} reduceId {} index current {} updated {}",
           appShuffleId.appId, appShuffleId.shuffleId, reduceId, this.lastChunkOffset, chunkOffset);
         if (indexMetaUpdateFailed) {
           indexFile.getChannel().position(indexFile.getPos());
@@ -894,7 +894,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // Chunk bitmap should be written to the meta file after the index file because if there are
         // any exceptions during writing the offset to the index file, meta file should not be
         // updated. If the update to the index file is successful but the update to meta file isn't
-        // then the index file position is reset in the catch clause.
+        // then the index file position is not updated.
         writeChunkTracker(mapIndex);
         indexFile.updatePos(8);
         this.lastChunkOffset = chunkOffset;
