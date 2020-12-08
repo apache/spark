@@ -1363,12 +1363,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(
-      e.getMessage.contains("dbx.tab1 is a table. 'DROP VIEW' expects a view."))
+    assert(e.getMessage.contains(
+      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {

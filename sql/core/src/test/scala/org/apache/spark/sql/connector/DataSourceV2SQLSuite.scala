@@ -2587,6 +2587,13 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DROP VIEW is not supported for v2 catalogs") {
+    assertAnalysisError(
+      "DROP VIEW testcat.v",
+      "Cannot specify catalog `testcat` for view v because view support in v2 catalog " +
+        "has not been implemented yet. DROP VIEW expects a view.")
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -2603,13 +2610,6 @@ class DataSourceV2SQLSuite
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
-  private def testV1CommandSupportingTempView(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with temp views or v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

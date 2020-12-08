@@ -150,7 +150,7 @@ object AnalysisContext {
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(override val catalogManager: CatalogManager)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog with SQLConfHelper {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -887,7 +887,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
-      case u @ UnresolvedView(ident, cmd) =>
+      case u @ UnresolvedView(ident, _, _) =>
         lookupTempView(ident).map { _ =>
           ResolvedView(ident.asIdentifier, isTemp = true)
         }
@@ -981,12 +981,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
-
-      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd) =>
-        u.failAnalysis(
-          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
-          "because view support in v2 catalog has not been implemented yet. " +
-          s"$cmd expects a view.")
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
@@ -1122,10 +1116,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd) =>
+      case u @ UnresolvedView(identifier, cmd, hint) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView => v
-          case _ => u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view.")
+          case _ =>
+            u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view." +
+              hint.map(" " + _).getOrElse(""))
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>

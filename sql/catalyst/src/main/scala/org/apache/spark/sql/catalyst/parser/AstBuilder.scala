@@ -3168,7 +3168,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
     DropView(
-      UnresolvedView(visitMultipartIdentifier(ctx.multipartIdentifier()), "DROP VIEW"),
+      UnresolvedView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        "DROP VIEW",
+        Some("Please use DROP TABLE instead.")),
       ctx.EXISTS != null)
   }
 
