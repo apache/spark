@@ -708,3 +708,10 @@ case class ShowPartitions(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("partition", StringType, nullable = false)())
 }
+
+/**
+ * The logical plan of the MSCK REPAIR TABLE command.
+ */
+case class RepairTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}

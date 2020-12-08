@@ -3539,7 +3539,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[RepairTableStatement]].
+   * Create a [[RepairTable]].
    *
    * For example:
    * {{{
@@ -3547,7 +3547,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    RepairTable(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "MSCK REPAIR TABLE"))
   }
 
   /**
