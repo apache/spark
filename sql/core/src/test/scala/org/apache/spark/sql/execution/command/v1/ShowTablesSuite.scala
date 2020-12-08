@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
@@ -111,4 +111,18 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 }
 
-class ShowTablesSuite extends ShowTablesSuiteBase with SharedSparkSession
+class ShowTablesSuite extends ShowTablesSuiteBase with SharedSparkSession {
+  test("SPARK-33670: show partitions from a datasource table") {
+    import testImplicits._
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      sql(s"USE $catalog.ns")
+      val t = "part_datasrc"
+      withTable(t) {
+        val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+        df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
+        assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+      }
+    }
+  }
+}

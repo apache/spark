@@ -1841,6 +1841,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33652: DeleteFrom should refresh caches referencing the table") {
+    val t = "testcat.ns1.ns2.tbl"
+    val view = "view"
+    withTable(t) {
+      withTempView(view) {
+        sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+        sql(s"CACHE TABLE view AS SELECT id FROM $t")
+        assert(spark.table(view).count() == 3)
+
+        sql(s"DELETE FROM $t WHERE id = 2")
+        assert(spark.table(view).count() == 1)
+      }
+    }
+  }
+
   test("UPDATE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -1959,10 +1975,16 @@ class DataSourceV2SQLSuite
 
   test("AlterTable: rename table basic test") {
     withTable("testcat.ns1.new") {
-      sql(s"CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
+      sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
 
-      sql(s"ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
+      val e = intercept[AnalysisException] {
+        sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
+      }
+      assert(e.getMessage.contains(
+        "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
     }
@@ -1972,7 +1994,8 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
+    assert(e.getMessage.contains(
+      "Table or view not found for 'ALTER VIEW ... RENAME TO': testcat.ns.tbl"))
   }
 
   test("ANALYZE TABLE") {

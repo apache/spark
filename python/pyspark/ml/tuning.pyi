@@ -104,7 +104,7 @@ class CrossValidatorModel(
     def __init__(
         self,
         bestModel: Model,
-        avgMetrics: List[float] = ...,
+        avgMetrics: Optional[List[float]] = ...,
         subModels: Optional[List[List[Model]]] = ...,
     ) -> None: ...
     def copy(self, extra: Optional[ParamMap] = ...) -> CrossValidatorModel: ...
@@ -171,7 +171,7 @@ class TrainValidationSplitModel(
     def __init__(
         self,
         bestModel: Model,
-        validationMetrics: List[float] = ...,
+        validationMetrics: Optional[List[float]] = ...,
         subModels: Optional[List[Model]] = ...,
     ) -> None: ...
     def setEstimator(self, value: Estimator) -> TrainValidationSplitModel: ...

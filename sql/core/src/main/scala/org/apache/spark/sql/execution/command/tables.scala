@@ -311,9 +311,6 @@ case class LoadDataCommand(
         sparkSession.sessionState.conf.resolver)
     }
 
-    if (targetTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
-    }
     if (DDLUtils.isDatasourceTable(targetTable)) {
       throw new AnalysisException(
         s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
@@ -451,10 +448,6 @@ case class TruncateTableCommand(
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
-    }
-    if (table.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
@@ -879,6 +872,9 @@ case class ShowTablesCommand(
       // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
       // should have been thrown by the sql parser.
       val table = catalog.getTableMetadata(TableIdentifier(tableIdentifierPattern.get, Some(db)))
+
+      DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW TABLE EXTENDED")
+
       val tableIdent = table.identifier
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         partitionSpec.get,
@@ -992,11 +988,7 @@ case class ShowPartitionsCommand(
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
      * 1. If the table is not partitioned.
      * 2. If it is a datasource table.
-     * 3. If it is a view.
      */
-    if (table.tableType == VIEW) {
-      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $tableIdentWithDB")
-    }
 
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
@@ -1006,20 +998,18 @@ case class ShowPartitionsCommand(
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
 
     /**
-     * Validate the partitioning spec by making sure all the referenced columns are
+     * Normalizes the partition spec w.r.t the partition columns and case sensitivity settings,
+     * and validates the spec by making sure all the referenced columns are
      * defined as partitioning columns in table definition. An AnalysisException exception is
      * thrown if the partitioning spec is invalid.
      */
-    if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(table.partitionColumnNames.contains)
-      if (badColumns.nonEmpty) {
-        val badCols = badColumns.mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
-      }
-    }
+    val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
+      partitionSpec,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver))
 
-    val partNames = catalog.listPartitionNames(tableName, spec)
+    val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
     partNames.map(Row(_))
   }
 }

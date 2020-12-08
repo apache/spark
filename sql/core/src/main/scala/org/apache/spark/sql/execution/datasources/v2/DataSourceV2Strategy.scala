@@ -208,7 +208,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case DeleteFromTable(relation, condition) =>
       relation match {
-        case DataSourceV2ScanRelation(table, _, output) =>
+        case DataSourceV2ScanRelation(r, _, output) =>
+          val table = r.table
           if (condition.exists(SubqueryExpression.hasSubquery)) {
             throw new AnalysisException(
               s"Delete by condition with subquery is not supported: $condition")
@@ -227,7 +228,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
               s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
           }
 
-          DeleteFromTableExec(table.asDeletable, filters) :: Nil
+          DeleteFromTableExec(table.asDeletable, filters, refreshCache(r)) :: Nil
         case _ =>
           throw new AnalysisException("DELETE is only supported with v2 tables.")
       }
@@ -256,8 +257,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(catalog, oldIdent, newIdent) =>
-      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+    case RenameTable(ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+      if (isView) {
+        throw new AnalysisException(
+          "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+      }
+      RenameTableExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil

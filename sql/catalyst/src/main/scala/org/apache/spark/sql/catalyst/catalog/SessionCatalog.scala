@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -1167,14 +1167,11 @@ class SessionCatalog(
   private def requireExactMatchedPartitionSpec(
       specs: Seq[TablePartitionSpec],
       table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames.sorted
-    specs.foreach { s =>
-      if (s.keys.toSeq.sorted != defined) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must match " +
-            s"the partition spec (${table.partitionColumnNames.mkString(", ")}) defined in " +
-            s"table '${table.identifier}'")
-      }
+    specs.foreach { spec =>
+      PartitioningUtils.requireExactMatchedPartitionSpec(
+        table.identifier.toString,
+        spec,
+        table.partitionColumnNames)
     }
   }
 
@@ -1618,7 +1615,7 @@ class SessionCatalog(
   }
 
   /**
-   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   * Validate the new location before renaming a managed table, which should be non-existent.
    */
   private def validateNewLocationOfRename(
       oldName: TableIdentifier,

@@ -367,14 +367,14 @@ private[hive] class HiveClientImpl(
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
-      val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
+      val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
         Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-        properties = paras)
+        properties = params)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 
@@ -985,7 +985,7 @@ private[hive] object HiveClientImpl extends Logging {
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
-      CatalystSqlParser.parseRawDataType(hc.getType)
+      CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException(

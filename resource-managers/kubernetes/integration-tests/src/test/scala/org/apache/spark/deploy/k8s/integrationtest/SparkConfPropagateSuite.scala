@@ -39,6 +39,7 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
 
       sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j.debug")
       sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j.debug")
+      sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       val log4jExpectedLog =
         s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties"
