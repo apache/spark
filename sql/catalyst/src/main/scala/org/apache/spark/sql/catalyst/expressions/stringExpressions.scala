@@ -2082,6 +2082,32 @@ case class UnBase64(child: Expression)
   }
 }
 
+object Decode {
+  def createExpr(params: Seq[Expression]): Expression = {
+    params.length match {
+      case 0 => StringDecode(Literal.create(null, StringType), Literal.create(null, StringType))
+      case 1 => StringDecode(params.head, Literal.create(null, StringType))
+      case 2 => StringDecode(params.head, params.last)
+      case _ =>
+        val input = params.head
+        val other = params.tail
+        val itr = other.iterator
+        var default: Expression = Literal.create(null, StringType)
+        val branches = ArrayBuffer.empty[(Expression, Expression)]
+        while (itr.hasNext) {
+          val search = itr.next
+          if (itr.hasNext) {
+            val condition = EqualTo(input, search)
+            branches += ((condition, itr.next))
+          } else {
+            default = search
+          }
+        }
+        CaseWhen(branches.seq, default)
+    }
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
@@ -2103,42 +2129,10 @@ case class UnBase64(child: Expression)
   """,
   since = "3.1.0")
 // scalastyle:on line.size.limit
-case class Decode(params: Seq[Expression], fakeChild: Expression) extends RuntimeReplaceable {
+case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
 
   def this(params: Seq[Expression]) = {
-    this(params, null)
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val inputTypeCheck = super.checkInputDataTypes
-    if (params.size < 2) {
-      TypeCheckResult.TypeCheckFailure("decode function requires at least two arguments")
-    } else {
-      inputTypeCheck
-    }
-  }
-
-  val child = params.length match {
-    // When the length of parameter list is less than 2, it is illegal. But because the
-    // children of UnaryExpression need the child, we specify Literal(null) as a fake child.
-    case 0 | 1 => Literal(null)
-    case 2 => StringDecode(params.head, params.last)
-    case _ =>
-      val input = params.head
-      val other = params.tail
-      val itr = other.iterator
-      var default: Expression = Literal.create(null, StringType)
-      val branches = ArrayBuffer.empty[(Expression, Expression)]
-      while (itr.hasNext) {
-        val search = itr.next
-        if (itr.hasNext) {
-          val condition = EqualTo(input, search)
-          branches += ((condition, itr.next))
-        } else {
-          default = search
-        }
-      }
-      CaseWhen(branches.seq, default)
+    this(params, Decode.createExpr(params))
   }
 
   override def flatArguments: Iterator[Any] = Iterator(params)
