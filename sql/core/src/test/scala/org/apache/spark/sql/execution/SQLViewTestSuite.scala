@@ -231,7 +231,6 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
-
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {

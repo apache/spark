@@ -638,7 +638,7 @@ class SessionCatalog(
    * otherwise, it is same to `getRawGlobalTempView`
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
-    getGlobalTempView(name).map(getTempViewPlan)
+    getRawGlobalTempView(name).map(getTempViewPlan)
   }
 
   /**
