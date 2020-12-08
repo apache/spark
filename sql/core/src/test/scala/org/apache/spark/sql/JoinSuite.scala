@@ -1148,6 +1148,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
     // Test shuffled hash join
     withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
@@ -1310,6 +1311,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         // Set broadcast join threshold and number of shuffle partitions,
         // as shuffled hash join depends on these two configs.
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val shjCodegenDF = df1.join(df2, $"k1" === $"k2", joinType)
         assert(shjCodegenDF.queryExecution.executedPlan.collect {
