@@ -75,7 +75,7 @@ public interface SupportsPartitionManagement extends Table {
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
      *
-     * @param ident a partition identifier
+     * @param ident a partition identifier which must contain all partition fields in order
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
