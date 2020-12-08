@@ -80,14 +80,14 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
-        String[] partitionNames = partitionSchema().names();
-        if (ident.numFields() == partitionNames.length) {
-          return listPartitionIdentifiers(partitionNames, ident).length > 0;
-        } else {
-          throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
-            ") in the partition identifier is not equal to the partition schema length (" +
-            partitionNames.length + "). The identifier cannot identify one partition.");
-        }
+      String[] partitionNames = partitionSchema().names();
+      if (ident.numFields() == partitionNames.length) {
+        return listPartitionIdentifiers(partitionNames, ident).length > 0;
+      } else {
+        throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
+          ") in the partition identifier is not equal to the partition schema length (" +
+          partitionNames.length + "). The identifier cannot identify one partition.");
+      }
     }
 
     /**
