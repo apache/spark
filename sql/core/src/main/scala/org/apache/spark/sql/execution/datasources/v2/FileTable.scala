@@ -60,7 +60,7 @@ abstract class FileTable(
     }
   }
 
-  lazy val dataSchema: StructType = {
+  lazy val fileSchema: StructType = {
     val schema = userSpecifiedSchema.map { schema =>
       val partitionSchema = fileIndex.partitionSchema
       val resolver = sparkSession.sessionState.conf.resolver
@@ -77,11 +77,19 @@ abstract class FileTable(
     }
   }
 
+  lazy val dataSchema: StructType = {
+    StructType(fileSchema.filterNot(partitionSchema.contains))
+  }
+
+  lazy val partitionSchema: StructType = {
+    fileIndex.partitionSchema
+  }
+
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkSchemaColumnNameDuplication(dataSchema,
+    SchemaUtils.checkSchemaColumnNameDuplication(fileSchema,
       "in the data schema", caseSensitive)
-    dataSchema.foreach { field =>
+    fileSchema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(
           s"$formatName data source does not support ${field.dataType.catalogString} data type.")
@@ -95,14 +103,14 @@ abstract class FileTable(
 
     // When data and partition schemas have overlapping columns,
     // tableSchema = dataSchema - overlapSchema + partitionSchema
-    val fields = dataSchema.fields.filterNot { field =>
+    val fields = fileSchema.fields.filterNot { field =>
       val colName = PartitioningUtils.getColName(field, caseSensitive)
       partitionNameSet.contains(colName)
     } ++ partitionSchema.fields
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] = partitionSchema.names.toSeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
