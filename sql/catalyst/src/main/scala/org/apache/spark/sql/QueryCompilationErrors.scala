@@ -231,7 +231,7 @@ object QueryCompilationErrors {
   }
 
   def invalidStarUsageError(prettyName: String): Throwable = {
-    new AnalysisException(s"Invalid usage of '*' in expression '$prettyName'")
+    new AnalysisException(s"Invalid usage of '*' in $prettyName")
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
@@ -292,8 +292,8 @@ object QueryCompilationErrors {
       s"Please file a bug report with this error message, stack trace, and the query.")
   }
 
-  def windowFunctionNotAllowedError(): Throwable = {
-    new AnalysisException("It is not allowed to use window functions inside WHERE/HAVING clause")
+  def windowFunctionNotAllowedError(clauseName: String): Throwable = {
+    new AnalysisException(s"It is not allowed to use window functions inside $clauseName clause")
   }
 
   def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {

@@ -1476,7 +1476,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         )
       case g: Generate if containsStar(g.generator.children) =>
-        throw QueryCompilationErrors.invalidStarUsageError(g.generator.prettyName)
+        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
@@ -1736,7 +1736,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(o.prettyName)
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
       }
     }
   }
@@ -2836,10 +2836,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
-        throw QueryCompilationErrors.windowFunctionNotAllowedError
+        throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
 
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
-        throw QueryCompilationErrors.windowFunctionNotAllowedError
+        throw QueryCompilationErrors.windowFunctionNotAllowedError("HAVING")
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
