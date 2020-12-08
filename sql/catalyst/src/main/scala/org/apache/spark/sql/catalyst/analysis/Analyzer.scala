@@ -1116,12 +1116,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, hint) =>
+      case u @ UnresolvedView(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView => v
           case _ =>
             u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view." +
-              hint.map(" " + _).getOrElse(""))
+              relationTypeMismatchHint.map(" " + _).getOrElse(""))
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>
