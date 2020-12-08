@@ -234,7 +234,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("create table using as select - with overriden max number of buckets") {
+  test("create table using as select - with overridden max number of buckets") {
     def createTableSql(numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET
