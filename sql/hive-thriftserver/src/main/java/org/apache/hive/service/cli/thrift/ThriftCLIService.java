@@ -257,17 +257,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       }
     } catch (Exception e) {
       LOG.warn("Error opening session: ", e);
-      resp.setStatus(toTStatus(e));
+      resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
-  }
-
-  public static TStatus toTStatus(Exception e) {
-    TStatus tStatus = new TStatus(TStatusCode.ERROR_STATUS);
-    tStatus.setErrorMessage(org.apache.hadoop.util.StringUtils
-       .stringifyException(e));
-    tStatus.setInfoMessages(HiveSQLException.toString(e));
-    return tStatus;
   }
 
   @Override
