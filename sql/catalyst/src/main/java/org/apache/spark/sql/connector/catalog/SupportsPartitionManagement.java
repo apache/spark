@@ -86,7 +86,7 @@ public interface SupportsPartitionManagement extends Table {
       } else {
         throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
           ") in the partition identifier is not equal to the partition schema length (" +
-          partitionNames.length + "). The identifier cannot identify one partition.");
+          partitionNames.length + "). The identifier might not refer to one partition.");
       }
     }
 
