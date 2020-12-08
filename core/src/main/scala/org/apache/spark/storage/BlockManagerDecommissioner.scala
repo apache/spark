@@ -418,7 +418,7 @@ private[storage] class BlockManagerDecommissioner(
     if (stopped || (stoppedRDD && stoppedShuffle)) {
       // Since we don't have anything left to migrate ever (since we don't restart once
       // stopped), return that we're done with a validity timestamp that doesn't expire.
-      logError("All block migrations stopped, reporting migrations as finished.")
+      logInfo("All block migrations stopped, reporting migrations as finished.")
       (Long.MaxValue, true)
     } else {
       // Chose the min of the active times. See the function description for more information.

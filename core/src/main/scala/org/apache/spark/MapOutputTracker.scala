@@ -67,7 +67,7 @@ private class ShuffleStatus(numPartitions: Int) extends Logging {
       }
     } catch {
       case e: java.lang.NullPointerException =>
-        logWarning(s"Unable to update map output for ${mapId}, status removed i-flight")
+        logWarning(s"Unable to update map output for ${mapId}, status removed in-flight")
     }
   }
   /**
