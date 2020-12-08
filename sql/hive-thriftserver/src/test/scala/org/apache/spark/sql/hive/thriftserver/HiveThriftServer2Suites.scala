@@ -1165,7 +1165,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val tempLog4jConf = Utils.createTempDir().getCanonicalPath
 
       Files.write(
-        """log4j.rootCategory=INFO, console
+        """log4j.rootCategory=DEBUG, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
@@ -1187,7 +1187,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.LOCALSCRATCHDIR}=$lScratchDir
        |  --hiveconf $portConf=0
        |  --driver-class-path $driverClassPath
-       |  --driver-java-options -Dlog4j.info
+       |  --driver-java-options -Dlog4j.debug
        |  --conf spark.ui.enabled=false
        |  ${extraConf.mkString("\n")}
      """.stripMargin.split("\\s+").toSeq
@@ -1346,13 +1346,11 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         throw cause
     }.get
 
-    dumpLogs()
     logInfo(s"HiveThriftServer2 started successfully")
   }
 
   override protected def afterAll(): Unit = {
     try {
-      dumpLogs()
       stopThriftServer()
       logInfo("HiveThriftServer2 stopped")
     } finally {
@@ -1373,7 +1371,17 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
-  def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*): Unit = {
+  private def tryCaptureSysLog(f: => Unit): Unit = {
+    try f catch {
+      case e: Exception =>
+        // Dump the HiveThriftServer2 log if error occurs, e.g. getConnection failure.
+        dumpLogs()
+        throw e
+    }
+  }
+
+  def withMultipleConnectionJdbcStatement(
+      tableNames: String*)(fs: (Statement => Unit)*): Unit = tryCaptureSysLog {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
@@ -1394,7 +1402,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     }
   }
 
-  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = {
+  def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = tryCaptureSysLog {
     val user = System.getProperty("user.name")
     val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
     val statements = connections.map(_.createStatement())
