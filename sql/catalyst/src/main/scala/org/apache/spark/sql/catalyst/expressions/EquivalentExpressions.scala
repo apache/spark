@@ -44,6 +44,12 @@ class EquivalentExpressions {
   // For each expression, the set of equivalent expressions.
   private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
+  // Stores the mapping between expression and subexpressions. Note that we only store the top-level
+  // expression relation. For example, for two expressions ExprA(Expr(Expr1, ...), ...),
+  // ExprB(Expr(Expr1, ...), ...), extracted subexpression is Expr1. Here we will store
+  // ExprA -> Expr1, ExprB -> Expr1.
+  private val exprToSubExprMap = mutable.HashMap.empty[Exp, Expr]
+
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
    * expressions. Non-recursive.
