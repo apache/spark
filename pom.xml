@@ -189,6 +189,7 @@
     <joda.version>2.10.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.8-1</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
@@ -2050,7 +2051,7 @@
         <version>3.1.2</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.hive</groupId>
+            <groupId>*</groupId>
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
@@ -2287,6 +2288,17 @@
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.thrift</groupId>
+        <artifactId>libthrift</artifactId>
+        <version>${libthrift.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
