@@ -395,6 +395,8 @@ object SparkBuild extends PomBuild {
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
+  enable(HiveThriftServer.settings)(hiveThriftServer)
+
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
    * jar.
@@ -654,10 +656,7 @@ object DependencyOverrides {
  */
 object ExcludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
-    excludeDependencies ++= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api")
-    )
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
   )
 }
 
@@ -758,6 +757,14 @@ object Hive {
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
+  )
+}
+
+object HiveThriftServer {
+  lazy val settings = Seq(
+    excludeDependencies ++= Seq(
+      ExclusionRule("javax.ws.rs", "jsr311-api")
+    )
   )
 }
 
