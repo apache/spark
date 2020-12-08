@@ -150,7 +150,7 @@ object AnalysisContext {
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(override val catalogManager: CatalogManager)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog with SQLConfHelper {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -277,7 +277,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveNoopDropTable) ++
+      Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
@@ -847,6 +847,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
@@ -887,6 +889,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
+      case u @ UnresolvedView(ident, _, _) =>
+        lookupTempView(ident).map { _ =>
+          ResolvedView(ident.asIdentifier, isTemp = true)
+        }
+        .getOrElse(u)
       case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
         lookupTempView(ident)
           .map { _ =>
@@ -1109,6 +1116,14 @@ class Analyzer(override val catalogManager: CatalogManager)
             val viewStr = if (v.isTemp) "temp view" else "view"
             u.failAnalysis(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.")
           case table => table
+        }.getOrElse(u)
+
+      case u @ UnresolvedView(identifier, cmd, relationTypeMismatchHint) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView => v
+          case _ =>
+            u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view." +
+              relationTypeMismatchHint.map(" " + _).getOrElse(""))
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>

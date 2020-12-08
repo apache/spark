@@ -278,18 +278,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val allCode = importedCode ++ code
     val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
       // Although the loop is heavy, only used for bracketed comments test.
-      val querys = new ArrayBuffer[String]
+      val queries = new ArrayBuffer[String]
       val otherCodes = new ArrayBuffer[String]
       var tempStr = ""
       var start = false
       for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
-          querys ++= splitWithSemicolon(otherCodes.toSeq)
+          queries ++= splitWithSemicolon(otherCodes.toSeq)
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
-          querys += s"\n${tempStr.stripSuffix(";")}"
+          queries += s"\n${tempStr.stripSuffix(";")}"
           tempStr = ""
         } else if (start) {
           tempStr += s"\n$c"
@@ -298,9 +298,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       }
       if (otherCodes.nonEmpty) {
-        querys ++= splitWithSemicolon(otherCodes.toSeq)
+        queries ++= splitWithSemicolon(otherCodes.toSeq)
       }
-      querys.toSeq
+      queries.toSeq
     } else {
       splitWithSemicolon(allCode).toSeq
     }

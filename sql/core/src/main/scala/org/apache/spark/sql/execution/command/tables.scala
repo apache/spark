@@ -352,7 +352,7 @@ case class LoadDataCommand(
         // entire  string will be considered while making a Path instance,this is mainly done
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
-        // the remaining charecters after '?' will be removed while forming URI instance
+        // the remaining characters after '?' will be removed while forming URI instance
         LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }

@@ -339,13 +339,6 @@ case class AlterViewAsStatement(
     query: LogicalPlan) extends ParsedStatement
 
 /**
- * A DROP VIEW statement, as parsed from SQL.
- */
-case class DropViewStatement(
-    viewName: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
@@ -376,15 +369,6 @@ case class InsertIntoStatement(
 
   override def children: Seq[LogicalPlan] = query :: Nil
 }
-
-/**
- * A SHOW TABLE EXTENDED statement, as parsed from SQL.
- */
-case class ShowTableStatement(
-    namespace: Option[Seq[String]],
-    pattern: String,
-    partitionSpec: Option[TablePartitionSpec])
-  extends ParsedStatement
 
 /**
  * A CREATE NAMESPACE statement, as parsed from SQL.
