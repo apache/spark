@@ -485,21 +485,6 @@ object View {
     }
     sqlConf
   }
-
-  def fromCatalogTable(
-      metadata: CatalogTable, isTempView: Boolean, parser: ParserInterface): View = {
-    val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-    val viewConfigs = metadata.viewSQLConfigs
-    val viewPlan =
-      SQLConf.withExistingConf(effectiveSQLConf(viewConfigs, isTempView = isTempView)) {
-        parser.parsePlan(viewText)
-      }
-    View(
-      desc = metadata,
-      isTempView = isTempView,
-      output = metadata.schema.toAttributes,
-      child = viewPlan)
-  }
 }
 
 /**

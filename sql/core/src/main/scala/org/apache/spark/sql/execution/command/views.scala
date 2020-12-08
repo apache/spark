@@ -113,12 +113,8 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
-      val shouldUncache = replace && catalog.getTempView(name.table).exists {
-        // Uncache View logical plan without checking the same result check, since it's unresolved.
-        case _: View => true
-        case other => !other.sameResult(child)
-      }
-      if (shouldUncache) {
+      if (replace && catalog.getRawTempView(name.table).isDefined &&
+          !catalog.getRawTempView(name.table).get.sameResult(child)) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
@@ -141,12 +137,8 @@ case class CreateViewCommand(
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
-      val shouldUncache = replace && catalog.getGlobalTempView(name.table).exists {
-        // Uncache View logical plan without checking the same result check, since it's unresolved.
-        case _: View => true
-        case other => !other.sameResult(child)
-      }
-      if (shouldUncache) {
+      if (replace && catalog.getRawGlobalTempView(name.table).isDefined &&
+          !catalog.getRawGlobalTempView(name.table).get.sameResult(child)) {
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
