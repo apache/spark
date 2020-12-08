@@ -140,6 +140,7 @@ private[spark] class CompressedMapStatus(
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
+    out.writeInt(_mapTaskId)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -147,6 +148,7 @@ private[spark] class CompressedMapStatus(
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
+    _mapTaskId = in.readInt()
   }
 }
 
@@ -204,6 +206,7 @@ private[spark] class HighlyCompressedMapStatus private (
       out.writeInt(kv._1)
       out.writeByte(kv._2)
     }
+    out.writeInt(_mapTaskId)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -219,6 +222,7 @@ private[spark] class HighlyCompressedMapStatus private (
       hugeBlockSizesArray += Tuple2(block, size)
     }
     hugeBlockSizes = hugeBlockSizesArray.toMap
+    _mapTaskId = in.readInt()
   }
 }
 
