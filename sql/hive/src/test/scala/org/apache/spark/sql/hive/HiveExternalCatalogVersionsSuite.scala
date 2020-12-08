@@ -60,7 +60,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    "2.3.7"
+    "2.3.8"
   } else {
     "1.2.1"
   }

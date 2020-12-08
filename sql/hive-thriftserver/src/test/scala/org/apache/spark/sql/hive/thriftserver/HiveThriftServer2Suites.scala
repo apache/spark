@@ -545,7 +545,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.8"))
     }
   }
 
@@ -558,7 +558,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         conf += resultSet.getString(1) -> resultSet.getString(2)
       }
 
-      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.7"))
+      assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.8"))
     }
   }
 
