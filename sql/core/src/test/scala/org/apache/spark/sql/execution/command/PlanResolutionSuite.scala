@@ -157,7 +157,10 @@ class PlanResolutionSuite extends AnalysisTest {
     manager
   }
 
-  def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
@@ -167,8 +170,13 @@ class PlanResolutionSuite extends AnalysisTest {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false))
     }
-    // We don't check analysis here, as we expect the plan to be unresolved such as `CreateTable`.
-    analyzer.execute(CatalystSqlParser.parsePlan(query))
+    // We don't check analysis here by default, as we expect the plan to be unresolved
+    // such as `CreateTable`.
+    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
+    if (checkAnalysis) {
+      analyzer.checkAnalysis(analyzed)
+    }
+    analyzed
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -705,7 +713,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("drop view in v2 catalog") {
     intercept[AnalysisException] {
-      parseAndResolve("DROP VIEW testcat.db.view")
+      parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
     }.getMessage.toLowerCase(Locale.ROOT).contains(
       "view support in catalog has not been implemented")
   }
