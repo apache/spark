@@ -25,7 +25,6 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
@@ -305,11 +304,14 @@ class Dataset[T] private[sql](
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
     schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.map { cell =>
+      row.toSeq.zip(newDf.schema).map { case (cell, f) =>
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ => StringEscapeUtils.escapeJava(cell.toString)
+          case _ if f.dataType == StringType =>
+            // Escapes meta-characters not to break the `showString` format
+            cell.toString.replaceAll("\n", "\\\\n").replaceAll("\t", "\\\\t")
+          case _ => cell.toString
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
