@@ -72,8 +72,6 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
           withTable("tab1") {
             (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
 
-            // TODO: temporary function support for temporary view with sql text stored will
-            // be fixed in another PR
             // temporary view
             sql(s"CREATE TEMPORARY VIEW tempView1 AS SELECT $tempFunctionName(id) from tab1")
             checkAnswer(sql("select count(*) FROM tempView1"), Row(10))
