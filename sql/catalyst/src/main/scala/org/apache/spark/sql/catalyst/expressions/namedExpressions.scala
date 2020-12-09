@@ -181,7 +181,10 @@ case class Alias(child: Expression, name: String)(
   }
 
   def newInstance(): NamedExpression =
-    Alias(child, name)(qualifier = qualifier, explicitMetadata = explicitMetadata)
+    Alias(child, name)(
+      qualifier = qualifier,
+      explicitMetadata = explicitMetadata,
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
 
   override def toAttribute: Attribute = {
     if (resolved) {
