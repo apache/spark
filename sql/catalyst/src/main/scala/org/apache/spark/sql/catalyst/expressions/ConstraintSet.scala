@@ -181,11 +181,7 @@ class ConstraintSet private(
       val errorMessage = s"Found same attribute ref present in more than 1 buffers." +
         s"This indicates either a faulty plan involving same dataframe reference self joined" +
         s"without alias or something murkier"
-      if (Utils.isTesting) {
-        throw new IllegalStateException(errorMessage)
-      } else {
-        logError(errorMessage)
-      }
+      throwExceptionOrLogWarning(errorMessage)
     }
     val newSet = new ConstraintSet(this.baseSet.clone(), this.originals.clone(), cleanedAttribList,
       newExpEquivList)
@@ -645,11 +641,7 @@ class ConstraintSet private(
           if(!(seqContainingAttrib.isEmpty || seqContainingAttrib.size == 1)) {
             val errorMessage = s"Attribute $x found in" +
               s" more than 1 buffers"
-            if (Utils.isTesting) {
-              throw new IllegalStateException(errorMessage)
-            } else {
-              this.logWarning(errorMessage)
-            }
+            throwExceptionOrLogWarning(errorMessage)
           }
           if (seqContainingAttrib.nonEmpty) {
             x -> seqContainingAttrib.head.head
@@ -784,6 +776,14 @@ class ConstraintSet private(
       this.expressionBasedEquivalenceList(bufferIndex).last
     } else {
       expr
+    }
+  }
+
+  private def throwExceptionOrLogWarning(errorMessage: String): Unit = {
+    if (Utils.isTesting) {
+      throw new IllegalStateException(errorMessage)
+    } else {
+      logWarning(errorMessage)
     }
   }
 
