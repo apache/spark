@@ -36,6 +36,7 @@ import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
+import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -74,6 +75,7 @@ trait SharedThriftServer extends SharedSparkSession {
       super.afterAll()
       SessionState.detachSession()
       Hive.closeCurrent()
+      SharedState.GLOBAL_SHARED_STATE.set(null)
     }
   }
 
