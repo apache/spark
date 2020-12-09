@@ -96,6 +96,15 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("table to alter does not exist") {
+    withNsTable(s"$catalog.ns", "does_not_exist") { t =>
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
+      }.getMessage
+      assert(errMsg.contains("Table not found"))
+    }
+  }
+
   test("partition already exists") {
     withNsTable(s"$catalog.ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
