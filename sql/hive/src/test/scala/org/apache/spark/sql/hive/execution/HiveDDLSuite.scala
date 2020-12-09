@@ -879,11 +879,17 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
+        assertAnalysisError(
+          s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
+          s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
+            "Please use ALTER TABLE instead.")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
+        assertAnalysisError(
+          s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
+          s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
+            "Please use ALTER TABLE instead.")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
