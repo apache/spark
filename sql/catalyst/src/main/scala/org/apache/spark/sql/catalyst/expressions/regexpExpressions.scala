@@ -93,7 +93,7 @@ abstract class StringRegexExpression extends BinaryExpression
           Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
           to match "\abc", the pattern should be "\\abc".
 
-          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it falls back
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
       * escape - an character added since Spark 3.0. The default escape character is the '\'.

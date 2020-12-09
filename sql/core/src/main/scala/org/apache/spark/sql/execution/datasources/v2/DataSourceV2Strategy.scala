@@ -251,14 +251,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropTable(r: ResolvedTable, ifExists, purge) =>
       DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
 
-    case _: NoopDropTable =>
+    case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(catalog, oldIdent, newIdent) =>
-      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+    case RenameTable(ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+      if (isView) {
+        throw new AnalysisException(
+          "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+      }
+      RenameTableExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
@@ -290,6 +294,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
+
+    case _: ShowTableExtended =>
+      throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
 
     case SetCatalogAndNamespace(catalogManager, catalogName, ns) =>
       SetCatalogAndNamespaceExec(catalogManager, catalogName, ns) :: Nil
@@ -333,6 +340,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         catalog,
         table,
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
+
+    case RepairTable(_: ResolvedTable) =>
+      throw new AnalysisException("MSCK REPAIR TABLE is not supported for v2 tables.")
 
     case _ => Nil
   }

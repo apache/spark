@@ -65,7 +65,7 @@ object HiveSerDe {
         outputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"),
         serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
 
-  // `HiveSerDe` in `serdeMap` should be dintinct.
+  // `HiveSerDe` in `serdeMap` should be distinct.
   val serdeInverseMap: Map[HiveSerDe, String] = serdeMap.flatMap {
     case ("sequencefile", _) => None
     case ("rcfile", _) => None

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -721,13 +721,18 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("drop view") {
+    val cmd = "DROP VIEW"
+    val hint = Some("Please use DROP TABLE instead.")
     parseCompare(s"DROP VIEW testcat.db.view",
-      DropViewStatement(Seq("testcat", "db", "view"), ifExists = false))
-    parseCompare(s"DROP VIEW db.view", DropViewStatement(Seq("db", "view"), ifExists = false))
+      DropView(UnresolvedView(Seq("testcat", "db", "view"), cmd, hint), ifExists = false))
+    parseCompare(s"DROP VIEW db.view",
+      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS db.view",
-      DropViewStatement(Seq("db", "view"), ifExists = true))
-    parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
-    parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = true))
+    parseCompare(s"DROP VIEW view",
+      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = false))
+    parseCompare(s"DROP VIEW IF EXISTS view",
+      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = true))
   }
 
   private def testCreateOrReplaceDdl(
@@ -958,7 +963,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: mutiple property changes are not allowed") {
+  test("alter table: multiple property changes are not allowed") {
     intercept[ParseException] {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
         "TYPE bigint COMMENT 'new comment'")}
@@ -1103,10 +1108,16 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table/view: rename table/view") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = false))
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = true))
   }
 
   test("describe table column") {
@@ -1950,7 +1961,7 @@ class DDLParserSuite extends AnalysisTest {
   test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTableStatement(Seq("a", "b", "c")))
+      RepairTable(UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE")))
   }
 
   test("LOAD DATA INTO table") {

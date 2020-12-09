@@ -143,7 +143,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
       // The conversion can fail when the `field` is not a form of number.
       val bigDecimal = decimalParser(field)
       // Because many other formats do not support decimal, it reduces the cases for
-      // decimals by disallowing values having scale (eg. `1.1`).
+      // decimals by disallowing values having scale (e.g. `1.1`).
       if (bigDecimal.scale <= 0) {
         // `DecimalType` conversion can fail when
         //   1. The precision is bigger than 38.
