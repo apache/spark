@@ -341,6 +341,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table,
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
+    case RepairTable(_: ResolvedTable) =>
+      throw new AnalysisException("MSCK REPAIR TABLE is not supported for v2 tables.")
+
     case _ => Nil
   }
 }
