@@ -43,12 +43,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
     assert(partitions === expected.toSet)
   }
 
-  protected def checkLocation(
-      ns: String,
-      tableName: String,
-      spec: String,
-      expected: String): Unit = {
-    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($spec)")
+  protected def checkLocation(t: String, spec: Map[String, String], expected: String): Unit = {
+    val tablePath = t.split('.')
+    val tableName = tablePath.last
+    val ns = tablePath.init.mkString(".")
+    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
+    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
       .select("information")
       .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
@@ -64,7 +64,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
         spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
         checkPartitions(t, Map("id" -> "1"))
-        checkLocation(s"$catalog.ns", "tbl", "id = 1", "loc")
+        checkLocation(t, Map("id" -> "1"), "loc")
       }
     }
   }
