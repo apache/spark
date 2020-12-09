@@ -122,3 +122,7 @@ DESC EXTENDED students name;
 |     histogram|      NULL|
 +--------------+----------+
 ```
+
+### Related Statements
+
+* [ANALYZE TABLES](sql-ref-syntax-aux-analyze-tables.html)

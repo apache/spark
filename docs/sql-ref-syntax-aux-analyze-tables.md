@@ -57,17 +57,44 @@ SHOW TABLE EXTENDED IN school_db LIKE '*';
 +------------+------------+--------------+----------------------------------------------------+
 |  database  | tableName  | isTemporary  |                    information                     |
 +------------+------------+--------------+----------------------------------------------------+
-| school_db  | students   | false        | Database: school_db
-Table: students
-...
-Statistics: 24 bytes
-...
-
-| school_db  | teachers   | false        | Database: school_db
-Table: teachers
-...
-Statistics: 14 bytes
-...
+|school_db   |students    |false         |Database: school_db
+                                          Table: students
+                                          Owner: root
+                                          Created Time: Wed Dec 09 14:23:25 CST 2020
+                                          Last Access: UNKNOWN
+                                          Created By: Spark 3.2.0-SNAPSHOT
+                                          Type: MANAGED
+                                          Provider: hive
+                                          Table Properties: [transient_lastDdlTime=1607495032]
+                                          Statistics: 24 bytes
+                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/students
+                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                                          Storage Properties: [serialization.format=1]
+                                          Partition Provider: Catalog
+                                          Schema: root
+                                           |-- name: string (nullable = true)
+                                           |-- student_id: integer (nullable = true)          |
+|school_db   |teachers    |false         |Database: school_db
+                                          Table: teachers
+                                          Owner: root
+                                          Created Time: Wed Dec 09 14:24:15 CST 2020
+                                          Last Access: UNKNOWN
+                                          Created By: Spark 3.2.0-SNAPSHOT
+                                          Type: MANAGED
+                                          Provider: hive
+                                          Table Properties: [transient_lastDdlTime=1607495059]
+                                          Statistics: 14 bytes
+                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/teachers
+                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                                          Storage Properties: [serialization.format=1]
+                                          Partition Provider: Catalog
+                                          Schema: root
+                                           |-- name: string (nullable = true)
+                                           |-- teacher_id: integer (nullable = true)          |
 +------------+------------+--------------+----------------------------------------------------+
 
 ANALYZE TABLES COMPUTE STATISTICS;
@@ -76,15 +103,47 @@ SHOW TABLE EXTENDED IN school_db LIKE '*';
 +------------+------------+--------------+----------------------------------------------------+
 |  database  | tableName  | isTemporary  |                    information                     |
 +------------+------------+--------------+----------------------------------------------------+
-| school_db  | students   | false        | Database: school_db
-Table: students
-...
-Statistics: 24 bytes, 2 rows
-...
-| school_db  | teachers   | false        | Database: school_db
-Table: teachers
-...
-Statistics: 14 bytes, 2 rows
-...
+|school_db   |students    |false         |Database: school_db
+                                          Table: students
+                                          Owner: root
+                                          Created Time: Wed Dec 09 14:23:25 CST 2020
+                                          Last Access: UNKNOWN
+                                          Created By: Spark 3.2.0-SNAPSHOT
+                                          Type: MANAGED
+                                          Provider: hive
+                                          Table Properties: [transient_lastDdlTime=1607495311]
+                                          Statistics: 24 bytes, 2 rows
+                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/students
+                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                                          Storage Properties: [serialization.format=1]
+                                          Partition Provider: Catalog
+                                          Schema: root
+                                           |-- name: string (nullable = true)
+                                           |-- student_id: integer (nullable = true)          |
+|school_db   |teachers    |false         |Database: school_db
+                                          Table: teachers
+                                          Owner: root
+                                          Created Time: Wed Dec 09 14:24:15 CST 2020
+                                          Last Access: UNKNOWN
+                                          Created By: Spark 3.2.0-SNAPSHOT
+                                          Type: MANAGED
+                                          Provider: hive
+                                          Table Properties: [transient_lastDdlTime=1607495312]
+                                          Statistics: 14 bytes, 2 rows
+                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/teachers
+                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                                          Storage Properties: [serialization.format=1]
+                                          Partition Provider: Catalog
+                                          Schema: root
+                                           |-- name: string (nullable = true)
+                                           |-- teacher_id: integer (nullable = true)          |
 +------------+------------+--------------+----------------------------------------------------+
 ```
+
+### Related Statements
+
+* [ANALYZE TABLE](sql-ref-syntax-aux-analyze-table.html)
