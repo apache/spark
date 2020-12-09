@@ -1235,7 +1235,7 @@ class DataFrameSuite extends QueryTest
     assert(df.showString(10, vertical = true) === expectedAnswer)
   }
 
-  test("showString: escape meta-characters") {
+  test("SPARK-33690: showString: escape meta-characters") {
     val df = Seq("aaa\nbbb\tccc").toDF("value")
     assert(df.showString(1, truncate = 0) ===
       """+-------------+
