@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog}
+import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,6 +38,7 @@ class AlterTableAddPartitionSuite
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
+    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
   override protected def checkLocation(
       t: String,
@@ -56,5 +58,15 @@ class AlterTableAddPartitionSuite
 
     assert(partMetadata.containsKey("location"))
     assert(partMetadata.get("location") === expected)
+  }
+
+  test("SPARK-33650: add partition into a table which doesn't support partition management") {
+    withNsTable(s"non_part_$catalog.ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      }.getMessage
+      assert(errMsg.contains(s"Table $t can not alter partitions"))
+    }
   }
 }

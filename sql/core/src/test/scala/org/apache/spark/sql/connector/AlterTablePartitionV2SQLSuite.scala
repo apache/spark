@@ -132,19 +132,14 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-33650: add/drop partition into a table which doesn't support partition management") {
+  test("SPARK-33650: drop partition into a table which doesn't support partition management") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING _")
-      Seq(
-        s"ALTER TABLE $t ADD PARTITION (id=1)",
-        s"ALTER TABLE $t DROP PARTITION (id=1)"
-      ).foreach { alterTable =>
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(alterTable)
-        }.getMessage
-        assert(errMsg.contains(s"Table $t can not alter partitions"))
-      }
+      val errMsg = intercept[AnalysisException] {
+        spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }.getMessage
+      assert(errMsg.contains(s"Table $t can not alter partitions"))
     }
   }
 
