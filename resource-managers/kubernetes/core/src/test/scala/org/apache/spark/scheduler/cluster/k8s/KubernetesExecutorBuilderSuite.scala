@@ -29,7 +29,7 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
-  override protected def userFeaturesStepConf: ConfigEntry[_] = {
+  override protected def userFeatureStepsConf: ConfigEntry[_] = {
     Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS
   }
 
