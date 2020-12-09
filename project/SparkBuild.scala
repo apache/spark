@@ -763,7 +763,8 @@ object Hive {
 object HiveThriftServer {
   lazy val settings = Seq(
     excludeDependencies ++= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api")
+      ExclusionRule("javax.ws.rs", "jsr311-api"),
+      ExclusionRule(organization = "com.sun.jersey")
     )
   )
 }
