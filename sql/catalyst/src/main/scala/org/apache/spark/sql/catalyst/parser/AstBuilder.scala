@@ -3562,7 +3562,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
     AnalyzeTables(
-      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
+      UnresolvedNamespace(multiPart.getOrElse(Nil)),
       noScan = ctx.identifier != null)
   }
 

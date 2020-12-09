@@ -403,8 +403,7 @@ class ResolveSessionCatalog(
 
     case AnalyzeTables(SessionCatalogAndNamespace(_, ns), noScan) =>
       if (ns.length > 1) {
-        throw new AnalysisException(
-          s"The database name is not valid: ${ns.quoted}")
+        throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
       }
       AnalyzeTablesCommand(ns.headOption, noScan)
 

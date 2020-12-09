@@ -441,15 +441,17 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           .saveAsTable("TBL")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
-        val df2 = spark.sql(
-          """
-             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
-             |FROM tbl t1
-             |JOIN tbl t2 on t1.id=t2.id
-             |WHERE  t1.fld3 IN (-123.23,321.23)
+        withTempView("TBL2") {
+          val df2 = spark.sql(
+            """
+              |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+              |FROM tbl t1
+              |JOIN tbl t2 on t1.id=t2.id
+              |WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
-        df2.createTempView("TBL2")
-        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+          df2.createTempView("TBL2")
+          sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+        }
       }
     }
   }
@@ -571,32 +573,28 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyzes table statistics in cached catalog view") {
-    def getTableStats(tableName: String): Statistics = {
-      spark.table(tableName).queryExecution.optimizedPlan.stats
-    }
-
     withTempDatabase { database =>
       sql(s"CREATE VIEW $database.v AS SELECT 1 c")
       // Cache data eagerly by default, so this operation collects table stats
       sql(s"CACHE TABLE $database.v")
-      val stats1 = getTableStats(s"$database.v")
+      val stats1 = getTableStatsFromOptimizedPlan(s"$database.v")
       assert(stats1.sizeInBytes > 0)
       assert(stats1.rowCount === Some(1))
       sql(s"UNCACHE TABLE $database.v")
 
       // Cache data lazily, then analyze table stats
       sql(s"CACHE LAZY TABLE $database.v")
-      val stats2 = getTableStats(s"$database.v")
+      val stats2 = getTableStatsFromOptimizedPlan(s"$database.v")
       assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
       assert(stats2.rowCount === None)
 
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
-      val stats3 = getTableStats(s"$database.v")
+      val stats3 = getTableStatsFromOptimizedPlan(s"$database.v")
       assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
       assert(stats3.rowCount === None)
 
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
-      val stats4 = getTableStats(s"$database.v")
+      val stats4 = getTableStatsFromOptimizedPlan(s"$database.v")
       assert(stats4.sizeInBytes === stats1.sizeInBytes)
       assert(stats4.rowCount === Some(1))
     }
@@ -672,23 +670,51 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("analyze all tables in a specific database") {
-    withTempDir { dir =>
-      withTable("t1", "t2") {
-        spark.range(10).write.saveAsTable("t1")
-        sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
-          "AS SELECT * FROM range(20)")
-        withView("v1") {
-          sql(s"CREATE VIEW v1 AS SELECT * FROM t1")
-          sql(s"ANALYZE TABLES IN default COMPUTE STATISTICS NOSCAN")
-          checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
-          checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+  test("SPARK-33687: analyze all tables in a specific database") {
+    withTempDatabase { database =>
+      spark.catalog.setCurrentDatabase(database)
+      withTempDir { dir =>
+        withTable("t1", "t2") {
+          spark.range(10).write.saveAsTable("t1")
+          sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+            "AS SELECT * FROM range(20)")
+          withView("v1", "v2") {
+            sql("CREATE VIEW v1 AS SELECT 1 c1")
+            sql("CREATE VIEW v2 AS SELECT 2 c2")
+            sql("CACHE TABLE v1")
+            sql("CACHE TABLE v2")
+            sql("UNCACHE TABLE v1")
+            sql("UNCACHE TABLE v2")
+            sql("CACHE LAZY TABLE v2")
 
-          sql(s"ANALYZE TABLES COMPUTE STATISTICS")
-          checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
-          checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+            sql(s"ANALYZE TABLES IN $database COMPUTE STATISTICS NOSCAN")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+            assert(getCatalogTable("v1").stats.isEmpty)
+            val stats11 = getTableStatsFromOptimizedPlan("v1")
+            assert(stats11.sizeInBytes > 0)
+            assert(stats11.rowCount === None)
+            val stats12 = getTableStatsFromOptimizedPlan("v2")
+            assert(stats12.sizeInBytes > 0)
+            assert(stats12.rowCount === None)
+
+            sql("ANALYZE TABLES COMPUTE STATISTICS")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+            val stats21 = getTableStatsFromOptimizedPlan("v1")
+            assert(stats21.sizeInBytes > 0)
+            assert(stats21.rowCount === None)
+            val stats22 = getTableStatsFromOptimizedPlan("v2")
+            assert(stats22.sizeInBytes > 0)
+            assert(stats22.rowCount === Some(1))
+          }
         }
       }
     }
+
+    val errMsg = intercept[AnalysisException] {
+      sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
+    }.getMessage
+    assert(errMsg.contains("Database 'db_not_exists' not found"))
   }
 }

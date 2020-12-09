@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 
 
 /**
@@ -30,34 +30,17 @@ case class AnalyzeTablesCommand(
     noScan: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-
     val catalog = sparkSession.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     catalog.listTables(db).foreach { tbl =>
       try {
-        val tableMeta = catalog.getTableMetadata(tbl)
-        if (tableMeta.tableType == CatalogTableType.MANAGED ||
-          tableMeta.tableType == CatalogTableType.EXTERNAL) {
-          // Compute stats for the whole table
-          val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
-          val tableIdentWithDB = TableIdentifier(tbl.table, Some(db))
-          val newRowCount =
-            if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
-
-          // Update the metastore if the above statistics of the table are different from those
-          // recorded in the metastore.
-          val newStats =
-            CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
-          if (newStats.isDefined) {
-            catalog.alterTableStats(tableIdentWithDB, newStats)
-          }
-        }
+        CommandUtils.analyzeTable(sparkSession, tbl, noScan)
       } catch {
-        case e: Exception =>
-          logError(s"Failed to analyze table: ${tbl.identifier}.", e)
+        case NonFatal(e) =>
+          logWarning(s"Failed to analyze table ${tbl.table} in the " +
+            s"database $db because of ${e.toString}", e)
       }
     }
-
     Seq.empty[Row]
   }
 }
