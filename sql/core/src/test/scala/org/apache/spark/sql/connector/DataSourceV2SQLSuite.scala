@@ -285,7 +285,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CreateTable/RepalceTable: invalid schema if has interval type") {
+  test("CreateTable/ReplaceTable: invalid schema if has interval type") {
     Seq("CREATE", "REPLACE").foreach { action =>
       val e1 = intercept[AnalysisException](
         sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
@@ -1361,9 +1361,9 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namspace")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namespace")
 
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES")
@@ -1374,11 +1374,11 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
 
     val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namspace")
+      sql("SHOW NAMESPACES in testcat_no_namespace")
     }
 
     assert(exception.getMessage.contains("does not support namespaces"))
@@ -2269,7 +2269,7 @@ class DataSourceV2SQLSuite
 
     val e = intercept[AnalysisException] {
       // Since the following multi-part name starts with `globalTempDB`, it is resolved to
-      // the session catalog, not the `gloabl_temp` v2 catalog.
+      // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
     assert(e.message.contains(
@@ -2595,6 +2595,13 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("DROP VIEW is not supported for v2 catalogs") {
+    assertAnalysisError(
+      "DROP VIEW testcat.v",
+      "Cannot specify catalog `testcat` for view v because view support in v2 catalog " +
+        "has not been implemented yet. DROP VIEW expects a view.")
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
@@ -2607,13 +2614,6 @@ class DataSourceV2SQLSuite
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
-  private def testV1CommandSupportingTempView(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with temp views or v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

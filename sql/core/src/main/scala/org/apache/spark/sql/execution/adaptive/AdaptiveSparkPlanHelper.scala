@@ -115,7 +115,7 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Returns a sequence containing the subqueries in this plan, also including the (nested)
-   * subquries in its children
+   * subqueries in its children
    */
   def subqueriesAll(p: SparkPlan): Seq[SparkPlan] = {
     val subqueries = flatMap(p)(_.subqueries)

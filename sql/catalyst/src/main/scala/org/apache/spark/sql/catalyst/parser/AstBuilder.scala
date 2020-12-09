@@ -3155,11 +3155,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[DropViewStatement]] command.
+   * Create a [[DropView]] command.
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
-    DropViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
+    DropView(
+      UnresolvedView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        "DROP VIEW",
+        Some("Please use DROP TABLE instead.")),
       ctx.EXISTS != null)
   }
 
@@ -3190,13 +3193,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[ShowTableStatement]] command.
+   * Create a [[ShowTableExtended]] command.
    */
-  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowTableStatement(
-      Option(ctx.ns).map(visitMultipartIdentifier),
+  override def visitShowTableExtended(
+      ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    ShowTableExtended(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       string(ctx.pattern),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+      partitionKeys)
   }
 
   /**

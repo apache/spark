@@ -78,6 +78,14 @@ class PlanResolutionSuite extends AnalysisTest {
     V1Table(t)
   }
 
+  private val view: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.tableType).thenReturn(CatalogTableType.VIEW)
+    when(t.provider).thenReturn(Some(v1Format))
+    V1Table(t)
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -101,6 +109,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table" => table
         case "v2Table1" => table
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
+        case "view" => view
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -148,7 +157,10 @@ class PlanResolutionSuite extends AnalysisTest {
     manager
   }
 
-  def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
@@ -158,8 +170,13 @@ class PlanResolutionSuite extends AnalysisTest {
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
         new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false))
     }
-    // We don't check analysis here, as we expect the plan to be unresolved such as `CreateTable`.
-    analyzer.execute(CatalystSqlParser.parsePlan(query))
+    // We don't check analysis here by default, as we expect the plan to be unresolved
+    // such as `CreateTable`.
+    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
+    if (checkAnalysis) {
+      analyzer.checkAnalysis(analyzed)
+    }
+    analyzed
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -677,6 +694,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewIdent1 = TableIdentifier("view", Option("db"))
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"))
+    val tempViewName = "v"
+    val tempViewIdent = TableIdentifier("v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -686,11 +705,15 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(viewIdent2, ifExists = false, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
   }
 
   test("drop view in v2 catalog") {
     intercept[AnalysisException] {
-      parseAndResolve("DROP VIEW testcat.db.view")
+      parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
     }.getMessage.toLowerCase(Locale.ROOT).contains(
       "view support in catalog has not been implemented")
   }
@@ -1164,26 +1187,26 @@ class PlanResolutionSuite extends AnalysisTest {
     )
   }
 
-  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatalog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
-      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      val catalogIdent = if (isSessionCatalog) v2SessionCatalog else testCat
+      val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case AppendData(r: DataSourceV2Relation, _, _, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
           assert(t.identifier == tableIdent)

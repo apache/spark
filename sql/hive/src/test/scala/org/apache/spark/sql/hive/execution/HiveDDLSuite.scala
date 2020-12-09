@@ -1048,7 +1048,8 @@ class HiveDDLSuite
       val message = intercept[AnalysisException] {
         sql("DROP VIEW tab1")
       }.getMessage
-      assert(message.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+      assert(message.contains(
+        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
     }
   }
 
