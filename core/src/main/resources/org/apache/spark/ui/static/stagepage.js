@@ -489,7 +489,7 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                var peakMemoryMetrics = row.peakMemoryMetrics
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
                                 if (typeof peakMemoryMetrics !== 'undefined') {
                                     if (type !== 'display')
                                         return peakMemoryMetrics.JVMHeapMemory;
@@ -532,7 +532,7 @@ $(document).ready(function () {
                                         return peakMemoryMetrics.OnHeapStorageMemory;
                                     else
                                         return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
-                                            formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
+                                            formatBytes(peakMemoryMetrics.OffHeapStorageMemory, type));
                                 } else {
                                     if (type !== 'display') {
                                         return 0;
