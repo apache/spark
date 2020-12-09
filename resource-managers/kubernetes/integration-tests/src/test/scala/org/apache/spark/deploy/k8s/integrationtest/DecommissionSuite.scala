@@ -40,7 +40,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
     var execLogs = scala.collection.mutable.HashMap[String, String]()
 
-    def collectExecLogsPodCheck(pod: Pod) = {
+    def collectExecLogsPodCheck(pod: Pod): Unit = {
       doBasicExecutorPyPodCheck(pod)
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val myLog = kubernetesTestComponents.kubernetesClient
@@ -73,7 +73,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         decommissioningTest = true)
     } catch {
       case e: Exception =>
-        println(s"Had an exception, exec logs are ${execLogs.toString}")
+        logError(s"Had an exception, exec logs are ${execLogs.toString}", e)
         throw e
     }
   }
