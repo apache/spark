@@ -339,7 +339,7 @@ NULL
 -- !query
 SELECT regexp_like('1a 2b 14m', '\\d+b')
 -- !query schema
-struct<1a 2b 14m REGEXP_LIKE \d+b:boolean>
+struct<REGEXP_LIKE(1a 2b 14m, \d+b):boolean>
 -- !query output
 true
 
@@ -347,6 +347,6 @@ true
 -- !query
 SELECT regexp_like('1a 2b 14m', '[a-z]+b')
 -- !query schema
-struct<1a 2b 14m REGEXP_LIKE [a-z]+b:boolean>
+struct<REGEXP_LIKE(1a 2b 14m, [a-z]+b):boolean>
 -- !query output
 false
