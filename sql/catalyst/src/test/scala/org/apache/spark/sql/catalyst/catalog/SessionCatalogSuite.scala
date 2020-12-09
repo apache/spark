@@ -646,7 +646,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Look up a view.
       catalog.setCurrentDatabase("default")
-      val view = View(desc = metadata, output = metadata.schema.toAttributes,
+      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
@@ -666,7 +666,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewText.isDefined)
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
-      val view = View(desc = metadata, output = metadata.schema.toAttributes,
+      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
@@ -1618,26 +1618,28 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
-      catalog.setCurrentDatabase("db1")
-      try {
-        val analyzer = new Analyzer(catalog, conf)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry)
+        catalog.setCurrentDatabase("db1")
+        try {
+          val analyzer = new Analyzer(catalog)
 
-        // The analyzer should report the undefined function rather than the undefined table first.
-        val cause = intercept[AnalysisException] {
-          analyzer.execute(
-            UnresolvedRelation(TableIdentifier("undefined_table")).select(
-              UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          // The analyzer should report the undefined function
+          // rather than the undefined table first.
+          val cause = intercept[AnalysisException] {
+            analyzer.execute(
+              UnresolvedRelation(TableIdentifier("undefined_table")).select(
+                UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+              )
             )
-          )
-        }
+          }
 
-        assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
-        // SPARK-21318: the error message should contains the current database name
-        assert(cause.getMessage.contains("db1"))
-      } finally {
-        catalog.reset()
+          assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+          // SPARK-21318: the error message should contains the current database name
+          assert(cause.getMessage.contains("db1"))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }

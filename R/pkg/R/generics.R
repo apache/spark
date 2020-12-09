@@ -838,6 +838,10 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 #' @name NULL
 setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
 
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("array_to_vector", function(x) { standardGeneric("array_to_vector") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("array_transform", function(x, f) { standardGeneric("array_transform") })
@@ -950,7 +954,6 @@ setGeneric("current_date", function(x = "missing") { standardGeneric("current_da
 #' @name NULL
 setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
 
-
 #' @rdname column_datetime_diff_functions
 #' @name NULL
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
@@ -1014,6 +1017,10 @@ setGeneric("expr", function(x) { standardGeneric("expr") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("flatten", function(x) { standardGeneric("flatten") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("from_avro", function(x, ...) { standardGeneric("from_avro") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -1387,6 +1394,10 @@ setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
 #' @rdname column_datetime_functions
 #' @name timestamp_seconds
 setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("to_avro", function(x, ...) { standardGeneric("to_avro") })
 
 #' @rdname column_collection_functions
 #' @name NULL

@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkContext
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._

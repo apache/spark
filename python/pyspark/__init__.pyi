@@ -53,7 +53,7 @@ from pyspark.taskcontext import (  # noqa: F401
 )
 from pyspark.util import InheritableThread as InheritableThread  # noqa: F401
 
-# Compatiblity imports
+# Compatibility imports
 from pyspark.sql import (  # noqa: F401
     SQLContext as SQLContext,
     HiveContext as HiveContext,

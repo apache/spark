@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 

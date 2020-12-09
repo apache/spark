@@ -39,13 +39,21 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     """
     Check the valid combinations of supported versions in Spark distributions.
 
-    :param spark_version: Spark version. It should be X.X.X such as '3.0.0' or spark-3.0.0.
-    :param hadoop_version: Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
+    Parameters
+    ----------
+    spark_version : str
+        Spark version. It should be X.X.X such as '3.0.0' or spark-3.0.0.
+    hadoop_version : str
+        Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
         'without' and 'without-hadoop' are supported as special keywords for Hadoop free
         distribution.
-    :param hive_version: Hive version. It should be X.X such as '2.3' or 'hive2.3'.
+    hive_version : str
+        Hive version. It should be X.X such as '2.3' or 'hive2.3'.
 
-    :return it returns fully-qualified versions of Spark, Hadoop and Hive in a tuple.
+    Parameters
+    ----------
+    tuple
+        fully-qualified versions of Spark, Hadoop and Hive in a tuple.
         For example, spark-3.0.0, hadoop3.2 and hive2.3.
     """
     if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+$", spark_version):
@@ -83,11 +91,17 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
     Installs Spark that corresponds to the given Hadoop version in the current
     library directory.
 
-    :param dest: The location to download and install the Spark.
-    :param spark_version: Spark version. It should be spark-X.X.X form.
-    :param hadoop_version: Hadoop version. It should be hadoopX.X
+    Parameters
+    ----------
+    dest : str
+        The location to download and install the Spark.
+    spark_version : str
+        Spark version. It should be spark-X.X.X form.
+    hadoop_version : str
+        Hadoop version. It should be hadoopX.X
         such as 'hadoop2.7' or 'without-hadoop'.
-    :param hive_version: Hive version. It should be hiveX.X such as 'hive2.3'.
+    hive_version : str
+        Hive version. It should be hiveX.X such as 'hive2.3'.
     """
 
     package_name = checked_package_name(spark_version, hadoop_version, hive_version)

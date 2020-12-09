@@ -181,7 +181,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("multivariate data and check againt R mvnormalmixEM") {
+  test("multivariate data and check against R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
       library(mvtnorm)

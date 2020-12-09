@@ -77,7 +77,7 @@ private[feature] trait SelectorParams extends Params
    * @group param
    */
   @Since("3.1.0")
-  final val fpr = new DoubleParam(this, "fpr", "The higest p-value for features to be kept.",
+  final val fpr = new DoubleParam(this, "fpr", "The highest p-value for features to be kept.",
     ParamValidators.inRange(0, 1))
 
   /** @group getParam */

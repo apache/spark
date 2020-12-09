@@ -22,10 +22,11 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -78,6 +79,7 @@ private[spark] class Executor(
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentArchives: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -110,7 +112,9 @@ private[spark] class Executor(
       .build()
     Executors.newCachedThreadPool(threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
-  private val executorSource = new ExecutorSource(threadPool, executorId)
+  private val schemes = conf.get(EXECUTOR_METRICS_FILESYSTEM_SCHEMES)
+    .toLowerCase(Locale.ROOT).split(",").map(_.trim).filter(_.nonEmpty)
+  private val executorSource = new ExecutorSource(threadPool, executorId, schemes)
   // Pool used for threads that supervise task killing / cancellation
   private val taskReaperPool = ThreadUtils.newDaemonCachedThreadPool("Task reaper")
   // For tasks which are in the process of being killed, this map holds the most recently created
@@ -147,6 +151,8 @@ private[spark] class Executor(
 
   // Whether to monitor killed / interrupted tasks
   private val taskReaperEnabled = conf.get(TASK_REAPER_ENABLED)
+
+  private val killOnFatalErrorDepth = conf.get(EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH)
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -228,16 +234,17 @@ private[spark] class Executor(
   private val appStartTime = conf.getLong("spark.app.startTime", 0)
 
   // To allow users to distribute plugins and their required files
-  // specified by --jars and --files on application submission, those jars/files should be
-  // downloaded and added to the class loader via updateDependencies.
-  // This should be done before plugin initialization below
+  // specified by --jars, --files and --archives on application submission, those
+  // jars/files/archives should be downloaded and added to the class loader via
+  // updateDependencies. This should be done before plugin initialization below
   // because executors search plugins from the class loader and initialize them.
-  private val Seq(initialUserJars, initialUserFiles) = Seq("jar", "file").map { key =>
-    conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
-      Map(urls.split(",").map(url => (url, appStartTime)): _*)
-    }.getOrElse(Map.empty)
-  }
-  updateDependencies(initialUserFiles, initialUserJars)
+  private val Seq(initialUserJars, initialUserFiles, initialUserArchives) =
+    Seq("jar", "file", "archive").map { key =>
+      conf.getOption(s"spark.app.initial.$key.urls").map { urls =>
+        Map(urls.split(",").map(url => (url, appStartTime)): _*)
+      }.getOrElse(Map.empty)
+    }
+  updateDependencies(initialUserFiles, initialUserJars, initialUserArchives)
 
   // Plugins need to load using a class loader that includes the executor's user classpath.
   // Plugins also needs to be initialized after the heartbeater started
@@ -445,7 +452,8 @@ private[spark] class Executor(
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
 
-        updateDependencies(taskDescription.addedFiles, taskDescription.addedJars)
+        updateDependencies(
+          taskDescription.addedFiles, taskDescription.addedJars, taskDescription.addedArchives)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
@@ -646,7 +654,7 @@ private[spark] class Executor(
           plugins.foreach(_.onTaskFailed(reason))
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(reason))
 
-        case t: Throwable if hasFetchFailure && !Utils.isFatalError(t) =>
+        case t: Throwable if hasFetchFailure && !Executor.isFatalError(t, killOnFatalErrorDepth) =>
           val reason = task.context.fetchFailed.get.toTaskFailedReason
           if (!t.isInstanceOf[FetchFailedException]) {
             // there was a fetch failure in the task, but some user code wrapped that exception
@@ -681,7 +689,7 @@ private[spark] class Executor(
           // SPARK-20904: Do not report failure to driver if if happened during shut down. Because
           // libraries may set up shutdown hooks that race with running tasks during shutdown,
           // spurious failures may occur and can result in improper accounting in the driver (e.g.
-          // the task failure would not be ignored if the shutdown happened because of premption,
+          // the task failure would not be ignored if the shutdown happened because of preemption,
           // instead of an app issue).
           if (!ShutdownHookManager.inShutdown()) {
             val (accums, accUpdates) = collectAccumulatorsAndResetStatusOnFailure(taskStartTimeNs)
@@ -709,7 +717,7 @@ private[spark] class Executor(
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
-          if (!t.isInstanceOf[SparkOutOfMemoryError] && Utils.isFatalError(t)) {
+          if (Executor.isFatalError(t, killOnFatalErrorDepth)) {
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
@@ -740,7 +748,7 @@ private[spark] class Executor(
    * sending a Thread.interrupt(), and monitoring the task until it finishes.
    *
    * Spark's current task cancellation / task killing mechanism is "best effort" because some tasks
-   * may not be interruptable or may not respond to their "killed" flags being set. If a significant
+   * may not be interruptible or may not respond to their "killed" flags being set. If a significant
    * fraction of a cluster's task slots are occupied by tasks that have been marked as killed but
    * remain running then this can lead to a situation where new jobs and tasks are starved of
    * resources that are being used by these zombie tasks.
@@ -905,16 +913,34 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: Map[String, Long], newJars: Map[String, Long]): Unit = {
+  private def updateDependencies(
+      newFiles: Map[String, Long],
+      newJars: Map[String, Long],
+      newArchives: Map[String, Long]): Unit = {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        logInfo(s"Fetching $name with timestamp $timestamp")
         // Fetch file with useCache mode, close cache for local mode.
         Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
           env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
         currentFiles(name) = timestamp
+      }
+      for ((name, timestamp) <- newArchives if currentArchives.getOrElse(name, -1L) < timestamp) {
+        logInfo(s"Fetching $name with timestamp $timestamp")
+        val sourceURI = new URI(name)
+        val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
+        val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
+          env.securityManager, hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
+        val dest = new File(
+          SparkFiles.getRootDirectory(),
+          if (sourceURI.getFragment != null) sourceURI.getFragment else source.getName)
+        logInfo(
+          s"Unpacking an archive $name from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+        Utils.deleteRecursively(dest)
+        Utils.unpack(source, dest)
+        currentArchives(name) = timestamp
       }
       for ((name, timestamp) <- newJars) {
         val localName = new URI(name).getPath.split("/").last
@@ -922,7 +948,7 @@ private[spark] class Executor(
           .orElse(currentJars.get(localName))
           .getOrElse(-1L)
         if (currentTimeStamp < timestamp) {
-          logInfo("Fetching " + name + " with timestamp " + timestamp)
+          logInfo(s"Fetching $name with timestamp $timestamp")
           // Fetch file with useCache mode, close cache for local mode.
           Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
             env.securityManager, hadoopConf, timestamp, useCache = !isLocal)
@@ -930,7 +956,7 @@ private[spark] class Executor(
           // Add it to our class loader
           val url = new File(SparkFiles.getRootDirectory(), localName).toURI.toURL
           if (!urlClassLoader.getURLs().contains(url)) {
-            logInfo("Adding " + url + " to class loader")
+            logInfo(s"Adding $url to class loader")
             urlClassLoader.addURL(url)
           }
         }
@@ -995,4 +1021,26 @@ private[spark] object Executor {
 
   // Used to store executorSource, for local mode only
   var executorSourceLocalModeOnly: ExecutorSource = null
+
+  /**
+   * Whether a `Throwable` thrown from a task is a fatal error. We will use this to decide whether
+   * to kill the executor.
+   *
+   * @param depthToCheck The max depth of the exception chain we should search for a fatal error. 0
+   *                     means not checking any fatal error (in other words, return false), 1 means
+   *                     checking only the exception but not the cause, and so on. This is to avoid
+   *                     `StackOverflowError` when hitting a cycle in the exception chain.
+   */
+  def isFatalError(t: Throwable, depthToCheck: Int): Boolean = {
+    if (depthToCheck <= 0) {
+      false
+    } else {
+      t match {
+        case _: SparkOutOfMemoryError => false
+        case e if Utils.isFatalError(e) => true
+        case e if e.getCause != null => isFatalError(e.getCause, depthToCheck - 1)
+        case _ => false
+      }
+    }
+  }
 }

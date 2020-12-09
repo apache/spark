@@ -401,17 +401,13 @@ private[spark] object JettyUtils extends Logging {
       uri.append(rest)
     }
 
-    val rewrittenURI = URI.create(uri.toString())
-    if (query != null) {
-      return new URI(
-          rewrittenURI.getScheme(),
-          rewrittenURI.getAuthority(),
-          rewrittenURI.getPath(),
-          query,
-          rewrittenURI.getFragment()
-        ).normalize()
+    val queryString = if (query == null) {
+      ""
+    } else {
+      s"?$query"
     }
-    rewrittenURI.normalize()
+    // SPARK-33611: use method `URI.create` to avoid percent-encoding twice on the query string.
+    URI.create(uri.toString() + queryString).normalize()
   }
 
   def createProxyLocationHeader(

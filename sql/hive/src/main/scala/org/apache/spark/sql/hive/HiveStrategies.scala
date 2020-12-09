@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
  * Determine the database, serde/format and schema of the Hive serde table, according to the storage
  * properties.
  */
-object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
+class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
   private def determineHiveSerde(table: CatalogTable): CatalogTable = {
     if (table.storage.serde.nonEmpty) {
       table
@@ -90,7 +90,7 @@ object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c @ CreateTable(t, _, query) if DDLUtils.isHiveTable(t) =>
       // Finds the database name if the name does not exist.
-      val dbName = t.identifier.database.getOrElse(SparkSession.active.catalog.currentDatabase)
+      val dbName = t.identifier.database.getOrElse(session.catalog.currentDatabase)
       val table = t.copy(identifier = t.identifier.copy(database = Some(dbName)))
 
       // Determines the serde/format of Hive tables
@@ -113,7 +113,7 @@ object ResolveHiveSerdeTable extends Rule[LogicalPlan] {
   }
 }
 
-object DetermineTableStats extends Rule[LogicalPlan] {
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
@@ -121,7 +121,7 @@ object DetermineTableStats extends Rule[LogicalPlan] {
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
     val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
-        val hadoopConf = SparkSession.active.sessionState.newHadoopConf()
+        val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
         fs.getContentSummary(tablePath).getLength
@@ -145,7 +145,7 @@ object DetermineTableStats extends Rule[LogicalPlan] {
 
     // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
     // children, hence not matched directly by previous HiveTableRelation case.
-    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _)
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       i.copy(table = hiveTableWithStats(relation))
   }
@@ -159,7 +159,8 @@ object DetermineTableStats extends Rule[LogicalPlan] {
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoStatement(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
+    case InsertIntoStatement(
+        r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
@@ -207,11 +208,11 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoStatement(
-           r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
+          r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             (!r.isPartitioned || SQLConf.get.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
             && isConvertible(r) =>
-        InsertIntoStatement(metastoreCatalog.convert(r), partition,
+        InsertIntoStatement(metastoreCatalog.convert(r), partition, cols,
           query, overwrite, ifPartitionNotExists)
 
       // Read path

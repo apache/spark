@@ -149,6 +149,7 @@ class DataStreamReader(OptionUtils):
         lineSep: Optional[str] = ...,
         pathGlobFilter: Optional[Union[bool, str]] = ...,
         recursiveFileLookup: Optional[Union[bool, str]] = ...,
+        unescapedQuoteHandling: Optional[str] = ...,
     ) -> DataFrame: ...
 
 class DataStreamWriter:

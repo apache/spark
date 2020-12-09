@@ -549,9 +549,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToPartitionedTable =>
         df.write.format("parquet").partitionBy("num")
           .save(pathToPartitionedTable.getCanonicalPath)
@@ -589,9 +589,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
         checkSchemaInCreatedDataSourceTable(
@@ -608,7 +608,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
     Seq(Option("num"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
@@ -1363,12 +1363,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(
-      e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+    assert(e.getMessage.contains(
+      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1911,7 +1910,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS (
              |  path '${tempDir.getCanonicalPath}'
              |)
-             |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
+             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
         }
         assert(e.message == "Cannot specify bucketing information if the table schema is not " +
@@ -2026,7 +2025,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-30312: truncate table - keep acl/permission") {
-    import testImplicits._
     val ignorePermissionAcl = Seq(true, false)
 
     ignorePermissionAcl.foreach { ignore =>
@@ -2170,11 +2168,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
         sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
         sql(s"CREATE VIEW my_view AS SELECT 1")
-        intercept[NoSuchTableException] {
+        val e1 = intercept[AnalysisException] {
           sql("TRUNCATE TABLE my_temp_tab")
-        }
+        }.getMessage
+        assert(e1.contains("my_temp_tab is a temp view. 'TRUNCATE TABLE' expects a table"))
         assertUnsupported("TRUNCATE TABLE my_ext_tab")
-        assertUnsupported("TRUNCATE TABLE my_view")
+        val e2 = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE my_view")
+        }.getMessage
+        assert(e2.contains("default.my_view is a view. 'TRUNCATE TABLE' expects a table"))
       }
     }
   }
@@ -2260,6 +2262,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
               s"'${db.toUpperCase(Locale.ROOT)}' != '$db'"))
         }
       }
+    }
+  }
+
+  test("show columns - invalid db name") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
+      val message = intercept[AnalysisException] {
+        sql("SHOW COLUMNS IN tbl FROM a.b.c")
+      }.getMessage
+      assert(message.contains(
+        "The namespace in session catalog must have exactly one name part: a.b.c.tbl"))
     }
   }
 
@@ -3103,84 +3116,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
-    }
-  }
-
-  test("SPARK-32481 Move data to trash on truncate table if enabled") {
-    val trashIntervalKey = "fs.trash.interval"
-    withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
-        sql("CREATE TABLE tab1 (col INT) USING parquet")
-        sql("INSERT INTO tab1 SELECT 1")
-        // scalastyle:off hadoopconfiguration
-        val hadoopConf = spark.sparkContext.hadoopConfiguration
-        // scalastyle:on hadoopconfiguration
-        val originalValue = hadoopConf.get(trashIntervalKey, "0")
-        val tablePath = new Path(spark.sessionState.catalog
-          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-
-        val fs = tablePath.getFileSystem(hadoopConf)
-        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
-        val trashPath = Path.mergePaths(trashCurrent, tablePath)
-        assume(
-          fs.mkdirs(trashPath) && fs.delete(trashPath, false),
-          "Trash directory could not be created, skipping.")
-        assert(!fs.exists(trashPath))
-        try {
-          hadoopConf.set(trashIntervalKey, "5")
-          sql("TRUNCATE TABLE tab1")
-        } finally {
-          hadoopConf.set(trashIntervalKey, originalValue)
-        }
-        assert(fs.exists(trashPath))
-        fs.delete(trashPath, true)
-      }
-    }
-  }
-
-  test("SPARK-32481 delete data permanently on truncate table if trash interval is non-positive") {
-    val trashIntervalKey = "fs.trash.interval"
-    withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "true") {
-        sql("CREATE TABLE tab1 (col INT) USING parquet")
-        sql("INSERT INTO tab1 SELECT 1")
-        // scalastyle:off hadoopconfiguration
-        val hadoopConf = spark.sparkContext.hadoopConfiguration
-        // scalastyle:on hadoopconfiguration
-        val originalValue = hadoopConf.get(trashIntervalKey, "0")
-        val tablePath = new Path(spark.sessionState.catalog
-          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-
-        val fs = tablePath.getFileSystem(hadoopConf)
-        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
-        val trashPath = Path.mergePaths(trashCurrent, tablePath)
-        assert(!fs.exists(trashPath))
-        try {
-          hadoopConf.set(trashIntervalKey, "0")
-          sql("TRUNCATE TABLE tab1")
-        } finally {
-          hadoopConf.set(trashIntervalKey, originalValue)
-        }
-        assert(!fs.exists(trashPath))
-      }
-    }
-  }
-
-  test("SPARK-32481 Do not move data to trash on truncate table if disabled") {
-    withTable("tab1") {
-      withSQLConf(SQLConf.TRUNCATE_TRASH_ENABLED.key -> "false") {
-        sql("CREATE TABLE tab1 (col INT) USING parquet")
-        sql("INSERT INTO tab1 SELECT 1")
-        val hadoopConf = spark.sessionState.newHadoopConf()
-        val tablePath = new Path(spark.sessionState.catalog
-          .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-
-        val fs = tablePath.getFileSystem(hadoopConf)
-        val trashCurrent = new Path(fs.getHomeDirectory, ".Trash/Current")
-        val trashPath = Path.mergePaths(trashCurrent, tablePath)
-        sql("TRUNCATE TABLE tab1")
-        assert(!fs.exists(trashPath))
-      }
     }
   }
 }

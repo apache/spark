@@ -189,7 +189,7 @@ Refer to the [`PowerIterationClustering` Scala docs](api/scala/org/apache/spark/
 
 [`PowerIterationClustering`](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html)
 implements the PIC algorithm.
-It takes an `JavaRDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+It takes a `JavaRDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
 affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)

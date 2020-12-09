@@ -2428,6 +2428,30 @@ abstract class CSVSuite
       assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
     }
   }
+
+  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
+    "unescaped quotes and unescaped delimiter data correctly") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      val row1 = Row("""a,""b,c""", "xyz")
+      val row2 = Row("""a,b,c""", """x""yz""")
+      // Generate the test data, use `,` as delimiter and `"` as quotes, but they didn't escape.
+      Seq(
+        """c1,c2""",
+        s""""${row1.getString(0)}","${row1.getString(1)}"""",
+        s""""${row2.getString(0)}","${row2.getString(1)}"""")
+        .toDF().repartition(1).write.text(dataPath)
+      // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
+      // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
+      val result = spark.read
+        .option("inferSchema", "true")
+        .option("header", "true")
+        .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
+        .csv(dataPath).collect()
+      val exceptResults = Array(row1, row2)
+      assert(result.sameElements(exceptResults))
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

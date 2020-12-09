@@ -21,7 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
@@ -722,7 +722,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replay the given log file, saving the application in the listing db.
-   * Visable for testing
+   * Visible for testing
    */
   private[history] def doMergeApplicationListing(
       reader: EventLogFileReader,

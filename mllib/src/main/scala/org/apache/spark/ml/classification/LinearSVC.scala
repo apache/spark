@@ -67,6 +67,10 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
  * Only supports L2 regularization currently.
  *
+ * Since 3.1.0, it supports stacking instances into blocks and using GEMV for
+ * better performance.
+ * The block size will be 1.0 MB, if param maxBlockSizeInMB is set 0.0 by default.
+ *
  */
 @Since("2.2.0")
 class LinearSVC @Since("2.2.0") (
@@ -154,7 +158,7 @@ class LinearSVC @Since("2.2.0") (
 
   /**
    * Sets the value of param [[maxBlockSizeInMB]].
-   * Default is 0.0.
+   * Default is 0.0, then 1.0 MB will be chosen.
    *
    * @group expertSetParam
    */

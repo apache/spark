@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -55,6 +56,13 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
         runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
       }
     }
+  }
+
+  test("show table in a not existing namespace") {
+    val msg = intercept[NoSuchNamespaceException] {
+      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
+    }.getMessage
+    assert(msg.matches("(Database|Namespace) 'unknown' not found;"))
   }
 
   test("show tables with a pattern") {

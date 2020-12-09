@@ -223,11 +223,11 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
 abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
   override def getAnalyzer: Analyzer = {
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
-    new Analyzer(catalog, conf) {
+    new Analyzer(catalog) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }

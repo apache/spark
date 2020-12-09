@@ -167,7 +167,6 @@ private[ml] class BlockHuberAggregator(
 
   protected override val dim: Int = bcParameters.value.size
   private val numFeatures = if (fitIntercept) dim - 2 else dim - 1
-  private val sigma = bcParameters.value(dim - 1)
   private val intercept = if (fitIntercept) bcParameters.value(dim - 2) else 0.0
   // make transient so we do not serialize between aggregation stages
   @transient private lazy val linear = Vectors.dense(bcParameters.value.toArray.take(numFeatures))
@@ -187,7 +186,9 @@ private[ml] class BlockHuberAggregator(
       s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
 
     if (block.weightIter.forall(_ == 0)) return this
+
     val size = block.size
+    val sigma = bcParameters.value(dim - 1)
 
     // vec here represents margins or dotProducts
     val vec = if (fitIntercept) {
@@ -200,23 +201,23 @@ private[ml] class BlockHuberAggregator(
     // in-place convert margins to multipliers
     // then, vec represents multipliers
     var sigmaGradSum = 0.0
+    var localLossSum = 0.0
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
       if (weight > 0) {
-        weightSum += weight
         val label = block.getLabel(i)
         val margin = vec(i)
         val linearLoss = label - margin
 
         if (math.abs(linearLoss) <= sigma * epsilon) {
-          lossSum += 0.5 * weight * (sigma + math.pow(linearLoss, 2.0) / sigma)
+          localLossSum += 0.5 * weight * (sigma + math.pow(linearLoss, 2.0) / sigma)
           val linearLossDivSigma = linearLoss / sigma
           val multiplier = -1.0 * weight * linearLossDivSigma
           vec.values(i) = multiplier
           sigmaGradSum += 0.5 * weight * (1.0 - math.pow(linearLossDivSigma, 2.0))
         } else {
-          lossSum += 0.5 * weight *
+          localLossSum += 0.5 * weight *
             (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
           val sign = if (linearLoss >= 0) -1.0 else 1.0
           val multiplier = weight * sign * epsilon
@@ -226,6 +227,8 @@ private[ml] class BlockHuberAggregator(
       } else { vec.values(i) = 0.0 }
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += block.weightIter.sum
 
     block.matrix match {
       case dm: DenseMatrix =>

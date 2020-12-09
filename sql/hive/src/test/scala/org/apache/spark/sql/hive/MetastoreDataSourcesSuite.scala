@@ -711,7 +711,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           identifier = TableIdentifier("wide_schema"),
           tableType = CatalogTableType.EXTERNAL,
           storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> tempDir.getCanonicalPath)
+            locationUri = Some(tempDir.toURI)
           ),
           schema = schema,
           provider = Some("json")
@@ -1076,7 +1076,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("skip_hive_metadata", Some("default")),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true")
+          locationUri = Some(tempPath.toURI),
+          properties = Map("skipHiveMetadata" -> "true")
         ),
         schema = schema,
         provider = Some("parquet")
