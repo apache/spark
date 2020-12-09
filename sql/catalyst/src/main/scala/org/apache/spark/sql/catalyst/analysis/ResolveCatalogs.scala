@@ -35,7 +35,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableAddColumnsStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
       cols.foreach(c => failNullType(c.dataType))
-      cols.foreach(c => failCharType(c.dataType))
       val changes = cols.map { col =>
         TableChange.addColumn(
           col.name.toArray,
@@ -49,7 +48,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableReplaceColumnsStatement(
         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
       cols.foreach(c => failNullType(c.dataType))
-      cols.foreach(c => failCharType(c.dataType))
       val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
         case Some(table) =>
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
@@ -72,7 +70,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case a @ AlterTableAlterColumnStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
       a.dataType.foreach(failNullType)
-      a.dataType.foreach(failCharType)
       val colName = a.column.toArray
       val typeChange = a.dataType.map { newDataType =>
         TableChange.updateColumnType(colName, newDataType)
@@ -136,16 +133,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
           s"because view support in catalog has not been implemented yet")
 
-    case RenameTableStatement(NonSessionCatalogAndTable(catalog, oldName), newNameParts, isView) =>
-      if (isView) {
-        throw new AnalysisException("Renaming view is not supported in v2 catalogs.")
-      }
-      RenameTable(catalog.asTableCatalog, oldName.asIdentifier, newNameParts.asIdentifier)
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      assertNoCharTypeInSchema(c.tableSchema)
       CreateV2Table(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -173,7 +163,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      assertNoCharTypeInSchema(c.tableSchema)
       ReplaceTable(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -197,11 +186,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         convertTableProperties(c),
         writeOptions = c.writeOptions,
         orCreate = c.orCreate)
-
-    case DropViewStatement(NonSessionCatalogAndTable(catalog, viewName), _) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${viewName.quoted} " +
-          s"because view support in catalog has not been implemented yet")
 
     case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
         if !isSessionCatalog(catalog) =>

@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
@@ -111,9 +111,9 @@ private[sql] class SharedState(
   lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
     sparkContext.ui.flatMap { ui =>
       if (conf.get(STREAMING_UI_ENABLED)) {
-        val statusListener = new StreamingQueryStatusListener(conf)
-        new StreamingQueryTab(statusListener, ui)
-        Some(statusListener)
+        val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+        new StreamingQueryTab(new StreamingQueryStatusStore(kvStore), ui)
+        Some(new StreamingQueryStatusListener(conf, kvStore))
       } else {
         None
       }

@@ -549,9 +549,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToPartitionedTable =>
         df.write.format("parquet").partitionBy("num")
           .save(pathToPartitionedTable.getCanonicalPath)
@@ -589,9 +589,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
         checkSchemaInCreatedDataSourceTable(
@@ -608,7 +608,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
     Seq(Option("num"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
@@ -1363,12 +1363,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(
-      e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+    assert(e.getMessage.contains(
+      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1911,7 +1910,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS (
              |  path '${tempDir.getCanonicalPath}'
              |)
-             |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
+             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
         }
         assert(e.message == "Cannot specify bucketing information if the table schema is not " +

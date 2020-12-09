@@ -173,7 +173,7 @@ sealed trait WindowFrame extends Expression with Unevaluable {
 case object UnspecifiedFrame extends WindowFrame
 
 /**
- * A specified Window Frame. The val lower/uppper can be either a foldable [[Expression]] or a
+ * A specified Window Frame. The val lower/upper can be either a foldable [[Expression]] or a
  * [[SpecialFrameBoundary]].
  */
 case class SpecifiedWindowFrame(

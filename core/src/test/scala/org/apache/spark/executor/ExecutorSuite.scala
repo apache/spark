@@ -519,6 +519,7 @@ class ExecutorSuite extends SparkFunSuite
       partitionId = 0,
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
+      addedArchives = Map[String, Long](),
       properties = new Properties,
       resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
@@ -552,7 +553,7 @@ class ExecutorSuite extends SparkFunSuite
               if (poll) {
                 executor.metricsPoller.poll()
               }
-              executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
+              executor.killAllTasks(true, "Killed task, e.g. because of speculative execution")
             } else {
               timedOut.set(true)
             }

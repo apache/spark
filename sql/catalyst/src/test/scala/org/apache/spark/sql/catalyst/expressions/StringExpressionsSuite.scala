@@ -118,7 +118,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testElt(null, 1, null, "world")
     testElt(null, null, "hello", "world")
 
-    // Invalid ranages
+    // Invalid ranges
     testElt(null, 3, "hello", "world")
     testElt(null, 0, "hello", "world")
     testElt(null, -1, "hello", "world")

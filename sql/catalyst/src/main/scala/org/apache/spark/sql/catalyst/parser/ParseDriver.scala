@@ -39,11 +39,6 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     astBuilder.visitSingleDataType(parser.singleDataType())
   }
 
-  /** Similar to `parseDataType`, but without CHAR/VARCHAR replacement. */
-  override def parseRawDataType(sqlText: String): DataType = parse(sqlText) { parser =>
-    astBuilder.parseRawDataType(parser.singleDataType())
-  }
-
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
     astBuilder.visitSingleExpression(parser.singleExpression())

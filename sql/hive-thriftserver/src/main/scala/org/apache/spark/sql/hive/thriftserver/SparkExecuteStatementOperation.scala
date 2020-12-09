@@ -69,13 +69,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   private var result: DataFrame = _
 
-  // We cache the returned rows to get iterators again in case the user wants to use FETCH_FIRST.
-  // This is only used when `spark.sql.thriftServer.incrementalCollect` is set to `false`.
-  // In case of `true`, this will be `None` and FETCH_FIRST will trigger re-execution.
-  private var resultList: Option[Array[SparkRow]] = _
-  private var previousFetchEndOffset: Long = 0
-  private var previousFetchStartOffset: Long = 0
-  private var iter: Iterator[SparkRow] = _
+  private var iter: FetchIterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
 
   private lazy val resultSchema: TableSchema = {
@@ -148,43 +142,14 @@ private[hive] class SparkExecuteStatementOperation(
     setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
-    // Reset iter when FETCH_FIRST or FETCH_PRIOR
-    if ((order.equals(FetchOrientation.FETCH_FIRST) ||
-        order.equals(FetchOrientation.FETCH_PRIOR)) && previousFetchEndOffset != 0) {
-      // Reset the iterator to the beginning of the query.
-      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
-        resultList = None
-        result.toLocalIterator.asScala
-      } else {
-        if (resultList.isEmpty) {
-          resultList = Some(result.collect())
-        }
-        resultList.get.iterator
-      }
+    if (order.equals(FetchOrientation.FETCH_FIRST)) {
+      iter.fetchAbsolute(0)
+    } else if (order.equals(FetchOrientation.FETCH_PRIOR)) {
+      iter.fetchPrior(maxRowsL)
+    } else {
+      iter.fetchNext()
     }
-
-    var resultOffset = {
-      if (order.equals(FetchOrientation.FETCH_FIRST)) {
-        logInfo(s"FETCH_FIRST request with $statementId. Resetting to resultOffset=0")
-        0
-      } else if (order.equals(FetchOrientation.FETCH_PRIOR)) {
-        // TODO: FETCH_PRIOR should be handled more efficiently than rewinding to beginning and
-        // reiterating.
-        val targetOffset = math.max(previousFetchStartOffset - maxRowsL, 0)
-        logInfo(s"FETCH_PRIOR request with $statementId. Resetting to resultOffset=$targetOffset")
-        var off = 0
-        while (off < targetOffset && iter.hasNext) {
-          iter.next()
-          off += 1
-        }
-        off
-      } else { // FETCH_NEXT
-        previousFetchEndOffset
-      }
-    }
-
-    resultRowSet.setStartOffset(resultOffset)
-    previousFetchStartOffset = resultOffset
+    resultRowSet.setStartOffset(iter.getPosition)
     if (!iter.hasNext) {
       resultRowSet
     } else {
@@ -206,11 +171,9 @@ private[hive] class SparkExecuteStatementOperation(
         }
         resultRowSet.addRow(row.toArray.asInstanceOf[Array[Object]])
         curRow += 1
-        resultOffset += 1
       }
-      previousFetchEndOffset = resultOffset
       log.info(s"Returning result set with ${curRow} rows from offsets " +
-        s"[$previousFetchStartOffset, $previousFetchEndOffset) with $statementId")
+        s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
       resultRowSet
     }
   }
@@ -326,14 +289,12 @@ private[hive] class SparkExecuteStatementOperation(
       logDebug(result.queryExecution.toString())
       HiveThriftServer2.eventManager.onStatementParsed(statementId,
         result.queryExecution.toString())
-      iter = {
-        if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
-          resultList = None
-          result.toLocalIterator.asScala
-        } else {
-          resultList = Some(result.collect())
-          resultList.get.iterator
-        }
+      iter = if (sqlContext.getConf(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT.key).toBoolean) {
+        new IterableFetchIterator[SparkRow](new Iterable[SparkRow] {
+          override def iterator: Iterator[SparkRow] = result.toLocalIterator.asScala
+        })
+      } else {
+        new ArrayFetchIterator[SparkRow](result.collect())
       }
       dataTypes = result.schema.fields.map(_.dataType)
     } catch {

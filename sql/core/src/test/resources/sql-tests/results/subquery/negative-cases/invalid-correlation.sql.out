@@ -111,7 +111,8 @@ org.apache.spark.sql.AnalysisException
 Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses:
 Aggregate [min(outer(t2a#x)) AS min(outer(t2.`t2a`))#x]
 +- SubqueryAlias t3
-   +- Project [t3a#x, t3b#x, t3c#x]
-      +- SubqueryAlias t3
-         +- LocalRelation [t3a#x, t3b#x, t3c#x]
+   +- View (`t3`, [t3a#x,t3b#x,t3c#x])
+      +- Project [t3a#x, t3b#x, t3c#x]
+         +- SubqueryAlias t3
+            +- LocalRelation [t3a#x, t3b#x, t3c#x]
 ;

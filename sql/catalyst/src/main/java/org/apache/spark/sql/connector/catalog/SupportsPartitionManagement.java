@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
@@ -79,7 +80,9 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
-        return listPartitionIdentifiers(ident).length > 0;
+        String[] partitionNames = partitionSchema().names();
+        String[] requiredNames = Arrays.copyOfRange(partitionNames, 0, ident.numFields());
+        return listPartitionIdentifiers(requiredNames, ident).length > 0;
     }
 
     /**
@@ -106,19 +109,11 @@ public interface SupportsPartitionManagement extends Table {
         throws UnsupportedOperationException;
 
     /**
-     * List the identifiers of all partitions that have the ident prefix in a table.
-     *
-     * @param ident a prefix of partition identifier
-     * @return an array of Identifiers for the partitions
-     */
-    InternalRow[] listPartitionIdentifiers(InternalRow ident);
-
-    /**
      * List the identifiers of all partitions that match to the ident by names.
      *
      * @param names the names of partition values in the identifier.
      * @param ident a partition identifier values.
      * @return an array of Identifiers for the partitions
      */
-    InternalRow[] listPartitionByNames(String[] names, InternalRow ident);
+    InternalRow[] listPartitionIdentifiers(String[] names, InternalRow ident);
 }

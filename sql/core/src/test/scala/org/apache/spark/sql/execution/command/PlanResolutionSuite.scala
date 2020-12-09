@@ -26,19 +26,21 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, CTESubstitution, EmptyFunctionRegistry, NoSuchTableException, ResolveCatalogs, ResolvedTable, ResolveInlineTables, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, DoubleType, HIVE_TYPE_STRING, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -49,6 +51,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val table: Table = {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
@@ -75,6 +78,14 @@ class PlanResolutionSuite extends AnalysisTest {
     V1Table(t)
   }
 
+  private val view: V1Table = {
+    val t = mock(classOf[CatalogTable])
+    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.tableType).thenReturn(CatalogTableType.VIEW)
+    when(t.provider).thenReturn(Some(v1Format))
+    V1Table(t)
+  }
+
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
@@ -98,6 +109,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "v2Table" => table
         case "v2Table1" => table
         case "v2TableWithAcceptAnySchemaCapability" => tableWithAcceptAnySchemaCapability
+        case "view" => view
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -145,28 +157,26 @@ class PlanResolutionSuite extends AnalysisTest {
     manager
   }
 
-  def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
+  def parseAndResolve(
+      query: String,
+      withDefault: Boolean = false,
+      checkAnalysis: Boolean = false): LogicalPlan = {
     val catalogManager = if (withDefault) {
       catalogManagerWithDefault
     } else {
       catalogManagerWithoutDefault
     }
-    val analyzer = new Analyzer(catalogManager)
-    // TODO: run the analyzer directly.
-    val rules = Seq(
-      CTESubstitution,
-      ResolveInlineTables,
-      analyzer.ResolveRelations,
-      new ResolveCatalogs(catalogManager),
-      new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false),
-      analyzer.ResolveTables,
-      analyzer.ResolveReferences,
-      analyzer.ResolveSubqueryColumnAliases,
-      analyzer.ResolveReferences,
-      analyzer.ResolveAlterTableChanges)
-    rules.foldLeft(parsePlan(query)) {
-      case (plan, rule) => rule.apply(plan)
+    val analyzer = new Analyzer(catalogManager) {
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(
+        new ResolveSessionCatalog(catalogManager, _ == Seq("v"), _ => false))
     }
+    // We don't check analysis here by default, as we expect the plan to be unresolved
+    // such as `CreateTable`.
+    val analyzed = analyzer.execute(CatalystSqlParser.parsePlan(query))
+    if (checkAnalysis) {
+      analyzer.checkAnalysis(analyzed)
+    }
+    analyzed
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
@@ -684,6 +694,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val viewIdent1 = TableIdentifier("view", Option("db"))
     val viewName2 = "view"
     val viewIdent2 = TableIdentifier("view", Option("default"))
+    val tempViewName = "v"
+    val tempViewIdent = TableIdentifier("v")
 
     parseResolveCompare(s"DROP VIEW $viewName1",
       DropTableCommand(viewIdent1, ifExists = false, isView = true, purge = false))
@@ -693,11 +705,15 @@ class PlanResolutionSuite extends AnalysisTest {
       DropTableCommand(viewIdent2, ifExists = false, isView = true, purge = false))
     parseResolveCompare(s"DROP VIEW IF EXISTS $viewName2",
       DropTableCommand(viewIdent2, ifExists = true, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = false, isView = true, purge = false))
+    parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
+      DropTableCommand(tempViewIdent, ifExists = true, isView = true, purge = false))
   }
 
   test("drop view in v2 catalog") {
     intercept[AnalysisException] {
-      parseAndResolve("DROP VIEW testcat.db.view")
+      parseAndResolve("DROP VIEW testcat.db.view", checkAnalysis = true)
     }.getMessage.toLowerCase(Locale.ROOT).contains(
       "view support in catalog has not been implemented")
   }
@@ -1090,9 +1106,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
 
     val sql = s"ALTER TABLE v1HiveTable ALTER COLUMN i TYPE char(1)"
-    val builder = new MetadataBuilder
-    builder.putString(HIVE_TYPE_STRING, CharType(1).catalogString)
-    val newColumnWithCleanedType = StructField("i", StringType, true, builder.build())
+    val newColumnWithCleanedType = StructField("i", CharType(1), true)
     val expected = AlterTableChangeColumnCommand(
       TableIdentifier("v1HiveTable", Some("default")), "i", newColumnWithCleanedType)
     val parsed = parseAndResolve(sql)
@@ -1158,9 +1172,9 @@ class PlanResolutionSuite extends AnalysisTest {
       ("ALTER TABLE testcat.tab ALTER COLUMN i TYPE bigint", false),
       ("ALTER TABLE tab ALTER COLUMN i TYPE bigint", false),
       (s"ALTER TABLE $v2SessionCatalogTable ALTER COLUMN i TYPE bigint", true),
-      ("INSERT INTO TABLE tab VALUES (1)", false),
-      ("INSERT INTO TABLE testcat.tab VALUES (1)", false),
-      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1)", true),
+      ("INSERT INTO TABLE tab VALUES (1, 'a')", false),
+      ("INSERT INTO TABLE testcat.tab VALUES (1, 'a')", false),
+      (s"INSERT INTO TABLE $v2SessionCatalogTable VALUES (1, 'a')", true),
       ("DESC TABLE tab", false),
       ("DESC TABLE testcat.tab", false),
       (s"DESC TABLE $v2SessionCatalogTable", true),
@@ -1173,26 +1187,26 @@ class PlanResolutionSuite extends AnalysisTest {
     )
   }
 
-  DSV2ResolutionTests.foreach { case (sql, isSessionCatlog) =>
+  DSV2ResolutionTests.foreach { case (sql, isSessionCatalog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catlogIdent = if (isSessionCatlog) v2SessionCatalog else testCat
-      val tableIdent = if (isSessionCatlog) "v2Table" else "tab"
+      val catalogIdent = if (isSessionCatalog) v2SessionCatalog else testCat
+      val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
         case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) =>
-          assert(r.catalog.exists(_ == catlogIdent))
+        case AppendData(r: DataSourceV2Relation, _, _, _) =>
+          assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _) =>
-          assert(r.catalog == catlogIdent)
+          assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _) =>
           assert(t.identifier == tableIdent)
@@ -1533,44 +1547,6 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-31147: forbid CHAR type in non-Hive tables") {
-    def checkFailure(t: String, provider: String): Unit = {
-      val types = Seq(
-        "CHAR(2)",
-        "ARRAY<CHAR(2)>",
-        "MAP<INT, CHAR(2)>",
-        "MAP<CHAR(2), INT>",
-        "STRUCT<s: CHAR(2)>")
-      types.foreach { tpe =>
-        intercept[AnalysisException] {
-          parseAndResolve(s"CREATE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"REPLACE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"CREATE OR REPLACE TABLE $t(col $tpe) USING $provider")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ADD COLUMN col $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t ALTER COLUMN col TYPE $tpe")
-        }
-        intercept[AnalysisException] {
-          parseAndResolve(s"ALTER TABLE $t REPLACE COLUMNS (col $tpe)")
-        }
-      }
-    }
-
-    checkFailure("v1Table", v1Format)
-    checkFailure("v2Table", v2Format)
-    checkFailure("testcat.tab", "foo")
-  }
-
   private def compareNormalized(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
     /**
      * Normalizes plans:
@@ -1628,7 +1604,7 @@ class PlanResolutionSuite extends AnalysisTest {
             .add("b", StringType)
       )
     )
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (c INT, d STRING COMMENT 'test2')",
       createTable(
         table = "my_tab",
@@ -1656,7 +1632,7 @@ class PlanResolutionSuite extends AnalysisTest {
     )
     // Partitioned by a StructType should be accepted by `SparkSqlParser` but will fail an analyze
     // rule in `AnalyzeCreateTable`.
-    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) " +
+    compare("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) STORED AS textfile " +
         "PARTITIONED BY (nested STRUCT<col1: STRING,col2: INT>)",
       createTable(
         table = "my_tab",
@@ -1761,14 +1737,16 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("create hive external table - location must be specified") {
-    val exc = intercept[AnalysisException] {
-      parseAndResolve("CREATE EXTERNAL TABLE my_tab STORED AS parquet")
+  test("create hive external table") {
+    val withoutLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet"
+    parseAndResolve(withoutLoc) match {
+      case ct: CreateTable =>
+        assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.tableDesc.storage.locationUri.isEmpty)
     }
-    assert(exc.getMessage.contains("CREATE EXTERNAL TABLE must be accompanied by LOCATION"))
 
-    val query = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
-    parseAndResolve(query) match {
+    val withLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet LOCATION '/something/anything'"
+    parseAndResolve(withLoc) match {
       case ct: CreateTable =>
         assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
         assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
@@ -1930,7 +1908,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("Test CTAS #3") {
-    val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
+    val s3 = """CREATE TABLE page_view STORED AS textfile AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
     assert(exists == false)
     assert(desc.identifier.database == Some("default"))
