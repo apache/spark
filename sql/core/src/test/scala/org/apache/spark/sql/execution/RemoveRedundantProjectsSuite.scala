@@ -167,7 +167,7 @@ abstract class RemoveRedundantProjectsSuiteBase
     }
   }
 
-  test("union") {
+  test("SPARK-33697: UnionExec should require column ordering") {
     withTable("t1", "t2") {
       spark.range(-10, 20)
         .selectExpr(
