@@ -19,8 +19,9 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, ExternalCatalogWithListener}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
@@ -66,6 +67,32 @@ class HiveSessionStateBuilder(
       sqlParser,
       resourceLoader)
     parentState.foreach(_.catalog.copyStateTo(catalog))
+
+    // Use hive build-in functions first.
+    if (conf.useHiveBuildInFunctionsEnabled) {
+      catalog.registerFunction(CatalogFunction(FunctionIdentifier("unix_timestamp", None),
+        "org.apache.hadoop.hive.ql.udf.generic.GenericUDFUnixTimeStamp", Seq.empty), true)
+      catalog.registerFunction(CatalogFunction(FunctionIdentifier("to_date", None),
+        "org.apache.hadoop.hive.ql.udf.generic.GenericUDFDate", Seq.empty), true)
+      catalog.registerFunction(CatalogFunction(FunctionIdentifier("collect_set", None),
+        "org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectSet", Seq.empty), true)
+      catalog.registerFunction(CatalogFunction(FunctionIdentifier("datediff", None),
+        "org.apache.hadoop.hive.ql.udf.generic.GenericUDFDateDiff", Seq.empty), true)
+
+      // Support to add additional hive build-in functions through configuration
+      val hiveBuildINFunctionsList = conf.hiveBuildINFunctionsList
+      if (!hiveBuildINFunctionsList.isEmpty) {
+        hiveBuildINFunctionsList.split(";").foreach(oneUdf => {
+          val parts = oneUdf.split(":")
+          if (parts.length == 2) {
+            catalog.registerFunction(CatalogFunction(FunctionIdentifier(parts(0), None),
+              parts(1), Seq.empty), true)
+          }
+        })
+      }
+    }
+
+
     catalog
   }
 

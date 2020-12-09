@@ -2973,6 +2973,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_HIVE_BUILD_IN_FUNCTIONS_ENABLED =
+    buildConf("spark.sql.hive.buildin.functions.enabled")
+    .internal()
+    .doc("When true, Spark will register hive build-in functions like unix_timestamp,to_date," +
+      " datediff,collect_set instead of self build-in functions.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val HIVE_BUILD_IN_FUNCTIONS_LIST =
+    buildConf("spark.sql.hive.buildin.functions.list")
+    .internal()
+    .doc("Configures a list of hive build-in functions, here is an example for the format: " +
+      " org.apache.hadoop.hive.ql.udf.generic.GenericUDFUnixTimeStamp:unix_timestamp;" +
+      " org.apache.hadoop.hive.ql.udf.generic.GenericUDFDate:to_date. This configuration only " +
+      s" has an effect when '${USE_HIVE_BUILD_IN_FUNCTIONS_ENABLED.key}' is set to true.")
+    .stringConf
+    .createWithDefault("")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3626,6 +3644,10 @@ class SQLConf extends Serializable with Logging {
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def useHiveBuildInFunctionsEnabled: Boolean = getConf(SQLConf.USE_HIVE_BUILD_IN_FUNCTIONS_ENABLED)
+
+  def hiveBuildINFunctionsList: String = getConf(SQLConf.HIVE_BUILD_IN_FUNCTIONS_LIST)
 
   /** ********************** SQLConf functionality methods ************ */
 
