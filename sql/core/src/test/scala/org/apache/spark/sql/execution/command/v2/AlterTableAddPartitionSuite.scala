@@ -61,7 +61,7 @@ class AlterTableAddPartitionSuite
   }
 
   test("partition already exists") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
@@ -78,7 +78,7 @@ class AlterTableAddPartitionSuite
   }
 
   test("SPARK-33650: add partition into a table which doesn't support partition management") {
-    withNsTable(s"non_part_$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD PARTITION (id=1)")

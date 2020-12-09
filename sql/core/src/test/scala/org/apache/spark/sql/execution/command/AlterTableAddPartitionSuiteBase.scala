@@ -46,10 +46,12 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
-  protected def withNsTable(ns: String, tableName: String)(f: String => Unit): Unit = {
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $ns")
-      val t = s"$ns.$tableName"
+  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
+      (f: String => Unit): Unit = {
+    val nsCat = s"$cat.$ns"
+    withNamespace(nsCat) {
+      sql(s"CREATE NAMESPACE $nsCat")
+      val t = s"$nsCat.$tableName"
       withTable(t) {
         f(t)
       }
@@ -57,7 +59,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("one partition") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"ALTER TABLE $t ADD $exists PARTITION (id=1) LOCATION 'loc'")
@@ -69,7 +71,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("multiple partitions") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"""
@@ -85,7 +87,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("multi-part partition") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"ALTER TABLE $t ADD $exists PARTITION (a=2, b='abc')")
@@ -96,7 +98,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("table to alter does not exist") {
-    withNsTable(s"$catalog.ns", "does_not_exist") { t =>
+    withNsTable("ns", "does_not_exist") { t =>
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
       }.getMessage
@@ -105,7 +107,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("case sensitivity in resolving partition specs") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
@@ -122,7 +124,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33521: universal type conversions of partition values") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (
         |  id int,
@@ -170,7 +172,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33676: not fully specified partition spec") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (id bigint, part0 int, part1 string)
         |$defaultUsing

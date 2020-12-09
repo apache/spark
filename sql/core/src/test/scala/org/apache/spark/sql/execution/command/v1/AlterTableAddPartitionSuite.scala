@@ -46,7 +46,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
 
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with SharedSparkSession {
   test("partition already exists") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
+    withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
