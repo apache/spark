@@ -334,10 +334,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("alter table: add partition (datasource table)") {
-    testAddPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: drop partition (datasource table)") {
     testDropPartitions(isDatasourceTable = true)
   }
