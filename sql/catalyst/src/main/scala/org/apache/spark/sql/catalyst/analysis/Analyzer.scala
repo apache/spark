@@ -114,7 +114,8 @@ case class AnalysisContext(
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
-    referredTempViewNames: Seq[Seq[String]] = Seq.empty)
+    referredTempViewNames: Seq[Seq[String]] = Seq.empty,
+    isTempView: Boolean = false)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -126,7 +127,7 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
+  def withAnalysisContext[A](viewDesc: CatalogTable, isTempView: Boolean)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       // Here we start to resolve views, get `maxNestedViewDepth` from configs.
@@ -139,7 +140,8 @@ object AnalysisContext {
       originContext.nestedViewDepth + 1,
       maxNestedViewDepth,
       originContext.relationCache,
-      viewDesc.viewReferredTempViewNames)
+      viewDesc.viewReferredTempViewNames,
+      isTempView)
     set(context)
     try f finally { set(originContext) }
   }
@@ -1048,7 +1050,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // operator.
       case view @ View(desc, isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc) {
+        val newChild = AnalysisContext.withAnalysisContext(desc, isTempView) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
           val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
           if (nestedViewDepth > maxNestedViewDepth) {

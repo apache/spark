@@ -1488,11 +1488,12 @@ class SessionCatalog(
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      val isResolvingPermanentView =
+        AnalysisContext.get.catalogAndNamespace.nonEmpty && !AnalysisContext.get.isTempView
       // We lookup function without database in two cases:
       // 1. the function is not a temporary function
-      // 2. the function is a temporary function but we are not resolving view
-      if (!isTemporaryFunction(name) || !isResolvingView) {
+      // 2. the function is a temporary function but we are not resolving permanent view
+      if (!isTemporaryFunction(name) || !isResolvingPermanentView) {
         // This function has been already loaded into the function registry.
         return functionRegistry.lookupFunction(name, children)
       }
@@ -1504,8 +1505,8 @@ class SessionCatalog(
       case Seq(_, db) => db
       case Seq(catalog, namespace @ _*) =>
         throw new AnalysisException(
-          s"Unsupported catalog ${catalog} and " +
-            s"namespace '${namespace.mkString("[", ".", "]")}' for function '$name'")
+          s"V2 catalog does not support functions yet. " +
+            s"catalog: ${catalog}, namespace '${namespace.mkString("[", ".", "]")}'")
     }
 
     // If the name itself is not qualified, add the current database to it.
