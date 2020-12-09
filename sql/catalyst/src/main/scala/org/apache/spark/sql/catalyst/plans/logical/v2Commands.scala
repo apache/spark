@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -419,9 +419,11 @@ case class DropTable(
 }
 
 /**
- * The logical plan for handling non-existing table for DROP TABLE command.
+ * The logical plan for no-op command handling non-existing table.
  */
-case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
+case class NoopCommand(
+    commandName: String,
+    multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command.
@@ -456,15 +458,17 @@ case class AlterTable(
 }
 
 /**
- * The logical plan of the ALTER TABLE RENAME command.
+ * The logical plan of the ALTER [TABLE|VIEW] ... RENAME TO command.
  */
 case class RenameTable(
-    catalog: TableCatalog,
-    oldIdent: Identifier,
-    newIdent: Identifier) extends Command
+    child: LogicalPlan,
+    newName: Seq[String],
+    isView: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
- * The logical plan of the SHOW TABLE command.
+ * The logical plan of the SHOW TABLES command.
  */
 case class ShowTables(
     namespace: LogicalPlan,
@@ -474,6 +478,22 @@ case class ShowTables(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TABLE EXTENDED command.
+ */
+case class ShowTableExtended(
+    namespace: LogicalPlan,
+    pattern: String,
+    partitionSpec: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = namespace :: Nil
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)(),
+    AttributeReference("information", StringType, nullable = false)())
 }
 
 /**
@@ -705,4 +725,20 @@ case class ShowPartitions(
 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("partition", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the DROP VIEW command.
+ */
+case class DropView(
+    child: LogicalPlan,
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the MSCK REPAIR TABLE command.
+ */
+case class RepairTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
 }

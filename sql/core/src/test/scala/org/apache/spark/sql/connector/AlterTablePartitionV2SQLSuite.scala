@@ -245,4 +245,40 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       assert(!partTable.partitionExists(expectedPartition))
     }
   }
+
+  test("SPARK-33650: add/drop partition into a table which doesn't support partition management") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING _")
+      Seq(
+        s"ALTER TABLE $t ADD PARTITION (id=1)",
+        s"ALTER TABLE $t DROP PARTITION (id=1)"
+      ).foreach { alterTable =>
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(alterTable)
+        }.getMessage
+        assert(errMsg.contains(s"Table $t can not alter partitions"))
+      }
+    }
+  }
+
+  test("SPARK-33676: not fully specified partition spec") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, part0 int, part1 string)
+        |USING foo
+        |PARTITIONED BY (part0, part1)""".stripMargin)
+      Seq(
+        s"ALTER TABLE $t ADD PARTITION (part0 = 1)",
+        s"ALTER TABLE $t DROP PARTITION (part0 = 1)"
+      ).foreach { alterTable =>
+        val errMsg = intercept[AnalysisException] {
+          sql(alterTable)
+        }.getMessage
+        assert(errMsg.contains("Partition spec is invalid. " +
+          "The spec (part0) must match the partition spec (part0, part1)"))
+      }
+    }
+  }
 }

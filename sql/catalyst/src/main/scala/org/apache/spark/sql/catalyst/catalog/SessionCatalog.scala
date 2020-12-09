@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -318,6 +318,11 @@ class SessionCatalog(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean,
       validateLocation: Boolean = true): Unit = {
+    val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
+    if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
+      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+    }
+
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
@@ -606,7 +611,7 @@ class SessionCatalog(
    * Return a local temporary view exactly as it was stored.
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
-    tempViews.get(formatTableName(name))
+    tempViews.get(formatTableName(name)).map(getTempViewPlan)
   }
 
   def getTempViewNames(): Seq[String] = synchronized {
@@ -617,7 +622,7 @@ class SessionCatalog(
    * Return a global temporary view exactly as it was stored.
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
-    globalTempViewManager.get(formatTableName(name))
+    globalTempViewManager.get(formatTableName(name)).map(getTempViewPlan)
   }
 
   /**
@@ -654,20 +659,25 @@ class SessionCatalog(
   def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
-      getTempView(table).map { plan =>
-        CatalogTable(
-          identifier = TableIdentifier(table),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = plan.output.toStructType)
+      getTempView(table).map {
+        case TemporaryViewRelation(metadata) => metadata
+        case plan =>
+          CatalogTable(
+            identifier = TableIdentifier(table),
+            tableType = CatalogTableType.VIEW,
+            storage = CatalogStorageFormat.empty,
+            schema = plan.output.toStructType)
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(table).map { plan =>
-        CatalogTable(
-          identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
-          tableType = CatalogTableType.VIEW,
-          storage = CatalogStorageFormat.empty,
-          schema = plan.output.toStructType)
+      val a = globalTempViewManager.get(table)
+      globalTempViewManager.get(table).map {
+        case TemporaryViewRelation(metadata) => metadata
+        case plan =>
+          CatalogTable(
+            identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
+            tableType = CatalogTableType.VIEW,
+            storage = CatalogStorageFormat.empty,
+            schema = plan.output.toStructType)
       }.getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
     } else {
       getTableMetadata(name)
@@ -777,13 +787,13 @@ class SessionCatalog(
       val table = formatTableName(name.table)
       if (db == globalTempViewManager.database) {
         globalTempViewManager.get(table).map { viewDef =>
-          SubqueryAlias(table, db, viewDef)
+          SubqueryAlias(table, db, getTempViewPlan(viewDef))
         }.getOrElse(throw new NoSuchTableException(db, table))
       } else if (name.database.isDefined || !tempViews.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
         getRelation(metadata)
       } else {
-        SubqueryAlias(table, tempViews(table))
+        SubqueryAlias(table, getTempViewPlan(tempViews(table)))
       }
     }
   }
@@ -797,23 +807,21 @@ class SessionCatalog(
     val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
 
     if (metadata.tableType == CatalogTableType.VIEW) {
-      val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-      val viewConfigs = metadata.viewSQLConfigs
-      val viewPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs)) {
-        parser.parsePlan(viewText)
-      }
-
-      logDebug(s"'$viewText' will be used for the view($table) with configs: $viewConfigs.")
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-      val child = View(
-        desc = metadata,
-        output = metadata.schema.toAttributes,
-        child = viewPlan)
+      val child = View.fromCatalogTable(metadata, isTempView = false, parser)
       SubqueryAlias(multiParts, child)
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
+    }
+  }
+
+  def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case viewInfo: TemporaryViewRelation =>
+        View.fromCatalogTable(viewInfo.tableMeta, isTempView = true, parser)
+      case v => v
     }
   }
 
@@ -1159,14 +1167,11 @@ class SessionCatalog(
   private def requireExactMatchedPartitionSpec(
       specs: Seq[TablePartitionSpec],
       table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames.sorted
-    specs.foreach { s =>
-      if (s.keys.toSeq.sorted != defined) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must match " +
-            s"the partition spec (${table.partitionColumnNames.mkString(", ")}) defined in " +
-            s"table '${table.identifier}'")
-      }
+    specs.foreach { spec =>
+      PartitioningUtils.requireExactMatchedPartitionSpec(
+        table.identifier.toString,
+        spec,
+        table.partitionColumnNames)
     }
   }
 
@@ -1610,7 +1615,7 @@ class SessionCatalog(
   }
 
   /**
-   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   * Validate the new location before renaming a managed table, which should be non-existent.
    */
   private def validateNewLocationOfRename(
       oldName: TableIdentifier,

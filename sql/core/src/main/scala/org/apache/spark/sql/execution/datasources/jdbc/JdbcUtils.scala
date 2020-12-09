@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
@@ -761,10 +761,7 @@ object JdbcUtils extends Logging {
       schema: StructType,
       caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
-    val parsedSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val userSchema = StructType(parsedSchema.map { field =>
-      field.copy(dataType = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType))
-    })
+    val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
     val nameEquality = if (caseSensitive) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
     } else {
@@ -925,6 +922,55 @@ object JdbcUtils extends Logging {
         }
       }
     }
+  }
+
+  /**
+   * Creates a namespace.
+   */
+  def createNamespace(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String,
+      comment: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
+  }
+
+  def createNamespaceComment(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String,
+      comment: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    try {
+      executeStatement(
+        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
+    } catch {
+      case e: Exception =>
+        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
+    }
+  }
+
+  def removeNamespaceComment(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    try {
+      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
+    } catch {
+      case e: Exception =>
+        logWarning("Cannot drop JDBC catalog comment.")
+    }
+  }
+
+  /**
+   * Drops a namespace from the JDBC database.
+   */
+  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
   }
 
   private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {

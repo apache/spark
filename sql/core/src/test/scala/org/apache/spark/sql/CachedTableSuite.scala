@@ -835,7 +835,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-19993 nested subquery caching and scalar + predicate subqueris") {
+  test("SPARK-19993 nested subquery caching and scalar + predicate subqueries") {
     withTempView("t1", "t2", "t3", "t4") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
@@ -886,17 +886,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   private def checkIfNoJobTriggered[T](f: => T): T = {
-    var numJobTrigered = 0
+    var numJobTriggered = 0
     val jobListener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        numJobTrigered += 1
+        numJobTriggered += 1
       }
     }
     sparkContext.addSparkListener(jobListener)
     try {
       val result = f
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(numJobTrigered === 0)
+      assert(numJobTriggered === 0)
       result
     } finally {
       sparkContext.removeSparkListener(jobListener)
@@ -1235,28 +1235,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           sql("REFRESH TABLE tempView1")
           checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
           checkAnswer(sql("SELECT * FROM tempView2"), Seq.empty)
-        }
-      }
-    }
-  }
-
-  test("SPARK-33290: querying temporary view after REFRESH TABLE fails with FNFE") {
-    withTable("t") {
-      withTempPath { path =>
-        withTempView("tempView1") {
-          Seq((1 -> "a")).toDF("i", "j").write.parquet(path.getCanonicalPath)
-          sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
-          sql("CREATE TEMPORARY VIEW tempView1 AS SELECT * FROM t")
-          checkAnswer(sql("SELECT * FROM tempView1"), Seq(Row(1, "a")))
-
-          Utils.deleteRecursively(path)
-          sql("REFRESH TABLE t")
-          checkAnswer(sql("SELECT * FROM t"), Seq.empty)
-          val exception = intercept[Exception] {
-            checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
-          }
-          assert(exception.getMessage.contains("FileNotFoundException"))
-          assert(exception.getMessage.contains("REFRESH TABLE"))
         }
       }
     }

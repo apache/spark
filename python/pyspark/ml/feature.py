@@ -3852,8 +3852,20 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
     def labels(self):
         """
         Ordered list of labels, corresponding to indices to be assigned.
+
+        .. deprecated:: 3.1.0
+            It will be removed in future versions. Use `labelsArray` method instead.
         """
         return self._call_java("labels")
+
+    @property
+    @since("3.0.2")
+    def labelsArray(self):
+        """
+        Array of ordered list of labels, corresponding to indices to be assigned
+        for each input column.
+        """
+        return self._call_java("labelsArray")
 
 
 @inherit_doc

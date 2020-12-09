@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -103,6 +103,15 @@ trait CheckAnalysis extends PredicateHelper {
 
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _) =>
+        u.failAnalysis(
+          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
+            "because view support in v2 catalog has not been implemented yet. " +
+            s"$cmd expects a view.")
+
+      case u: UnresolvedView =>
+        u.failAnalysis(s"View not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
@@ -407,7 +416,7 @@ trait CheckAnalysis extends PredicateHelper {
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
           // throw an AnalysisException, too.
-          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+          case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
             val queryColumnNames = desc.viewQueryColumnNames
             val queryOutput = if (queryColumnNames.nonEmpty) {
               if (output.length != queryColumnNames.length) {
@@ -579,7 +588,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
-          case _ => // Fallbacks to the following checks
+          case _ => // Falls back to the following checks
         }
 
         operator match {
@@ -996,11 +1005,11 @@ trait CheckAnalysis extends PredicateHelper {
   private def checkAlterTablePartition(
       table: Table, parts: Seq[PartitionSpec]): Unit = {
     (table, parts) match {
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
       case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
         failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
+      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
+        failAnalysis("PartitionSpecs are not resolved")
 
       // Skip atomic partition tables
       case (_: SupportsAtomicPartitionManagement, _) =>

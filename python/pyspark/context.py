@@ -224,6 +224,8 @@ class SparkContext(object):
         self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
         os.environ["SPARK_AUTH_SOCKET_TIMEOUT"] = \
             str(self._jvm.PythonUtils.getPythonAuthSocketTimeout(self._jsc))
+        os.environ["SPARK_BUFFER_SIZE"] = \
+            str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]

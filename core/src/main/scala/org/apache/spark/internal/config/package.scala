@@ -504,7 +504,7 @@ package object config {
       .version("0.7.0")
       .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString(Network.NETWORK_TIMEOUT.defaultValueString)
+      .createOptional
 
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
@@ -1809,6 +1809,16 @@ package object config {
 
   private[spark] val FILES = ConfigBuilder("spark.files")
     .version("1.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val ARCHIVES = ConfigBuilder("spark.archives")
+    .version("3.1.0")
+    .doc("Comma-separated list of archives to be extracted into the working directory of each " +
+      "executor. .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory " +
+      "name to unpack via adding '#' after the file name to unpack, for example, " +
+      "'file.zip#directory'. This configuration is experimental.")
     .stringConf
     .toSequence
     .createWithDefault(Nil)

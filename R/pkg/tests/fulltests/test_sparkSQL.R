@@ -1425,7 +1425,8 @@ test_that("column functions", {
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
   c26 <- timestamp_seconds(c1) + vector_to_array(c) +
-    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+    vector_to_array(c, "float32") + vector_to_array(c, "float64") +
+    array_to_vector(c)
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +

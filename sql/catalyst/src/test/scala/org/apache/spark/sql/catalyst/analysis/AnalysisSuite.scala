@@ -427,7 +427,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+  test("SPARK-12102: Ignore nullability when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
     val plan = relation.select(
@@ -665,6 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)

@@ -216,7 +216,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case DoubleType | FloatType =>
       // When Double/Float overflows, there can be 2 cases:
       // - precision loss: according to SQL standard, the number is truncated;
-      // - returns (+/-)Infinite: same behavior also other DBs have (eg. Postgres)
+      // - returns (+/-)Infinite: same behavior also other DBs have (e.g. Postgres)
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
            |${ev.value} = $eval1 $symbol $eval2;

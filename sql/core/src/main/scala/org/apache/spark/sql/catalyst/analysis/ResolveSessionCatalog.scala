@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
@@ -237,8 +237,7 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(ns.head, location)
 
-    // v1 RENAME TABLE supports temp view.
-    case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
+    case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
@@ -353,9 +352,8 @@ class ResolveSessionCatalog(
       }
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
 
-    // v1 DROP TABLE supports temp view.
-    case DropViewStatement(TempViewOrV1Table(name), ifExists) =>
-      DropTableCommand(name.asTableIdentifier, ifExists, isView = true, purge = false)
+    case DropView(r: ResolvedView, ifExists) =>
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
     case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
         if isSessionCatalog(catalog) =>
@@ -384,14 +382,20 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(ns.head), pattern)
 
-    case ShowTableStatement(ns, pattern, partitionsSpec) =>
-      val db = ns match {
-        case Some(ns) if ns.length != 1 =>
-          throw new AnalysisException(
-            s"The database name is not valid: ${ns.quoted}")
-        case _ => ns.map(_.head)
+    case ShowTableExtended(
+        SessionCatalogAndNamespace(_, ns),
+        pattern,
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+      assert(ns.nonEmpty)
+      if (ns.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${ns.quoted}")
       }
-      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
+      ShowTablesCommand(
+        databaseName = Some(ns.head),
+        tableIdentifierPattern = Some(pattern),
+        isExtended = true,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -404,11 +408,8 @@ class ResolveSessionCatalog(
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
-    case RepairTableStatement(tbl) =>
-      val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
-      AlterTableRecoverPartitionsCommand(
-        v1TableName.asTableIdentifier,
-        "MSCK REPAIR TABLE")
+    case RepairTable(ResolvedV1TableIdentifier(ident)) =>
+      AlterTableRecoverPartitionsCommand(ident.asTableIdentifier, "MSCK REPAIR TABLE")
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -636,11 +637,16 @@ class ResolveSessionCatalog(
       (storageFormat, DDLUtils.HIVE_PROVIDER)
     } else {
       // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
-      // tables if it's a CTAS and `conf.convertCTAS` is true.
-      // TODO: create native data source table by default for non-CTAS.
-      if (ctas && conf.convertCTAS) {
+      // tables if:
+      //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
+      //   2. It's a CTAS and `conf.convertCTAS` is true.
+      val createHiveTableByDefault = conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
+      if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
         (nonHiveStorageFormat, conf.defaultDataSourceName)
       } else {
+        logWarning("A Hive serde table will be created as there is no table provider " +
+          s"specified. You can set ${SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key} to false " +
+          "so that native data source table will be created instead.")
         (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
       }
     }
@@ -657,17 +663,7 @@ class ResolveSessionCatalog(
       comment: Option[String],
       storageFormat: CatalogStorageFormat,
       external: Boolean): CatalogTable = {
-    if (external) {
-      if (DDLUtils.isHiveTable(Some(provider))) {
-        if (location.isEmpty) {
-          throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
-        }
-      } else {
-        throw new AnalysisException(s"Operation not allowed: CREATE EXTERNAL TABLE ... USING")
-      }
-    }
-
-    val tableType = if (location.isDefined) {
+    val tableType = if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED

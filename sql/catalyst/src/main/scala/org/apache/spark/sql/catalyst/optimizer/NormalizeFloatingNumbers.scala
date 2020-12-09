@@ -143,6 +143,28 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
     case _ => throw new IllegalStateException(s"fail to normalize $expr")
   }
+
+  val FLOAT_NORMALIZER: Any => Any = (input: Any) => {
+    val f = input.asInstanceOf[Float]
+    if (f.isNaN) {
+      Float.NaN
+    } else if (f == -0.0f) {
+      0.0f
+    } else {
+      f
+    }
+  }
+
+  val DOUBLE_NORMALIZER: Any => Any = (input: Any) => {
+    val d = input.asInstanceOf[Double]
+    if (d.isNaN) {
+      Double.NaN
+    } else if (d == -0.0d) {
+      0.0d
+    } else {
+      d
+    }
+  }
 }
 
 case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with ExpectsInputTypes {
@@ -152,27 +174,8 @@ case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with E
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(FloatType, DoubleType))
 
   private lazy val normalizer: Any => Any = child.dataType match {
-    case FloatType => (input: Any) => {
-      val f = input.asInstanceOf[Float]
-      if (f.isNaN) {
-        Float.NaN
-      } else if (f == -0.0f) {
-        0.0f
-      } else {
-        f
-      }
-    }
-
-    case DoubleType => (input: Any) => {
-      val d = input.asInstanceOf[Double]
-      if (d.isNaN) {
-        Double.NaN
-      } else if (d == -0.0d) {
-        0.0d
-      } else {
-        d
-      }
-    }
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
   }
 
   override def nullSafeEval(input: Any): Any = {
