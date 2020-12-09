@@ -38,7 +38,7 @@ private[spark] class KubernetesDriverBuilder {
       }
       .getOrElse(SparkPod.initialPod())
 
-    val userFeatureOpt = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
+    val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
       .map { className =>
         Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
       }
@@ -54,7 +54,7 @@ private[spark] class KubernetesDriverBuilder {
       new HadoopConfDriverFeatureStep(conf),
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf),
-      new LocalDirsFeatureStep(conf)) ++ userFeatureOpt
+      new LocalDirsFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesDriverSpec(
       initialPod,

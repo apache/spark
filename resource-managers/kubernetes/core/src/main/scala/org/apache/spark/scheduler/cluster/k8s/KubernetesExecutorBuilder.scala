@@ -42,7 +42,7 @@ private[spark] class KubernetesExecutorBuilder {
       }
       .getOrElse(SparkPod.initialPod())
 
-    val userFeatureOpt = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
+    val userFeatures = conf.get(Config.KUBERNETES_EXECUTOR_POD_FEATURE_STEPS)
       .map { className =>
         Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
       }
@@ -53,7 +53,7 @@ private[spark] class KubernetesExecutorBuilder {
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),
-      new LocalDirsFeatureStep(conf)) ++ userFeatureOpt
+      new LocalDirsFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesExecutorSpec(
       initialPod,

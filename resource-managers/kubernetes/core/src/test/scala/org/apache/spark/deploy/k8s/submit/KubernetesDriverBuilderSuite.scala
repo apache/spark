@@ -29,7 +29,7 @@ class KubernetesDriverBuilderSuite extends PodBuilderSuite {
     Config.KUBERNETES_DRIVER_PODTEMPLATE_FILE
   }
 
-  override protected def userFeatureStepConf: ConfigEntry[_] = {
+  override protected def userFeatureStepsConf: ConfigEntry[_] = {
     Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS
   }
 
