@@ -1207,6 +1207,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
+  private var sparkCmd: String = _
+
   private def startThriftServer(attempt: Int) = {
     warehousePath = Utils.createTempDir()
     warehousePath.delete()
@@ -1268,6 +1270,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val captureOutput = (line: String) => diagnosisBuffer.synchronized {
         diagnosisBuffer += line
 
+        if (line.startsWith("Spark Command: ")) {
+          sparkCmd = line
+        }
         if (line.contains(successLines)) {
           listeningPort = line.split(" on port ")(1).split(' ').head.toInt
           logInfo(s"Started HiveThriftServer2: port=$listeningPort, mode=$mode, attempt=$attempt")
@@ -1352,6 +1357,18 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   override protected def afterAll(): Unit = {
     try {
       dumpLogs()
+      if (sparkCmd != null) {
+        import scala.sys.process._
+        val jars = sparkCmd.split(":").filter(_.endsWith("jar"))
+        jars.foreach { jar =>
+          val lineStream = s"jar vtf $jar".lineStream
+          val classes = lineStream.filter(_.contains("NewCookie.class"))
+          if (classes.nonEmpty) {
+            info(s"!!!!!!!!! Suspect???????? ---> $jar --> ${classes.mkString(", ")}")
+          }
+        }
+
+      }
       stopThriftServer()
       logInfo("HiveThriftServer2 stopped")
     } finally {
