@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-import org.apache.spark.annotation.{Unstable, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
 
 /**
  * :: DeveloperApi ::

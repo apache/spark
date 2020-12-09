@@ -57,7 +57,9 @@ abstract class PodBuilderSuite extends SparkFunSuite {
   test("configure a custom test step") {
     val client = mockKubernetesClient()
     val sparkConf = baseConf.clone()
-      .set(userFeaturesStepConf.key, "org.apache.spark.deploy.k8s.features.LocalDirsFeatureStep,org.apache.spark.deploy.k8s.TestStep")
+      .set(userFeaturesStepConf.key,
+        "org.apache.spark.deploy.k8s.features.LocalDirsFeatureStep," +
+        "org.apache.spark.deploy.k8s.TestStep")
       .set(templateFileConf.key, "template-file.yaml")
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
