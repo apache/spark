@@ -78,6 +78,20 @@ object SQLConf {
   }
 
   /**
+   * Merge all non-static configs to the SQLConf. For example, when the 1st [[SparkSession]] and
+   * the global [[SharedState]] have been initialized, all static configs have taken affect and
+   * should not be set to other values. Other later created sessions should respect all static
+   * configs and only be able to change non-static configs.
+   */
+  private[sql] def mergeNonStaticSQLConfigs(
+      sqlConf: SQLConf,
+      configs: Map[String, String]): Unit = {
+    for ((k, v) <- configs if !SQLConf.staticConfKeys.contains(k)) {
+      sqlConf.setConfString(k, v)
+    }
+  }
+
+  /**
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
    */

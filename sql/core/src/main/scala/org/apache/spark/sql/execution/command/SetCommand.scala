@@ -184,9 +184,8 @@ case class ResetCommand(config: Option[String]) extends RunnableCommand with Ign
           .foreach(sparkSession.conf.set(key, _))
       case None =>
         sparkSession.sessionState.conf.clear()
-        (globalInitialConfigs.getAll ++: sessionDefaults).foreach { case (k, v) =>
-          sparkSession.sessionState.conf.setConfString(k, v)
-        }
+        SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
+          globalInitialConfigs.getAll ++: sessionDefaults)
     }
     Seq.empty[Row]
   }

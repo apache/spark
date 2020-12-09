@@ -77,9 +77,7 @@ abstract class BaseSessionStateBuilder(
    * Extract entries from `SparkConf` and put them in the `SQLConf`
    */
   protected def mergeSparkConf(sqlConf: SQLConf, sparkConf: SparkConf): Unit = {
-    sparkConf.getAll.foreach { case (k, v) =>
-      sqlConf.setConfString(k, v)
-    }
+    SQLConf.mergeNonStaticSQLConfigs(sqlConf, sparkConf.getAll.toMap)
   }
 
   /**
@@ -98,9 +96,9 @@ abstract class BaseSessionStateBuilder(
     }.getOrElse {
       val conf = new SQLConf
       mergeSparkConf(conf, session.sharedState.conf)
-      for ((k, v) <- options if !SQLConf.staticConfKeys.contains(k)) {
-        conf.setConfString(k, v)
-      }
+      // the later added configs to spark conf shall be respected too
+      mergeSparkConf(conf, session.sparkContext.conf)
+      SQLConf.mergeNonStaticSQLConfigs(conf, session.initialSessionOptions)
       conf
     }
   }

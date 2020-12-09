@@ -281,20 +281,6 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
-  test("static SQL conf comes from SparkConf") {
-    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
-    try {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
-      val newSession = new SparkSession(sparkContext)
-      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
-      checkAnswer(
-        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
-    } finally {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
-    }
-  }
-
   test("cannot set/unset static SQL conf") {
     val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
