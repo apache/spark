@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -2085,8 +2086,9 @@ case class UnBase64(child: Expression)
 object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
-      case 0 => StringDecode(Literal.create(null, StringType), Literal.create(null, StringType))
-      case 1 => StringDecode(params.head, Literal.create(null, StringType))
+      case 0 | 1 =>
+        throw new AnalysisException("Invalid number of arguments for function decode. " +
+          s"Expected: 2; Found: ${params.length}")
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head
