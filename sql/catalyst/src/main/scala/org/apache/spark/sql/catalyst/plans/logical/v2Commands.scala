@@ -736,6 +736,13 @@ case class DropView(
 }
 
 /**
+ * The logical plan of the MSCK REPAIR TABLE command.
+ */
+case class RepairTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(

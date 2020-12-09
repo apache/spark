@@ -341,11 +341,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table,
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
+    case RepairTable(_: ResolvedTable) =>
+      throw new AnalysisException("MSCK REPAIR TABLE is not supported for v2 tables.")
+
     case r: CacheTable =>
       CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
 
-    case CacheTableAsSelect(tempViewName, plan, isLazy, options) =>
-      CacheTableAsSelectExec(tempViewName, plan, isLazy, options) :: Nil
+    case r: CacheTableAsSelect =>
+      CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
 
     case _ => Nil
   }
