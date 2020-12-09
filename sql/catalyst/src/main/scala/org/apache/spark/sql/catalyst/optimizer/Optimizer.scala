@@ -1065,7 +1065,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       val newFilters = filter.constraints --
         (child.constraints ++ splitConjunctivePredicates(condition).
           map(filter.constraints.convertToCanonicalizedIfRequired).toSet)
-      val decanonicalzedNewFilters = newFilters.map(filter.constraints.rewriteUsingAlias(_))
+      // do not directly use map on newFilters because the map function in ExpressionSet
+      // will reccanionicalize the expression
+      val decanonicalzedNewFilters = newFilters.iterator.map(
+        filter.constraints.rewriteUsingAlias(_))
       if (decanonicalzedNewFilters.nonEmpty) {
         Filter(And(decanonicalzedNewFilters.reduce(And), condition), child)
       } else {
