@@ -526,27 +526,33 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      * This is only invoked when the stream is able to write. The stream first writes any deferred
      * block parts buffered in memory.
      */
-    private void writeAnyDeferredBufs() throws IOException {
-      if (deferredBufs != null && !deferredBufs.isEmpty()) {
-        for (ByteBuffer deferredBuf : deferredBufs) {
-          writeBuf(deferredBuf);
-        }
-        deferredBufs = null;
+    private void writeDeferredBufs() throws IOException {
+      for (ByteBuffer deferredBuf : deferredBufs) {
+        writeBuf(deferredBuf);
       }
+      deferredBufs = null;
     }
 
     /**
-     * This throws RuntimeException which will abort the merge of a particular shuffle partition.
+     * This throws RuntimeException if the number of IOExceptions have exceeded threshold.
      */
-    private void incrementIOExceptionsAndAbortIfNecessary() {
-      // Update the count of IOExceptions
-      partitionInfo.incrementIOExceptions();
+    private void abortIfNecessary() {
       if (partitionInfo.shouldAbort(mergeManager.ioExceptionsThresholdDuringMerge)) {
         deferredBufs = null;
         throw new RuntimeException(String.format("%s when merging %s",
           ErrorHandler.BlockPushErrorHandler.IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX,
           streamId));
       }
+    }
+
+    /**
+     * This increments the number of IOExceptions and throws RuntimeException if it exceeds the
+     * threshold which will abort the merge of a particular shuffle partition.
+     */
+    private void incrementIOExceptionsAndAbortIfNecessary() {
+      // Update the count of IOExceptions
+      partitionInfo.incrementIOExceptions();
+      abortIfNecessary();
     }
 
     @Override
@@ -586,6 +592,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             deferredBufs = null;
             return;
           }
+          abortIfNecessary();
           logger.trace("{} shuffleId {} reduceId {} onData writable",
             partitionInfo.appShuffleId.appId, partitionInfo.appShuffleId.shuffleId,
             partitionInfo.reduceId);
@@ -596,7 +603,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // If we got here, it's safe to write the block data to the merged shuffle file. We
           // first write any deferred block.
           try {
-            writeAnyDeferredBufs();
+            if (deferredBufs != null && !deferredBufs.isEmpty()) {
+              writeDeferredBufs();
+            }
             writeBuf(buf);
           } catch (IOException ioe) {
             incrementIOExceptionsAndAbortIfNecessary();
@@ -674,7 +683,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
           if (partitionInfo.getCurrentMapIndex() < 0) {
             try {
-              writeAnyDeferredBufs();
+              if (deferredBufs != null && !deferredBufs.isEmpty()) {
+                abortIfNecessary();
+                writeDeferredBufs();
+              }
             } catch (IOException ioe) {
               incrementIOExceptionsAndAbortIfNecessary();
               // If the above doesn't throw a RuntimeException, then we propagate the IOException

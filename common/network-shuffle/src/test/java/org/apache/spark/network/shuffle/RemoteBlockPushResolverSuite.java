@@ -618,18 +618,97 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test (expected = RuntimeException.class)
-  public void testRequestForAbortedShufflePartitionThrowsException() throws IOException {
+  public void testRequestForAbortedShufflePartitionThrowsException() {
     try {
       testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
     } catch (Throwable t) {
       // No more blocks can be merged to this partition.
     }
     try {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-          new PushBlockStream(TEST_APP, 0, 10, 0, 0));
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 10, 0, 0));
     } catch (Throwable t) {
       assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_10_0",
+        t.getMessage());
+      throw t;
+    }
+  }
+
+  @Test (expected = RuntimeException.class)
+  public void testPendingBlockIsAbortedImmediately() throws IOException {
+    useTestFiles(true, false);
+    RemoteBlockPushResolver.PushBlockStreamCallback callback =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    testIndexFile.close();
+    for (int i = 1; i < 6; i++) {
+      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
+        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+          new PushBlockStream(TEST_APP, 0, i, 0, 0));
+      try {
+        callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
+        // This will complete without any exceptions but the exception count is increased.
+        callback1.onComplete(callback1.getID());
+      } catch (Throwable t) {
+        callback1.onFailure(callback1.getID(), t);
+      }
+    }
+    assertEquals(5, partitionInfo.getNumIOExceptions());
+    // The server will respond with IOExceptions exceeded threshold for any additional attempts
+    // to write.
+    try {
+      callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
+    } catch (Throwable t) {
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
+        t.getMessage());
+      throw t;
+    }
+  }
+
+  @Test (expected = RuntimeException.class)
+  public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
+    useTestFiles(true, false);
+    RemoteBlockPushResolver.PushBlockStreamCallback callback =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 0, 0, 0));
+    RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo = callback.getPartitionInfo();
+    TestMergeShuffleFile testIndexFile = (TestMergeShuffleFile) partitionInfo.getIndexFile();
+    testIndexFile.close();
+    for (int i = 1; i < 5; i++) {
+      RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
+        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+          new PushBlockStream(TEST_APP, 0, i, 0, 0));
+      try {
+        callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
+        // This will complete without any exceptions but the exception count is increased.
+        callback1.onComplete(callback1.getID());
+      } catch (Throwable t) {
+        callback1.onFailure(callback1.getID(), t);
+      }
+    }
+    assertEquals(4, partitionInfo.getNumIOExceptions());
+    RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, 0, 5, 0, 0));
+    callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
+    // This is deferred
+    callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
+    // Callback2 completes which will throw another exception.
+    try {
+      callback2.onComplete(callback2.getID());
+    } catch (Throwable t) {
+      callback2.onFailure(callback2.getID(), t);
+    }
+    assertEquals(5, partitionInfo.getNumIOExceptions());
+    // Restore index file so that any further writes to it are successful and any exceptions are
+    // due to IOExceptions exceeding threshold.
+    testIndexFile.restore();
+    try {
+      callback.onComplete(callback.getID());
+    } catch (Throwable t) {
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
         t.getMessage());
       throw t;
     }
