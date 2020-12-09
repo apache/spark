@@ -209,10 +209,10 @@ class ResolveSessionCatalog(
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterViewSetProperties(ResolvedV1TableIdentifier(ident), props) =>
+    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
+    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
