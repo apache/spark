@@ -151,7 +151,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
         |  part6 = 'abc',
         |  part7 = true,
         |  part8 = '2020-11-23',
-        |  part9 = '2020-11-23T22:13:10.123456'
+        |  part9 = '2020-11-23 22:13:10.123456'
         |""".stripMargin
       sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
       val expected = Map(
@@ -164,7 +164,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
         "part6" -> "abc",
         "part7" -> "true",
         "part8" -> "2020-11-23",
-        "part9" -> s"2020-11-23${if (version == "V2") " " else "T"}22:13:10.123456")
+        "part9" -> "2020-11-23 22:13:10.123456")
       checkPartitions(t, expected)
       sql(s"ALTER TABLE $t DROP PARTITION ($partSpec)")
       checkPartitions(t) // no partitions
