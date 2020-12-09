@@ -1351,6 +1351,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   override protected def afterAll(): Unit = {
     try {
+      dumpLogs()
       stopThriftServer()
       logInfo("HiveThriftServer2 stopped")
     } finally {
