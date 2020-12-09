@@ -853,7 +853,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   of the child window expression, transpose them.
  */
 object TransposeWindow extends Rule[LogicalPlan] {
-  private def compatibleParititions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+  private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
     ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
       case (l, r) => l.semanticEquals(r)
     })
@@ -864,7 +864,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
         if w1.references.intersect(w2.windowOutputSet).isEmpty &&
            w1.expressions.forall(_.deterministic) &&
            w2.expressions.forall(_.deterministic) &&
-           compatibleParititions(ps1, ps2) =>
+           compatiblePartitions(ps1, ps2) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }

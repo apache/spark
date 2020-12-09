@@ -88,6 +88,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-33621: inject data source rewrite rule") {
+    withSession(Seq(_.injectDataSourceRewriteRule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.dataSourceRewriteRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
@@ -384,9 +390,6 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseDataType(sqlText: String): DataType =
     delegate.parseDataType(sqlText)
-
-  override def parseRawDataType(sqlText: String): DataType =
-    delegate.parseRawDataType(sqlText)
 }
 
 object MyExtensions {

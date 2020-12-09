@@ -257,8 +257,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(catalog, oldIdent, newIdent) =>
-      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+    case RenameTable(ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+      if (isView) {
+        throw new AnalysisException(
+          "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+      }
+      RenameTableExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil

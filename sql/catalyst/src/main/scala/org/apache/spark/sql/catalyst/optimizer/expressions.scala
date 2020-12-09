@@ -70,7 +70,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 /**
  * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
  * value in conjunctive [[Expression Expressions]]
- * eg.
+ * e.g.
  * {{{
  *   SELECT * FROM table WHERE i = 5 AND j = i + 3
  *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
