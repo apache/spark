@@ -224,7 +224,7 @@ private[spark] object Config extends Logging {
       .doc("Class names of an extra driver pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated." +
         "Runs after all of Spark internal feature steps.")
-      .version("3.2.0")
+      .version("3.1.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -234,7 +234,7 @@ private[spark] object Config extends Logging {
       .doc("Class name of an extra executor pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated" +
         "Runs after all of Spark internal feature steps.")
-      .version("3.2.0")
+      .version("3.1.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
