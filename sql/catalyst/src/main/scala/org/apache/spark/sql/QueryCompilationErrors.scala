@@ -289,7 +289,7 @@ object QueryCompilationErrors {
   def expressionWithMultiWindowExpressionsError(
       expr: NamedExpression, distinctWindowSpec: Seq[WindowSpecDefinition]): Throwable = {
     new AnalysisException(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
-      s"Please file a bug report with this error message, stack trace, and the query.")
+      "Please file a bug report with this error message, stack trace, and the query.")
   }
 
   def windowFunctionNotAllowedError(clauseName: String): Throwable = {
@@ -308,7 +308,7 @@ object QueryCompilationErrors {
   def windowFunctionWithWindowFrameNotOrderedError(wf: WindowFunction): Throwable = {
     new AnalysisException(s"Window function $wf requires window to be ordered, please add " +
       s"ORDER BY clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
-      s"ORDER BY window_ordering) from table")
+      "ORDER BY window_ordering) from table")
   }
 
   def cannotResolveUserSpecifiedColumnsError(col: String, t: TreeNode[_]): Throwable = {
@@ -317,7 +317,7 @@ object QueryCompilationErrors {
 
   def writeTableWithMismatchedColumnsError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"Cannot write to table due to mismatched user specified column " +
+    new AnalysisException("Cannot write to table due to mismatched user specified column " +
       s"size($columnSize) and data column size($outputSize)", t.origin.line, t.origin.startPosition)
   }
 
