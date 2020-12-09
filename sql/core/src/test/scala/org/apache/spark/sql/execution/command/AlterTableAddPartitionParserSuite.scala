@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.AlterTableAddPartition
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSession {
-  test("add partition") {
+  test("add partition if not exists") {
     val sql = """
       |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
       |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
@@ -38,7 +38,7 @@ class AlterTableAddPartitionParserSuite extends AnalysisTest with SharedSparkSes
     comparePlans(parsed, expected)
   }
 
-  test("add partition if not exists") {
+  test("add partition") {
     val sql = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
     val parsed = parsePlan(sql)
     val expected = AlterTableAddPartition(
