@@ -111,4 +111,52 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-33521: universal type conversions of partition values") {
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"""
+        |CREATE TABLE $t (
+        |  id int,
+        |  part0 tinyint,
+        |  part1 smallint,
+        |  part2 int,
+        |  part3 bigint,
+        |  part4 float,
+        |  part5 double,
+        |  part6 string,
+        |  part7 boolean,
+        |  part8 date,
+        |  part9 timestamp
+        |) $defaultUsing
+        |PARTITIONED BY (part0, part1, part2, part3, part4, part5, part6, part7, part8, part9)
+        |""".stripMargin)
+      val partSpec = """
+        |  part0 = -1,
+        |  part1 = 0,
+        |  part2 = 1,
+        |  part3 = 2,
+        |  part4 = 3.14,
+        |  part5 = 3.14,
+        |  part6 = 'abc',
+        |  part7 = true,
+        |  part8 = '2020-11-23',
+        |  part9 = '2020-11-23T22:13:10.123456'
+        |""".stripMargin
+      sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
+      val expected = Map(
+        "part0" -> "-1",
+        "part1" -> "0",
+        "part2" -> "1",
+        "part3" -> "2",
+        "part4" -> "3.14",
+        "part5" -> "3.14",
+        "part6" -> "abc",
+        "part7" -> "true",
+        "part8" -> "2020-11-23",
+        "part9" -> s"2020-11-23${if (version == "V2") " " else "T"}22:13:10.123456")
+      checkPartitions(t, expected)
+      sql(s"ALTER TABLE $t DROP PARTITION ($partSpec)")
+      checkPartitions(t) // no partitions
+    }
+  }
 }
