@@ -60,21 +60,39 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   test("one partition") {
     withNsTable(s"$catalog.ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+      Seq("", "IF NOT EXISTS").foreach { exists =>
+        sql(s"ALTER TABLE $t ADD $exists PARTITION (id=1) LOCATION 'loc'")
 
-      checkPartitions(t, Map("id" -> "1"))
-      checkLocation(t, Map("id" -> "1"), "loc")
+        checkPartitions(t, Map("id" -> "1"))
+        checkLocation(t, Map("id" -> "1"), "loc")
+      }
     }
   }
 
   test("multiple partitions") {
     withNsTable(s"$catalog.ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
+      Seq("", "IF NOT EXISTS").foreach { exists =>
+        sql(s"""
+          |ALTER TABLE $t ADD $exists
+          |PARTITION (id=1) LOCATION 'loc'
+          |PARTITION (id=2) LOCATION 'loc1'""".stripMargin)
 
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      checkLocation(t, Map("id" -> "1"), "loc")
-      checkLocation(t, Map("id" -> "2"), "loc1")
+        checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+        checkLocation(t, Map("id" -> "1"), "loc")
+        checkLocation(t, Map("id" -> "2"), "loc1")
+      }
+    }
+  }
+
+  test("multi-part partition") {
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
+      Seq("", "IF NOT EXISTS").foreach { exists =>
+        sql(s"ALTER TABLE $t ADD $exists PARTITION (a=2, b='abc')")
+
+        checkPartitions(t, Map("a" -> "2", "b" -> "abc"))
+      }
     }
   }
 
