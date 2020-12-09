@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -27,22 +27,13 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.storage.StorageLevel
 
-case class CacheTableExec(
-    relation: LogicalPlan,
-    multipartIdentifier: Seq[String],
-    query: Option[LogicalPlan],
-    isLazy: Boolean,
-    options: Map[String, String]) extends V2CommandExec {
-  override def run(): Seq[InternalRow] = {
-    val sparkSession = sqlContext.sparkSession
-    val relationName = multipartIdentifier.quoted
-    val df = if (query.isDefined) {
-      Dataset.ofRows(sparkSession, query.get).createTempView(relationName)
-      sparkSession.table(relationName)
-    } else {
-      Dataset.ofRows(sparkSession, relation)
-    }
+trait BaseCacheTableExec extends V2CommandExec {
+  def relationName: String
+  def dataFrameToCache: DataFrame
+  def isLazy: Boolean
+  def options: Map[String, String]
 
+  override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
     val storageLevelValue =
       CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
@@ -51,6 +42,8 @@ case class CacheTableExec(
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }
 
+    val sparkSession = sqlContext.sparkSession
+    val df = dataFrameToCache
     if (storageLevelValue.nonEmpty) {
       sparkSession.sharedState.cacheManager.cacheQuery(
         df,
@@ -69,4 +62,28 @@ case class CacheTableExec(
   }
 
   override def output: Seq[Attribute] = Seq.empty
+}
+
+case class CacheTableExec(
+    relation: LogicalPlan,
+    multipartIdentifier: Seq[String],
+    override val isLazy: Boolean,
+    override val options: Map[String, String]) extends BaseCacheTableExec {
+  override def relationName: String = multipartIdentifier.quoted
+
+  override def dataFrameToCache: DataFrame = Dataset.ofRows(sqlContext.sparkSession, relation)
+}
+
+case class CacheTableAsSelectExec(
+    tempViewName: String,
+    query: LogicalPlan,
+    override val isLazy: Boolean,
+    override val options: Map[String, String]) extends BaseCacheTableExec {
+  override def relationName: String = tempViewName
+
+  override def dataFrameToCache: DataFrame = {
+    val sparkSession = sqlContext.sparkSession
+    Dataset.ofRows(sparkSession, query).createTempView(tempViewName)
+    sparkSession.table(tempViewName)
+  }
 }

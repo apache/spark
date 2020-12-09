@@ -339,7 +339,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil
 
     case r: CacheTable =>
-      CacheTableExec(r.table, r.multipartIdentifier, r.query, r.isLazy, r.options) :: Nil
+      CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
+
+    case CacheTableAsSelect(tempViewName, plan, isLazy, options) =>
+      CacheTableAsSelectExec(tempViewName, plan, isLazy, options) :: Nil
 
     case _ => Nil
   }

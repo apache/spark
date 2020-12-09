@@ -714,6 +714,14 @@ case class ShowPartitions(
 case class CacheTable(
     table: LogicalPlan,
     multipartIdentifier: Seq[String],
-    query: Option[LogicalPlan],
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the CACHE TABLE ... AS SELECT command.
+ */
+case class CacheTableAsSelect(
+    tempViewName: String,
+    plan: LogicalPlan,
     isLazy: Boolean,
     options: Map[String, String]) extends Command

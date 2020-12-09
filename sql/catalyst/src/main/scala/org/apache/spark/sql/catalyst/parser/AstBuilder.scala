@@ -3582,7 +3582,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[CacheTableCommand]].
+   * Create a [[CacheTable]] or [[CacheTableAsSelect]].
    *
    * For example:
    * {{{
@@ -3602,7 +3602,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "the table name in CACHE TABLE AS SELECT", ctx)
     }
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTable(UnresolvedRelation(tableName), tableName, query, ctx.LAZY != null, options)
+    val isLazy = ctx.LAZY != null
+    if (query.isDefined) {
+      CacheTableAsSelect(tableName.head, query.get, isLazy, options)
+    } else {
+      CacheTable(UnresolvedRelation(tableName), tableName, isLazy, options)
+    }
   }
 
   /**

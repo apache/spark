@@ -115,7 +115,7 @@ trait CheckAnalysis extends PredicateHelper {
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
-      case CacheTable(u: UnresolvedRelation, _, None, _, _) =>
+      case CacheTable(u: UnresolvedRelation, _, _, _) =>
         failAnalysis(s"Table or view not found for `CACHE TABLE`: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
