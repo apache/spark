@@ -46,53 +46,51 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
   }
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
-  test("one partition") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val t = s"$catalog.ns.tbl"
+  protected def withNsTable(ns: String, tableName: String)(f: String => Unit): Unit = {
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE $ns")
+      val t = s"$ns.$tableName"
       withTable(t) {
-        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-        checkPartitions(t, Map("id" -> "1"))
-        checkLocation(t, Map("id" -> "1"), "loc")
+        f(t)
       }
+    }
+  }
+
+  test("one partition") {
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+
+      checkPartitions(t, Map("id" -> "1"))
+      checkLocation(t, Map("id" -> "1"), "loc")
     }
   }
 
   test("multiple partitions") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val t = s"$catalog.ns.tbl"
-      withTable(t) {
-        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
 
-        checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-        checkLocation(t, Map("id" -> "1"), "loc")
-        checkLocation(t, Map("id" -> "2"), "loc1")
-      }
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      checkLocation(t, Map("id" -> "1"), "loc")
+      checkLocation(t, Map("id" -> "2"), "loc1")
     }
   }
 
   test("partition already exists") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val t = s"$catalog.ns.tbl"
-      withTable(t) {
-        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-        sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 
-        val errMsg = intercept[PartitionsAlreadyExistException] {
-          sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-            " PARTITION (id=2) LOCATION 'loc1'")
-        }.getMessage
-        assert(errMsg.contains("The following partitions already exists"))
-
-        sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+      val errMsg = intercept[PartitionsAlreadyExistException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
           " PARTITION (id=2) LOCATION 'loc1'")
-        checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      }
+      }.getMessage
+      assert(errMsg.contains("The following partitions already exists"))
+
+      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+        " PARTITION (id=2) LOCATION 'loc1'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
 }
