@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
@@ -91,6 +92,23 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
       sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+    }
+  }
+
+  test("case sensitivity in resolving partition specs") {
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+        }.getMessage
+        assert(errMsg.contains("ID is not a valid partition column"))
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+        checkPartitions(t, Map("id" -> "1"))
+        checkLocation(t, Map("id" -> "1"), "loc1")
+      }
     }
   }
 }

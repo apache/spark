@@ -113,7 +113,7 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
-          spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+          spark.sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
         }.getMessage
         assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
       }
