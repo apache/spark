@@ -45,28 +45,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("ALTER TABLE ADD PARTITIONS: partition already exists") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(
-        s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
-
-      assertThrows[PartitionsAlreadyExistException](
-        spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'"))
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      spark.sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(2))))
-    }
-  }
-
   test("ALTER TABLE RENAME PARTITION") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
