@@ -18,13 +18,14 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Unstable, DeveloperApi}
 
 /**
  * :: DeveloperApi ::
  *
  * Represents a SparkPod consisting of pod and the container within the pod.
  */
+@Unstable
 @DeveloperApi
 case class SparkPod(pod: Pod, container: Container) {
 
