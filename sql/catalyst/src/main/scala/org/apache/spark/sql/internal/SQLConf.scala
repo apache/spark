@@ -932,7 +932,8 @@ object SQLConf {
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence.")
+        "than this configuration value, they take precedence. After set this config, you may be " +
+        "interesting in spark.sql.thriftServer.interruptOnCancel which can help interrupt task.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
