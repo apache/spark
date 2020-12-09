@@ -159,4 +159,18 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
       checkPartitions(t) // no partitions
     }
   }
+
+  test("SPARK-33676: not fully specified partition spec") {
+    withNsTable(s"$catalog.ns", "tbl") { t =>
+      sql(s"""
+        |CREATE TABLE $t (id bigint, part0 int, part1 string)
+        |$defaultUsing
+        |PARTITIONED BY (part0, part1)""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (part0 = 1)")
+      }.getMessage
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec (part0) must match the partition spec (part0, part1)"))
+    }
+  }
 }

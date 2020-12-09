@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.connector
 
-import java.time.{LocalDate, LocalDateTime}
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.unsafe.types.UTF8String
 
 class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
 
@@ -150,16 +146,11 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         |CREATE TABLE $t (id bigint, part0 int, part1 string)
         |USING foo
         |PARTITIONED BY (part0, part1)""".stripMargin)
-      Seq(
-        s"ALTER TABLE $t ADD PARTITION (part0 = 1)",
-        s"ALTER TABLE $t DROP PARTITION (part0 = 1)"
-      ).foreach { alterTable =>
-        val errMsg = intercept[AnalysisException] {
-          sql(alterTable)
-        }.getMessage
-        assert(errMsg.contains("Partition spec is invalid. " +
-          "The spec (part0) must match the partition spec (part0, part1)"))
-      }
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (part0 = 1)")
+      }.getMessage
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec (part0) must match the partition spec (part0, part1)"))
     }
   }
 }
