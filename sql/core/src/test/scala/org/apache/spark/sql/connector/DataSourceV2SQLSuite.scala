@@ -2011,7 +2011,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("MSCK REPAIR TABLE", t)
+      testNotSupportedV2Command("MSCK REPAIR TABLE", t)
     }
   }
 
@@ -2610,13 +2610,6 @@ class DataSourceV2SQLSuite
     }
     val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
     assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
-  }
-
-  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

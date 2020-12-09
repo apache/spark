@@ -384,11 +384,6 @@ case class CreateNamespaceStatement(
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
 
 /**
- * A REPAIR TABLE statement, as parsed from SQL
- */
-case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
-
-/**
  * A TRUNCATE TABLE statement, as parsed from SQL
  */
 case class TruncateTableStatement(

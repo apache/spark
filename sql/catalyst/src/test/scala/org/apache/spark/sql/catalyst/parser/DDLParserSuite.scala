@@ -1952,7 +1952,7 @@ class DDLParserSuite extends AnalysisTest {
   test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTableStatement(Seq("a", "b", "c")))
+      RepairTable(UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE")))
   }
 
   test("LOAD DATA INTO table") {
