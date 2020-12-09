@@ -210,7 +210,7 @@ class UDFSuite
     }
   }
 
-  test("permanent view should use captured catalog and namespace for function") {
+  test("SPARK-33692: permanent view should use captured catalog and namespace for function") {
     val upperFuncClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
     val lowerFuncClass =
