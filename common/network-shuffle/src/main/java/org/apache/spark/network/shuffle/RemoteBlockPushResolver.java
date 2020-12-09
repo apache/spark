@@ -339,11 +339,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX, appShuffleId.shuffleId, msg.mapIndex,
       msg.reduceId);
     if (partitionInfo != null) {
-      if (partitionInfo.shouldAbort(ioExceptionsThresholdDuringMerge)) {
-        throw new RuntimeException(String.format("%s when merging %s",
-          ErrorHandler.BlockPushErrorHandler.IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX,
-          streamId));
-      }
       return new PushBlockStreamCallback(this, streamId, partitionInfo, msg.mapIndex);
     } else {
       // For a duplicate block or a block which is late, respond back with a callback that handles
@@ -466,6 +461,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.streamId = streamId;
       this.partitionInfo = Preconditions.checkNotNull(partitionInfo);
       this.mapIndex = mapIndex;
+      abortIfNecessary();
     }
 
     @Override
