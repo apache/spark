@@ -1083,6 +1083,27 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test{
 class HiveThriftHttpServerSuite extends HiveThriftServer2Test {
   override def mode: ServerMode.Value = ServerMode.http
 
+  override def afterAll(): Unit = {
+    dumpLogs()
+    if (sparkCmd != null) {
+      import scala.sys.process._
+      val cmds = sparkCmd.split(":")
+      val jars = cmds.filter(_.endsWith("jar"))
+      val compileClasses = cmds.filter(_.endsWith("classes"))
+        .map(new File(_))
+        .filter(_.isDirectory).map(_.list())
+      jars.foreach { jar =>
+        val lineStream = s"jar vtf $jar".lineStream
+        val classes = lineStream.filter(_.contains("NewCookie.class"))
+        if (classes.nonEmpty) {
+          info(s"!!!!!!!!! Suspect???????? ---> $jar --> ${classes.mkString(", ")}")
+        }
+      }
+
+    }
+    super.afterAll()
+  }
+
   test("JDBC query execution") {
     withJdbcStatement("test") { statement =>
       val queries = Seq(
@@ -1207,7 +1228,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
-  private var sparkCmd: String = _
+  var sparkCmd: String = _
 
   private def startThriftServer(attempt: Int) = {
     warehousePath = Utils.createTempDir()
@@ -1317,7 +1338,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     logTailingProcess = null
   }
 
-  private def dumpLogs(): Unit = {
+  def dumpLogs(): Unit = {
     logError(
       s"""
          |=====================================
@@ -1356,19 +1377,6 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   override protected def afterAll(): Unit = {
     try {
-      dumpLogs()
-      if (sparkCmd != null) {
-        import scala.sys.process._
-        val jars = sparkCmd.split(":").filter(_.endsWith("jar"))
-        jars.foreach { jar =>
-          val lineStream = s"jar vtf $jar".lineStream
-          val classes = lineStream.filter(_.contains("NewCookie.class"))
-          if (classes.nonEmpty) {
-            info(s"!!!!!!!!! Suspect???????? ---> $jar --> ${classes.mkString(", ")}")
-          }
-        }
-
-      }
       stopThriftServer()
       logInfo("HiveThriftServer2 stopped")
     } finally {
