@@ -530,7 +530,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
         case c: RowFormatSerdeContext =>
           // Use a serde format.
-          val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
+          val SerdeInfo(None, None, Some(name), props) = visitRowFormatSerde(c)
 
           // SPARK-10310: Special cases LazySimpleSerDe
           val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
