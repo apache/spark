@@ -45,44 +45,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("ALTER TABLE ADD PARTITION") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
-      assert(partMetadata.containsKey("location"))
-      assert(partMetadata.get("location") == "loc")
-    }
-  }
-
-  test("ALTER TABLE ADD PARTITIONS") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(
-        s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(partTable.partitionExists(InternalRow.fromSeq(Seq(2))))
-
-      val partMetadata = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(1)))
-      assert(partMetadata.containsKey("location"))
-      assert(partMetadata.get("location") == "loc")
-
-      val partMetadata1 = partTable.loadPartitionMetadata(InternalRow.fromSeq(Seq(2)))
-      assert(partMetadata1.containsKey("location"))
-      assert(partMetadata1.get("location") == "loc1")
-    }
-  }
-
   test("ALTER TABLE ADD PARTITIONS: partition already exists") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {

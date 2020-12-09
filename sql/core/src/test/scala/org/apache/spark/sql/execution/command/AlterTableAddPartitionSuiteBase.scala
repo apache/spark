@@ -58,4 +58,19 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("multiple partitions") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val t = s"$catalog.ns.tbl"
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc' PARTITION (id=2) LOCATION 'loc1'")
+
+        checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+        checkLocation(t, Map("id" -> "1"), "loc")
+        checkLocation(t, Map("id" -> "2"), "loc1")
+      }
+    }
+  }
 }
