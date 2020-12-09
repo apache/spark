@@ -21,7 +21,6 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -102,23 +101,6 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
       }.getMessage
       assert(errMsg.contains("Table not found"))
-    }
-  }
-
-  test("partition already exists") {
-    withNsTable(s"$catalog.ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
-
-      val errMsg = intercept[PartitionsAlreadyExistException] {
-        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'" +
-          " PARTITION (id=2) LOCATION 'loc1'")
-      }.getMessage
-      assert(errMsg.contains("The following partitions already exists"))
-
-      sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
     }
   }
 
