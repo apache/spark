@@ -43,7 +43,7 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging
+  with PVTestsSuite with DepsTestsSuite with DecommissionSuite  with RTestsSuite with Logging
   with Eventually with Matchers {
 
 
@@ -321,19 +321,19 @@ class KubernetesSuite extends SparkFunSuite
             case Action.MODIFIED =>
               execPods(name) = resource
             case Action.ADDED =>
-              logDebug(s"Add event received for $name.")
+              logInfo(s"Add event received for $name.")
               execPods(name) = resource
               // If testing decommissioning start a thread to simulate
               // decommissioning on the first exec pod.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
-                logDebug("Waiting for pod to become OK prior to deletion")
+                logInfo("Waiting for pod to become OK prior to deletion")
                 Eventually.eventually(patienceTimeout, patienceInterval) {
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
                 // Look for the string that indicates we're good to trigger decom on the driver
-                logDebug("Waiting for first collect...")
+                logInfo("Waiting for first collect...")
                 Eventually.eventually(TIMEOUT, INTERVAL) {
                   assert(kubernetesTestComponents.kubernetesClient
                     .pods()

@@ -16,12 +16,15 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import io.fabric8.kubernetes.api.model.Pod
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark.internal.config
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
   import DecommissionSuite._
-  import KubernetesSuite.k8sTestTag
+  import KubernetesSuite._
 
   test("Test basic decommissioning", k8sTestTag) {
     sparkAppConf
@@ -31,7 +34,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
       .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
       // Ensure we have somewhere to migrate our data too
-      .set("spark.executor.instances", "3")
+      .set("spark.executor.instances", "2")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
@@ -99,22 +102,40 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // The default of 30 seconds is fine, but for testing we just want to get this done fast.
       .set("spark.storage.decommission.replicationReattemptInterval", "1")
 
-    var execLogs: String = ""
+    var execLogs = scala.collection.mutable.HashMap[String, String]()
 
-    runSparkApplicationAndVerifyCompletion(
-      appResource = PYSPARK_SCALE,
-      mainClass = "",
-      expectedDriverLogOnCompletion = Seq(
-        "Finished waiting, stopping Spark",
-        "Decommission executors"),
-      appArgs = Array.empty[String],
-      driverPodChecker = doBasicDriverPyPodCheck,
-      executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
-      isJVM = false,
-      pyFiles = None,
-      executorPatience = None,
-      decommissioningTest = false)
+    def collectExecLogsPodCheck(pod: Pod) = {
+      doBasicExecutorPyPodCheck(pod)
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val myLog = kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(pod.getMetadata.getName)
+          .getLog
+        assert(myLog.contains("Exit code"))
+        execLogs += (pod.getMetadata.getName, myLog)
+      }
+    }
+
+    try {
+      runSparkApplicationAndVerifyCompletion(
+        appResource = PYSPARK_SCALE,
+        mainClass = "",
+        expectedDriverLogOnCompletion = Seq(
+          "Finished waiting, stopping Spark",
+          "Decommission executors"),
+        appArgs = Array.empty[String],
+        driverPodChecker = doBasicDriverPyPodCheck,
+        executorPodChecker = collectExecLogsPodCheck,
+        appLocator = appLocator,
+        isJVM = false,
+        pyFiles = None,
+        executorPatience = None,
+        decommissioningTest = false)
+    } catch {
+      case e: Exception =>
+        println(s"Had an exception, exec logs are ${execLogs.toString}")
+        throw e
+    }
   }
 }
 
