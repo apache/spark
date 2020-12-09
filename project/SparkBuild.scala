@@ -802,7 +802,12 @@ object Assembly {
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
-    }
+    },
+    excludeDependencies ++= Seq(
+      ExclusionRule("javax.ws.rs", "jsr311-api"),
+      ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule("org.eclipse.jetty", "jetty-webapp")
+    )
   )
 }
 
