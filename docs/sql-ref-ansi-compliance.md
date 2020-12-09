@@ -144,14 +144,18 @@ SELECT * FROM t;
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
   - `size`: This function returns null for null input.
-  - `element_at`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices. 
-  - `element_at`: This function throws `NoSuchElementException` if key does not exist in map. 
+  - `element_at`:
+    - This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
+    - This function throws `NoSuchElementException` if key does not exist in map.
   - `elt`: This function throws `ArrayIndexOutOfBoundsException` if using invalid indices.
   - `parse_url`: This function throws `IllegalArgumentException` if an input string is not a valid url.
-  - `to_date` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `to_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
-  - `to_unix_timestamp` This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_date`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `to_unix_timestamp`: This function should fail with an exception if the input string can't be parsed, or the pattern string is invalid.
+  - `make_date`: This function should fail with an exception if the result date is invalid.
+  - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
+  - `make_interval`:  This function should fail with an exception if the result interval is invalid.
 
 ### SQL Operators
 
