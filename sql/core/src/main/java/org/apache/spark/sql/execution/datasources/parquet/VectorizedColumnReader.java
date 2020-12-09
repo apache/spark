@@ -615,7 +615,7 @@ public class VectorizedColumnReader {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType
             || DecimalType.isByteArrayDecimalType(column.dataType())) {
-      defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
+      defColumn.readBinaries(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
       final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
       if (!shouldConvertTimestamps()) {

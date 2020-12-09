@@ -486,7 +486,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
-  public void readBinarys(
+  public void readBinaries(
       int total,
       WritableColumnVector c,
       int rowId,
