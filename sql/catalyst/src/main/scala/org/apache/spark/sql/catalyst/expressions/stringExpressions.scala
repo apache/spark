@@ -2130,7 +2130,7 @@ object Decode {
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
   """,
-  since = "3.1.0")
+  since = "3.2.0")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
 
