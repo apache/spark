@@ -2011,7 +2011,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("MSCK REPAIR TABLE", t)
+      testNotSupportedV2Command("MSCK REPAIR TABLE", t)
     }
   }
 
