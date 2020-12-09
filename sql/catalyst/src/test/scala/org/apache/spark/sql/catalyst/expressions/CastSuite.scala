@@ -984,6 +984,30 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
   }
 
+  test("ANSI mode: cast string to date with parse error") {
+    val activeConf = conf
+    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), DateType, Option(zid.getId)),
+          s"Cannot cast $str to DateType.")
+      }
+
+      SQLConf.withExistingConf(activeConf) {
+        checkCastWithParseError("12345")
+        checkCastWithParseError("12345-12-18")
+        checkCastWithParseError("2015-13-18")
+        checkCastWithParseError("2015-03-128")
+        checkCastWithParseError("2015/03/18")
+        checkCastWithParseError("2015.03.18")
+        checkCastWithParseError("20150318")
+        checkCastWithParseError("2015-031-8")
+        checkCastWithParseError("2015-03-18ABC")
+        checkCastWithParseError("abdef")
+      }
+    }
+  }
+
   test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
     checkExceptionInExpression[ArithmeticException](
       cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")

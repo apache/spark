@@ -466,6 +466,15 @@ object DateTimeUtils {
     }
   }
 
+  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
+    val date = stringToDate(s, zoneId)
+    if (date.isEmpty) {
+      throw new DateTimeException(s"Cannot cast $s to DateType.")
+    } else {
+      date.get
+    }
+  }
+
   // Gets the local date-time parts (year, month, day and time) of the instant expressed as the
   // number of microseconds since the epoch at the given time zone ID.
   private def getLocalDateTime(micros: Long, zoneId: ZoneId): LocalDateTime = {
