@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -25,6 +26,21 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
   override def version: String = "V1"
   override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultUsing: String = "USING parquet"
+
+  override protected def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
+    val tablePath = t.split('.')
+    val tableName = tablePath.last
+    val ns = tablePath.init.mkString(".")
+    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
+    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
+      .select("information")
+      .first().getString(0)
+    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
+    assert(location.endsWith(expected))
+  }
 }
 
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with SharedSparkSession

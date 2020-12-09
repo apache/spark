@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -42,26 +43,15 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
       .map(PartitioningUtils.parsePathFragment)
     assert(partitions === expected.toSet)
   }
-
-  protected def checkLocation(t: String, spec: Map[String, String], expected: String): Unit = {
-    val tablePath = t.split('.')
-    val tableName = tablePath.last
-    val ns = tablePath.init.mkString(".")
-    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
-    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
-      .select("information")
-      .first().getString(0)
-    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
-    assert(location.endsWith(expected))
-  }
+  protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       val t = s"$catalog.ns.tbl"
       withTable(t) {
-        spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-        spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+        sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
         checkPartitions(t, Map("id" -> "1"))
         checkLocation(t, Map("id" -> "1"), "loc")
