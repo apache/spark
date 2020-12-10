@@ -232,7 +232,6 @@ object SharedState extends Logging {
     def containsInSparkConf(key: String): Boolean = {
       sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
         (key.startsWith("hive") && sparkConf.contains("spark." + key))
-
     }
 
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
@@ -242,7 +241,6 @@ object SharedState extends Logging {
       val hadoopConfTemp = new Configuration()
       hadoopConfTemp.clear()
       hadoopConfTemp.addResource(configFile)
-
       for (entry <- hadoopConfTemp.asScala if !containsInSparkConf(entry.getKey)) {
         hadoopConf.set(entry.getKey, entry.getValue)
       }
