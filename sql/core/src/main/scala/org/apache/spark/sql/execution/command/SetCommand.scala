@@ -173,19 +173,17 @@ case class ResetCommand(config: Option[String]) extends RunnableCommand with Ign
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val globalInitialConfigs = sparkSession.sharedState.conf
-    val sessionDefaults = sparkSession.initialSessionOptions.filter {
-      case (k, _) => !SQLConf.staticConfKeys.contains(k)
-    }
     config match {
       case Some(key) =>
         sparkSession.conf.unset(key)
-        sessionDefaults.get(key)
+        sparkSession.initialSessionOptions.get(key)
           .orElse(globalInitialConfigs.getOption(key))
           .foreach(sparkSession.conf.set(key, _))
       case None =>
         sparkSession.sessionState.conf.clear()
+        SQLConf.mergeSparkConf(sparkSession.sessionState.conf, globalInitialConfigs)
         SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
-          globalInitialConfigs.getAll ++: sessionDefaults)
+          sparkSession.initialSessionOptions)
     }
     Seq.empty[Row]
   }
