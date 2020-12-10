@@ -209,32 +209,4 @@ class UDFSuite
       assert(e.getMessage.contains("Can not get an evaluator of the empty UDAF"))
     }
   }
-
-  test("SPARK-33692: permanent view should use captured catalog and namespace for function") {
-    val upperFuncClass =
-      classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
-    val lowerFuncClass =
-      classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFLower].getCanonicalName
-    val functionName = "test_udf"
-    withTempDatabase { dbName =>
-      withUserDefinedFunction(
-        s"default.$functionName" -> false,
-        s"$dbName.$functionName" -> false,
-        functionName -> true) {
-        withView("default.v1") {
-          sql("USE DEFAULT")
-          sql(s"CREATE FUNCTION $functionName AS '$upperFuncClass'")
-          // create a view using a function in 'default' database
-          sql(s"CREATE VIEW v1 AS SELECT $functionName('TeSt_STr')")
-          sql(s"USE $dbName")
-          // create function in another database with the same function name
-          sql(s"CREATE FUNCTION $functionName AS '$lowerFuncClass'")
-          // create temporary function with the same function name
-          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$lowerFuncClass'")
-          // view v1 should still using function defined in `default` database
-          checkAnswer(sql("SELECT * FROM default.v1"), Seq(Row("TEST_STR")))
-        }
-      }
-    }
-  }
 }
