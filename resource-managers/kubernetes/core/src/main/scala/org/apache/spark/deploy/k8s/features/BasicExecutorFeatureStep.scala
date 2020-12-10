@@ -230,7 +230,7 @@ private[spark] class BasicExecutorFeatureStep(
         new ContainerBuilder(containerWithLimitCores).withNewLifecycle()
           .withNewPreStop()
             .withNewExec()
-              .addToCommand("/opt/decom.sh")
+              .addToCommand(kubernetesConf.get(DECOMMISSION_SCRIPT))
             .endExec()
           .endPreStop()
           .endLifecycle()

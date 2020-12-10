@@ -316,21 +316,6 @@ case class AlterTableSerDePropertiesStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterViewSetPropertiesStatement(
-    viewName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER VIEW ... UNSET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterViewUnsetPropertiesStatement(
-    viewName: Seq[String],
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * ALTER VIEW ... Query command, as parsed from SQL.
  */
 case class AlterViewAsStatement(
