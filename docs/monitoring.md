@@ -1038,6 +1038,22 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
 "spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
+Also it could be done under spark session like:
+```
+import org.apache.spark.sql.SparkSession
+
+val spark = SparkSession.builder
+            .master(sparkconfig.getString("MASTER_URL"))
+            .config("spark.metrics.conf.*.sink.graphite.class","org.apache.spark.metrics.sink.GraphiteSink")
+            .config("spark.metrics.conf.*.sink.graphite.host","graphiteEndPoint_hostName>")
+            .config("spark.metrics.conf.*.sink.graphite.port",<graphite_listening_port>)
+            .config("spark.metrics.conf.*.sink.graphite.period",10)
+            .config("spark.metrics.conf.*.sink.graphite.unit","seconds")
+            .config("spark.metrics.conf.*.sink.graphite.prefix","optional_prefix")
+            .config("spark.metrics.conf.*.sink.graphite.regex","optional_regex_to_send_matching_metrics")	
+            .appName("YOUR_APP_NAME")
+            .getOrCreate()
+```
 
 Default values of the Spark metrics configuration are as follows:
 ```
