@@ -27,7 +27,6 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.metastore.api.AlreadyExistsException
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
@@ -37,7 +36,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
@@ -982,19 +981,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     spec.map { case (k, v) => partCols.find(_.equalsIgnoreCase(k)).get -> v }
   }
 
-  private def isAlreadyExistsException(e: Throwable): Boolean = {
-    val maxDepth = 4
-    var depth = 0
-    var cause = e
-    var found = false
-    while (!found && depth < maxDepth && cause != null) {
-      found = cause.getClass.getCanonicalName == classOf[AlreadyExistsException].getCanonicalName
-      cause = cause.getCause
-      depth += 1
-    }
-    found
-  }
-
   override def createPartitions(
       db: String,
       table: String,
@@ -1016,12 +1002,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       p.copy(storage = p.storage.copy(locationUri = Some(partitionPath.toUri)))
     }
     val lowerCasedParts = partsWithLocation.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
-    try {
-      client.createPartitions(db, table, lowerCasedParts, ignoreIfExists)
-    } catch {
-      case e: Throwable if isAlreadyExistsException(e) =>
-        throw new PartitionsAlreadyExistException(db, table, parts.map(_.spec))
-    }
+    client.createPartitions(db, table, lowerCasedParts, ignoreIfExists)
   }
 
   override def dropPartitions(
