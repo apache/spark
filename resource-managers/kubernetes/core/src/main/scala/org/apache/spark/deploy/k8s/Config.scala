@@ -447,6 +447,7 @@ private[spark] object Config extends Logging {
         "list of PODs then this delta time is taken as the accepted time difference between the " +
         "registration time and the time of the polling. After this time the POD is considered " +
         "missing from the cluster and the executor will be removed.")
+      .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(delay => delay > 0, s"delay must be a positive time value")
       .createWithDefaultString("30s")
