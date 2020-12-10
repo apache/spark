@@ -42,16 +42,17 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
 
     def collectExecLogsPodCheck(pod: Pod): Unit = {
       doBasicExecutorPyPodCheck(pod)
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        val myLog = kubernetesTestComponents.kubernetesClient
-          .pods()
-          .withName(pod.getMetadata.getName)
-          .getLog
-        execLogs += ((pod.getMetadata.getName, myLog))
-        assert(
-          myLog.contains("ShutdownHookManager: Shutdown hook called") ||
-          myLog.contains("Executor self-exiting due to")
-        )
+      try {
+        while (true) {
+          val myLog = kubernetesTestComponents.kubernetesClient
+            .pods()
+            .withName(pod.getMetadata.getName)
+            .getLog
+          execLogs += ((pod.getMetadata.getName, myLog))
+        }
+      } catch {
+        case e: Exception =>
+          // We expect the pod to go away at some point
       }
     }
 
