@@ -17,7 +17,6 @@
 package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito.mock
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s._
