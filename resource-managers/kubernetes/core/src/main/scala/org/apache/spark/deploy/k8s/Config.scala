@@ -222,7 +222,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_POD_FEATURE_STEPS =
     ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
       .doc("Class names of an extra driver pod feature step implementing " +
-        "KubernetesFeatureConfigStep. This is a developer API. Comma separated." +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
         "Runs after all of Spark internal feature steps.")
       .version("3.2.0")
       .stringConf
@@ -232,7 +232,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_POD_FEATURE_STEPS =
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
-        "KubernetesFeatureConfigStep. This is a developer API. Comma separated" +
+        "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
         "Runs after all of Spark internal feature steps.")
       .version("3.2.0")
       .stringConf
