@@ -1484,19 +1484,19 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
       val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
       val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      // We lookup function without database in three cases:
-      // 1. the function is not a temporary function
-      // 2. the function is a temporary function but we are not resolving view
-      // 3. we are resolving a view and the function is a temporary function referred by this view
-      if (!isTemporaryFunction(name) ||
-        !isResolvingView ||
-        referredTempFunctionNames.contains(name.funcName)) {
+      // Lookup the function as a temporary or a built-in function (i.e. without database) and
+      // 1. if we are not resolving view, we don't care about the function type and just return it.
+      // 2. if we are resolving view, only return a temp function if it's referred by this view.
+      if (!isResolvingView ||
+          !isTemporaryFunction(name) ||
+          referredTempFunctionNames.contains(name.funcName)) {
         // This function has been already loaded into the function registry.
         return functionRegistry.lookupFunction(name, children)
       }
@@ -1509,7 +1509,7 @@ class SessionCatalog(
       case Seq(catalog, namespace @ _*) =>
         throw new AnalysisException(
           s"V2 catalog does not support functions yet. " +
-            s"catalog: ${catalog}, namespace '${namespace.mkString("[", ".", "]")}'")
+            s"catalog: ${catalog}, namespace: '${namespace.quoted}'")
     }
 
     // If the name itself is not qualified, add the current database to it.
