@@ -334,10 +334,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("alter table: add partition (datasource table)") {
-    testAddPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: drop partition (datasource table)") {
     testDropPartitions(isDatasourceTable = true)
   }
@@ -1619,63 +1615,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
     }
-  }
-
-  protected def testAddPartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "5")
-    val part2 = Map("a" -> "2", "b" -> "6")
-    val part3 = Map("a" -> "3", "b" -> "7")
-    val part4 = Map("a" -> "4", "b" -> "8")
-    val part5 = Map("a" -> "9", "b" -> "9")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
-
-    // basic add partition
-    sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
-      "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
-
-    val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
-    assert(tableLocation.isDefined)
-    val partitionLocation = makeQualifiedPath(
-      new Path(tableLocation.get.toString, "paris").toString)
-
-    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(partitionLocation))
-    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
-
-    // add partitions without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
-
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist ADD IF NOT EXISTS PARTITION (a='4', b='9')")
-    }
-
-    // partition to add already exists
-    intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 ADD PARTITION (a='4', b='8')")
-    }
-
-    // partition to add already exists when using IF NOT EXISTS
-    sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
-
-    // partition spec in ADD PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 ADD PARTITION (A='9', B='9')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4, part5))
   }
 
   protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {

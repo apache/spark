@@ -3161,8 +3161,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     DropView(
       UnresolvedView(
         visitMultipartIdentifier(ctx.multipartIdentifier()),
-        "DROP VIEW",
-        Some("Please use DROP TABLE instead.")),
+        commandName = "DROP VIEW",
+        allowTemp = true,
+        relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
       ctx.EXISTS != null)
   }
 
@@ -3399,7 +3400,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewSetPropertiesStatement]] or [[AlterTableSetPropertiesStatement]] commands.
+   * Parse [[AlterViewSetProperties]] or [[AlterTableSetPropertiesStatement]] commands.
    *
    * For example:
    * {{{
@@ -3413,14 +3414,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetPropertiesStatement(identifier, cleanedTableProperties)
+      AlterViewSetProperties(
+        UnresolvedView(
+          identifier,
+          commandName = "ALTER VIEW ... SET TBLPROPERTIES",
+          allowTemp = false,
+          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+        cleanedTableProperties)
     } else {
       AlterTableSetPropertiesStatement(identifier, cleanedTableProperties)
     }
   }
 
   /**
-   * Parse [[AlterViewUnsetPropertiesStatement]] or [[AlterTableUnsetPropertiesStatement]] commands.
+   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetPropertiesStatement]] commands.
    *
    * For example:
    * {{{
@@ -3436,7 +3443,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
+      AlterViewUnsetProperties(
+        UnresolvedView(
+          identifier,
+          commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
+          allowTemp = false,
+          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+        cleanedProperties,
+        ifExists)
     } else {
       AlterTableUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
     }
