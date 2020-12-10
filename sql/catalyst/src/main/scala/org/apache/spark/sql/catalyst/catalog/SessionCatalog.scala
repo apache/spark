@@ -1484,16 +1484,36 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
-      // This function has been already loaded into the function registry.
-      return functionRegistry.lookupFunction(name, children)
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // Lookup the function as a temporary or a built-in function (i.e. without database) and
+      // 1. if we are not resolving view, we don't care about the function type and just return it.
+      // 2. if we are resolving view, only return a temp function if it's referred by this view.
+      if (!isResolvingView ||
+          !isTemporaryFunction(name) ||
+          referredTempFunctionNames.contains(name.funcName)) {
+        // This function has been already loaded into the function registry.
+        return functionRegistry.lookupFunction(name, children)
+      }
+    }
+
+    // Get the database from AnalysisContext if it's defined, otherwise, use current database
+    val currentDatabase = AnalysisContext.get.catalogAndNamespace match {
+      case Seq() => getCurrentDatabase
+      case Seq(_, db) => db
+      case Seq(catalog, namespace @ _*) =>
+        throw new AnalysisException(
+          s"V2 catalog does not support functions yet. " +
+            s"catalog: ${catalog}, namespace: '${namespace.quoted}'")
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val database = formatDatabaseName(name.database.getOrElse(currentDatabase))
     val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName)) {

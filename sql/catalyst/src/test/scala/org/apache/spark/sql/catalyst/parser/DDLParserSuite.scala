@@ -724,15 +724,15 @@ class DDLParserSuite extends AnalysisTest {
     val cmd = "DROP VIEW"
     val hint = Some("Please use DROP TABLE instead.")
     parseCompare(s"DROP VIEW testcat.db.view",
-      DropView(UnresolvedView(Seq("testcat", "db", "view"), cmd, hint), ifExists = false))
+      DropView(UnresolvedView(Seq("testcat", "db", "view"), cmd, true, hint), ifExists = false))
     parseCompare(s"DROP VIEW db.view",
-      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = false))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, true, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS db.view",
-      DropView(UnresolvedView(Seq("db", "view"), cmd, hint), ifExists = true))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, true, hint), ifExists = true))
     parseCompare(s"DROP VIEW view",
-      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = false))
+      DropView(UnresolvedView(Seq("view"), cmd, true, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS view",
-      DropView(UnresolvedView(Seq("view"), cmd, hint), ifExists = true))
+      DropView(UnresolvedView(Seq("view"), cmd, true, hint), ifExists = true))
   }
 
   private def testCreateOrReplaceDdl(
@@ -764,16 +764,22 @@ class DDLParserSuite extends AnalysisTest {
         "'comment' = 'new_comment')"
     val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val hint = Some("Please use ALTER TABLE instead.")
 
     comparePlans(parsePlan(sql1_view),
-      AlterViewSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+      AlterViewSetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... SET TBLPROPERTIES", false, hint),
+        Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(parsePlan(sql2_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = false))
+      AlterViewUnsetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... UNSET TBLPROPERTIES", false, hint),
+        Seq("comment", "test"),
+        ifExists = false))
     comparePlans(parsePlan(sql3_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = true))
+      AlterViewUnsetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... UNSET TBLPROPERTIES", false, hint),
+        Seq("comment", "test"),
+        ifExists = true))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -2040,33 +2046,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
-  }
-
-  test("alter table: add partition") {
-    val sql1 =
-      """
-        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
-        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-
-    val parsed1 = parsePlan(sql1)
-    val parsed2 = parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
-      Seq(
-        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)
-    val expected2 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
-      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("alter view: add partition (not supported)") {
