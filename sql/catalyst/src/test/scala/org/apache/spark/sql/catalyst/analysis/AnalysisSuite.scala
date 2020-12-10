@@ -986,19 +986,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
-    val plan =
-      Sort(
-        Seq(CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head)).asc),
-        false,
-        testRelation)
-    val projected = Alias(
-      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head)),
-      "_nondeterministic")()
-    val expect =
-      Project(testRelation.output,
-        Sort(Seq(projected.toAttribute.asc), false,
-          Project(testRelation.output :+ projected,
-            testRelation)))
-    checkAnalysis(plan, expect)
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
+    }
   }
 }
