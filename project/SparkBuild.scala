@@ -395,7 +395,7 @@ object SparkBuild extends PomBuild {
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
-  enable(HiveThriftServer.settings)(hiveThriftServer)
+  enable(YARN.settings)(yarn)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -656,7 +656,13 @@ object DependencyOverrides {
  */
 object ExcludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
+    excludeDependencies ++= Seq(
+      ExclusionRule("javax.ws.rs", "jsr311-api")
+//      ExclusionRule("javax.ws.rs", "jsr311-api"),
+//      ExclusionRule(organization = "com.sun.jersey"),
+//      ExclusionRule("org.eclipse.jetty", "jetty-webapp")
+    )
   )
 }
 
@@ -760,13 +766,9 @@ object Hive {
   )
 }
 
-object HiveThriftServer {
+object YARN {
   lazy val settings = Seq(
-    excludeDependencies ++= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("org.eclipse.jetty", "jetty-webapp")
-    )
+    libraryDependencies += "javax.ws.rs" % "jsr311-api" % "1.1.1" % "test"
   )
 }
 
@@ -802,12 +804,7 @@ object Assembly {
                                                                => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
-    },
-    excludeDependencies ++= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api"),
-      ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("org.eclipse.jetty", "jetty-webapp")
-    )
+    }
   )
 }
 
