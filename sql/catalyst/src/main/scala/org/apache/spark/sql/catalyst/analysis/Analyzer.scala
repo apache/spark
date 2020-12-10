@@ -889,8 +889,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a table")
         }
         u
-      case u @ UnresolvedView(ident, _, _) =>
+      case u @ UnresolvedView(ident, cmd, allowTemp, _) =>
         lookupTempView(ident).map { _ =>
+          if (!allowTemp) {
+            u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a permanent view.")
+          }
           ResolvedView(ident.asIdentifier, isTemp = true)
         }
         .getOrElse(u)
@@ -1118,7 +1121,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedView(identifier, cmd, relationTypeMismatchHint) =>
+      case u @ UnresolvedView(identifier, cmd, _, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
           case v: ResolvedView => v
           case _ =>

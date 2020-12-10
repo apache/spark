@@ -2594,11 +2594,29 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("DROP VIEW is not supported for v2 catalogs") {
-    assertAnalysisError(
-      "DROP VIEW testcat.v",
-      "Cannot specify catalog `testcat` for view v because view support in v2 catalog " +
-        "has not been implemented yet. DROP VIEW expects a view.")
+  test("View commands are not supported in v2 catalogs") {
+    def validateViewCommand(
+        sql: String,
+        catalogName: String,
+        viewName: String,
+        cmdName: String): Unit = {
+      assertAnalysisError(
+        sql,
+        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
+          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
+    }
+
+    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
+    validateViewCommand(
+      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... SET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... UNSET TBLPROPERTIES")
   }
 
   private def testNotSupportedV2Command(

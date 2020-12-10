@@ -742,3 +742,22 @@ case class DropView(
 case class RepairTable(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
+ */
+case class AlterViewSetProperties(
+    child: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
+ */
+case class AlterViewUnsetProperties(
+    child: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
