@@ -832,6 +832,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_METASTORE_PREDICATE_CONCAT_FILTER =
+    buildConf("spark.sql.hive.metastore.concat.PartitionPruning")
+      .doc("When true, some predicates of which contains concat or concat_ws can be filter " +
+        "throught hive metstore's getPartitionsByExpr function,thereby reducing the pressure " +
+        "of metastore's sql query ")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD =
     buildConf("spark.sql.hive.metastorePartitionPruningInSetThreshold")
       .doc("The threshold of set size for InSet predicate when pruning partitions through Hive " +
@@ -3231,6 +3239,8 @@ class SQLConf extends Serializable with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def metastorePredicateConcatFilter: Boolean = getConf(HIVE_METASTORE_PREDICATE_CONCAT_FILTER)
 
   def metastorePartitionPruningInSetThreshold: Int =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD)

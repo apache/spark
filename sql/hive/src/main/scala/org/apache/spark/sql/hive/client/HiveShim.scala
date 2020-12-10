@@ -32,12 +32,14 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, UDFArgumentException}
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
+import org.apache.hadoop.hive.ql.plan._
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -47,7 +49,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTableParti
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TypeUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -520,6 +522,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       classOf[Driver],
       "getResults",
       classOf[JList[Object]])
+  private lazy val getPartitionsByExpr =
+    findMethod(
+      classOf[Hive],
+      "getPartitionsByExpr",
+      classOf[Table],
+      classOf[ExprNodeGenericFuncDesc],
+      classOf[HiveConf],
+      classOf[JList[Partition]])
 
   private lazy val getDatabaseOwnerNameMethod =
     findMethod(
@@ -837,6 +847,237 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
   }
 
+  private def convertExpDescs(hive: Hive,
+      table: Table,
+      exp: Expression,
+      value: Object,
+      isRecursive: Boolean): JList[ExprNodeDesc] = {
+    val exporNodeDesc = new JArrayList[ExprNodeDesc]()
+    try {
+      logDebug("convertExpDescs-isRecurrsive:" + isRecursive)
+      // construct column genericUDFConcat
+      val funInfo = FunctionRegistry.getFunctionInfo(exp.prettyName)
+      val concatColumns = new JArrayList[ExprNodeDesc]()
+      logDebug("convertExpDescs-exp.children:" + exp.children)
+      exp.children.foreach(column => {
+        column match {
+          case attr: AttributeReference =>
+            logDebug("convertExpDescs-attr:" + attr )
+            concatColumns.add(new ExprNodeColumnDesc(
+              TypeInfoFactory.getPrimitiveTypeInfo(attr.dataType.typeName),
+              attr.name, "", false))
+          case liter: Literal =>
+            logDebug("convertExpDescs-liter:" + liter)
+            val literalValue = liter.value.toString
+            concatColumns.add(new ExprNodeConstantDesc(literalValue))
+        }
+      }
+      )
+      logDebug("convertExpDescs-concatColumns:" + concatColumns)
+      val expGenFunDesc = ExprNodeGenericFuncDesc.newInstance(funInfo.getGenericUDF, concatColumns)
+      exporNodeDesc.add(expGenFunDesc)
+      if (!isRecursive) {
+        // construct genericUDFConcat ExprNode
+        val expConstDesc = new ExprNodeConstantDesc(TypeInfoFactory.stringTypeInfo, value)
+        exporNodeDesc.add(expConstDesc)
+      }
+    } catch {
+      case e: Throwable =>
+        logError(s"conver expression to node failed ${e.getMessage}!")
+        throw e
+    }
+    logDebug("convertExpDescs-exporNodeDesc:" + exporNodeDesc)
+    exporNodeDesc
+  }
+
+  private def convertUDFExpToPartitions(hive: Hive,
+      table: Table,
+      op: BinaryComparison,
+      a: Expression,
+      v: Object): Option[ExprNodeGenericFuncDesc] = {
+    try {
+      val opFun = FunctionRegistry.getFunctionInfo(op.sqlOperator)
+      logDebug("convertUDFExpToPartitions-table:" + table + ",op:" +
+        op + ",a:" + a + ",v:" + v + ",isSubstr")
+      if (opFun.getGenericUDF == null) {
+        throw new UDFArgumentException(s"${op.sqlOperator} is an aggregation " +
+          s"function or a table function.")
+      }
+      Some(ExprNodeGenericFuncDesc.newInstance(
+        opFun.getGenericUDF, convertExpDescs(hive, table, a, v, false)))
+    } catch {
+      case e: Throwable =>
+        logError(s"convert predicates expression failed ${e.getMessage}!")
+        None
+    }
+  }
+
+  private def convertAttributeExpToPartitions(name: String,
+      dataType: DataType, op: BinaryComparison,
+                                              value: Object): Option[ExprNodeGenericFuncDesc] = {
+    val AttributeColumn = new JArrayList[ExprNodeDesc]()
+    AttributeColumn.add(new ExprNodeColumnDesc(
+      TypeInfoFactory.getPrimitiveTypeInfo(dataType.typeName),
+      name, "", false))
+    val expConstDesc = new ExprNodeConstantDesc(TypeInfoFactory.stringTypeInfo, value.toString)
+    AttributeColumn.add(expConstDesc)
+    val funInfo = FunctionRegistry.getFunctionInfo(op.symbol)
+    Some(ExprNodeGenericFuncDesc.newInstance(funInfo.getGenericUDF, AttributeColumn))
+  }
+  def convertUDFFilters(hive: Hive,
+      table: Table, filters: Seq[Expression]): Seq[ExprNodeGenericFuncDesc] = {
+    filters.flatMap(convertExp(hive, table))
+  }
+
+  def convertExp(hive: Hive, table: Table)(expr: Expression): Option[ExprNodeGenericFuncDesc] = {
+    val useConcatAdvancedFilter = SQLConf.get.metastorePredicateConcatFilter
+    logDebug("convertExp-expr:" + expr)
+    expr match {
+      // Prune partition of Concat
+      case op@BinaryComparison(a: Concat, Literal(v, _: StringType)) =>
+        convertUDFExpToPartitions(hive, table, op, a, v.toString)
+      case op@BinaryComparison(Literal(v, _: StringType), a: Concat) =>
+        convertUDFExpToPartitions(hive, table, op, a, v.toString)
+
+      // Prune partition of ConcatWs
+      case op@BinaryComparison(a: ConcatWs, Literal(v, _: StringType)) =>
+        convertUDFExpToPartitions(hive, table, op, a, v.toString)
+      case op@BinaryComparison(Literal(v, _: StringType), a: ConcatWs) =>
+        convertUDFExpToPartitions(hive, table, op, a, v.toString)
+      case op@BinaryComparison(AttributeReference(name, dataType, _, _),
+      Literal(v, _: StringType)) =>
+        convertAttributeExpToPartitions(name, dataType, op, v.toString)
+
+      case op@BinaryComparison(Literal(v, _: StringType),
+      AttributeReference(name, dataType, _, _)) =>
+        convertAttributeExpToPartitions(name, dataType, op, v.toString)
+
+      case op@BinaryComparison(Literal(v, _: StringType),
+      AttributeReference(name, dataType, _, _)) =>
+        convertAttributeExpToPartitions(name, dataType, op, v.toString)
+
+      case And(expr1, expr2) if useConcatAdvancedFilter =>
+        val ex1 = convertExp(hive, table)(expr1)
+        val ex2 = convertExp(hive, table)(expr2)
+        if (!ex1.isEmpty && !ex2.isEmpty) {
+          val addFun = FunctionRegistry.getFunctionInfo("and")
+          val addFunDesc = new JArrayList[ExprNodeDesc]()
+          addFunDesc.add(ex1.get)
+          addFunDesc.add(ex2.get)
+          Some(ExprNodeGenericFuncDesc.newInstance(addFun.getGenericUDF, addFunDesc))
+        } else {
+          None
+        }
+      case Or(expr1, expr2) if useConcatAdvancedFilter =>
+        for {
+          left <- convertExp(hive, table)(expr1)
+          right <- convertExp(hive, table)(expr2)
+        } yield {
+          val orFunDesc = new JArrayList[ExprNodeDesc]()
+          orFunDesc.add(left)
+          orFunDesc.add(right)
+          ExprNodeGenericFuncDesc.newInstance(FunctionRegistry.getFunctionInfo("or").
+            getGenericUDF, orFunDesc)
+        }
+      case In(op@(Concat(_: Seq[Expression]) | ConcatWs(_: Seq[Expression])),
+      ExtractableLiterals(values))
+        if useConcatAdvancedFilter => this.compactInExpr(op, values)
+      case InSet(op@(Concat(_: Seq[Expression]) | ConcatWs(_: Seq[Expression])),
+      ExtractableValues(values))
+        if useConcatAdvancedFilter => this.compactInExpr(op, values)
+      case _ => None
+    }
+  }
+
+  object ExtractableLiteral {
+    def unapply(expr: Expression): Option[String] = expr match {
+      case Literal(value, _: IntegralType) => Some(value.toString)
+      case Literal(value, _: StringType) => Some(value.toString)
+      case _ => None
+    }
+  }
+
+  object ExtractableLiterals {
+    def unapply(exprs: Seq[Expression]): Option[Seq[String]] = {
+      val extractables = exprs.map(ExtractableLiteral.unapply)
+      if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
+        Some(extractables.map(_.get))
+      } else {
+        None
+      }
+    }
+  }
+
+  object ExtractableValues {
+    private lazy val valueToLiteralString: PartialFunction[Any, String] = {
+      case value: Byte => value.toString
+      case value: Short => value.toString
+      case value: Int => value.toString
+      case value: Long => value.toString
+      case value: UTF8String => value.toString
+    }
+
+    def unapply(values: Set[Any]): Option[Seq[String]] = {
+      val extractables = values.toSeq.map(valueToLiteralString.lift)
+      if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
+        Some(extractables.map(_.get))
+      } else {
+        None
+      }
+    }
+  }
+
+  def compactInExpr(expr1: Expression, lrValues: Seq[String]): Some[ExprNodeGenericFuncDesc] = {
+    val exporNodeDesc = new JArrayList[ExprNodeDesc]()
+    val expr1Fun = FunctionRegistry.getFunctionInfo(expr1.prettyName)
+    val concatColumns = new JArrayList[ExprNodeDesc]()
+    expr1.children.foreach(column => {
+      column match {
+        case attr: AttributeReference =>
+          concatColumns.add(new ExprNodeColumnDesc(
+            TypeInfoFactory.getPrimitiveTypeInfo(attr.dataType.typeName),
+            attr.name, "", false))
+        case liter: Literal =>
+          concatColumns.add(new ExprNodeConstantDesc(liter.value.toString))
+      }
+    })
+    val expGenFunDesc = ExprNodeGenericFuncDesc.newInstance(expr1Fun.getGenericUDF, concatColumns)
+    exporNodeDesc.add(expGenFunDesc)
+    lrValues.foreach( lrValue => {
+      val expConstDesc = new ExprNodeConstantDesc(TypeInfoFactory.stringTypeInfo, lrValue)
+      exporNodeDesc.add(expConstDesc)
+    }
+    )
+    Some(ExprNodeGenericFuncDesc.newInstance(FunctionRegistry.getFunctionInfo("in").
+      getGenericUDF, exporNodeDesc))
+  }
+
+
+  def getExprNodeGenericFuncDesc(
+      hive: Hive,
+      table: Table,
+      predicates: Seq[Expression]): Option[ExprNodeGenericFuncDesc] = {
+    // Hive getPartitionsByFilter() takes a string that represents partition
+    // predicates concat/concat_ws..."
+    val expNodeExpDescs: Seq[ExprNodeGenericFuncDesc] =
+      this.convertUDFFilters(hive, table, predicates)
+    logDebug("PrunePartitionsSeq after convertConcatFilters:" + expNodeExpDescs)
+    if (expNodeExpDescs.isEmpty) {
+      None
+    } else {
+      val expNodeExpDescRight = expNodeExpDescs.takeRight(expNodeExpDescs.size - 1)
+      val opFunExpNodesMerge = expNodeExpDescRight.foldLeft(expNodeExpDescs(0)) {
+        (expNodesMerge, expNode) =>
+          val opAndFun = FunctionRegistry.getFunctionInfo("and")
+          val opAndFunExpNodes = new java.util.ArrayList[ExprNodeDesc](2)
+          opAndFunExpNodes.add(expNodesMerge)
+          opAndFunExpNodes.add(expNode)
+          ExprNodeGenericFuncDesc.newInstance(opAndFun.getGenericUDF, opAndFunExpNodes)
+      }
+      Some(opFunExpNodesMerge)
+    }
+  }
+
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
@@ -846,9 +1087,31 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates, timeZoneId)
+    logDebug("Partitions predicates:" + predicates )
+    logDebug("PrunePartitions after converFilters:" + filter)
 
+    val useConcatAdvancedFilter = SQLConf.get.metastorePredicateConcatFilter
+    var partitionStats = new JArrayList[Partition]()
+    val expNode: Option[ExprNodeGenericFuncDesc] = if (useConcatAdvancedFilter) {
+      getExprNodeGenericFuncDesc(hive, table, predicates)
+    } else {
+      None
+    }
+    logDebug("PrunePartitions after mergeSeqExp:" + expNode)
     val partitions =
-      if (filter.isEmpty) {
+      if (expNode.nonEmpty && expNode.get.toString.contains("Concat")) {
+        try {
+          getPartitionsByExpr.invoke(hive, table, expNode.get, hive.getConf, partitionStats)
+        } catch {
+          case e: Throwable =>
+            logError(s"convert predicates from metastore expression failed ${e.getMessage}!")
+        }
+        if (partitionStats.isEmpty) {
+          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+        } else {
+          partitionStats
+        }
+      } else if (filter.isEmpty) {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
