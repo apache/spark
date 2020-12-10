@@ -467,11 +467,8 @@ object DateTimeUtils {
   }
 
   def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
-    val date = stringToDate(s, zoneId)
-    if (date.isEmpty) {
+    stringToDate(s, zoneId).getOrElse {
       throw new DateTimeException(s"Cannot cast $s to DateType.")
-    } else {
-      date.get
     }
   }
 
