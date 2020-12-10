@@ -74,8 +74,7 @@ private[spark] object Minikube extends Logging {
       ""
     } else {
       // For Minikube >=1.9
-      val profile = executeMinikube("profile")(0)
-      Paths.get("profiles", profile).toString
+      Paths.get("profiles", executeMinikube("profile")(0)).toString
     }
     val apiServerCertPath = Paths.get(minikubeBasePath, profileDir, "apiserver.crt")
     val apiServerKeyPath = Paths.get(minikubeBasePath, profileDir, "apiserver.key")
