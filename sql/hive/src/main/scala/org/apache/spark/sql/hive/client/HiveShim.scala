@@ -768,7 +768,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         Some(convertInToOr(name, values))
 
       case in @ InSet(_, values) if useAdvanced && values.size > inSetThreshold =>
-        convert(TypeUtils.rewriteToMinMaxFilter(in).reduceLeft(And))
+        convert(TypeUtils.rewriteInSetToMinMaxPredicate(in).reduceLeft(And))
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>

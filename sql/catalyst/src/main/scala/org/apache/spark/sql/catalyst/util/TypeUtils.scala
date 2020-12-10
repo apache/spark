@@ -114,7 +114,7 @@ object TypeUtils {
     }
   }
 
-  def rewriteToMinMaxFilter(inSet: InSet): Seq[Expression] = {
+  def rewriteInSetToMinMaxPredicate(inSet: InSet): Seq[Expression] = {
     val dataType = inSet.child.dataType
     val sortedValues = inSet.hset.toSeq.sorted(getInterpretedOrdering(dataType))
     Seq(GreaterThanOrEqual(inSet.child, Literal(sortedValues.head, dataType)),

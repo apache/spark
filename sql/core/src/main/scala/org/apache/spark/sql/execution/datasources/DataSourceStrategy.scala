@@ -617,9 +617,9 @@ object DataSourceStrategy
         translateFilterWithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(sources.Not)
 
-      case inSet @ expressions.InSet(e, set) =>
+      case inSet @ expressions.InSet(_, set) =>
         val minMaxFilter = if (set.size > conf.optimizerInSetRewriteMinMaxThreshold) {
-          TypeUtils.rewriteToMinMaxFilter(inSet)
+          TypeUtils.rewriteInSetToMinMaxPredicate(inSet)
         } else {
           Seq.empty
         }
