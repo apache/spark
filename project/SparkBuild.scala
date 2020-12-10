@@ -768,7 +768,10 @@ object Hive {
 
 object YARN {
   lazy val settings = Seq(
-    libraryDependencies += "javax.ws.rs" % "jsr311-api" % "1.1.1" % "test"
+    libraryDependencies += "javax.ws.rs" % "jsr311-api" % "1.1.1" % "test",
+    excludeDependencies --= Seq(
+      ExclusionRule("javax.ws.rs", "jsr311-api")
+    )
   )
 }
 
