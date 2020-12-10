@@ -115,7 +115,7 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    isTempView: Boolean = false)
+    referredTempFunctionNames: Seq[String] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -141,7 +141,7 @@ object AnalysisContext {
       maxNestedViewDepth,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
-      isTempView)
+      viewDesc.viewReferredTempFunctionNames)
     set(context)
     try f finally { set(originContext) }
   }

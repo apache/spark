@@ -1488,12 +1488,15 @@ class SessionCatalog(
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
-      val isResolvingPermanentView =
-        AnalysisContext.get.catalogAndNamespace.nonEmpty && !AnalysisContext.get.isTempView
-      // We lookup function without database in two cases:
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // We lookup function without database in three cases:
       // 1. the function is not a temporary function
-      // 2. the function is a temporary function but we are not resolving permanent view
-      if (!isTemporaryFunction(name) || !isResolvingPermanentView) {
+      // 2. the function is a temporary function but we are not resolving view
+      // 3. we are resolving a view and the function is a temporary function referred by this view
+      if (!isTemporaryFunction(name) ||
+        !isResolvingView ||
+        referredTempFunctionNames.contains(name.funcName)) {
         // This function has been already loaded into the function registry.
         return functionRegistry.lookupFunction(name, children)
       }
