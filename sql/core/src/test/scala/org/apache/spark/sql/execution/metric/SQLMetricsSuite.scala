@@ -181,7 +181,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           assert(probes.toDouble > 1.0)
         } else {
           val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
-          // Extract min, med, max from the string and strip off everthing else.
+          // Extract min, med, max from the string and strip off everything else.
           val index = mainValue.indexOf(" (", 0)
           mainValue.slice(0, index).split(", ").foreach {
             probe => assert(probe.toDouble > 1.0)

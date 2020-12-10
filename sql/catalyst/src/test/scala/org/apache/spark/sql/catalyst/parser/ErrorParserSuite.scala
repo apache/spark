@@ -77,7 +77,7 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left joinn b on a.id = b.id", "missing 'JOIN' at 'joinn'")
+    intercept("select * from a left join_ b on a.id = b.id", "missing 'JOIN' at 'join_'")
     intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
     intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
   }

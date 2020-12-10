@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.Utils
 
 object SessionCatalog {
@@ -1167,14 +1167,11 @@ class SessionCatalog(
   private def requireExactMatchedPartitionSpec(
       specs: Seq[TablePartitionSpec],
       table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames.sorted
-    specs.foreach { s =>
-      if (s.keys.toSeq.sorted != defined) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must match " +
-            s"the partition spec (${table.partitionColumnNames.mkString(", ")}) defined in " +
-            s"table '${table.identifier}'")
-      }
+    specs.foreach { spec =>
+      PartitioningUtils.requireExactMatchedPartitionSpec(
+        table.identifier.toString,
+        spec,
+        table.partitionColumnNames)
     }
   }
 
@@ -1487,16 +1484,36 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
-      // This function has been already loaded into the function registry.
-      return functionRegistry.lookupFunction(name, children)
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // Lookup the function as a temporary or a built-in function (i.e. without database) and
+      // 1. if we are not resolving view, we don't care about the function type and just return it.
+      // 2. if we are resolving view, only return a temp function if it's referred by this view.
+      if (!isResolvingView ||
+          !isTemporaryFunction(name) ||
+          referredTempFunctionNames.contains(name.funcName)) {
+        // This function has been already loaded into the function registry.
+        return functionRegistry.lookupFunction(name, children)
+      }
+    }
+
+    // Get the database from AnalysisContext if it's defined, otherwise, use current database
+    val currentDatabase = AnalysisContext.get.catalogAndNamespace match {
+      case Seq() => getCurrentDatabase
+      case Seq(_, db) => db
+      case Seq(catalog, namespace @ _*) =>
+        throw new AnalysisException(
+          s"V2 catalog does not support functions yet. " +
+            s"catalog: ${catalog}, namespace: '${namespace.quoted}'")
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val database = formatDatabaseName(name.database.getOrElse(currentDatabase))
     val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName)) {
@@ -1618,7 +1635,7 @@ class SessionCatalog(
   }
 
   /**
-   * Validate the new locatoin before renaming a managed table, which should be non-existent.
+   * Validate the new location before renaming a managed table, which should be non-existent.
    */
   private def validateNewLocationOfRename(
       oldName: TableIdentifier,
