@@ -34,7 +34,6 @@ private[spark] object Minikube extends Logging {
   private val MINIKUBE_VM_PREFIX = "minikubeVM: "
   private val MINIKUBE_PREFIX = "minikube: "
   private val MINIKUBE_PATH = ".minikube"
-  private val MINIKUBE_APISERVER_CERT_PATH = ".minikube"
 
   def logVersion(): Unit = {
     logInfo(executeMinikube("version").mkString("\n"))
