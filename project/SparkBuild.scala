@@ -657,12 +657,7 @@ object DependencyOverrides {
 object ExcludedDependencies {
   lazy val settings = Seq(
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
-    excludeDependencies ++= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api")
-//      ExclusionRule("javax.ws.rs", "jsr311-api"),
-//      ExclusionRule(organization = "com.sun.jersey"),
-//      ExclusionRule("org.eclipse.jetty", "jetty-webapp")
-    )
+    excludeDependencies += ExclusionRule("javax.ws.rs", "jsr311-api")
   )
 }
 
@@ -769,9 +764,7 @@ object Hive {
 object YARN {
   lazy val settings = Seq(
     libraryDependencies += "javax.ws.rs" % "jsr311-api" % "1.1.1" % "test",
-    excludeDependencies --= Seq(
-      ExclusionRule("javax.ws.rs", "jsr311-api")
-    )
+    excludeDependencies -= ExclusionRule("javax.ws.rs", "jsr311-api")
   )
 }
 

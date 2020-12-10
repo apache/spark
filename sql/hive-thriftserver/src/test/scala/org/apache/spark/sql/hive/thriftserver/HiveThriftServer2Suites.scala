@@ -1047,7 +1047,7 @@ class SingleSessionSuite extends HiveThriftServer2Test {
   }
 }
 
-class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test{
+class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test {
   var tempScratchDir: File = _
 
   override protected def beforeAll(): Unit = {
@@ -1082,27 +1082,6 @@ class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test{
 
 class HiveThriftHttpServerSuite extends HiveThriftServer2Test {
   override def mode: ServerMode.Value = ServerMode.http
-
-  override def afterAll(): Unit = {
-    dumpLogs()
-    if (sparkCmd != null) {
-      import scala.sys.process._
-      val cmds = sparkCmd.split(":")
-      val jars = cmds.filter(_.endsWith("jar"))
-      val compileClasses = cmds.filter(_.endsWith("classes"))
-        .map(new File(_))
-        .filter(_.isDirectory).map(_.list())
-      jars.foreach { jar =>
-        val lineStream = s"jar vtf $jar".lineStream
-        val classes = lineStream.filter(_.contains("NewCookie.class"))
-        if (classes.nonEmpty) {
-          info(s"!!!!!!!!! Suspect???????? ---> $jar --> ${classes.mkString(", ")}")
-        }
-      }
-
-    }
-    super.afterAll()
-  }
 
   test("JDBC query execution") {
     withJdbcStatement("test") { statement =>
@@ -1228,8 +1207,6 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
-  var sparkCmd: String = _
-
   private def startThriftServer(attempt: Int) = {
     warehousePath = Utils.createTempDir()
     warehousePath.delete()
@@ -1278,7 +1255,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     // Ensures that the following "tail" command won't fail.
     logPath.createNewFile()
-    val successLines = if (mode == ServerMode.http) {
+    val successLine = if (mode == ServerMode.http) {
       THRIFT_HTTP_SERVICE_LIVE
     } else {
       THRIFT_BINARY_SERVICE_LIVE
@@ -1291,10 +1268,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val captureOutput = (line: String) => diagnosisBuffer.synchronized {
         diagnosisBuffer += line
 
-        if (line.startsWith("Spark Command: ")) {
-          sparkCmd = line
-        }
-        if (line.contains(successLines)) {
+        if (line.contains(successLine)) {
           listeningPort = line.split(" on port ")(1).split(' ').head.toInt
           logInfo(s"Started HiveThriftServer2: port=$listeningPort, mode=$mode, attempt=$attempt")
           serverStarted.trySuccess(())
@@ -1338,7 +1312,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     logTailingProcess = null
   }
 
-  def dumpLogs(): Unit = {
+  private def dumpLogs(): Unit = {
     logError(
       s"""
          |=====================================
