@@ -48,7 +48,8 @@ private object MsSqlServerDialect extends JdbcDialect {
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case TimestampType => if(oldDateTime) {Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))} 
+      else {Some(JdbcType("DATETIME2", java.sql.Types.TIMESTAMP))}
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
