@@ -301,7 +301,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
     assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("x.`y.z`"))
     assert(TableIdentifier("z", Some("`x.y`")) === parseTableIdentifier("```x.y```.z"))
     assert(TableIdentifier("`y.z`", Some("x")) === parseTableIdentifier("x.```y.z```"))
-    assert(TableIdentifier("x.y.z", None) === parseTableIdentifier("`x.y.z`"))
+    assert(TableIdentifier("y.z", Some("x")) === parseTableIdentifier("`x.y.z`"))
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
