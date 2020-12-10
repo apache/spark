@@ -166,10 +166,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testDropPartitions(isDatasourceTable = false)
   }
 
-  test("alter table: add partition") {
-    testAddPartitions(isDatasourceTable = false)
-  }
-
   test("drop table") {
     testDropTable(isDatasourceTable = false)
   }
