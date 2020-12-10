@@ -152,7 +152,15 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
-      val filePath = new Path(new URI(file.filePath))
+      var path: Option[Path] = None
+      import scala.util.Try
+      Try {
+        path = Some(new Path(new URI(file.filePath)))
+      } recover {
+        case ex: Throwable =>
+          path = Some(new Path(file.filePath))
+      }
+      val filePath = path.get
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file

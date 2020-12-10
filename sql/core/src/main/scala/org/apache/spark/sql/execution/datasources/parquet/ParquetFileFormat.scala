@@ -255,7 +255,15 @@ class ParquetFileFormat
     (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
-      val filePath = new Path(new URI(file.filePath))
+      var path: Option[Path] = None
+      Try {
+        path = Some(new Path(new URI(file.filePath)))
+      } recover {
+        case ex: Throwable =>
+          path = Some(new Path(file.filePath))
+      }
+      val filePath = path.get
+
       val split =
         new org.apache.parquet.hadoop.ParquetInputSplit(
           filePath,

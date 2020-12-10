@@ -170,7 +170,15 @@ class OrcFileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
 
-      val filePath = new Path(new URI(file.filePath))
+      var path: Option[Path] = None
+      import scala.util.Try
+      Try {
+        path = Some(new Path(new URI(file.filePath)))
+      } recover {
+        case ex: Throwable =>
+          path = Some(new Path(file.filePath))
+      }
+      val filePath = path.get
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
