@@ -2963,7 +2963,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
       exprs.filterNot(_.deterministic).flatMap { expr =>
-        val leafNondeterministic = expr.collect { case n: Nondeterministic => n }
+        val leafNondeterministic = expr.collect { case n if !n.deterministic => n }
         leafNondeterministic.distinct.map { e =>
           val ne = e match {
             case n: NamedExpression => n
