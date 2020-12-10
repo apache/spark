@@ -2031,6 +2031,33 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
   }
 
+  test("alter table: add partition") {
+    val sql1 =
+      """
+        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
+        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
+        |(dt='2009-09-09', country='uk')
+      """.stripMargin
+    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
+
+    val parsed1 = parsePlan(sql1)
+    val parsed2 = parsePlan(sql2)
+
+    val expected1 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
+      Seq(
+        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
+        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
+      ifNotExists = true)
+    val expected2 = AlterTableAddPartition(
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... ADD PARTITION ..."),
+      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
+      ifNotExists = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+  }
+
   test("alter view: add partition (not supported)") {
     assertUnsupported(
       """

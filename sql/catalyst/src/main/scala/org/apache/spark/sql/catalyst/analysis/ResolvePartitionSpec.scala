@@ -81,7 +81,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         resolvedPartitionSpec
     }
 
-  private[sql] def convertToPartIdent(
+  private def convertToPartIdent(
       partitionSpec: TablePartitionSpec,
       schema: Seq[StructField]): InternalRow = {
     val partValues = schema.map { part =>
