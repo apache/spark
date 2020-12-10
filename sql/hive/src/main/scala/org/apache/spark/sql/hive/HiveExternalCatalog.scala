@@ -250,7 +250,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // specify location for managed table. And in [[CreateDataSourceTableAsSelectCommand]] we have
     // to create the table directory and write out data before we create this table, to avoid
     // exposing a partial written table.
-    val needDefaultTableLocation = tableDefinition.tableType == MANAGED &&
+    val needDefaultTableLocation = (tableDefinition.tableType == MANAGED
+      || tableDefinition.tableType == EXTERNAL) &&
       tableDefinition.storage.locationUri.isEmpty
 
     val tableLocation = if (needDefaultTableLocation) {

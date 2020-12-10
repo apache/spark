@@ -1597,6 +1597,15 @@ object SQLConf {
        .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
        .booleanConf
        .createWithDefault(false)
+
+  val CREATE_EXTERNAL_STATEMENT_LOCATION = buildConf("spark.sql.create.external.statement.location")
+    .doc("In is a statement about whether to specify location when creating an external table. " +
+      "If it is not declared, the default value is false. " +
+      "If you do not specify a location when creating an external table, you can create it successfully; " +
+      "if you declare it as true, you must specify a location when creating an external table.")
+    .booleanConf
+    .createWithDefault(false)
+
 }
 
 /**
@@ -2009,6 +2018,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def createExternalStatementLocation: Boolean = getConf(CREATE_EXTERNAL_STATEMENT_LOCATION)
 
   /** ********************** SQLConf functionality methods ************ */
 
