@@ -266,13 +266,24 @@ class ConstantFoldingSuite extends PlanTest {
   }
 
   test("SPARK-33544: Constant folding test with side effects") {
+    val assert = AssertTrue(false)
+
     val originalQuery =
       testRelation
         .select('a)
-        .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
+        .where(Size(CreateArray(Seq(assert))) > 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    comparePlans(optimized, originalQuery.analyze)
+
+    val newAssert = assert.copy(
+      child = Cast(RaiseError(new RuntimeException("'false' is not true!")), NullType))
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .where(Size(CreateArray(Seq(newAssert))) > 0)
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   object OptimizeForCreate extends RuleExecutor[LogicalPlan] {
@@ -318,16 +329,44 @@ class ConstantFoldingSuite extends PlanTest {
       }.getMessage
       assert(e2.contains("divide by zero"))
 
+      val e3 = intercept[ArithmeticException] {
+        Optimize.execute(
+          testRelation
+            .select(
+              CaseWhen(
+                Seq((Literal(2) < Literal(3), Literal(3) / Literal(0))),
+                Literal(3) + Literal(0)) as 'c1).analyze)
+      }.getMessage
+      assert(e3.contains("divide by zero"))
+
       val originalQuery =
         testRelation
           .select(
             If(Literal(2) > Literal(3),
               Literal(3) / Literal(0),
-              Literal(3) + Literal(0)) as 'c1)
+              Literal(3) + Literal(0)) as 'c1,
+            CaseWhen(
+              Seq((Literal(2) > Literal(3), Literal(3) / Literal(0))),
+              Literal(3) + Literal(0)) as 'c2,
+            If('a === Literal(1),
+              Literal(3) / Cast(RaiseError("test"), IntegerType),
+              Literal(3) + Literal(0)) as 'c3,
+            CaseWhen(
+              Seq(('a === Literal(1), Literal(4) + Literal(3) / Literal(0))),
+              Literal(3) + Literal(0)) as 'c4)
       val optimized = OptimizeForCreate.execute(originalQuery.analyze)
       val correctAnswer =
         testRelation
-          .select(Literal(3.0) as 'c1)
+          .select(
+            Literal(3.0) as 'c1,
+            Literal(3.0) as 'c2,
+            If('a === Literal(1),
+              Cast(RaiseError(new RuntimeException("test")), DoubleType),
+              Literal(3.0)) as 'c3,
+            CaseWhen(
+              Seq(('a === Literal(1),
+                Cast(RaiseError(new ArithmeticException("divide by zero")), DoubleType))),
+              Literal(3.0)) as 'c4)
           .analyze
       comparePlans(optimized, correctAnswer)
     }

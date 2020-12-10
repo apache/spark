@@ -2341,11 +2341,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   test("raise_error") {
     val strDf = Seq(("hello")).toDF("a")
 
-    val e1 = intercept[SparkException] {
+    val e1 = intercept[RuntimeException] {
       strDf.select(raise_error(lit(null.asInstanceOf[String]))).collect()
     }
-    assert(e1.getCause.isInstanceOf[RuntimeException])
-    assert(e1.getCause.getMessage == null)
+    assert(e1.getMessage == null)
 
     val e2 = intercept[SparkException] {
       strDf.select(raise_error($"a")).collect()

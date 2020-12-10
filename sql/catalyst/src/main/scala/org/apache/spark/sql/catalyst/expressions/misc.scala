@@ -69,12 +69,29 @@ case class RaiseError(child: Expression, error: Option[Throwable] = None)
 
   def this(child: Expression) = this(child, None)
 
-  override def foldable: Boolean = child.foldable
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
+
+  private def errorHashCode: Int = error match {
+    case Some(err) => 31 * err.getClass.hashCode() + err.getMessage.hashCode
+    case None => 0
+  }
+
+  override def hashCode(): Int = 31 * child.hashCode() + errorHashCode
+
+  private def errorEquals(other: Option[Throwable]): Boolean = (error, other) match {
+    case (Some(e), Some(o)) => e.getClass == o.getClass && e.getMessage == o.getMessage
+    case (None, None) => true
+    case _ => false
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case o: RaiseError => child == o.child && errorEquals(o.error)
+    case _ => false
+  }
 
   override def eval(input: InternalRow): Any = {
     error match {
@@ -120,7 +137,7 @@ case class RaiseError(child: Expression, error: Option[Throwable] = None)
 
 object RaiseError {
   def apply(error: Throwable): RaiseError = {
-    RaiseError(Literal.create(error.getMessage, StringType), Some(error))
+    new RaiseError(Literal.create(error.getMessage, StringType), Some(error))
   }
 }
 

@@ -67,6 +67,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
         // object and running eval unnecessarily.
         case l: Literal => l
 
+        // Skip redundant folding of errors.
         case c @ Cast(RaiseError(_, _), _, _) => c
         case r: RaiseError => r
 
@@ -84,10 +85,14 @@ object ConstantFolding extends Rule[LogicalPlan] {
           }
           constant match {
             case scala.util.Right(value) => Literal.create(value, e.dataType)
-            case scala.util.Left(error) => Cast(RaiseError(error), e.dataType)
+            case scala.util.Left(error) =>
+              ResolveTimeZone.resolveTimeZones(Cast(RaiseError(error), e.dataType))
           }
       }
+
+      // Evaluate top-level `RaiseError`s
       newPlan.expressions.foreach(checkError)
+
       newPlan
   }
 }
