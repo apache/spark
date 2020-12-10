@@ -17,6 +17,7 @@
 # under the License.
 import argparse
 import fnmatch
+import os
 import sys
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
@@ -57,6 +58,34 @@ ERRORS_ELIGIBLE_TO_REBUILD = [
     'undefined label:',
     'unknown document:',
 ]
+
+ON_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS', 'false') == "true"
+TEXT_BLUE = '\033[94m'
+TEXT_RESET = '\033[0m'
+
+
+def _promote_new_flags():
+    print(TEXT_BLUE)
+    print("Tired of waiting for documentation to be built?")
+    print()
+    if ON_GITHUB_ACTIONS:
+        print("You can quickly build documentation locally with just one command.")
+        print("    ./breeze build-docs")
+        print()
+        print("Still too slow?")
+        print()
+    print("You can only build one documentation package:")
+    print("    ./breeze build-docs --package-filter <PACKAGE-NAME>")
+    print()
+    print("This usually takes from 20 seconds to 2 minutes.")
+    print()
+    print("You can also use other extra flags to iterate faster:")
+    print("   --docs-only       - Only build documentation")
+    print("   --spellcheck-only - Only perform spellchecking")
+    print()
+    print("For more info:")
+    print("   ./breeze build-docs --help")
+    print(TEXT_RESET)
 
 
 def _get_parser():
@@ -132,7 +161,6 @@ def display_packages_summary(
 
 
 def print_build_errors_and_exit(
-    message: str,
     build_errors: Dict[str, List[DocBuildError]],
     spelling_errors: Dict[str, List[SpellingError]],
 ) -> None:
@@ -144,7 +172,7 @@ def print_build_errors_and_exit(
         if spelling_errors:
             display_spelling_error_summary(spelling_errors)
             print()
-        print(message)
+        print("The documentation has errors.")
         display_packages_summary(build_errors, spelling_errors)
         print()
         print(CHANNEL_INVITATION)
@@ -155,15 +183,18 @@ def main():
     """Main code"""
     args = _get_parser().parse_args()
     available_packages = get_available_packages()
-    with with_group("Available packages"):
-        for pkg in available_packages:
-            print(f" - {pkg}")
-
     docs_only = args.docs_only
     spellcheck_only = args.spellcheck_only
     disable_checks = args.disable_checks
     package_filters = args.package_filter
     for_production = args.for_production
+
+    if not package_filters:
+        _promote_new_flags()
+
+    with with_group("Available packages"):
+        for pkg in available_packages:
+            print(f" - {pkg}")
 
     print("Current package filters: ", package_filters)
     current_packages = (
@@ -221,8 +252,11 @@ def main():
             all_build_errors[None] = general_errors
 
     dev_index_generator.generate_index(f"{DOCS_DIR}/_build/index.html")
+
+    if not package_filters:
+        _promote_new_flags()
+
     print_build_errors_and_exit(
-        "The documentation has errors.",
         all_build_errors,
         all_spelling_errors,
     )
