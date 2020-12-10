@@ -69,17 +69,17 @@ private[spark] object Minikube extends Logging {
   def getKubernetesClient: DefaultKubernetesClient = {
     val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
-    val (apiServerCertPath, apiServerKeyPath) =
-      if (Files.exists(Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt"))) {
-        // For Minikube <1.9
-        (Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt"),
-          Paths.get(userHome, MINIKUBE_PATH, "apiserver.key"))
-      } else {
-        // For Minikube >=1.9
-        val profile = executeMinikube("profile")(0)
-        (Paths.get(userHome, MINIKUBE_PATH, "profiles", profile, "apiserver.crt"),
-          Paths.get(userHome, MINIKUBE_PATH, "profiles", profile, "apiserver.key"))
-      }
+    val minikubeBasePath = Paths.get(userHome, MINIKUBE_PATH).toString
+    val profileDir = if (Files.exists(Paths.get(minikubeBasePath, "apiserver.crt"))) {
+      // For Minikube <1.9
+      ""
+    } else {
+      // For Minikube >=1.9
+      val profile = executeMinikube("profile")(0)
+      Paths.get("profiles", profile).toString
+    }
+    val apiServerCertPath = Paths.get(minikubeBasePath, profileDir, "apiserver.crt")
+    val apiServerKeyPath = Paths.get(minikubeBasePath, profileDir, "apiserver.key")
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
