@@ -200,6 +200,20 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("creating local temp view should not affect existing table reference") {
+    withTable("t") {
+      withTempView("t") {
+        withGlobalTempView("v") {
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t")
+          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t")
+          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
+          checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v"), Seq(Row(2)))
+        }
+      }
+    }
+  }
+
   test("SPARK-33692: view should use captured catalog and namespace to lookup function") {
     val avgFuncClass = "test.org.apache.spark.sql.MyDoubleAvg"
     val sumFuncClass = "test.org.apache.spark.sql.MyDoubleSum"
