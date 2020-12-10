@@ -1288,4 +1288,32 @@ object DateTimeUtils {
       throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
     }
   }
+
+
+  /**
+   * Returns the ceil date time from original date time and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
+   */
+  def ceilTimestamp(t: Long, level: Int, timeZone: TimeZone): Long = {
+    val floorValue = truncTimestamp(t, level, getZoneId(timeZone.getID))
+    if (floorValue == t) {
+      floorValue
+    } else {
+      // trunc, then add a increment, trunc again === ceil
+      val increment = level match {
+        case TRUNC_TO_YEAR => 366 * MICROS_PER_DAY
+        case TRUNC_TO_QUARTER => 93 * MICROS_PER_DAY
+        case TRUNC_TO_MONTH => 31 * MICROS_PER_DAY
+        case TRUNC_TO_WEEK => 7 * MICROS_PER_DAY
+        case TRUNC_TO_DAY => MICROS_PER_DAY
+        case TRUNC_TO_HOUR => 3600 * MICROS_PER_SECOND
+        case TRUNC_TO_MINUTE => 60 * MICROS_PER_SECOND
+        case TRUNC_TO_SECOND => MICROS_PER_SECOND
+        case _ =>
+          // caller make sure that this should never be reached
+          sys.error(s"Invalid trunc level: $level")
+      }
+      truncTimestamp(floorValue + increment, level, getZoneId(timeZone.getID))
+    }
+  }
 }
