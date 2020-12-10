@@ -23,6 +23,12 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val DECOMMISSION_SCRIPT =
+    ConfigBuilder("spark.kubernetes.decommission.script")
+      .doc("The location of the script to use for graceful decommissioning")
+      .stringConf
+      .createWithDefault("/opt/decom.sh")
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
