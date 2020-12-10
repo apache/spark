@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -962,7 +963,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   test("ANSI mode: cast string to timestamp with parse error") {
     val activeConf = conf
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    new ParVector(DateTimeTestUtils.outstandingZoneIds.toVector).foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
@@ -986,7 +987,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   test("ANSI mode: cast string to date with parse error") {
     val activeConf = conf
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    new ParVector(DateTimeTestUtils.outstandingZoneIds.toVector).foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), DateType, Option(zid.getId)),
