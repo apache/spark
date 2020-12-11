@@ -74,10 +74,10 @@ class SparkEnv (
   @volatile private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
-  // A general, soft-reference map for metadata needed during HadoopRDD split computation
-  // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
+  // A general, weak-reference map for metadata needed during HadoopRDD split computation
+  // (e.g., HadoopRDD uses this to cache JobConfs).
   private[spark] val hadoopJobMetadata =
-    CacheBuilder.newBuilder().softValues().build[String, AnyRef]().asMap()
+    CacheBuilder.newBuilder().weakValues().build[String, AnyRef]().asMap()
 
   private[spark] var driverTmpDir: Option[String] = None
 
