@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -39,12 +38,12 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, toPrettySQL}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -1000,8 +999,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedRelation if !u.isStreaming =>
             lookupV2Relation(u.multipartIdentifier, u.options, false).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case other => throw new IllegalStateException(
-                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
+              case other =>
+                throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupV2Relation")
             }.getOrElse(write)
           case _ => write
         }
@@ -1098,8 +1097,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
-                case other => throw new IllegalStateException(
-                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
+                case other =>
+                  throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupRelation")
               }.getOrElse(write)
           case _ => write
         }
@@ -3508,8 +3507,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
           case column: ColumnChange =>
             // This is informational for future developers
-            throw new UnsupportedOperationException(
-              "Please add an implementation for a column change here")
+            throw QueryExecutionErrors.columnChangeUnsupportedError
           case other => Some(other)
         }
 

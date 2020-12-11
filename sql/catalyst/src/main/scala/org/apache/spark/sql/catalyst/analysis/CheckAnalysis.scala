@@ -17,7 +17,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -96,8 +95,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw new IllegalStateException(
-          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
@@ -661,8 +659,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                """.stripMargin)
 
           case _: UnresolvedHint =>
-            throw new IllegalStateException(
-              "Internal error: logical hint operator should have been removed during analysis")
+            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>

@@ -36,7 +36,6 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
  */
 object QueryCompilationErrors {
 
-  // Analyzer errors
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
       s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +

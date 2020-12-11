@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Unary
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -245,13 +245,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot terminate expression: $this")
+    throw QueryExecutionErrors.cannotTerminateExpressionError(this)
 }
 
 case class UnresolvedFunction(
