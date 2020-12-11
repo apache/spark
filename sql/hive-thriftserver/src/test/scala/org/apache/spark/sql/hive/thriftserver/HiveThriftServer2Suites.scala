@@ -1360,15 +1360,15 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
-  private def jdbcUri = if (mode == ServerMode.http) {
+  private def jdbcUri(database: String = "default"): String = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/
-       |default?
+       |$database?
        |hive.server2.transport.mode=http;
        |hive.server2.thrift.http.path=cliservice;
        |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
+    s"jdbc:hive2://localhost:$serverPort/$database?${hiveConfList}#${hiveVarList}"
   }
 
   private def tryCaptureSysLog(f: => Unit): Unit = {
@@ -1383,7 +1383,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   def withMultipleConnectionJdbcStatement(
       tableNames: String*)(fs: (Statement => Unit)*): Unit = tryCaptureSysLog {
     val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri(), user, "") }
     val statements = connections.map(_.createStatement())
 
     try {
@@ -1404,7 +1404,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   def withDatabase(dbNames: String*)(fs: (Statement => Unit)*): Unit = tryCaptureSysLog {
     val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
+    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri(), user, "") }
     val statements = connections.map(_.createStatement())
 
     try {
@@ -1420,5 +1420,17 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
+  }
+
+  test("SPARK-17819: Support default database in connection URIs") {
+    withDatabase("spark17819") { statement =>
+      statement.execute(s"CREATE DATABASE IF NOT EXISTS spark17819")
+      val jdbcStr = jdbcUri("spark17819")
+      val connection = DriverManager.getConnection(jdbcStr, user, "")
+      val statementN = connection.createStatement()
+      val resultSet = statementN.executeQuery("select current_database()")
+      resultSet.next()
+      assert(resultSet.getString(1) === "spark17819")
+    }
   }
 }
