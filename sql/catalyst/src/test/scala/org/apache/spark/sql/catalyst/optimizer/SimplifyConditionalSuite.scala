@@ -204,19 +204,22 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
     val b = UnresolvedAttribute("b")
     val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
-    val caseWhen = CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(2))), Some(b))
+    val caseWhen = CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3)))
 
-    assertEquivalent(EqualTo(caseWhen, Literal(1)), Or(a, EqualTo(b, Literal(1))))
-    assertEquivalent(EqualTo(caseWhen, Literal(3)), EqualTo(b, Literal(3)))
-
-    assertEquivalent(And(EqualTo(caseWhen, Literal(1)), EqualTo(caseWhen, Literal(2))),
-      And(Or(a, EqualTo(b, Literal(1))), Or(c, EqualTo(b, Literal(2)))))
+    assertEquivalent(EqualTo(caseWhen, Literal(4)), FalseLiteral)
+    assertEquivalent(EqualTo(caseWhen, Literal(3)), EqualTo(caseWhen, Literal(3)))
+    assertEquivalent(EqualTo(caseWhen, Literal("4")), FalseLiteral)
+    assertEquivalent(EqualTo(caseWhen, Literal("3")), EqualTo(caseWhen, Literal(3)))
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal("1")), (c, Literal("2"))), None), Literal("4")),
+      FalseLiteral)
 
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(1))), None), Literal(1)),
-      Or(a, c))
+      And(EqualTo(caseWhen, Literal(5)), EqualTo(caseWhen, Literal(6))),
+      FalseLiteral)
+
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(2))), None), Literal(3)),
+      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(1))), None), Literal(-1)),
       FalseLiteral)
 
     // Do not simplify if it contains non foldable expressions.
@@ -228,6 +231,6 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     // Do not simplify if it contains non-deterministic expressions.
     val nonDeterministic = CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(b))
     assert(!nonDeterministic.deterministic)
-    assertEquivalent(EqualTo(nonDeterministic, Literal(1)), EqualTo(nonDeterministic, Literal(1)))
+    assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
   }
 }
