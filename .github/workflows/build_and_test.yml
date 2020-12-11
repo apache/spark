@@ -336,7 +336,6 @@ jobs:
     - name: Install R linter dependencies and SparkR
       run: |
         sudo apt-get install -y libcurl4-openssl-dev
-
         # dependencies for usethis 1.6.3.
         sudo Rscript -e "install.packages(c('clipr', 'cli', 'crayon', 'desc', 'fs', 'gh', 'glue', 'purrr', 'rematch2', 'rlang', 'rprojroot', 'whisker', 'withr', 'yaml'), repos='https://cloud.r-project.org/')"
         sudo Rscript -e "install.packages('https://cran.r-project.org/src/contrib/Archive/usethis/usethis_1.6.3.tar.gz', repos=NULL, type='source')"

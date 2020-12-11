@@ -41,7 +41,6 @@ cache:
 install:
   # Install maven and dependencies
   - ps: .\dev\appveyor-install-dependencies.ps1
-
   # usethis and its dependencies
   - cmd: Rscript -e "install.packages(c('clipr', 'cli', 'crayon', 'desc', 'fs', 'gh', 'glue', 'purrr', 'rematch2', 'rlang', 'rprojroot', 'whisker', 'withr', 'yaml'), repos='https://cloud.r-project.org/')"
   - cmd: Rscript -e "install.packages('https://cran.r-project.org/src/contrib/Archive/usethis/usethis_1.6.3.tar.gz', repos=NULL, type='source')"
