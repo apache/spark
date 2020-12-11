@@ -2893,7 +2893,7 @@ class HiveDDLSuite
 
       // ROW FORMAT DELIMITED ... STORED AS TEXTFILE
       Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
-        withTable("targetTable", "failedTable") {
+        withTable("targetTable") {
           spark.sql(
             s"""
                |CREATE TABLE targetTable LIKE $sourceTable
