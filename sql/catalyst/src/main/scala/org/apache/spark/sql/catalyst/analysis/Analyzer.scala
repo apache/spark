@@ -877,8 +877,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case UnresolvedRelation(ident, _, false) =>
             lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ => throw new AnalysisException("Cannot write into temp view " +
-                s"${ident.quoted} as it's not a data source v2 relation.")
+              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
             }.getOrElse(write)
           case _ => write
         }
@@ -919,8 +918,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
 
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
-          s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
+        throw QueryCompilationErrors.nonStreamingTempViewError(identifier.quoted)
       }
       tmpView.map(ResolveRelations.resolveViews)
     }
@@ -1155,9 +1153,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table =>
               if (isStreaming) {
                 if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-                  throw new AnalysisException(s"${identifier.quoted} is a permanent view, " +
-                    "which is not supported by streaming reading API such as " +
-                    "`DataStreamReader.table` yet.")
+                  throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+                    identifier.quoted)
                 }
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
