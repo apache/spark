@@ -2772,7 +2772,7 @@ class HiveDDLSuite
 
   test("Create Table LIKE with row format") {
     val catalog = spark.sessionState.catalog
-    withTable("sourceHiveTable", "sourceDsTable", "targetHiveTable1", "targetHiveTable2") {
+    withTable("sourceHiveTable", "sourceDsTable") {
       sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
       sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
 
@@ -2818,30 +2818,6 @@ class HiveDDLSuite
             """.stripMargin)
       }.getMessage
       assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS"))
-
-      // row format incompatible with parquet format (from hive table)
-      e = intercept[AnalysisException] {
-        spark.sql(
-          """
-            |CREATE TABLE targetHiveTable1 LIKE sourceHiveTable STORED AS PARQUET
-            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-            |WITH SERDEPROPERTIES ('test' = 'test')
-          """.stripMargin)
-      }.getMessage
-      assert(e.contains(
-        s"ROW FORMAT SERDE is incompatible with format 'parquet'"))
-
-      // row format incompatible with parquet format (from datasource table)
-      e = intercept[AnalysisException] {
-        spark.sql(
-          """
-            |CREATE TABLE targetHiveTable2 LIKE sourceDsTable STORED AS PARQUET
-            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-            |WITH SERDEPROPERTIES ('test' = 'test')
-          """.stripMargin)
-      }.getMessage
-      assert(e.contains(
-        s"ROW FORMAT SERDE is incompatible with format 'parquet'"))
     }
   }
 

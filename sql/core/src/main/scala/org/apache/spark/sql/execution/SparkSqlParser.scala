@@ -453,15 +453,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    // "CREATE TABLE dst LIKE src ROW FORMAT SERDE 'xxx.xxx.SerdeClass'"
-    // The behavior of above SQL in Hive will just ignore the ROW FORMAT definition,
-    // and use SerdeInfo from src table instead.
-    // It's different from "CREATE TABLE ... ROW FORMAT SERDE 'xxx.xxx.SerdeClass'",
-    // result as followed:
-    // SerDe Library:          xxx.xxx.SerdeClass
-    // InputFormat:            org.apache.hadoop.mapred.TextInputFormat
-    // OutputFormat:           org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-    // To avoid ambiguous understanding, it might be better to just forbidden such behavior.
+    // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
+    // it's a bit weird to use the default file format, but it's also weird to get file format
+    // from the source table while the serde class is user-specified.
+    // Here we require both serde and format to be specified, to avoid confusion.
     serdeInfo match {
       case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
         if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
