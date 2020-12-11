@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
 
 /**
  * Object for grouping all error messages of the query compilation.
- * Currently it includes all AnalysisExcpetions created and thrown directly in
+ * Currently it includes all [[AnalysisException]]s created and thrown directly in
  * org.apache.spark.sql.catalyst.analysis.Analyzer.
  */
 object QueryCompilationErrors {
