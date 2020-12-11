@@ -2965,7 +2965,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.filterNot(_.deterministic).flatMap { expr =>
         val leafNondeterministic = expr.collect {
           case n: Nondeterministic => n
-          case e: CallMethodViaReflection => e
           case udf: UserDefinedExpression if !udf.deterministic => udf
         }
         leafNondeterministic.distinct.map { e =>
