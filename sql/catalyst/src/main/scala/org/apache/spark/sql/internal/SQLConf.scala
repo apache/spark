@@ -932,8 +932,9 @@ object SQLConf {
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence. After set this config, you may be " +
-        "interesting in spark.sql.thriftServer.interruptOnCancel which can help interrupt task.")
+        "than this configuration value, they take precedence. If you set this timeout and prefer" +
+        "to cancel the queries right away without waiting task to finish, consider enabling" +
+        s"${THRIFTSERVER_FORCE_CANCEL.key} together.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
@@ -941,7 +942,7 @@ object SQLConf {
   val THRIFTSERVER_FORCE_CANCEL =
     buildConf("spark.sql.thriftServer.interruptOnCancel")
       .doc("When true, all running tasks will be interrupted if one cancels a query. " +
-        "When false, all running tasks will be remained until finished.")
+        "When false, all running tasks will remain until finished.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
