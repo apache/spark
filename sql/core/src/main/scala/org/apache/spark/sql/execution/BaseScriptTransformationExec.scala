@@ -104,16 +104,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
 
       val outputRowFormat = ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD")
-
-      val padNull = if (conf.legacyPadNullWhenValueLessThenSchema) {
-        (arr: Array[String], size: Int) => arr.padTo(size, null)
-      } else {
-        (arr: Array[String], size: Int) => arr
-      }
       val processRowWithoutSerde = if (!ioschema.schemaLess) {
         prevLine: String =>
           new GenericInternalRow(
-            padNull(prevLine.split(outputRowFormat), outputFieldWriters.size)
+            prevLine.split(outputRowFormat).padTo(outputFieldWriters.size, null)
               .zip(outputFieldWriters)
               .map { case (data, writer) => writer(data) })
       } else {
@@ -124,7 +118,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
           new GenericInternalRow(
-            padNull(prevLine.split(outputRowFormat).slice(0, 2), 2)
+            prevLine.split(outputRowFormat).slice(0, 2).padTo(2, null)
               .map(kvWriter))
       }
 

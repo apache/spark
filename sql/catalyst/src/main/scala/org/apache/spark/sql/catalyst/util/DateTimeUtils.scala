@@ -189,7 +189,7 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def microsToMillis(micros: Long): Long = {
-    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // When the timestamp is negative i.e before 1970, we need to adjust the milliseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
     Math.floorDiv(micros, MICROS_PER_MILLIS)
@@ -361,6 +361,15 @@ object DateTimeUtils {
       Some(instantToMicros(instant))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
+    val timestamp = stringToTimestamp(s, timeZoneId)
+    if (timestamp.isEmpty) {
+      throw new DateTimeException(s"Cannot cast $s to TimestampType.")
+    } else {
+      timestamp.get
     }
   }
 
@@ -736,14 +745,16 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
+    // Time zone offsets have a maximum precision of seconds (see `java.time.ZoneOffset`). Hence
+    // truncation to microsecond, millisecond, and second can be done
+    // without using time zone information. This results in a performance improvement.
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
         micros - Math.floorMod(micros, MICROS_PER_MILLIS)
       case TRUNC_TO_SECOND =>
         micros - Math.floorMod(micros, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE =>
-        micros - Math.floorMod(micros, MICROS_PER_MINUTE)
+      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ => // Try to truncate date levels

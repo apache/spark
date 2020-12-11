@@ -1064,13 +1064,13 @@ class StreamSuite extends StreamTest {
   }
 
   test("SPARK-30657: streaming limit should not apply on limits on state subplans") {
-    val streanData = MemoryStream[Int]
-    val streamingDF = streanData.toDF().toDF("value")
+    val streamData = MemoryStream[Int]
+    val streamingDF = streamData.toDF().toDF("value")
     val staticDF = spark.createDataset(Seq(1)).toDF("value").orderBy("value")
     testStream(streamingDF.join(staticDF.limit(1), "value"))(
-      AddData(streanData, 1, 2, 3),
+      AddData(streamData, 1, 2, 3),
       CheckAnswer(Row(1)),
-      AddData(streanData, 1, 3, 5),
+      AddData(streamData, 1, 3, 5),
       CheckAnswer(Row(1), Row(1)))
   }
 
@@ -1134,7 +1134,7 @@ class StreamSuite extends StreamTest {
     verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
 
     verifyLocalLimit(
-      inputDF.groupBy().count().limit(1),
+      inputDF.groupBy("value").count().limit(1),
       expectStreamingLimit = false,
       outputMode = OutputMode.Complete())
   }

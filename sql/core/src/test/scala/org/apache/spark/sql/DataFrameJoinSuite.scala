@@ -335,7 +335,9 @@ class DataFrameJoinSuite extends QueryTest
 
     withTempDatabase { dbName =>
       withTable(table1Name, table2Name) {
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        withSQLConf(
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
           spark.range(50).write.saveAsTable(s"$dbName.$table1Name")
           spark.range(100).write.saveAsTable(s"$dbName.$table2Name")
 

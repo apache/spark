@@ -21,14 +21,18 @@ import java.net.ConnectException;
 
 import com.google.common.base.Throwables;
 
+import org.apache.spark.annotation.Evolving;
+
 /**
  * Plugs into {@link RetryingBlockFetcher} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockFetcher} will delegate the exception to this handler only when
  * - remaining retries < max retries
  * - exception is an IOException
+ *
+ * @since 3.1.0
  */
-
+@Evolving
 public interface ErrorHandler {
 
   boolean shouldRetryError(Throwable t);
@@ -44,6 +48,8 @@ public interface ErrorHandler {
 
   /**
    * The error handler for pushing shuffle blocks to remote shuffle services.
+   *
+   * @since 3.1.0
    */
   class BlockPushErrorHandler implements ErrorHandler {
     /**

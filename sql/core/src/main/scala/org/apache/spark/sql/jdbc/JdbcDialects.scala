@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, SQLFeatureNotSupportedException, Timestamp}
+import java.sql.{Connection, Date, Timestamp}
 
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
@@ -61,7 +62,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect extends Serializable {
+abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -231,7 +232,7 @@ abstract class JdbcDialect extends Serializable {
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw new SQLFeatureNotSupportedException(s"Unsupported TableChange $change")
+          throw new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
       }
     }
     updateClause.result()
@@ -263,6 +264,18 @@ abstract class JdbcDialect extends Serializable {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "NULL" else "NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} SET $nullable"
+  }
+
+  def getTableCommentQuery(table: String, comment: String): String = {
+    s"COMMENT ON TABLE $table IS '$comment'"
+  }
+
+  def getSchemaCommentQuery(schema: String, comment: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+  }
+
+  def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
   /**

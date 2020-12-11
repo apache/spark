@@ -52,7 +52,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
   override def dataPreparation(conn: Connection): Unit = {}
 
   override def testUpdateColumnType(tbl: String): Unit = {
-    sql(s"CREATE TABLE $tbl (ID INTEGER) USING _")
+    sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
     var expectedSchema = new StructType().add("ID", IntegerType)
     assert(t.schema === expectedSchema)
@@ -65,5 +65,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTes
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
     assert(msg.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+  }
+
+  override def testCreateTableWithProperty(tbl: String): Unit = {
+    sql(s"CREATE TABLE $tbl (ID INT)" +
+      s" TBLPROPERTIES('TABLESPACE'='pg_default')")
+    var t = spark.table(tbl)
+    var expectedSchema = new StructType().add("ID", IntegerType)
+    assert(t.schema === expectedSchema)
   }
 }

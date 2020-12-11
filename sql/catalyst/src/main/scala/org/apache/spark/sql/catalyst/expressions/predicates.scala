@@ -18,14 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.immutable.TreeSet
-import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
@@ -49,11 +46,26 @@ abstract class BasePredicate {
 }
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
-  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+  private[this] val subExprEliminationEnabled = SQLConf.get.subexpressionEliminationEnabled
+  private[this] lazy val runtime =
+    new SubExprEvaluationRuntime(SQLConf.get.subexpressionEliminationCacheMaxEntries)
+  private[this] val expr = if (subExprEliminationEnabled) {
+    runtime.proxyExpressions(Seq(expression)).head
+  } else {
+    expression
+  }
+
+  override def eval(r: InternalRow): Boolean = {
+    if (subExprEliminationEnabled) {
+      runtime.setInput(r)
+    }
+
+    expr.eval(r).asInstanceOf[Boolean]
+  }
 
   override def initialize(partitionIndex: Int): Unit = {
     super.initialize(partitionIndex)
-    expression.foreach {
+    expr.foreach {
       case n: Nondeterministic => n.initialize(partitionIndex)
       case _ =>
     }

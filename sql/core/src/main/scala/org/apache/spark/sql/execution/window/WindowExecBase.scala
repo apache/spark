@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
 trait WindowExecBase extends UnaryExecNode {
@@ -70,6 +70,9 @@ trait WindowExecBase extends UnaryExecNode {
 
       case (RowFrame, IntegerLiteral(offset)) =>
         RowBoundOrdering(offset)
+
+      case (RowFrame, _) =>
+        sys.error(s"Unhandled bound in windows expressions: $bound")
 
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, child.output)
@@ -136,8 +139,9 @@ trait WindowExecBase extends UnaryExecNode {
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
-            case f: FrameLessOffsetWindowFunction => collect("FRAME_LESS_OFFSET", frame, e, f)
-            case f: OffsetWindowSpec if !f.ignoreNulls &&
+            case f: FrameLessOffsetWindowFunction =>
+              collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
+            case f: OffsetWindowFunction if !f.ignoreNulls &&
               frame.frameType == RowFrame && frame.lower == UnboundedPreceding =>
               frame.upper match {
                 case UnboundedFollowing => collect("UNBOUNDED_OFFSET", f.fakeFrame, e, f)
@@ -184,8 +188,8 @@ trait WindowExecBase extends UnaryExecNode {
               new FrameLessOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
@@ -195,8 +199,8 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
@@ -207,8 +211,8 @@ trait WindowExecBase extends UnaryExecNode {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
                 ordinal,
-                // OFFSET frame functions are guaranteed be OffsetWindowSpec.
-                functions.map(_.asInstanceOf[OffsetWindowSpec]),
+                // OFFSET frame functions are guaranteed be OffsetWindowFunction.
+                functions.map(_.asInstanceOf[OffsetWindowFunction]),
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
@@ -248,6 +252,9 @@ trait WindowExecBase extends UnaryExecNode {
                 createBoundOrdering(frameType, lower, timeZone),
                 createBoundOrdering(frameType, upper, timeZone))
             }
+
+          case _ =>
+            sys.error(s"Unsupported factory: $key")
         }
 
         // Keep track of the number of expressions. This is a side-effect in a map...

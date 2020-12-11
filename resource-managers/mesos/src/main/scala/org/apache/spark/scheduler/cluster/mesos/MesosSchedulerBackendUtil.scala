@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret,
+import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Secret,
   TaskState => MesosTaskState, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 import org.apache.mesos.Protos.Environment.Variable

@@ -61,16 +61,15 @@ case class MapInPandasExec(
       val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
       val outputTypes = child.schema
 
-      val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(inputIter, context)
-
       // Here we wrap it via another row so that Python sides understand it
       // as a DataFrame.
-      val wrappedIter = contextAwareIterator.map(InternalRow(_))
+      val wrappedIter = inputIter.map(InternalRow(_))
 
       // DO NOT use iter.grouped(). See BatchIterator.
       val batchIter =
         if (batchSize > 0) new BatchIterator(wrappedIter, batchSize) else Iterator(wrappedIter)
+
+      val context = TaskContext.get()
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,

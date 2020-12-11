@@ -201,4 +201,41 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
           Map("avroSchema" -> evolvedAvroSchema).asJava)),
       expected)
   }
+
+  test("roundtrip in to_avro and from_avro - struct with nullable Avro schema") {
+    val df = spark.range(10).select(struct('id, 'id.cast("string").as("str")).as("struct"))
+    val avroTypeStruct = s"""
+      |{
+      |  "type": "record",
+      |  "name": "struct",
+      |  "fields": [
+      |    {"name": "id", "type": "long"},
+      |    {"name": "str", "type": ["null", "string"]}
+      |  ]
+      |}
+    """.stripMargin
+    val avroStructDF = df.select(functions.to_avro('struct, avroTypeStruct).as("avro"))
+    checkAnswer(avroStructDF.select(
+      functions.from_avro('avro, avroTypeStruct)), df)
+  }
+
+  test("to_avro with unsupported nullable Avro schema") {
+    val df = spark.range(10).select(struct('id, 'id.cast("string").as("str")).as("struct"))
+    for (unsupportedAvroType <- Seq("""["null", "int", "long"]""", """["int", "long"]""")) {
+      val avroTypeStruct = s"""
+        |{
+        |  "type": "record",
+        |  "name": "struct",
+        |  "fields": [
+        |    {"name": "id", "type": $unsupportedAvroType},
+        |    {"name": "str", "type": ["null", "string"]}
+        |  ]
+        |}
+      """.stripMargin
+      val message = intercept[SparkException] {
+        df.select(functions.to_avro('struct, avroTypeStruct).as("avro")).show()
+      }.getCause.getMessage
+      assert(message.contains("Only UNION of a null type and a non-null type is supported"))
+    }
+  }
 }

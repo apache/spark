@@ -527,7 +527,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       .exists(_.getRenderedMessage().contains("Generated method too long")))
   }
 
-  test("SPARK-28916: subexrepssion elimination can cause 64kb code limit on UnsafeProjection") {
+  test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
     val numOfExprs = 10000
     val exprs = (0 to numOfExprs).flatMap(colIndex =>
       Seq(Add(BoundReference(colIndex, DoubleType, true),
@@ -554,7 +554,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Expecting result:
     //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
-    // Using lenient assertions to be resilient to annonymous class numbering changes
+    // Using lenient assertions to be resilient to anonymous class numbering changes
     assert(!refTerm.contains("null"))
     assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }

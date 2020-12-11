@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -39,7 +39,8 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
+class BucketedReadWithoutHiveSupportSuite
+  extends BucketedReadSuite with DisableAdaptiveExecutionSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
@@ -113,7 +114,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   //   2) Verify the final result is the same as the expected one
   private def checkPrunedAnswers(
       bucketSpec: BucketSpec,
-      bucketValues: Seq[Integer],
+      bucketValues: Seq[Any],
       filterCondition: Column,
       originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
@@ -190,7 +191,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Case 4: InSet
       val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
@@ -242,6 +243,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         bucketValues = null :: Nil,
         filterCondition = $"j" <=> null,
         nullDF)
+    }
+  }
+
+  test("bucket pruning support IsNaN") {
+    withTable("bucketed_table") {
+      val numBuckets = NumBucketsForPruningNullDf
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      // json does not support predicate push-down, and thus json is used here
+      naNDF.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = Double.NaN :: Nil,
+        filterCondition = $"j".isNaN,
+        naNDF)
     }
   }
 
@@ -619,13 +639,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("bucketed_table")
       val tbl = spark.table("bucketed_table")
-      val agged = tbl.groupBy("i", "j").agg(max("k"))
+      val aggregated = tbl.groupBy("i", "j").agg(max("k"))
 
       checkAnswer(
-        agged.sort("i", "j"),
+        aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -659,13 +680,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
       val tbl = spark.table("bucketed_table")
-      val agged = tbl.groupBy("i", "j").agg(max("k"))
+      val aggregated = tbl.groupBy("i", "j").agg(max("k"))
 
       checkAnswer(
-        agged.sort("i", "j"),
+        aggregated.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+      assert(
+        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -786,9 +808,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       Utils.deleteRecursively(tableDir)
       df1.write.parquet(tableDir.getAbsolutePath)
 
-      val agged = spark.table("bucketed_table").groupBy("i").count()
+      val aggregated = spark.table("bucketed_table").groupBy("i").count()
       val error = intercept[Exception] {
-        agged.count()
+        aggregated.count()
       }
 
       assert(error.getCause().toString contains "Invalid bucket file")

@@ -19,14 +19,12 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.Semaphore
 
-import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite,
-  TestUtils}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils}
+import org.apache.spark.util.ThreadUtils
 
 class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
 

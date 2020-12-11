@@ -54,7 +54,7 @@ setMethod("show", "WindowSpec",
 #' Defines the partitioning columns in a WindowSpec.
 #'
 #' @param x a WindowSpec.
-#' @param col a column to partition on (desribed by the name or Column).
+#' @param col a column to partition on (described by the name or Column).
 #' @param ... additional column(s) to partition on.
 #' @return A WindowSpec.
 #' @rdname partitionBy
@@ -231,7 +231,7 @@ setMethod("rangeBetween",
 #' @rdname over
 #' @name over
 #' @aliases over,Column,WindowSpec-method
-#' @family colum_func
+#' @family column_func
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(mtcars)

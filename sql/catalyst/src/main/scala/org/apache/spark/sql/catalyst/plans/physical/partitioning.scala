@@ -164,7 +164,7 @@ trait Partitioning {
    * i.e. the current dataset does not need to be re-partitioned for the `required`
    * Distribution (it is possible that tuples within a partition need to be reorganized).
    *
-   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` does't match
+   * A [[Partitioning]] can never satisfy a [[Distribution]] if its `numPartitions` doesn't match
    * [[Distribution.requiredNumPartitions]].
    */
   final def satisfies(required: Distribution): Boolean = {

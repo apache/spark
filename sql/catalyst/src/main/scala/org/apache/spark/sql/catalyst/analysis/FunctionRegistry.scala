@@ -391,6 +391,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimeZone]("current_timezone"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -426,9 +427,14 @@ object FunctionRegistry {
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
     expression[Extract]("extract"),
+    expression[DateFromUnixDate]("date_from_unix_date"),
+    expression[UnixDate]("unix_date"),
     expression[SecondsToTimestamp]("timestamp_seconds"),
     expression[MillisToTimestamp]("timestamp_millis"),
     expression[MicrosToTimestamp]("timestamp_micros"),
+    expression[UnixSeconds]("unix_seconds"),
+    expression[UnixMillis]("unix_millis"),
+    expression[UnixMicros]("unix_micros"),
 
     // collection functions
     expression[CreateArray]("array"),

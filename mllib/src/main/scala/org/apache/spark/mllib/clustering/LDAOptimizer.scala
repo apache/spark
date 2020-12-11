@@ -466,7 +466,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     val seed = randomGenerator.nextLong()
     // If and only if optimizeDocConcentration is set true,
     // we calculate logphat in the same pass as other statistics.
-    // No calculation of loghat happens otherwise.
+    // No calculation of logphat happens otherwise.
     val logphatPartOptionBase = () => if (optimizeDocConcentration) {
                                         Some(BDV.zeros[Double](k))
                                       } else {
