@@ -2354,7 +2354,7 @@ class HiveDDLSuite
 
   test("SPARK-33742: partition already exists") {
     withTable("t") {
-      sql(s"CREATE TABLE t (id bigint, data string) PARTITIONED BY (id)")
+      sql(s"CREATE TABLE t (data string) PARTITIONED BY (id bigint)")
       sql(s"ALTER TABLE t ADD PARTITION (id=2) LOCATION 'loc1'")
 
       val errMsg = intercept[PartitionsAlreadyExistException] {
