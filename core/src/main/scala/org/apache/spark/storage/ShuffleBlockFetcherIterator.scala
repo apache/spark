@@ -263,7 +263,13 @@ final class ShuffleBlockFetcherIterator(
             logDebug("remainingBlocks: " + remainingBlocks)
           }
         }
-        logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeNs(startTimeNs)}")
+        val duration = Utils.getUsedTimeNs(startTimeNs)
+        if (System.currentTimeMillis() - startTimeNs > 60 * 1000L) {
+          logWarning(s"Got remote block ${blockId} " +
+            s"from ${req.address.host}:${req.address.port} cost ${duration}")
+        }
+        logTrace(s"Got remote block ${blockId} from ${req.address.host}" +
+          s":${req.address.port} cost ${duration}")
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
@@ -595,6 +601,9 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
+          if (fetchWaitTime >= 60 * 1000) {
+            logWarning(s"Fetch ${blockId} successfully from ${address} wait ${fetchWaitTime}")
+          }
           if (address != blockManager.blockManagerId) {
             if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
@@ -682,6 +691,9 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, mapIndex, address, e) =>
+          if (fetchWaitTime >= 60 * 1000) {
+            logWarning(s"Fetch ${blockId} successfully from ${address} wait ${fetchWaitTime}")
+          }
           throwFetchFailedException(blockId, mapIndex, address, e)
       }
 
