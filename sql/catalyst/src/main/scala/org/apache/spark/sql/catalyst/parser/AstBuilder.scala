@@ -294,6 +294,36 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a drop partition specification map.
+   */
+  override def visitDropPartitionSpec(ctx: DropPartitionSpecContext): Seq[Expression] = {
+    ctx.dropPartitionVal().asScala.map {
+      case pLVal: DropPartLExprContext =>
+        val left = AttributeReference(pLVal.identifier().getText, StringType)()
+        val right = Literal(Option(pLVal.constant()).map(visitStringConstant).get)
+        val operator = pLVal.dropPartitionOperator().getChild(0).asInstanceOf[TerminalNode]
+        val expression = buildComparison(left, right, operator)
+        if (expression.isInstanceOf[EqualNullSafe]) {
+          throw new ParseException(
+            "'<=>' operator is not supported in ALTER TABLE ... DROP PARTITION.", ctx)
+        }
+        expression
+      case pRVal: DropPartRExprContext =>
+        val left = Literal(Option(pRVal.constant()).map(visitStringConstant).get)
+        val right = AttributeReference(pRVal.identifier().getText, StringType)()
+        val operator = pRVal.dropPartitionOperator().getChild(0).asInstanceOf[TerminalNode]
+        val expression = buildComparison(left, right, operator)
+        if (expression.isInstanceOf[EqualNullSafe]) {
+          throw new ParseException(
+            "'<=>' operator is not supported in ALTER TABLE ... DROP PARTITION.", ctx)
+        }
+        expression
+      case _ => throw new ParseException(
+        "Expression is not supported in ALTER TABLE ... DROP PARTITION.", ctx)
+    }
+  }
+
+  /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.
@@ -1068,6 +1098,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val left = expression(ctx.left)
     val right = expression(ctx.right)
     val operator = ctx.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+    buildComparison(left, right, operator)
+  }
+
+  /**
+   * Creates a comparison expression. The following comparison operators are supported:
+   * - Equal: '=' or '=='
+   * - Null-safe Equal: '<=>'
+   * - Not Equal: '<>' or '!='
+   * - Less than: '<'
+   * - Less then or Equal: '<='
+   * - Greater than: '>'
+   * - Greater then or Equal: '>='
+   */
+  private def buildComparison(
+                               left: Expression,
+                               right: Expression,
+                               operator: TerminalNode): Expression = {
     operator.getSymbol.getType match {
       case SqlBaseParser.EQ =>
         EqualTo(left, right)

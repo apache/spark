@@ -22,17 +22,15 @@ import java.util.Locale
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EqualTo, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -523,6 +521,7 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
+    partExpr: Seq[Seq[Expression]],
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean,
     purge: Boolean,
@@ -535,7 +534,12 @@ case class AlterTableDropPartitionCommand(
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    val normalizedSpecs = specs.map { spec =>
+    var tableSpecs = specs
+    if (partExpr.nonEmpty) {
+      tableSpecs = parsePartExpressionToTablePartitionSpec(partExpr, sparkSession, catalog, table)
+    }
+
+    val normalizedSpecs = tableSpecs.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
         table.partitionColumnNames,
@@ -552,6 +556,56 @@ case class AlterTableDropPartitionCommand(
     Seq.empty[Row]
   }
 
+  def parsePartExpressionToTablePartitionSpec(partExpr: Seq[Seq[Expression]],
+                                              sparkSession: SparkSession,
+                                              catalog: SessionCatalog,
+                                              table: CatalogTable): Seq[TablePartitionSpec] = {
+    if (!hasComplexFilters(partExpr)) {
+      return partExpr.map(f => {
+        var expr: TablePartitionSpec = Map()
+        f.foreach {
+          case EqualTo(left: AttributeReference, right: Literal)
+          => expr += (left.name -> right.value.toString)
+          case EqualTo(left: Literal, right: AttributeReference)
+          => expr += (right.name -> left.value.toString)
+        }
+        expr
+      }
+      )
+    }
+
+    if (!sparkSession.sessionState.conf.batchDropPartitionsEnable) {
+      throw new Exception("Don't support partition filters in ALTER TABLE DROP PARTITION, " +
+        "you can \'set spark.sql.batch.drop.partitions.enable = true\'")
+    }
+
+    var parts: Seq[CatalogTablePartition] = Seq()
+    partExpr.foreach { s =>
+      val partitions = catalog.listPartitionsByFilter(tableName, s)
+      parts = parts.++:(partitions)
+      if (checkDropPartitionsSize(parts, sparkSession)) {
+        throw new Exception("Just support drop partition's number less than " +
+          s"${sparkSession.sessionState.conf.batchDropPartitionsLimit}...")
+      }
+      partitions
+    }
+    parts.map(f => f.spec)
+  }
+
+  def hasComplexFilters(specs: Seq[Seq[Expression]]): Boolean = {
+    specs.exists(f => f.exists(!_.isInstanceOf[EqualTo]))
+  }
+
+  /**
+   * We only support the number of partitions deleted in batches not greater than 1000(default).
+   *
+   * @param parts
+   * @return
+   */
+  def checkDropPartitionsSize(parts: Seq[CatalogTablePartition],
+                              sparkSession: SparkSession): Boolean = {
+    parts.size > sparkSession.sessionState.conf.batchDropPartitionsLimit
+  }
 }
 
 

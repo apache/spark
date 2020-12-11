@@ -1591,6 +1591,21 @@ object SQLConf {
        .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
        .booleanConf
        .createWithDefault(false)
+
+  val BATCH_DROP_PARTITIONS_ENABLE =
+    buildConf("spark.sql.batch.drop.partitions.enable")
+      .internal()
+      .doc("Whether support partition filter in ALTER TABLE DROP PARTITION.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val BATCH_DROP_PARTITIONS_LIMIT =
+    buildConf("spark.sql.batch.drop.partitions.limit")
+      .internal()
+      .doc("The max partition's number which is allowed to be deleted.")
+      .intConf
+      .checkValue(bit => bit >= -1 && bit <= 1000, "The bit value must be in [-1, 1000].")
+      .createWithDefault(1000)
 }
 
 /**
@@ -2003,6 +2018,10 @@ class SQLConf extends Serializable with Logging {
 
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
+
+  def batchDropPartitionsEnable: Boolean = getConf(SQLConf.BATCH_DROP_PARTITIONS_ENABLE)
+
+  def batchDropPartitionsLimit: Int = getConf(SQLConf.BATCH_DROP_PARTITIONS_LIMIT)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -120,8 +120,8 @@ statement
         partitionSpec+                                                 #addTablePartition
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
-    | ALTER TABLE tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+    | ALTER TABLE tableIdentifier DROP (IF EXISTS)?
+        dropPartitionSpec (',' dropPartitionSpec)* PURGE?              #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
@@ -265,6 +265,22 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+dropPartitionSpec
+    : PARTITION '(' dropPartitionVal (',' dropPartitionVal)* ')'
+    ;
+
+dropPartitionVal
+    : left=identifier dropPartitionOperator right=constant  #dropPartLExpr
+    | left=constant dropPartitionOperator right=identifier  #dropPartRExpr
+    ;
+
+/**
+ * we should not support NSEQ <=>
+ */
+dropPartitionOperator
+    : EQ  | NEQ | NEQJ | LT | LTE | GT | GTE
     ;
 
 describeFuncName
