@@ -62,7 +62,7 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
     val msg = intercept[NoSuchNamespaceException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
     }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found;"))
+    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
   }
 
   test("show tables with a pattern") {
