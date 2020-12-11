@@ -936,7 +936,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 }
 
-class SingleSessionSuite extends HiveThriftServer2Test {
+class SingleSessionSuite extends HiveThriftServer2TestBase {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
@@ -1047,7 +1047,7 @@ class SingleSessionSuite extends HiveThriftServer2Test {
   }
 }
 
-class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2Test {
+class HiveThriftCleanUpScratchDirSuite extends HiveThriftServer2TestBase {
   var tempScratchDir: File = _
 
   override protected def beforeAll(): Unit = {
@@ -1123,7 +1123,7 @@ object ServerMode extends Enumeration {
   val binary, http = Value
 }
 
-abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAfterAll with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
@@ -1360,7 +1360,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
   Utils.classForName(classOf[HiveDriver].getCanonicalName)
 
-  private def jdbcUri(database: String = "default"): String = if (mode == ServerMode.http) {
+  protected def jdbcUri(database: String = "default"): String = if (mode == ServerMode.http) {
     s"""jdbc:hive2://localhost:$serverPort/
        |$database?
        |hive.server2.transport.mode=http;
@@ -1421,7 +1421,13 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   def withJdbcStatement(tableNames: String*)(f: Statement => Unit): Unit = {
     withMultipleConnectionJdbcStatement(tableNames: _*)(f)
   }
+}
 
+/**
+ * Common tests for both binary and http mode thrift server
+ * TODO: SPARK-31914: Move common tests from subclasses to this trait
+ */
+abstract class HiveThriftServer2Test extends HiveThriftServer2TestBase {
   test("SPARK-17819: Support default database in connection URIs") {
     withDatabase("spark17819") { statement =>
       statement.execute(s"CREATE DATABASE IF NOT EXISTS spark17819")

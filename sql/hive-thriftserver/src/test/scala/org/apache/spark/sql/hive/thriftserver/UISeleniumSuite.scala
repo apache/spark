@@ -32,7 +32,7 @@ import org.scalatestplus.selenium.WebBrowser
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
-  extends HiveThriftServer2Test
+  extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
