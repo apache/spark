@@ -80,7 +80,7 @@ case "$1" in
   executor)
     shift 1
     CMD=(
-      ${JAVA_HOME}/bin/java
+      "$SPARK_HOME/bin/spark-class"
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
