@@ -228,14 +228,20 @@ object SharedState extends Logging {
   def loadHiveConfFile(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Unit = {
+    def containsInSparkConf(key: String): Boolean = {
+      sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
+        (key.startsWith("hive") && sparkConf.contains("spark." + key))
+    }
+
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    val configFile = Utils.getContextOrSparkClassLoader.getResourceAsStream("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
       val hadoopConfTemp = new Configuration()
+      hadoopConfTemp.clear()
       hadoopConfTemp.addResource(configFile)
-      hadoopConfTemp.asScala.foreach { entry =>
-        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
+      for (entry <- hadoopConfTemp.asScala if !containsInSparkConf(entry.getKey)) {
+        hadoopConf.set(entry.getKey, entry.getValue)
       }
     }
     // hive.metastore.warehouse.dir only stay in hadoopConf
