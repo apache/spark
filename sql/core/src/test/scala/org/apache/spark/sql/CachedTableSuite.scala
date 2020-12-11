@@ -1244,12 +1244,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("SPARK-33729: REFRESH TABLE should not use cached/stale plan") {
-    def mf(src: File, dst: File): Unit = {
+    def moveParquetFiles(src: File, dst: File): Unit = {
       src.listFiles(new FilenameFilter {
         override def accept(dir: File, name: String): Boolean = name.endsWith("parquet")
       }).foreach { f =>
         Files.move(f.toPath, Paths.get(dst.getAbsolutePath, f.getName))
       }
+      // cleanup the rest of the files
+      src.listFiles().foreach(_.delete())
       src.delete()
     }
 
@@ -1257,14 +1259,14 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withTempDir { dir =>
         val path1 = new File(dir, "path1")
         Seq((1 -> "a")).toDF("i", "j").write.parquet(path1.getCanonicalPath)
-        mf(path1, dir)
+        moveParquetFiles(path1, dir)
         sql(s"CREATE TABLE t (i INT, j STRING) USING parquet LOCATION '${dir.toURI}'")
         sql("CACHE TABLE t")
         checkAnswer(sql("SELECT * FROM t"), Row(1, "a") :: Nil)
 
         val path2 = new File(dir, "path2")
         Seq(2 -> "b").toDF("i", "j").write.parquet(path2.getCanonicalPath)
-        mf(path2, dir)
+        moveParquetFiles(path2, dir)
         sql("REFRESH TABLE t")
         checkAnswer(sql("SELECT * FROM t"), Row(1, "a") :: Row(2, "b") :: Nil)
       }
