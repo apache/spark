@@ -1428,9 +1428,14 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val jdbcStr = jdbcUri("spark17819")
       val connection = DriverManager.getConnection(jdbcStr, user, "")
       val statementN = connection.createStatement()
-      val resultSet = statementN.executeQuery("select current_database()")
-      resultSet.next()
-      assert(resultSet.getString(1) === "spark17819")
+      try {
+        val resultSet = statementN.executeQuery("select current_database()")
+        resultSet.next()
+        assert(resultSet.getString(1) === "spark17819")
+      } finally {
+        statementN.close()
+        connection.close()
+      }
     }
   }
 }
