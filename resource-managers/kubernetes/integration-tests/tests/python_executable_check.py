@@ -14,19 +14,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import os
-import sys
+
+from pyspark.sql import SparkSession
 
 
-def version_check(python_env, major_python_version):
-    """
-        These are various tests to test the Python container image.
-        This file will be distributed via --py-files in the e2e tests.
-    """
-    env_version = os.environ.get('PYSPARK_PYTHON', 'python3')
-    print("Python runtime version check is: " +
-          str(sys.version_info[0] == major_python_version))
+if __name__ == "__main__":
+    spark = SparkSession \
+        .builder \
+        .appName("PythonExecutableTest") \
+        .getOrCreate()
 
-    print("Python environment version check is: " +
-          str(env_version == python_env))
+    # Check python executable at executors
+    is_custom_python_executor = spark.range(1).rdd.map(
+        lambda _: "IS_CUSTOM_PYTHON" in os.environ).first()
+
+    print("PYSPARK_PYTHON: %s" % os.environ.get("PYSPARK_PYTHON"))
+    print("PYSPARK_DRIVER_PYTHON: %s" % os.environ.get("PYSPARK_DRIVER_PYTHON"))
+
+    print("Custom Python used on executor: %s" % is_custom_python_executor)
+
+    is_custom_python_driver = "IS_CUSTOM_PYTHON" in os.environ
+    print("Custom Python used on driver: %s" % is_custom_python_driver)
+
+    spark.stop()
