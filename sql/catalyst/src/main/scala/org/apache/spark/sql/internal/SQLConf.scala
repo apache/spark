@@ -2671,6 +2671,15 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val ORC_SKIP_ROW_FORMAT_DELIMITED_ERROR = buildConf("spark.sql.orc.skipRowFormatDelimitedError")
+    .doc("Whether to support row format delimited when creating orc table. If true  SparkSQL will catch " +
+      "exception when creating table like " +
+      "\"create table test(c1 int) row format delimited fields terminated by '002';\"" +
+      ", default is true.")
+    .booleanConf
+    .createWithDefault(true)
+
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2980,6 +2989,8 @@ class SQLConf extends Serializable with Logging {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
+
+  def orcSkipRowFormatDelimitedError: Boolean = getConf(ORC_SKIP_ROW_FORMAT_DELIMITED_ERROR)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

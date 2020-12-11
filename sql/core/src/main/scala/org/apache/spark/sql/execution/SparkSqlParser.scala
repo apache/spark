@@ -678,6 +678,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
         ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
+          case ("orcfile" | "orc") => if (!SQLConf.get.orcSkipRowFormatDelimitedError) {
+            operationNotAllowed(
+              s"ROW FORMAT DELIMITED is only compatible with 'textfile', not 'orcfile/orc'",
+              parentCtx)
+          }
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
         }
