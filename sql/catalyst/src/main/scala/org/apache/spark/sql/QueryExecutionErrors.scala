@@ -56,5 +56,4 @@ object QueryExecutionErrors {
   def cannotTerminateExpressionError(generator: UnresolvedGenerator): Throwable = {
     new UnsupportedOperationException(s"Cannot terminate expression: $generator")
   }
-
 }

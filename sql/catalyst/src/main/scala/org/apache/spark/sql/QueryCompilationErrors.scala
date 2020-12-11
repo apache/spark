@@ -409,8 +409,7 @@ object QueryCompilationErrors {
   }
 
   def onlyStarExpandStructDataTypesError(target: Option[Seq[String]]): Throwable = {
-    new AnalysisException("Can only star expand struct data types. Attribute: `" +
-      target.get + "`")
+    new AnalysisException(s"Can only star expand struct data types. Attribute: `${target.get}`")
   }
 
   def cannotResolveTargetAccordingGivenInputColumnsError(
@@ -470,8 +469,7 @@ object QueryCompilationErrors {
 
   def showColumnsWithConflictDatabasesError(
       db: Seq[String], v1TableName: TableIdentifier): Throwable = {
-    new AnalysisException(
-      "SHOW COLUMNS with conflicting databases: " +
+    new AnalysisException("SHOW COLUMNS with conflicting databases: " +
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
