@@ -349,23 +349,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(
-      Decode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
+      StringDecode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
     // scalastyle:on
     checkEvaluation(Encode(a, Literal("utf-8")), null, create_row(null))
     checkEvaluation(Encode(Literal.create(null, StringType), Literal("utf-8")), null)
     checkEvaluation(Encode(a, Literal.create(null, StringType)), null, create_row(""))
 
-    checkEvaluation(Decode(b, Literal("utf-8")), null, create_row(null))
-    checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
-    checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
+    checkEvaluation(StringDecode(b, Literal("utf-8")), null, create_row(null))
+    checkEvaluation(StringDecode(Literal.create(null, BinaryType), Literal("utf-8")), null)
+    checkEvaluation(StringDecode(b, Literal.create(null, StringType)), null, create_row(null))
 
     // Test escaping of charset
     GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")) :: Nil)
-    GenerateUnsafeProjection.generate(Decode(b, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
   }
 
   test("initcap unit test") {
