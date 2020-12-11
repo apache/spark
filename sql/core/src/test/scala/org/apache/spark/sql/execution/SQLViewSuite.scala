@@ -111,7 +111,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`tab1` is not a view"))
+      assert(e.contains("tab1 is a table. 'ALTER VIEW ... AS' expects a view."))
     }
   }
 
@@ -448,8 +448,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
-    assertNoSuchTable("ALTER VIEW testView AS SELECT 1, 2")
-    assertNoSuchTable("ALTER VIEW default.testView AS SELECT 1, 2")
+    assertAnalysisError(
+      "ALTER VIEW testView AS SELECT 1, 2",
+      "View not found for 'ALTER VIEW ... AS': testView")
+
+    assertAnalysisError(
+      "ALTER VIEW default.testView AS SELECT 1, 2",
+      "View not found for 'ALTER VIEW ... AS': default.testView")
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {

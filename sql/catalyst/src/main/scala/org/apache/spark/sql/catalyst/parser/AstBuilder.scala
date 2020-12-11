@@ -3842,7 +3842,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Alter the query of a view. This creates a [[AlterViewAsStatement]]
+   * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:
    * {{{
@@ -3850,8 +3850,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    AlterViewAsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterViewAs(
+      UnresolvedView(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER VIEW ... AS"),
       originalText = source(ctx.query),
       query = plan(ctx.query))
   }
