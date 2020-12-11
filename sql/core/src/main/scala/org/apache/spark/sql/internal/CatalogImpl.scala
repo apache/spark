@@ -534,8 +534,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
 
     if (cache.nonEmpty) {
-      // recache with the same cache level.
-      cacheTable(tableName, cache.get.cachedRepresentation.cacheBuilder.storageLevel)
+      // save the cache name and cache level for recreation
+      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
+
+      // creates a new logical plan since the old table refers to old relation which
+      // should be refreshed
+      val newTable = sparkSession.table(tableIdent)
+
+      // recache with the same name and cache level.
+      sparkSession.sharedState.cacheManager.cacheQuery(newTable, cacheName, cacheLevel)
     }
   }
 
