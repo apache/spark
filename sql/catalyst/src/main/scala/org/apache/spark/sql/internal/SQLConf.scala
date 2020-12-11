@@ -926,6 +926,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_FORCE_CANCEL =
+    buildConf("spark.sql.thriftServer.interruptOnCancel")
+      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
+        "When false, all running tasks will remain until finished.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
       .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
@@ -938,14 +946,6 @@ object SQLConf {
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
-
-  val THRIFTSERVER_FORCE_CANCEL =
-    buildConf("spark.sql.thriftServer.interruptOnCancel")
-      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
-        "When false, all running tasks will remain until finished.")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(false)
 
   val THRIFTSERVER_UI_STATEMENT_LIMIT =
     buildConf("spark.sql.thriftserver.ui.retainedStatements")
