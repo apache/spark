@@ -29,6 +29,7 @@ import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
@@ -175,6 +176,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
+    override def taskSetManagerForAttempt(
+      stageId: Int, stageAttemptId: Int): Option[TaskSetManager] = None
     override def executorDecommission(
       executorId: String,
       decommissionInfo: ExecutorDecommissionInfo): Unit = {}
@@ -786,6 +789,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
+      override def taskSetManagerForAttempt(
+        stageId: Int, stageAttemptId: Int): Option[TaskSetManager] = None
       override def executorDecommission(
         executorId: String,
         decommissionInfo: ExecutorDecommissionInfo): Unit = {}
@@ -2033,6 +2038,107 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     sc.listenerBus.waitUntilEmpty()
     assert(completedStage === List(0, 1, 1, 0))
     assert(scheduler.activeJobs.isEmpty)
+  }
+
+  def reInit(): Unit = {
+    assert(sc != null)
+    val dagOutputTracker = mapOutputTracker
+    val taskSchedulerImpl = new TaskSchedulerImpl(sc) {
+      override def submitTasks(taskSet: TaskSet) = {
+        super.submitTasks(taskSet)
+        taskSet.tasks.foreach(_.epoch = dagOutputTracker.getEpoch)
+        taskSets += taskSet
+      }
+
+      override def cancelTasks(stageId: Int, interruptThread: Boolean) {
+        cancelledStages += stageId
+      }
+    }
+    taskSchedulerImpl.initialize(new FakeSchedulerBackend)
+    scheduler = new DAGScheduler(
+      sc,
+      taskSchedulerImpl,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+  }
+
+  test("Test dagScheduler.shouldUnregisterMapOutput with map stage not running") {
+    reInit()
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))))
+    // The MapOutputTracker should know about both map output locations.
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB"))
+
+    // The first result task fails, with a fetch failure for the output from the first mapper.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, 0, "ignored"),
+      null))
+    assert(sparkListener.failedStages.contains(1))
+
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    // unregisterMapOutput with a fetchFailed.
+    assert(mapStatuses.count(_ != null) === 1)
+    assert(mapStatuses(1).location === makeBlockManagerId("hostB"))
+  }
+
+  test("Test dagScheduler.shouldUnregisterMapOutput with map stage re-running") {
+    reInit()
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostC", reduceRdd.partitions.length))))
+    // The MapOutputTracker should know about both map output locations.
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
+      HashSet("hostA", "hostB", "hostC"))
+
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, 0, "ignored"),
+      null))
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleId, 1, 1, 0, "ignored"),
+      null))
+
+    assert(sparkListener.failedStages.contains(1))
+
+    // Wait for a long time to make sure the map stage was resubmitted.
+    eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
+      assert(scheduler.runningStages.nonEmpty && taskSets.size == 3)
+    }
+
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0),
+      Success,
+      makeMapStatus("hostA", reduceRdd.partitions.length)))
+
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 1, 0, "ignored"),
+      null))
+
+    assert(sparkListener.failedStages.contains(1))
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    logInfo(s"${mapStatuses}")
+    assert(mapStatuses.count(_ != null) === 2)
+    assert(mapStatuses(0).location === makeBlockManagerId("hostA"))
+    assert(mapStatuses(2).location === makeBlockManagerId("hostC"))
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {

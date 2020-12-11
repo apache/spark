@@ -797,6 +797,10 @@ private[spark] class TaskSetManager(
     }
   }
 
+  private[scheduler] def hasPartitionId(partitionId: Int): Boolean = {
+    partitionToIndex.contains(partitionId)
+  }
+
   /**
    * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
    * DAG Scheduler.

@@ -125,4 +125,8 @@ private[spark] trait TaskScheduler {
    */
   def applicationAttemptId(): Option[String]
 
+  /**
+   * Returns the TaskSetManager corresponding to the given stage and attempt id.
+   */
+  def taskSetManagerForAttempt(stageId: Int, stageAttemptId: Int): Option[TaskSetManager]
 }

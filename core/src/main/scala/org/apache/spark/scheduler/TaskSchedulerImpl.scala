@@ -1106,7 +1106,7 @@ private[spark] class TaskSchedulerImpl(
   override def applicationAttemptId(): Option[String] = backend.applicationAttemptId()
 
   // exposed for testing
-  private[scheduler] def taskSetManagerForAttempt(
+  override def taskSetManagerForAttempt(
       stageId: Int,
       stageAttemptId: Int): Option[TaskSetManager] = synchronized {
     for {

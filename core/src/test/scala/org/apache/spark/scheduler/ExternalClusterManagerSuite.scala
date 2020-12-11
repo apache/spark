@@ -93,6 +93,8 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
   override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   override def applicationAttemptId(): Option[String] = None
+  override def taskSetManagerForAttempt(
+    stageId: Int, stageAttemptId: Int): Option[TaskSetManager] = None
   def executorHeartbeatReceived(
       execId: String,
       accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],

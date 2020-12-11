@@ -251,6 +251,26 @@ private[spark] class DAGScheduler(
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
 
+  private def shouldUnregisterMapOutput(mapStage: Stage, fetchFailed: FetchFailed,
+    stageId: Int, stageAttemptId: Int): Boolean = {
+    if (!runningStages.contains(mapStage)) {
+      true
+    } else if (taskScheduler == null) {
+      true
+    } else {
+      val latestInfo = mapStage.latestInfo
+      if (latestInfo == null) {
+        true
+      } else {
+        taskScheduler.taskSetManagerForAttempt(
+          latestInfo.stageId, latestInfo.attemptNumber()) match {
+          case Some(tsm: TaskSetManager) => !tsm.hasPartitionId(fetchFailed.mapId.toInt)
+          case _ => true
+        }
+      }
+    }
+  }
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -1699,7 +1719,7 @@ private[spark] class DAGScheduler(
             }
         }
 
-      case FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
+      case fetchFailed @ FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1731,8 +1751,14 @@ private[spark] class DAGScheduler(
             // resubmitted stage attempt.
             mapOutputTracker.unregisterAllMapOutput(shuffleId)
           } else if (mapIndex != -1) {
-            // Mark the map whose fetch failed as broken in the map stage
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
+            if (shouldUnregisterMapOutput(mapStage, fetchFailed, task.stageId,
+              task.stageAttemptId)) {
+              // Mark the map whose fetch failed as broken in the map stage
+              mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
+            } else {
+              logInfo(s"FetchFailed ${fetchFailed} do not trigger to unregister the map " +
+                s"output.")
+            }
           }
 
           if (failedStage.rdd.isBarrier()) {
