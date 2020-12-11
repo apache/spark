@@ -311,9 +311,6 @@ case class LoadDataCommand(
         sparkSession.sessionState.conf.resolver)
     }
 
-    if (targetTable.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
-    }
     if (DDLUtils.isDatasourceTable(targetTable)) {
       throw new AnalysisException(
         s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
@@ -355,7 +352,7 @@ case class LoadDataCommand(
         // entire  string will be considered while making a Path instance,this is mainly done
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
-        // the remaining charecters after '?' will be removed while forming URI instance
+        // the remaining characters after '?' will be removed while forming URI instance
         LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
@@ -451,10 +448,6 @@ case class TruncateTableCommand(
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
-    }
-    if (table.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
@@ -995,11 +988,7 @@ case class ShowPartitionsCommand(
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
      * 1. If the table is not partitioned.
      * 2. If it is a datasource table.
-     * 3. If it is a view.
      */
-    if (table.tableType == VIEW) {
-      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $tableIdentWithDB")
-    }
 
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(

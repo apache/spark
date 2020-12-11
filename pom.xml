@@ -155,7 +155,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.6</commons.httpclient.version>
+    <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.12</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
@@ -169,8 +169,9 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <snappy.version>1.1.8</snappy.version>
+    <fasterxml.jackson.version>2.10.5</fasterxml.jackson.version>
+    <fasterxml.jackson-databind.version>2.10.5.1</fasterxml.jackson-databind.version>
+    <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
@@ -784,7 +785,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${fasterxml.jackson.version}</version>
+        <version>${fasterxml.jackson-databind.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
