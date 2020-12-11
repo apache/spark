@@ -778,6 +778,7 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
         checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
         sql(s"DROP TABLE $t")
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
       }
@@ -2616,15 +2617,11 @@ class DataSourceV2SQLSuite
       "ALTER VIEW ... AS")
   }
 
-  private def testNotSupportedV2Command(
-      sqlCommand: String,
-      sqlParams: String,
-      sqlCommandInMessage: Option[String] = None): Unit = {
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
-    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

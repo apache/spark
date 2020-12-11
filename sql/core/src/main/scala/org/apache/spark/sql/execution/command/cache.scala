@@ -17,57 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-import org.apache.spark.storage.StorageLevel
-
-case class CacheTableCommand(
-    multipartIdentifier: Seq[String],
-    plan: Option[LogicalPlan],
-    isLazy: Boolean,
-    options: Map[String, String]) extends RunnableCommand {
-  require(plan.isEmpty || multipartIdentifier.length == 1,
-    "Namespace name is not allowed in CACHE TABLE AS SELECT")
-
-  override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableName = multipartIdentifier.quoted
-    plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableName)
-    }
-
-    val storageLevelKey = "storagelevel"
-    val storageLevelValue =
-      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
-    if (withoutStorageLevel.nonEmpty) {
-      logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
-    }
-
-    val table = sparkSession.table(tableName)
-    if (storageLevelValue.nonEmpty) {
-      sparkSession.sharedState.cacheManager.cacheQuery(
-        table,
-        Some(tableName),
-        StorageLevel.fromString(storageLevelValue.get))
-    } else {
-      sparkSession.sharedState.cacheManager.cacheQuery(table, Some(tableName))
-    }
-
-    if (!isLazy) {
-      // Performs eager caching
-      table.count()
-    }
-
-    Seq.empty[Row]
-  }
-}
 
 case class UncacheTableCommand(
     multipartIdentifier: Seq[String],
