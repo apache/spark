@@ -304,14 +304,13 @@ class Dataset[T] private[sql](
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
     schema.fieldNames.toSeq +: data.map { row =>
-      row.toSeq.zip(newDf.schema).map { case (cell, f) =>
+      row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ if f.dataType == StringType =>
+          case _ =>
             // Escapes meta-characters not to break the `showString` format
             cell.toString.replaceAll("\n", "\\\\n").replaceAll("\t", "\\\\t")
-          case _ => cell.toString
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
