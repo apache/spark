@@ -208,6 +208,14 @@ def sumDistinct(col):
     return _invoke_function_over_column("sumDistinct", col)
 
 
+@since(3.2)
+def product(col, scale=1.0):
+    """
+    Aggregate function: returns the product of the values in a group.
+    """
+    return _invoke_function("product", _to_java_column(col), scale)
+
+
 def acos(col):
     """
     .. versionadded:: 1.4.0

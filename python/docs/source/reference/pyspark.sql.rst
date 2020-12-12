@@ -461,6 +461,7 @@ Functions
     posexplode
     posexplode_outer
     pow
+    product
     quarter
     radians
     raise_error
