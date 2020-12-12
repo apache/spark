@@ -57,12 +57,13 @@ abstract class PodBuilderSuite extends SparkFunSuite {
     val client = mockKubernetesClient()
     val sparkConf = baseConf.clone()
       .set(userFeatureStepsConf.key,
-        "org.apache.spark.deploy.k8s.features.LocalDirsFeatureStep," +
+        "org.apache.spark.deploy.k8s.TestStepTwo," +
         "org.apache.spark.deploy.k8s.TestStep")
       .set(templateFileConf.key, "template-file.yaml")
     val pod = buildPod(sparkConf, client)
     verifyPod(pod)
     assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long"))
+    assert(pod.container.getVolumeMounts.asScala.exists(_.getName == "so_long_two"))
   }
 
   test("complain about misconfigured pod template") {
@@ -212,6 +213,36 @@ class TestStep extends KubernetesFeatureConfigStep {
       .addNewEnv()
         .withName("CUSTOM_SPARK_LOCAL_DIRS")
         .withValue("fishyfishyfishy")
+        .endEnv()
+      .addToVolumeMounts(localDirVolumeMounts: _*)
+      .build()
+    SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
+  }
+}
+
+/**
+ * A test user feature step.
+ */
+class TestStepTwo extends KubernetesFeatureConfigStep {
+  import io.fabric8.kubernetes.api.model._
+
+  override def configurePod(pod: SparkPod): SparkPod = {
+    val localDirVolumes = Seq(new VolumeBuilder().withName("so_long_two").build())
+    val localDirVolumeMounts = Seq(
+      new VolumeMountBuilder().withName("so_long_two")
+        .withMountPath("and_thanks_for_all_the_fish_eh")
+        .build()
+    )
+
+    val podWithLocalDirVolumes = new PodBuilder(pod.pod)
+      .editSpec()
+        .addToVolumes(localDirVolumes: _*)
+        .endSpec()
+      .build()
+    val containerWithLocalDirVolumeMounts = new ContainerBuilder(pod.container)
+      .addNewEnv()
+        .withName("CUSTOM_SPARK_LOCAL_DIRS_TWO")
+        .withValue("fishyfishyfishyTWO")
         .endEnv()
       .addToVolumeMounts(localDirVolumeMounts: _*)
       .build()
