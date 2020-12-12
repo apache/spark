@@ -52,36 +52,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("ALTER TABLE DROP PARTITION") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-      spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-    }
-  }
-
-  test("ALTER TABLE DROP PARTITIONS") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
-        " PARTITION (id=2) LOCATION 'loc1'")
-      spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(
-        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
-    }
-  }
-
   test("ALTER TABLE DROP PARTITIONS: partition not exists") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
