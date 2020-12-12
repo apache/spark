@@ -315,7 +315,6 @@ public class ThriftHttpServlet extends TServlet {
     NewCookie newCookie = new NewCookie(cookie.getName(), cookie.getValue(),
       cookie.getPath(), cookie.getDomain(), cookie.getVersion(),
       cookie.getComment(), cookie.getMaxAge(), cookie.getSecure());
-    LOG.error("====>" + newCookie.getClass().getProtectionDomain().getCodeSource().getLocation());
     return newCookie + "; HttpOnly";
   }
 
