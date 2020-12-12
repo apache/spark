@@ -1735,22 +1735,30 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33435/SPARK-33653: REFRESH TABLE should invalidate all caches referencing " +
-      "the table as well as refreshing the table itself") {
+  test("SPARK-33435: REFRESH TABLE should invalidate all caches referencing the table") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      withTempView("t") {
+        sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        sql(s"REFRESH TABLE $tblName")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-33653: REFRESH TABLE should recache the target table itself") {
     val tblName = "testcat.ns.t"
     withTable(tblName) {
       withTempView("t") {
         sql(s"CREATE TABLE $tblName (id bigint) USING foo")
         sql(s"CACHE TABLE $tblName")
-        sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
 
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
-        val oldCache = spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName))
-        assert(oldCache.isDefined)
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
         sql(s"REFRESH TABLE $tblName")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
-        val newCache = spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName))
-        assert(newCache.isDefined)
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
       }
     }
   }
