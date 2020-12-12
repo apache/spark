@@ -469,13 +469,13 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartition(
-        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
-        retainData)
+        retainData = false)
 
     case AlterTableSerDePropertiesStatement(tbl, serdeClassName, serdeProperties, partitionSpec) =>
       val v1TableName = parseV1Table(tbl, "ALTER TABLE SerDe Properties")

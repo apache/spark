@@ -3791,8 +3791,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
-      purge = ctx.PURGE != null,
-      retainData = false)
+      purge = ctx.PURGE != null)
   }
 
   /**
