@@ -123,14 +123,14 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
     }
   }
 
-  ignore("case sensitivity in resolving partition specs") {
+  test("case sensitivity in resolving partition specs") {
     withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
         }.getMessage
-        assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
+        assert(errMsg.contains("ID is not a valid partition column"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
