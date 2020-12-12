@@ -871,6 +871,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      case c @ CacheTable(UnresolvedRelation(ident, _, false), _, _, _) =>
+        lookupTempView(ident)
+          .map(view => c.copy(table = view))
+          .getOrElse(c)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -996,6 +1000,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
 
+      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
+        lookupV2Relation(u.multipartIdentifier, u.options, false)
+          .map(v2Relation => c.copy(table = v2Relation))
+          .getOrElse(c)
+
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -1086,6 +1095,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
         }
+
+      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
+        lookupRelation(u.multipartIdentifier, u.options, false)
+          .map(v2Relation => c.copy(table = v2Relation))
+          .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>

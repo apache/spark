@@ -711,7 +711,6 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
-
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
