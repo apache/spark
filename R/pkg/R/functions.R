@@ -1568,8 +1568,9 @@ setMethod("overlay",
 #' @note mean since 3.2.0
 setMethod("product",
           signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+          function(x, scale = 1.0) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product",
+                              x@jc, scale)
             column(jc)
           })
 
