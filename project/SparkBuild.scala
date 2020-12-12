@@ -768,7 +768,7 @@ object YARN {
   lazy val settings = Seq(
     libraryDependencies ++= Seq(
       "javax.ws.rs" % "jsr311-api" % "1.1.1" % "test",
-      "com.sun.jersey" % "jersey-core" % "1.9" % "test"),
+      "com.sun.jersey" % "jersey-core" % "1.19" % "test"),
     excludeDependencies --= Seq(
       ExclusionRule("com.sun.jersey", "jersey-core"),
       ExclusionRule("javax.ws.rs", "jsr311-api")
