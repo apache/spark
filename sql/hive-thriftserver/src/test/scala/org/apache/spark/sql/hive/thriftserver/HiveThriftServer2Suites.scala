@@ -1117,6 +1117,11 @@ class HiveThriftHttpServerSuite extends HiveThriftServer2Test {
       assert(resultSet.getString(1) === "4.56")
     }
   }
+
+  override def afterAll(): Unit = {
+    dumpLogs
+    super.afterAll()
+  }
 }
 
 object ServerMode extends Enumeration {
@@ -1312,7 +1317,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
     logTailingProcess = null
   }
 
-  private def dumpLogs(): Unit = {
+  def dumpLogs(): Unit = {
     logError(
       s"""
          |=====================================
