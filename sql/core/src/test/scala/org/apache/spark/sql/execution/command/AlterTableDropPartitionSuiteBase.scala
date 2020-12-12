@@ -107,6 +107,15 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("table to alter does not exist") {
+    withNsTable("ns", "does_not_exist") { t =>
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
+      }.getMessage
+      assert(errMsg.contains("Table not found"))
+    }
+  }
+
   test("partition not exists") {
     withNsTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
@@ -115,7 +124,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
       val errMsg = intercept[NoSuchPartitionsException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
       }.getMessage
-      assert(errMsg.contains("The following partitions not found in table"))
+      assert(errMsg.contains("partitions not found in table"))
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
