@@ -1564,6 +1564,21 @@ setMethod("overlay",
 #' \code{product}: Returns the product of the values in a group.
 #'
 #' @param column values that are to be multiplied together
+#'
+#' @rdname column_aggregate_functions
+#' @aliases product product,Column-method
+#' @note mean since 3.2.0
+setMethod("product",
+          signature(x = "Column", scale = "missing"),
+          function(x, scale) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{product}: Returns the product of the values in a group.
+#'
+#' @param column values that are to be multiplied together
 #' @param scale pre-scaling to be applied to each value in the product
 #'
 #' @rdname column_aggregate_functions
@@ -1571,7 +1586,7 @@ setMethod("overlay",
 #' @note mean since 3.2.0
 setMethod("product",
           signature(x = "Column", scale = "numeric"),
-          function(x, scale = 1.0) {
+          function(x, scale) {
             jc <- callJStatic("org.apache.spark.sql.functions", "product",
                               x@jc, scale)
             column(jc)
