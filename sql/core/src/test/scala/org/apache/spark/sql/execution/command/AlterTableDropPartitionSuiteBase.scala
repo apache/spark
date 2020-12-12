@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
@@ -29,18 +31,11 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   protected def catalog: String
   protected def defaultUsing: String
 
+  protected def notFullPartitionSpecErr: String
+
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     super.test(s"ALTER TABLE .. ADD PARTITION $version: " + testName, testTags: _*)(testFun)
-  }
-
-  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
-    val partitions = sql(s"SHOW PARTITIONS $t")
-      .collect()
-      .toSet
-      .map((row: Row) => row.getString(0))
-      .map(PartitioningUtils.parsePathFragment)
-    assert(partitions === expected.toSet)
   }
 
   protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
@@ -52,6 +47,111 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
       withTable(t) {
         f(t)
       }
+    }
+  }
+
+  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
+    val partitions = sql(s"SHOW PARTITIONS $t")
+      .collect()
+      .toSet
+      .map((row: Row) => row.getString(0))
+      .map(PartitioningUtils.parsePathFragment)
+    assert(partitions === expected.toSet)
+  }
+
+  protected def checkDropPartition(
+      t: String,
+      ifExists: String,
+      specs: Map[String, Any]*): Unit = {
+    checkPartitions(t, specs.map(_.mapValues(_.toString)): _*)
+    val specStr = specs.map(
+      _.map {
+        case (k, v: String) => s"$k = '$v'"
+        case (k, v) => s"$k = $v"
+      }.mkString("PARTITION (", ", ", ")"))
+      .mkString(", ")
+    sql(s"ALTER TABLE $t DROP $ifExists $specStr")
+    checkPartitions(t)
+  }
+
+  test("single partition") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      Seq("", "IF EXISTS").foreach { ifExists =>
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+        checkDropPartition(t, ifExists, Map("id" -> 1))
+      }
+    }
+  }
+
+  test("multiple partitions") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      Seq("", "IF EXISTS").foreach { ifExists =>
+        sql(s"""
+          |ALTER TABLE $t ADD
+          |PARTITION (id=1) LOCATION 'loc'
+          |PARTITION (id=2) LOCATION 'loc1'""".stripMargin)
+        checkDropPartition(t, ifExists, Map("id" -> 1), Map("id" -> 2))
+      }
+    }
+  }
+
+  test("multi-part partition") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
+      Seq("", "IF EXISTS").foreach { ifExists =>
+        sql(s"ALTER TABLE $t ADD PARTITION (a = 2, b = 'abc')")
+        checkDropPartition(t, ifExists, Map("a" -> 2, "b" -> "abc"))
+      }
+    }
+  }
+
+  test("partition not exists") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+
+      val errMsg = intercept[NoSuchPartitionsException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("The following partitions not found in table"))
+
+      checkPartitions(t, Map("id" -> "1"))
+      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+      checkPartitions(t)
+    }
+  }
+
+  ignore("case sensitivity in resolving partition specs") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
+        }.getMessage
+        assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        Seq("", "IF EXISTS").foreach { ifExists =>
+          sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+          checkDropPartition(t, ifExists, Map("id" -> 1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33676: not fully specified partition spec") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"""
+        |CREATE TABLE $t (id bigint, part0 int, part1 string)
+        |$defaultUsing
+        |PARTITIONED BY (part0, part1)""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (part0 = 1)")
+      }.getMessage
+      assert(errMsg.contains(notFullPartitionSpecErr))
     }
   }
 }
