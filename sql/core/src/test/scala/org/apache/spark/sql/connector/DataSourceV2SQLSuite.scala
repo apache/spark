@@ -2077,7 +2077,7 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"UNCACHE TABLE $t")
     }
-    assert(e.message.contains("Table or view not found: testcat.ns1.ns2.tbl"))
+    assert(e.message.contains("Table or view not found for `UNCACHE TABLE`: testcat.ns1.ns2.tbl"))
 
     // If "IF EXISTS" is set, UNCACHE TABLE will not throw an exception.
     sql(s"UNCACHE TABLE IF EXISTS $t")

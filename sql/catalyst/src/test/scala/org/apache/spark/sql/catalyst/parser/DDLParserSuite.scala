@@ -2032,6 +2032,16 @@ class DDLParserSuite extends AnalysisTest {
       "It is not allowed to add catalog/namespace prefix a.b")
   }
 
+  test("UNCACHE TABLE") {
+    comparePlans(
+      parsePlan("UNCACHE TABLE a.b.c"),
+      UncacheTable(UnresolvedRelation(Seq("a", "b", "c")), ifExists = false))
+
+    comparePlans(
+      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
+      UncacheTable(UnresolvedRelation(Seq("a", "b", "c")), ifExists = true))
+  }
+
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),

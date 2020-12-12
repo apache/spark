@@ -87,3 +87,16 @@ case class CacheTableAsSelectExec(
     sparkSession.table(tempViewName)
   }
 }
+
+case class UncacheTableExec(
+    relation: LogicalPlan,
+    cascade: Boolean) extends V2CommandExec {
+  override def run(): Seq[InternalRow] = {
+    val sparkSession = sqlContext.sparkSession
+    val df = Dataset.ofRows(sparkSession, relation)
+    sparkSession.sharedState.cacheManager.uncacheQuery(df, cascade)
+    Seq.empty
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
+}
