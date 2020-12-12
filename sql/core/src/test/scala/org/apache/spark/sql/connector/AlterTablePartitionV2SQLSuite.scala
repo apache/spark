@@ -52,27 +52,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("ALTER TABLE DROP PARTITIONS: partition not exists") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      spark.sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      assertThrows[NoSuchPartitionsException](
-        spark.sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)"))
-
-      val partTable =
-        catalog("testpart").asTableCatalog.loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-      assert(partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      spark.sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      assert(!partTable.asPartitionable.partitionExists(InternalRow.fromSeq(Seq(2))))
-      assert(
-        partTable.asPartitionable.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty)
-    }
-  }
-
   test("case sensitivity in resolving partition specs") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
