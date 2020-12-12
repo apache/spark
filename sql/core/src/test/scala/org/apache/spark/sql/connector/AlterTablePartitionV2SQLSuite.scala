@@ -52,31 +52,6 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("case sensitivity in resolving partition specs") {
-    val t = "testpart.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
-      }
-
-      val partTable = catalog("testpart").asTableCatalog
-        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
-        .asPartitionable
-      assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
-        assert(partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-        spark.sql(s"ALTER TABLE $t DROP PARTITION (Id=1)")
-        assert(!partTable.partitionExists(InternalRow.fromSeq(Seq(1))))
-      }
-    }
-  }
-
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableDropPartitionSuite
@@ -95,6 +97,25 @@ class AlterTableDropPartitionSuite
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
       checkPartitions(t)
+    }
+  }
+
+  test("case sensitivity in resolving partition specs") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
+        }.getMessage
+        assert(errMsg.contains(s"ID is not a valid partition column in table $t"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        Seq("", "IF EXISTS").foreach { ifExists =>
+          sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
+          checkDropPartition(t, ifExists, Map("id" -> 1))
+        }
+      }
     }
   }
 }
