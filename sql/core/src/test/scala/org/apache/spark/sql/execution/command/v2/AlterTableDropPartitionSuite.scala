@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
-import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -35,6 +35,7 @@ class AlterTableDropPartitionSuite
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
+    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
   protected def checkDropPartition(
       t: String,
@@ -102,7 +103,7 @@ class AlterTableDropPartitionSuite
 
   test("case sensitivity in resolving partition specs") {
     withNsTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
@@ -116,6 +117,16 @@ class AlterTableDropPartitionSuite
           checkDropPartition(t, ifExists, Map("id" -> 1))
         }
       }
+    }
+  }
+
+  test("SPARK-33650: drop partition into a table which doesn't support partition management") {
+    withNsTable("ns", "tbl", s"non_part_$catalog") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }.getMessage
+      assert(errMsg.contains("can not alter partitions"))
     }
   }
 }
