@@ -2105,7 +2105,7 @@ object Decode {
             default = search
           }
         }
-        CaseWhen(branches.seq, default)
+        CaseWhen(branches.seq.toSeq, default)
     }
   }
 }

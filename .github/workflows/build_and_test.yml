@@ -336,6 +336,9 @@ jobs:
     - name: Install R linter dependencies and SparkR
       run: |
         sudo apt-get install -y libcurl4-openssl-dev
+        # dependencies for usethis 1.6.3.
+        sudo Rscript -e "install.packages(c('clipr', 'cli', 'crayon', 'desc', 'fs', 'gh', 'glue', 'purrr', 'rematch2', 'rlang', 'rprojroot', 'whisker', 'withr', 'yaml', 'git2r', 'rstudioapi'), repos='https://cloud.r-project.org/')"
+        sudo Rscript -e "install.packages('https://cran.r-project.org/src/contrib/Archive/usethis/usethis_1.6.3.tar.gz', repos=NULL, type='source')"
         sudo Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         sudo Rscript -e "devtools::install_github('jimhester/lintr@v2.0.0')"
         ./R/install-dev.sh
@@ -414,7 +417,7 @@ jobs:
     - name: Build with SBT
       run: |
         ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pscala-2.13 compile test:compile
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pscala-2.13 compile test:compile
 
   hadoop-2:
     name: Hadoop 2 build with SBT
