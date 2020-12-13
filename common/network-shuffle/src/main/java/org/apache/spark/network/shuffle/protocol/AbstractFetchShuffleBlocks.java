@@ -17,13 +17,18 @@
 
 package org.apache.spark.network.shuffle.protocol;
 
+import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.apache.spark.network.protocol.Encoders;
 
-/** Base class for fetch shuffle blocks and chunks. */
+/**
+ * Base class for fetch shuffle blocks and chunks.
+ *
+ * @since 3.2.0
+ */
 public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
   public final String appId;
   public final String execId;
@@ -40,9 +45,9 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
 
   public ToStringBuilder toStringHelper() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-        .append("appId", appId)
-        .append("execId", execId)
-        .append("shuffleId", shuffleId);
+      .append("appId", appId)
+      .append("execId", execId)
+      .append("shuffleId", shuffleId);
   }
 
   /**
@@ -54,12 +59,9 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-
     AbstractFetchShuffleBlocks that = (AbstractFetchShuffleBlocks) o;
-    if (shuffleId != that.shuffleId) return false;
-    if (!appId.equals(that.appId)) return false;
-    if (!execId.equals(that.execId)) return false;
-    return true;
+    return shuffleId == that.shuffleId
+      && Objects.equal(appId, that.appId) && Objects.equal(execId, that.execId);
   }
 
   @Override

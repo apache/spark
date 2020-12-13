@@ -26,13 +26,17 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 /**
  * Response to {@link MergedBlockMetaRequest} request.
  * Note that the server-side encoding of this messages does NOT include the buffer itself.
+ *
+ * @since 3.2.0
  */
 public class MergedBlockMetaSuccess extends AbstractResponseMessage {
   public final long requestId;
   public final int numChunks;
 
   public MergedBlockMetaSuccess(
-      long requestId, int numChunks, ManagedBuffer chunkBitmapsBuffer) {
+      long requestId,
+      int numChunks,
+      ManagedBuffer chunkBitmapsBuffer) {
     super(chunkBitmapsBuffer, true);
     this.requestId = requestId;
     this.numChunks = numChunks;
@@ -50,10 +54,8 @@ public class MergedBlockMetaSuccess extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return com.google.common.base.Objects.toStringHelper(this)
-        .add("requestId", requestId)
-        .add("numChunks", numChunks)
-        .toString();
+    return Objects.toStringHelper(this)
+      .add("requestId", requestId).add("numChunks", numChunks).toString();
   }
 
   @Override
@@ -70,10 +72,6 @@ public class MergedBlockMetaSuccess extends AbstractResponseMessage {
 
   public int getNumChunks() {
     return numChunks;
-  }
-
-  public ManagedBuffer getChunkBitmapsBuffer() {
-    return body();
   }
 
   /** Decoding uses the given ByteBuf as our data, and will retain() it. */

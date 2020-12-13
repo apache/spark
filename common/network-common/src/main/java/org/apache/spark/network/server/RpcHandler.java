@@ -35,9 +35,7 @@ public abstract class RpcHandler {
 
   private static final RpcResponseCallback ONE_WAY_CALLBACK = new OneWayRpcCallback();
   private static final MergedBlockMetaReqHandler NOOP_MERGED_BLOCK_META_REQ_HANDLER =
-      (client, appId, mergedBlockId, callback) -> {
-        // do nothing
-      };
+    (client, mergedBlockMetaRequest, callback) -> { /* do nothing */ };
 
   /**
    * Receive a single RPC message. Any exception thrown while in this method will be sent back to
@@ -141,10 +139,22 @@ public abstract class RpcHandler {
 
   /**
    * Handler for {@link MergedBlockMetaRequest}.
+   *
+   * @since 3.2.0
    */
   public interface MergedBlockMetaReqHandler {
+
+    /**
+     * Receive a {@link MergedBlockMetaRequest}.
+     *
+     * @param client A channel client which enables the handler to make requests back to the sender
+     *     of this RPC.
+     * @param mergedBlockMetaRequest Request for merged block meta.
+     * @param callback Callback which should be invoked exactly once upon success or failure.
+     */
     void receiveMergeBlockMetaReq(
-        TransportClient client, String appId, String mergedBlockId,
+        TransportClient client,
+        MergedBlockMetaRequest mergedBlockMetaRequest,
         MergedBlockMetaResponseCallback callback);
   }
 }

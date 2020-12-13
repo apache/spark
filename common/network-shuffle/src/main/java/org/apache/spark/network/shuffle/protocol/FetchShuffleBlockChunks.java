@@ -27,11 +27,15 @@ import org.apache.spark.network.protocol.Encoders;
 import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 
-/** Request to read a set of block chunks. Returns {@link StreamHandle}. */
+/**
+ * Request to read a set of block chunks. Returns {@link StreamHandle}.
+ *
+ * @since 3.2.0
+ */
 public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   // The length of reduceIds must equal to chunkIds.size().
-  // The i-th int[] in chunkIds contains all the chunks for the i-th reduceId in reduceIds.
   public final int[] reduceIds;
+  // The i-th int[] in chunkIds contains all the chunks for the i-th reduceId in reduceIds.
   public final int[][] chunkIds;
 
   public FetchShuffleBlockChunks(
@@ -117,7 +121,6 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     for (int i = 0; i < chunkIdsLen; i++) {
       chunkIds[i] = Encoders.IntArrays.decode(buf);
     }
-    return new FetchShuffleBlockChunks(
-        appId, execId, shuffleId, reduceIds, chunkIds);
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, reduceIds, chunkIds);
   }
 }

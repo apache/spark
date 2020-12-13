@@ -180,7 +180,7 @@ public class TransportResponseHandlerSuite {
 
     // This response should be ignored.
     handler.handle(new MergedBlockMetaSuccess(22, 2,
-        new NioManagedBuffer(ByteBuffer.allocate(7))));
+      new NioManagedBuffer(ByteBuffer.allocate(7))));
     assertEquals(1, handler.numOutstandingRequests());
 
     ByteBuffer resp = ByteBuffer.allocate(10);

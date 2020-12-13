@@ -29,7 +29,7 @@ public class FetchShuffleBlocksSuite {
   @Test
   public void testFetchShuffleBlockEncodeDecode() {
     FetchShuffleBlocks fetchShuffleBlocks =
-        new FetchShuffleBlocks("app0", "exec1", 0, new long[] {0}, new int[][] {{0, 1}}, false);
+      new FetchShuffleBlocks("app0", "exec1", 0, new long[] {0}, new int[][] {{0, 1}}, false);
     Assert.assertEquals(2, fetchShuffleBlocks.getNumBlocks());
     int len = fetchShuffleBlocks.encodedLength();
     Assert.assertEquals(50, len);

@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.util.UUID
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -72,13 +72,12 @@ case class ShuffleBlockBatchId(
   }
 }
 
-// Format of the shuffle block chunk ids
-// org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getMergedBlockData().
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleBlockChunkId(
-  shuffleId: Int,
-  reduceId: Int,
-  chunkId: Int) extends BlockId {
+    shuffleId: Int,
+    reduceId: Int,
+    chunkId: Int) extends BlockId {
   override def name: String = "shuffleChunk_" + shuffleId  + "_" + reduceId + "_" + chunkId
 }
 
@@ -92,11 +91,13 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) exten
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedBlockId(appId: String, shuffleId: Int, reduceId: Int) extends BlockId {
   override def name: String = "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".data"
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedIndexBlockId(
     appId: String,
@@ -106,6 +107,7 @@ case class ShuffleMergedIndexBlockId(
     "mergedShuffle_" + appId + "_" + shuffleId + "_" + reduceId + ".index"
 }
 
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleMergedMetaBlockId(
     appId: String,

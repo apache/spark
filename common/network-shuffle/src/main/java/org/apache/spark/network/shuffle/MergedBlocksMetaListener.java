@@ -21,21 +21,26 @@ import java.util.EventListener;
 
 /**
  * Listener for receiving success or failure events when fetching meta of merged blocks.
+ *
+ * @since 3.2.0
  */
 public interface MergedBlocksMetaListener extends EventListener {
 
   /**
-   * Called after successfully receiving the meta of merged blocks. Currently, the meta only
-   * includes the count of chunks in a merged block.
-   * @param mergedBlockId  merged block Id.
+   * Called after successfully receiving the meta of a merged block.
+   *
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
    * @param meta contains meta information of a merged block.
    */
-  void onSuccess(String mergedBlockId, MergedBlockMeta meta);
+  void onSuccess(int shuffleId, int reduceId, MergedBlockMeta meta);
 
   /**
-   * Called when there is an exception while fetching the meta of merged blocks.
-   * @param mergedBlockId   merged block Id.
+   * Called when there is an exception while fetching the meta of a merged block.
+   *
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
    * @param exception exception getting chunk counts.
    */
-  void onFailure(String mergedBlockId, Throwable exception);
+  void onFailure(int shuffleId, int reduceId, Throwable exception);
 }

@@ -23,17 +23,21 @@ import io.netty.buffer.ByteBuf;
 /**
  * Request to find the meta information for the specified merged block. The meta information
  * contains the number of chunks in the merged blocks and the maps ids in each chunk.
+ *
+ * @since 3.2.0
  */
 public class MergedBlockMetaRequest extends AbstractMessage implements RequestMessage {
   public final long requestId;
   public final String appId;
-  public final String blockId;
+  public final int shuffleId;
+  public final int reduceId;
 
-  public MergedBlockMetaRequest(long requestId, String appId, String blockId) {
+  public MergedBlockMetaRequest(long requestId, String appId, int shuffleId, int reduceId) {
     super(null, false);
     this.requestId = requestId;
     this.appId = appId;
-    this.blockId = blockId;
+    this.shuffleId = shuffleId;
+    this.reduceId = reduceId;
   }
 
   @Override
@@ -43,34 +47,36 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public int encodedLength() {
-    return 8 + Encoders.Strings.encodedLength(appId) + Encoders.Strings.encodedLength(blockId);
+    return 8 + Encoders.Strings.encodedLength(appId) + 8;
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeLong(requestId);
     Encoders.Strings.encode(buf, appId);
-    Encoders.Strings.encode(buf, blockId);
+    buf.writeInt(shuffleId);
+    buf.writeInt(reduceId);
   }
 
   public static MergedBlockMetaRequest decode(ByteBuf buf) {
     long requestId = buf.readLong();
     String appId = Encoders.Strings.decode(buf);
-    String blockId = Encoders.Strings.decode(buf);
-    return new MergedBlockMetaRequest(requestId, appId, blockId);
+    int shuffleId = buf.readInt();
+    int reduceId = buf.readInt();
+    return new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, appId, blockId);
+    return Objects.hashCode(requestId, appId, shuffleId, reduceId);
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof MergedBlockMetaRequest) {
       MergedBlockMetaRequest o = (MergedBlockMetaRequest) other;
-      return requestId == o.requestId && Objects.equal(appId, o.appId) && Objects.equal(blockId,
-          o.blockId);
+      return requestId == o.requestId && Objects.equal(appId, o.appId)
+        && shuffleId == o.shuffleId && reduceId == o.reduceId;
     }
     return false;
   }
@@ -78,9 +84,10 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-        .add("requestId", requestId)
-        .add("appId", appId)
-        .add("blockId", blockId)
-        .toString();
+      .add("requestId", requestId)
+      .add("appId", appId)
+      .add("shuffleId", shuffleId)
+      .add("reduceId", reduceId)
+      .toString();
   }
 }

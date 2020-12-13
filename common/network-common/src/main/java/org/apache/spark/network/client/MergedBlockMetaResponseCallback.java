@@ -22,6 +22,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 /**
  * Callback for the result of a single
  * {@link org.apache.spark.network.protocol.MergedBlockMetaRequest}.
+ *
+ * @since 3.2.0
  */
 public interface MergedBlockMetaResponseCallback extends BaseResponseCallback {
   /**

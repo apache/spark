@@ -41,8 +41,9 @@ import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.server.MessageHandler;
-import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportFrameDecoder;
+
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * Handler that processes server responses, in response to requests issued from a
@@ -210,11 +211,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     } else if (message instanceof MergedBlockMetaSuccess) {
       MergedBlockMetaSuccess resp = (MergedBlockMetaSuccess) message;
       MergedBlockMetaResponseCallback listener =
-          (MergedBlockMetaResponseCallback) outstandingRpcs.get(resp.requestId);
+        (MergedBlockMetaResponseCallback) outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn(
-            "Ignoring response for MergedBlockMetaRequest {} from {} ({} bytes) since it is not"
-                + " outstanding", resp.requestId, getRemoteAddress(channel), resp.body().size());
+          "Ignoring response for MergedBlockMetaRequest {} from {} ({} bytes) since it is not"
+            + " outstanding", resp.requestId, getRemoteAddress(channel), resp.body().size());
         resp.body().release();
       } else {
         outstandingRpcs.remove(resp.requestId);

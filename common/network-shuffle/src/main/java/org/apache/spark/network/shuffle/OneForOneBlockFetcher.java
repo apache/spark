@@ -25,7 +25,6 @@ import java.util.HashMap;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
-import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +37,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.shuffle.protocol.AbstractFetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.TransportConf;
@@ -53,8 +53,8 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class OneForOneBlockFetcher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
-  private static final String SHUFFLE_BLOCK_PREFIX = "shuffle";
-  private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk";
+  static final String SHUFFLE_BLOCK_PREFIX = "shuffle";
+  static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk";
 
   private final TransportClient client;
   private final BlockTransferMessage message;
@@ -200,8 +200,10 @@ public class OneForOneBlockFetcher {
     String[] blockIdParts = blockId.split("_");
     // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
     // For single block id, the format contains shuffleId, mapId, educeId.
+    // For single block chunk id, the format contains shuffleId, reduceId, chunkId.
     if (blockIdParts.length < 4 || blockIdParts.length > 5
-        || !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
+        || !(blockIdParts[0].equals(SHUFFLE_BLOCK_PREFIX)
+          || blockIdParts[0].equals(SHUFFLE_CHUNK_PREFIX))) {
       throw new IllegalArgumentException(
         "Unexpected shuffle block id format: " + blockId);
     }
@@ -218,8 +220,8 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onFailure(int chunkIndex, Throwable e) {
-      // If failed block is a merged block, we only fail this block and do not
-      // fail the remaining blocks. The failed merged block will be retried by
+      // If the failed block is a merged block chunk, we only fail this block chunk and do not
+      // fail the remaining block chunks. The failed merged block chunk will be retried by
       // falling back to fetching the original unmerged blocks.
       if ((blockIds[chunkIndex]).startsWith(SHUFFLE_CHUNK_PREFIX)) {
         failSingleBlockChunk(blockIds[chunkIndex], e);
@@ -283,7 +285,7 @@ public class OneForOneBlockFetcher {
     try {
       listener.onBlockFetchFailure(shuffleBlockChunkId, e);
     } catch (Exception e2) {
-      logger.error("Error in block fetch failure callback", e2);
+      logger.error("Error from blockFetchFailure callback", e2);
     }
   }
 

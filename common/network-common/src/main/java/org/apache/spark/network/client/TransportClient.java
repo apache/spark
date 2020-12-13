@@ -201,24 +201,28 @@ public class TransportClient implements Closeable {
   }
 
   /**
-   * Sends a FetchMergedBlockMeta message to the server-side. The response of this message is
+   * Sends a MergedBlockMetaRequest message to the server. The response of this message is
    * either a {@link MergedBlockMetaSuccess} or {@link RpcFailure}.
    *
    * @param appId applicationId.
-   * @param mergedBlockId merged block Id.
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
    * @param callback callback the handle the reply.
    */
-  public void sendMergedBlockMetaReq(String appId, String mergedBlockId,
+  public void sendMergedBlockMetaReq(
+      String appId,
+      int shuffleId,
+      int reduceId,
       MergedBlockMetaResponseCallback callback) {
     long requestId = requestId();
     if (logger.isTraceEnabled()) {
       logger.trace(
-          "Sending RPC {} to fetch merged block meta to {}", requestId, getRemoteAddress(channel));
+        "Sending RPC {} to fetch merged block meta to {}", requestId, getRemoteAddress(channel));
     }
     handler.addRpcRequest(requestId, callback);
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);
     channel.writeAndFlush(
-        new MergedBlockMetaRequest(requestId, appId, mergedBlockId)).addListener(listener);
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId)).addListener(listener);
   }
 
   /**

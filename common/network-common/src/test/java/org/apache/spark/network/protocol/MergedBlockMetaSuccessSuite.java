@@ -17,9 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.util.List;
 
@@ -54,20 +54,16 @@ public class MergedBlockMetaSuccessSuite {
     chunk2.add(2);
     chunk2.add(4);
     RoaringBitmap[] expectedChunks = new RoaringBitmap[]{chunk1, chunk2};
-    FileChannel fileChannel = new FileOutputStream(chunkMetaFile, true).getChannel();
-    ByteBuf buf = Unpooled.buffer();
-    for (int i = 0; i < expectedChunks.length; i++) {
-      Encoders.Bitmaps.encode(buf, expectedChunks[i]);
+    try (DataOutputStream metaOutput = new DataOutputStream(new FileOutputStream(chunkMetaFile))) {
+      for (int i = 0; i < expectedChunks.length; i++) {
+        expectedChunks[i].serialize(metaOutput);
+      }
     }
-    fileChannel.write(buf.nioBuffer());
-    fileChannel.close();
-    buf.release();
-
     TransportConf conf = mock(TransportConf.class);
     when(conf.lazyFileDescriptor()).thenReturn(false);
     long requestId = 1L;
     MergedBlockMetaSuccess expectedMeta = new MergedBlockMetaSuccess(requestId, 2,
-        new FileSegmentManagedBuffer(conf, chunkMetaFile, 0, chunkMetaFile.length()));
+      new FileSegmentManagedBuffer(conf, chunkMetaFile, 0, chunkMetaFile.length()));
 
     List<Object> out = Lists.newArrayList();
     ChannelHandlerContext context = mock(ChannelHandlerContext.class);
@@ -78,7 +74,7 @@ public class MergedBlockMetaSuccessSuite {
     MessageWithHeader msgWithHeader = (MessageWithHeader) out.remove(0);
 
     ByteArrayWritableChannel writableChannel =
-        new ByteArrayWritableChannel((int) msgWithHeader.count());
+      new ByteArrayWritableChannel((int) msgWithHeader.count());
     while (msgWithHeader.transfered() < msgWithHeader.count()) {
       msgWithHeader.transferTo(writableChannel, msgWithHeader.transfered());
     }
@@ -95,9 +91,8 @@ public class MergedBlockMetaSuccessSuite {
     for (int i = 0; i < expectedMeta.getNumChunks(); i++) {
       responseBitmaps[i] = Encoders.Bitmaps.decode(responseBuf);
     }
-
     Assert.assertEquals(
-        "num of roaring bitmaps", expectedMeta.getNumChunks(), responseBitmaps.length);
+      "num of roaring bitmaps", expectedMeta.getNumChunks(), responseBitmaps.length);
     for (int i = 0; i < expectedMeta.getNumChunks(); i++) {
       Assert.assertEquals("chunk bitmap " + i, expectedChunks[i], responseBitmaps[i]);
     }

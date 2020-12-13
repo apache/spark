@@ -192,28 +192,32 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   public void getMergedBlockMeta(
       String host,
       int port,
-      String mergedBlockId,
+      int shuffleId,
+      int reduceId,
       MergedBlocksMetaListener listener) {
     checkInit();
-    logger.debug("Get merged blocks meta from {}:{} for block {}", host, port, mergedBlockId);
+    logger.debug("Get merged blocks meta from {}:{} for shuffleId {} reduceId {}", host, port,
+      shuffleId, reduceId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
-      client.sendMergedBlockMetaReq(appId, mergedBlockId, new MergedBlockMetaResponseCallback() {
-        @Override
-        public void onSuccess(int numChunks, ManagedBuffer buffer) {
-          logger.trace("Successfully got merged block meta for {}", mergedBlockId);
-          listener.onSuccess(mergedBlockId, new MergedBlockMeta(numChunks, buffer));
-        }
+      client.sendMergedBlockMetaReq(appId, shuffleId, reduceId,
+        new MergedBlockMetaResponseCallback() {
+          @Override
+          public void onSuccess(int numChunks, ManagedBuffer buffer) {
+            logger.trace("Successfully got merged block meta for shuffleId {} reduceId {}",
+              shuffleId, reduceId);
+            listener.onSuccess(shuffleId, reduceId, new MergedBlockMeta(numChunks, buffer));
+          }
 
-        @Override
-        public void onFailure(Throwable e) {
-          logger.error("Failed while getting merged block meta", e);
-          listener.onFailure(mergedBlockId, e);
-        }
-      });
+          @Override
+          public void onFailure(Throwable e) {
+            logger.error("Failed while getting merged block meta", e);
+            listener.onFailure(shuffleId, reduceId, e);
+          }
+        });
     } catch (Exception e) {
       logger.error("Exception while getting merged block meta", e);
-      listener.onFailure(mergedBlockId, e);
+      listener.onFailure(shuffleId, reduceId, e);
     }
   }
 

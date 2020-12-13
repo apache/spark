@@ -21,6 +21,8 @@ package org.apache.spark.network.client;
  * A basic callback. This is extended by {@link RpcResponseCallback} and
  * {@link MergedBlockMetaResponseCallback} so that both RpcRequests and MergedBlockMetaRequests
  * can be handled in {@link TransportResponseHandler} a similar way.
+ *
+ * @since 3.2.0
  */
 public interface BaseResponseCallback {
 

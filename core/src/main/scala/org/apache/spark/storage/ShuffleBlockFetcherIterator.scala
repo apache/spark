@@ -57,7 +57,7 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  *                        Note that zero-sized blocks are already excluded, which happened in
  *                        [[org.apache.spark.MapOutputTracker.convertMapStatuses]].
  * @param mapOutputTracker [[MapOutputTracker]] for falling back to fetching unmerged blocks if
- *                        we fail to fetch merged blocks when push based shuffle is enabled.
+ *                        we fail to fetch merged block chunks when push based shuffle is enabled.
  * @param streamWrapper A function to wrap the returned input stream.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
  * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
@@ -154,15 +154,6 @@ final class ShuffleBlockFetcherIterator(
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
 
   /**
-   * Current number of FetchMergedBlockMeta request in flight. For each reducer, it is expected
-   * to only send out one FetchMergedBlockMeta to the specific shuffle service.
-   */
-  private[this] var fetchMergedBlockMetaInFlight = 0
-
-  private[this] val blockMgrWithEmptyExecId = BlockManagerId("", blockManager.blockManagerId.host,
-    blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
-
-  /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
    * longer place fetched blocks into [[results]].
    */
@@ -180,6 +171,10 @@ final class ShuffleBlockFetcherIterator(
 
   /** A map for storing merged block shuffle chunk bitmap */
   private[this] val chunksMetaMap = new mutable.HashMap[ShuffleBlockChunkId, RoaringBitmap]()
+
+  private[this] val localShuffleMergerBlockMgrId = BlockManagerId(
+    BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, blockManager.blockManagerId.host,
+      blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
 
   initialize()
 
@@ -247,12 +242,6 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  private def getBlockInfosMap(blockInfos: Seq[FetchBlockInfo]): Map[String, (Long, Int)] = {
-    blockInfos.map {
-      case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
-    }.toMap
-  }
-
   private[this] def sendRequest(req: FetchRequest): Unit = {
     logDebug("Sending request for %d blocks (%s) from %s".format(
       req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
@@ -264,7 +253,9 @@ final class ShuffleBlockFetcherIterator(
     reqsInFlight += 1
 
     // so we can look up the block info of each blockID
-    val infoMap = getBlockInfosMap(req.blocks)
+    val infoMap = req.blocks.map {
+      case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
+    }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
@@ -313,32 +304,34 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def sendFetchMergedStatusRequest(req: FetchRequest): Unit = {
-    val infoMap = getBlockInfosMap(req.blocks)
+    val sizeMap = req.blocks.map {
+      case FetchBlockInfo(blockId, size, _) =>
+        val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+        ((shuffleBlockId.shuffleId, shuffleBlockId.reduceId), size)}.toMap
     val address = req.address
     val mergedBlocksMetaListener = new MergedBlocksMetaListener {
-      override def onSuccess(mergedBlockId: String, meta: MergedBlockMeta): Unit = {
-        logInfo(s"Received the status of merged block $mergedBlockId " +
+      override def onSuccess(shuffleId: Int, reduceId: Int, meta: MergedBlockMeta): Unit = {
+        logInfo(s"Received the meta of merged block for ($shuffleId, $reduceId)  " +
           s"from ${req.address.host}:${req.address.port}")
         try {
-          results.put(
-            MergedBlocksMetaFetchResult(mergedBlockId, infoMap(mergedBlockId)._1, meta.getNumChunks,
-              meta.readChunkBitmaps(), address))
+          results.put(MergedBlocksMetaFetchResult(shuffleId, reduceId, sizeMap(shuffleId, reduceId),
+            meta.getNumChunks, meta.readChunkBitmaps(), address))
         } catch {
           case e: Throwable =>
-            results.put(MergedBlocksMetaFailedFetchResult(mergedBlockId, address))
+            results.put(MergedBlocksMetaFailedFetchResult(shuffleId, reduceId, address))
         }
       }
 
-      override def onFailure(mergedBlockId: String, exception: Throwable): Unit = {
-        logError(
-          s"Failed to get the status of merged blocks from ${req.address.host}:${req.address.port}",
-          exception)
-        results.put(MergedBlocksMetaFailedFetchResult(mergedBlockId, address))
+      override def onFailure(shuffleId: Int, reduceId: Int, exception: Throwable): Unit = {
+        logError(s"Failed to get the meta of merged blocks for ($shuffleId, $reduceId) " +
+          s"from ${req.address.host}:${req.address.port}", exception)
+        results.put(MergedBlocksMetaFailedFetchResult(shuffleId, reduceId, address))
       }
     }
     req.blocks.foreach(block => {
-      shuffleClient.getMergedBlockMeta(
-        address.host, address.port, block.blockId.toString, mergedBlocksMetaListener)
+      val shuffleBlockId = block.blockId.asInstanceOf[ShuffleBlockId]
+      shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
+        shuffleBlockId.reduceId, mergedBlocksMetaListener)
     })
   }
 
@@ -356,13 +349,12 @@ final class ShuffleBlockFetcherIterator(
    *    remote).
    */
   private[this] def initiateFallbackBlockFetchForMergedBlock(
-    blockId: BlockId,
-    address: BlockManagerId): Unit = {
+      blockId: BlockId,
+      address: BlockManagerId): Unit = {
     logWarning(s"Falling back to fetch the original unmerged blocks for merged block $blockId")
     // Increase the blocks processed, since we will process another block in the next iteration of
     // the while loop.
     numBlocksProcessed += 1
-
     val fallbackBlocksByAddr: Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])] =
       if (blockId.isShuffle) {
         val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
@@ -380,20 +372,13 @@ final class ShuffleBlockFetcherIterator(
     val fallbackRemoteReqs = partitionBlocksByFetchMode(fallbackBlocksByAddr.iterator,
       fallbackLocalBlocks, fallbackHostLocalBlocks, fallbackMergedLocalBlocks)
     // Add the remote requests into our queue in a random order
-    // TODO do we need to initiate a batch of fetch request here, or are we good with the iterator
-    // TODO triggering it anyway?
     fetchRequests ++= Utils.randomize(fallbackRemoteReqs)
-    logInfo(
-      s"Started ${fallbackRemoteReqs.size} fallback remote requests for " +
-        s"merged block $blockId"
-    )
+    logInfo(s"Started ${fallbackRemoteReqs.size} fallback remote requests for merged " +
+      s"block $blockId")
     // If there is any fall back block that's a local block, we get them here. The original
     // invocation to fetchLocalBlocks might have already returned by this time, so we need
     // to invoke it again here.
     fetchLocalBlocks(fallbackLocalBlocks)
-    logInfo(
-      s"Got ${fallbackLocalBlocks.size} fallback local blocks for merged block $blockId"
-    )
     // Merged local blocks should be empty during fallback
     assert(fallbackMergedLocalBlocks.isEmpty, "There should be zero merged blocks during fallback")
     // Some of the fallback local blocks could be host local blocks
@@ -404,16 +389,17 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def partitionBlocksByFetchMode(
-    blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])],
-    localBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)],
-    hostLocalBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)],
-    mergedLocalBlocks: mutable.LinkedHashSet[BlockId]
-  ): ArrayBuffer[FetchRequest] = {
+      blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])],
+      localBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)],
+      hostLocalBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)],
+      mergedLocalBlocks: scala.collection.mutable.LinkedHashSet[BlockId]):
+      ArrayBuffer[FetchRequest] = {
     logDebug(s"maxBytesInFlight: $maxBytesInFlight, targetRemoteRequestSize: "
       + s"$targetRemoteRequestSize, maxBlocksInFlightPerAddress: $maxBlocksInFlightPerAddress")
 
-    // Partition to local, host-local and remote blocks. Remote blocks are further split into
-    // FetchRequests of size at most maxBytesInFlight in order to limit the amount of data in flight
+    // Partition to local, host-local, merged-local, remote (includes merged-remote) blocks.
+    // Remote blocks are further split into FetchRequests of size at most maxBytesInFlight in order
+    // to limit the amount of data in flight
     val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
     var localBlockBytes = 0L
     var hostLocalBlockBytes = 0L
@@ -423,14 +409,14 @@ final class ShuffleBlockFetcherIterator(
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
-      if (address.executorId.isEmpty) {
+      if (isMergedShuffleBlockAddress(address)) {
         // These are push-based merged blocks or chunks of these merged blocks.
         if (address.host == blockManager.blockManagerId.host) {
           checkBlockSizes(blockInfos)
           val pushMergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
             blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch = false)
           numBlocksToFetch += pushMergedBlockInfos.size
-          localBlocks ++= pushMergedBlockInfos.map(info => (info.blockId, info.mapIndex))
+          mergedLocalBlocks ++= pushMergedBlockInfos.map(info => info.blockId)
           mergedLocalBlockBytes += pushMergedBlockInfos.map(_.size).sum
           logInfo(s"Got ${pushMergedBlockInfos.size} local merged blocks " +
             s"of size $mergedLocalBlockBytes")
@@ -438,7 +424,8 @@ final class ShuffleBlockFetcherIterator(
           remoteBlockBytes += blockInfos.map(_._2).sum
           collectFetchReqsFromMergedBlocks(address, blockInfos, collectedRemoteRequests)
         }
-      } else if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
+      } else if (
+        Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
@@ -462,18 +449,22 @@ final class ShuffleBlockFetcherIterator(
       }
     }
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
-    val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes + mergedLocalBlockBytes
-    assert(
-      numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks +
-        + mergedLocalBlocks.size + prevNumBlocksToFetch,
-      s"The number of non-empty blocks $numBlocksToFetch doesn't equal to the number of local " +
-        s"blocks ${localBlocks.size} + the number of host-local blocks ${hostLocalBlocks.size} " +
-        s"+ the number of remote blocks ${numRemoteBlocks} " +
-        s"+ the number of previous blocks $prevNumBlocksToFetch.")
-    logInfo(s"Getting $numBlocksToFetch (${Utils.bytesToString(totalBytes)}) non-empty blocks " +
-      s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local and " +
-      s"${hostLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) " +
-      s"host-local and $numRemoteBlocks (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
+    val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes +
+      mergedLocalBlockBytes
+    val blocksToFetchCurrentIteration = numBlocksToFetch - prevNumBlocksToFetch
+    assert(blocksToFetchCurrentIteration == localBlocks.size + hostLocalBlocks.size +
+      numRemoteBlocks + mergedLocalBlocks.size,
+      s"The number of non-empty blocks $blocksToFetchCurrentIteration doesn't equal to " +
+        s"the number of local blocks ${localBlocks.size} + " +
+        s"the number of host-local blocks ${hostLocalBlocks.size} " +
+        s"the number of merged-local blocks ${mergedLocalBlocks.size} " +
+        s"+ the number of remote blocks ${numRemoteBlocks} ")
+    logInfo(s"Getting $blocksToFetchCurrentIteration (${Utils.bytesToString(totalBytes)}) " +
+      s"non-empty blocks including " +
+      s"${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local and " +
+      s"${hostLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) host-local and " +
+      s"${mergedLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) merged-local and " +
+      s"$numRemoteBlocks (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
     collectedRemoteRequests
   }
 
@@ -514,19 +505,19 @@ final class ShuffleBlockFetcherIterator(
   }
 
   /**
-    * Collect the FetchRequests for push-based merged blocks from remote shuffle services.
-    * This method will be called to either initialize the FetchRequests with the original
-    * blocks or during the fallback when the fetch of merged shuffle blocks/chunks fail.
-    * @param address remote shuffle service address
-    * @param blockInfos shuffle block information
-    * @param collectedRemoteRequests queue of FetchRequests
-    * @return Number of blocks put into remoteRequests during this invocation
-    */
+   * Collect the FetchRequests for push-based merged blocks from remote shuffle services.
+   * This method will be called to either initialize the FetchRequests with the original
+   * blocks or during the fallback when the fetch of merged shuffle blocks/chunks fail.
+   *
+   * @param address                 remote shuffle service address
+   * @param blockInfos              shuffle block information
+   * @param collectedRemoteRequests queue of FetchRequests
+   * @return Number of blocks put into remoteRequests during this invocation
+   */
   private[this] def collectFetchReqsFromMergedBlocks(
-    address: BlockManagerId,
-    blockInfos: Seq[(BlockId, Long, Int)],
-    collectedRemoteRequests: ArrayBuffer[FetchRequest]
-  ): Unit = {
+      address: BlockManagerId,
+      blockInfos: Seq[(BlockId, Long, Int)],
+      collectedRemoteRequests: ArrayBuffer[FetchRequest]): Unit = {
     val iterator = blockInfos.iterator
     var curRequestSize = 0L
     var curBlocks = Seq.empty[FetchBlockInfo]
@@ -621,46 +612,18 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks(
-      localBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)]
-  ): Unit = {
+      localBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)]): Unit = {
     logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
-    // For push merged blocks, the executor Id is empty. The empty executor Id should be part of the
-    // the FetchResults as well, because there could be an error while reading the local merged
-    // blocks which will throw a FetchFailedException and the dag scheduler handles the
-    // FetchFailures of merged shuffle chunks differently. Having executor id empty
-    // informs the dag scheduler that the failure was for a chunk of merged block.
-    val blockMgrWithEmptyExecId = BlockManagerId("", blockManager.blockManagerId.host,
-      blockManager.blockManagerId.port, blockManager.blockManagerId.topologyInfo)
     val iter = localBlocks.iterator
     while (iter.hasNext) {
       val (blockId, mapIndex) = iter.next()
       try {
-        blockId match {
-          case shuffleBlockId: ShuffleBlockId if shuffleBlockId.mapId == -1 =>
-            val chunksMeta = blockManager.getMergedBlockMeta(shuffleBlockId).readChunkBitmaps()
-            val bufs: Seq[ManagedBuffer] = blockManager.getMergedBlockData(shuffleBlockId)
-            // Update total number of blocks to fetch, reflecting the multiple local chunks
-            numBlocksToFetch += bufs.size - 1
-            for (chunkId <- bufs.indices) {
-              val buf = bufs(chunkId)
-              shuffleMetrics.incLocalBlocksFetched(1)
-              shuffleMetrics.incLocalBytesRead(buf.size)
-              buf.retain()
-              val shuffleChunkId = ShuffleBlockChunkId(
-                shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunkId)
-              results.put(SuccessFetchResult(
-                shuffleChunkId, -1,
-                blockMgrWithEmptyExecId, buf.size(), buf, isNetworkReqDone = false))
-              chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
-            }
-          case _ =>
-            val buf = blockManager.getLocalBlockData(blockId)
-            shuffleMetrics.incLocalBlocksFetched(1)
-            shuffleMetrics.incLocalBytesRead(buf.size)
-            buf.retain()
-            results.put(new SuccessFetchResult(blockId, mapIndex, blockManager.blockManagerId,
-              buf.size(), buf, false))
-        }
+        val buf = blockManager.getLocalBlockData(blockId)
+        shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size)
+        buf.retain()
+        results.put(new SuccessFetchResult(blockId, mapIndex, blockManager.blockManagerId,
+          buf.size(), buf, false))
       } catch {
         // If we see an exception, stop immediately.
         case e: Exception =>
@@ -672,61 +635,9 @@ final class ShuffleBlockFetcherIterator(
               logError("Error occurred while fetching local blocks, " + ce.getMessage)
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
-          // If we see an exception with reading a local merged block, we fallback to
-          // fetch the original unmerged blocks. We do not report block fetch failure
-          // and will continue with the remaining local block read.
-          blockId match {
-            case id: ShuffleBlockId if id.mapId == -1 =>
-              logWarning(s"Error occurred while fetching local merged block, " +
-                s"prepare to fetch the original blocks", e)
-              results.put(
-                IgnoreFetchResult(blockId, blockMgrWithEmptyExecId, 0, isNetworkReqDone = false))
-            case _ =>
-              results.put(new FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
-          }
+          results.put(new FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
           return
       }
-    }
-  }
-
-  /**
-   * Fetch a single merged block generated by shuffle service on local host
-   * @param blockId ShuffleBlockId to be fetched
-   * @param localDirs Local directories where the merged shuffle files are stored
-   * @param blockManagerId BlockManagerId
-   * @return Boolean represents successful or failed fetch
-   */
-  private[this] def fetchMergedLocalBlock(
-    blockId: BlockId,
-    localDirs: Array[String],
-    blockManagerId: BlockManagerId): Boolean = {
-    try {
-      val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
-      val chunksMeta =
-        blockManager.getMergedBlockMeta(shuffleBlockId, localDirs).readChunkBitmaps()
-      // Fetch local merged shuffle block data as multiple chunks
-      val bufs: Seq[ManagedBuffer] = blockManager.getMergedBlockData(shuffleBlockId, localDirs)
-      // Update total number of blocks to fetch, reflecting the multiple local chunks
-      numBlocksToFetch += bufs.size - 1
-      for (chunkId <- bufs.indices) {
-        val buf = bufs(chunkId)
-        buf.retain()
-        val shuffleChunkId = ShuffleBlockChunkId(
-          shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunkId)
-        results.put(SuccessFetchResult(
-          shuffleChunkId, blockMgrWithEmptyExecId, 0, buf, isNetworkReqDone = false))
-        chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
-      }
-      true
-    } catch {
-      case e: Exception =>
-        // If we see an exception with reading a local merged block, we fallback to
-        // fetch the original unmerged blocks. We do not report block fetch failure
-        // and will continue with the remaining local block read.
-        logWarning(s"Error occurred while fetching local merged block, " +
-          s"prepare to fetch the original blocks", e)
-        results.put(IgnoreFetchResult(blockId, blockMgrWithEmptyExecId, 0, false))
-        false
     }
   }
 
@@ -826,33 +737,72 @@ final class ShuffleBlockFetcherIterator(
   }
 
   /**
+   * Fetch a single local merged block generated.
+   * @param blockId ShuffleBlockId to be fetched
+   * @param localDirs Local directories where the merged shuffle files are stored
+   * @param blockManagerId BlockManagerId
+   * @return Boolean represents successful or failed fetch
+   */
+  private[this] def fetchMergedLocalBlock(
+      blockId: BlockId,
+      localDirs: Array[String],
+      blockManagerId: BlockManagerId): Boolean = {
+    try {
+      val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+      val chunksMeta = blockManager.getMergedBlockMeta(shuffleBlockId, localDirs).readChunkBitmaps()
+      // Fetch local merged shuffle block data as multiple chunks
+      val bufs: Seq[ManagedBuffer] = blockManager.getMergedBlockData(shuffleBlockId, localDirs)
+      // Update total number of blocks to fetch, reflecting the multiple local chunks
+      numBlocksToFetch += bufs.size - 1
+      for (chunkId <- bufs.indices) {
+        val buf = bufs(chunkId)
+        buf.retain()
+        val shuffleChunkId = ShuffleBlockChunkId(shuffleBlockId.shuffleId, shuffleBlockId.reduceId,
+          chunkId)
+        results.put(SuccessFetchResult(shuffleChunkId, -1, blockManagerId, buf.size(), buf,
+          isNetworkReqDone = false))
+        chunksMetaMap.put(shuffleChunkId, chunksMeta(chunkId))
+      }
+      true
+    } catch {
+      case e: Exception =>
+        // If we see an exception with reading a local merged block, we fallback to
+        // fetch the original unmerged blocks. We do not report block fetch failure
+        // and will continue with the remaining local block read.
+        logWarning(s"Error occurred while fetching local merged block, " +
+          s"prepare to fetch the original blocks", e)
+        results.put(IgnoreFetchResult(blockId, blockManagerId, 0, false))
+        false
+    }
+  }
+
+  /**
    * Fetch the merged local blocks while we are fetching remote blocks.
    */
   private[this] def fetchMergedLocalBlocks(
       hostLocalDirManager: HostLocalDirManager,
       mergedLocalBlocks: mutable.LinkedHashSet[BlockId]): Unit = {
-    val cachedLocalMergedDirs = hostLocalDirManager.getCachedHostLocalDirs()
-      .get(blockMgrWithEmptyExecId.executorId)
-    if (cachedLocalMergedDirs.isDefined) {
-      logDebug(s"Synchronous fetching local merged blocks with cached executors' dir: " +
-        s"${cachedLocalMergedDirs.get.mkString(", ")}")
-      mergedLocalBlocks.foreach{ case blockId =>
-        fetchMergedLocalBlock(blockId, cachedLocalMergedDirs.get, blockMgrWithEmptyExecId)
-      }
+    val cachedMergerDirs = hostLocalDirManager.getCachedHostLocalDirs.get(
+      BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    if (cachedMergerDirs.isDefined) {
+      logDebug(s"Fetching local merged blocks with cached executors dir: " +
+        s"${cachedMergerDirs.get.mkString(", ")}")
+      mergedLocalBlocks.foreach(blockId =>
+        fetchMergedLocalBlock(blockId, cachedMergerDirs.get, localShuffleMergerBlockMgrId))
     } else {
-      logDebug(s"Asynchronous fetching local merged blocks without cached executors' dir")
-      hostLocalDirManager.getHostLocalDirs(Array(blockMgrWithEmptyExecId.executorId)) {
+      logDebug(s"Asynchronous fetching local merged blocks without cached executors dir")
+      hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
+        localShuffleMergerBlockMgrId.port, Array(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
           mergedLocalBlocks.takeWhile {
             case blockId =>
               logDebug(s"Successfully fetched local dirs: " +
-                s"${dirs.get(blockMgrWithEmptyExecId.executorId).mkString(", ")}")
-              fetchMergedLocalBlock(
-                blockId, dirs.get(blockMgrWithEmptyExecId.executorId), blockMgrWithEmptyExecId)
+                s"${dirs.get(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER).mkString(", ")}")
+              fetchMergedLocalBlock(blockId, dirs(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER),
+                localShuffleMergerBlockMgrId)
           }
           logDebug(s"Got local merged blocks (without cached executors' dir) in " +
             s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
-
         case Failure(throwable) =>
           // If we see an exception with getting the local dirs for local merged blocks,
           // we fallback to fetch the original unmerged blocks. We do not report block fetch
@@ -861,7 +811,8 @@ final class ShuffleBlockFetcherIterator(
             s"blocks: ${mergedLocalBlocks.mkString(", ")}. Fetch the original blocks instead",
             throwable)
           mergedLocalBlocks.foreach(
-            blockId => results.put(IgnoreFetchResult(blockId, blockMgrWithEmptyExecId, 0, false))
+            blockId => results.put(IgnoreFetchResult(blockId, localShuffleMergerBlockMgrId, 0,
+              isNetworkReqDone = false))
           )
       }
     }
@@ -872,8 +823,11 @@ final class ShuffleBlockFetcherIterator(
     context.addTaskCompletionListener(onCompleteCallback)
     // Local blocks to fetch, excluding zero-sized blocks.
     val localBlocks = scala.collection.mutable.LinkedHashSet[(BlockId, Int)]()
-    // Partition blocks by the different fetch modes: local, host-local and remote blocks.
-    val remoteRequests = partitionBlocksByFetchMode(blocksByAddress, localBlocks, hostLocalBlocks)
+    val mergedLocalBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
+    // Partition blocks by the different fetch modes: local, host-local, merged-local and remote
+    // blocks.
+    val remoteRequests = partitionBlocksByFetchMode(blocksByAddress, localBlocks, hostLocalBlocks,
+      mergedLocalBlocks)
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(remoteRequests)
     assert ((0 == reqsInFlight) == (0 == bytesInFlight),
@@ -893,7 +847,7 @@ final class ShuffleBlockFetcherIterator(
     fetchAllHostLocalBlocks(hostLocalBlocks)
     fetchAllMergedLocalBlocks(mergedLocalBlocks)
   }
-  
+
   private def fetchAllHostLocalBlocks(
       hostLocalBlocks: scala.collection.mutable.LinkedHashSet[(BlockId, Int)]): Unit = {
     if (hostLocalBlocks.nonEmpty) {
@@ -940,17 +894,30 @@ final class ShuffleBlockFetcherIterator(
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
-          if (isRemoteOrHostLocal(address)) {
-            if (hostLocalBlocks.contains(blockId -> mapIndex)) {
+          if (address != blockManager.blockManagerId) {
+            if (isMergedShuffleBlockAddress(address)
+              && address.host == blockManager.blockManagerId.host) {
+              // It is a local merged block chunk
+              assert(blockId.isShuffleChunk)
+              shuffleMetrics.incLocalBlocksFetched(
+                getNumberOfBlocksInChunk(blockId.asInstanceOf[ShuffleBlockChunkId]))
+              shuffleMetrics.incLocalBytesRead(buf.size)
+            } else if (hostLocalBlocks.contains(blockId -> mapIndex)) {
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
             } else {
+              // Could be a remote merged block chunk or remote block
               numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
               shuffleMetrics.incRemoteBytesRead(buf.size)
               if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
                 shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
               }
-              shuffleMetrics.incRemoteBlocksFetched(1)
+              if (blockId.isShuffleChunk) {
+                shuffleMetrics.incRemoteBlocksFetched(
+                  getNumberOfBlocksInChunk(blockId.asInstanceOf[ShuffleBlockChunkId]))
+              } else {
+                shuffleMetrics.incRemoteBlocksFetched(1)
+              }
               bytesInFlight -= size
             }
           }
@@ -1015,21 +982,29 @@ final class ShuffleBlockFetcherIterator(
             } catch {
               case e: IOException =>
                 buf.release()
-                if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                  || corruptedBlocks.contains(blockId)) {
-                  if (blockId.isShuffleChunk) {
-                    initiateFallbackBlockFetchForMergedBlock(blockId, address)
-                    // Set result to null to trigger another iteration of the while loop.
-                    result = null
-                  } else {
-                    throwFetchFailedException(blockId, mapIndex, address, e)
-                  }
-                } else {
-                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
-                  corruptedBlocks += blockId
-                  fetchRequests += FetchRequest(
-                    address, Array(FetchBlockInfo(blockId, size, mapIndex)))
+                if (blockId.isShuffleChunk) {
+                  // Retrying a corrupt block may result again in a corrupt block. For merged
+                  // block chunks, we opt to fallback on the original shuffle blocks
+                  // that belong to that corrupt merged block chunk immediately instead of
+                  // retrying to fetch the corrupt chunk. This also makes the code simpler
+                  // because the chunkMeta corresponding to a Shuffle Chunk is always removed
+                  // from chunksMetaMap whenever a Shuffle Block Chunk gets processed.
+                  // If we try to re-fetch a corrupt shuffle chunk, then it has to be added
+                  // back to the chunksMetaMap.
+                  initiateFallbackBlockFetchForMergedBlock(blockId, address)
+                  // Set result to null to trigger another iteration of the while loop.
                   result = null
+                } else {
+                  if (buf.isInstanceOf[FileSegmentManagedBuffer]
+                    || corruptedBlocks.contains(blockId)) {
+                    throwFetchFailedException(blockId, mapIndex, address, e)
+                  } else {
+                    logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                    corruptedBlocks += blockId
+                    fetchRequests += FetchRequest(
+                      address, Array(FetchBlockInfo(blockId, size, mapIndex)))
+                    result = null
+                  }
                 }
             } finally {
               if (blockId.isShuffleChunk) {
@@ -1061,7 +1036,8 @@ final class ShuffleBlockFetcherIterator(
           // a SuccessFetchResult or a FailureFetchResult.
           result = null
 
-        case MergedBlocksMetaFetchResult(block, blockSize, numChunks, bitmaps, address, _) =>
+        case MergedBlocksMetaFetchResult(shuffleId, reduceId, blockSize, numChunks, bitmaps,
+          address, _) =>
           val blocksToRequest: ArrayBuffer[(BlockId, Long, Int)] =
             new ArrayBuffer[(BlockId, Long, Int)]()
           // Remove the original block from numBlocksToFetch. When #splitLocalRemoteBlocks
@@ -1070,9 +1046,7 @@ final class ShuffleBlockFetcherIterator(
           numBlocksToFetch -= 1
           val approxChunkSize = blockSize / numChunks
           for (i <- 0 until numChunks) {
-            val originalBlockId = BlockId(block).asInstanceOf[ShuffleBlockId]
-            val blockChunkId = ShuffleBlockChunkId(
-              originalBlockId.shuffleId, originalBlockId.reduceId, i)
+            val blockChunkId = ShuffleBlockChunkId(shuffleId, reduceId, i)
             chunksMetaMap.put(blockChunkId, bitmaps(i))
             logDebug(s"adding block chunk $blockChunkId of size $approxChunkSize")
             blocksToRequest += ((blockChunkId, approxChunkSize, -1))
@@ -1083,10 +1057,10 @@ final class ShuffleBlockFetcherIterator(
           // Set result to null to force another iteration.
           result = null
 
-        case MergedBlocksMetaFailedFetchResult(block, address, _) =>
+        case MergedBlocksMetaFailedFetchResult(shuffleId, reduceId, address, _) =>
           // If we fail to fetch the merged status of a merged block, we fall back to fetching the
           // unmerged blocks.
-          initiateFallbackBlockFetchForMergedBlock(BlockId(block), address)
+          initiateFallbackBlockFetchForMergedBlock(ShuffleBlockId(shuffleId, -1, reduceId), address)
           // Set result to null to force another iteration.
           result = null
       }
@@ -1111,24 +1085,24 @@ final class ShuffleBlockFetcherIterator(
       onCompleteCallback.onComplete(context))
   }
 
-  /**
-   * Returns true if the address is of remote block manager. false otherwise.
-   */
-  private def isRemoteOrHostLocal(address: BlockManagerId): Boolean = {
-    // If the executor id is empty then it is a merged block so we compare the hosts to check
-    // if it's remote. Otherwise, compare the blockManager Id.
-    (address.executorId.isEmpty && address.host != blockManager.blockManagerId.host) ||
-      (address.executorId.nonEmpty && address != blockManager.blockManagerId)
+  private def isMergedShuffleBlockAddress(address: BlockManagerId): Boolean = {
+    BlockManagerId.SHUFFLE_MERGER_IDENTIFIER.equals(address.executorId)
   }
 
   /**
-   * Returns true if the address is of remote block manager. false otherwise.
+   * Returns true if the address is of a remote block manager or host-local. false otherwise.
    */
   private def isRemote(address: BlockManagerId): Boolean = {
     // If the executor id is empty then it is a merged block so we compare the hosts to check
     // if it's remote. Otherwise, compare the blockManager Id.
-    (address.executorId.isEmpty && address.host != blockManager.blockManagerId.host) ||
-      (address.executorId.nonEmpty && address != blockManager.blockManagerId)
+    (BlockManagerId.SHUFFLE_MERGER_IDENTIFIER.equals(address.executorId) &&
+      address.host != blockManager.blockManagerId.host) ||
+    (!BlockManagerId.SHUFFLE_MERGER_IDENTIFIER.equals(address.executorId) &&
+      address != blockManager.blockManagerId)
+  }
+
+  private def getNumberOfBlocksInChunk(blockId : ShuffleBlockChunkId): Int = {
+    chunksMetaMap(blockId).getCardinality
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -1369,8 +1343,7 @@ object ShuffleBlockFetcherIterator {
             curBlocks += info
           } else {
             val curBlockId = info.blockId.asInstanceOf[ShuffleBlockId]
-            val currentMapId =
-              curBlocks.head.blockId.asInstanceOf[ShuffleBlockId].mapId
+            val currentMapId = curBlocks.head.blockId.asInstanceOf[ShuffleBlockId].mapId
             if (curBlockId.mapId != currentMapId) {
               mergedBlockInfo += mergeFetchBlockInfo(curBlocks)
               curBlocks.clear()
@@ -1469,38 +1442,39 @@ object ShuffleBlockFetcherIterator {
    *                         request. Used to update reqsInFlight.
    */
   private[storage] case class IgnoreFetchResult(blockId: BlockId,
-    address: BlockManagerId,
-    size: Long,
-    isNetworkReqDone: Boolean)
-    extends FetchResult
+      address: BlockManagerId,
+      size: Long,
+      isNetworkReqDone: Boolean) extends FetchResult
 
   /**
-   * Result of a successful fetch of meta information of merged blocks.
+   * Result of a successful fetch of meta information for a merged block.
    *
-   * @param block            merged block id.
+   * @param shuffleId        shuffle id.
+   * @param reduceId         reduce id.
    * @param blockSize        size of each merged block.
    * @param numChunks        number of chunks in the merged block.
    * @param bitmaps          bitmaps for every chunk.
    * @param address          BlockManager that the merged status was fetched from.
    */
   private[storage] case class MergedBlocksMetaFetchResult(
-    block: String,
-    blockSize: Long,
-    numChunks: Int,
-    bitmaps: Array[RoaringBitmap],
-    address: BlockManagerId,
-    blockId: BlockId = DUMMY_SHUFFLE_BLOCK_ID
-  ) extends FetchResult
+      shuffleId: Int,
+      reduceId: Int,
+      blockSize: Long,
+      numChunks: Int,
+      bitmaps: Array[RoaringBitmap],
+      address: BlockManagerId,
+      blockId: BlockId = DUMMY_SHUFFLE_BLOCK_ID) extends FetchResult
 
   /**
-   * Result of a failure while fetching the meta information of merged blocks.
+   * Result of a failure while fetching the meta information for a merged block.
    *
-   * @param block  merged block id
-   * @param address BlockManager that the merged status was fetched from.
+   * @param shuffleId shuffle id.
+   * @param reduceId  reduce id.
+   * @param address   BlockManager that the merged status was fetched from.
    */
   private[storage] case class MergedBlocksMetaFailedFetchResult(
-    block: String,
-    address: BlockManagerId,
-    blockId: BlockId = DUMMY_SHUFFLE_BLOCK_ID
-  ) extends FetchResult
+      shuffleId: Int,
+      reduceId: Int,
+      address: BlockManagerId,
+      blockId: BlockId = DUMMY_SHUFFLE_BLOCK_ID) extends FetchResult
 }

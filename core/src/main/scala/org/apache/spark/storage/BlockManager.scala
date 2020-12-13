@@ -254,9 +254,6 @@ private[spark] class BlockManager(
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
-  val isShuffleHostLocalDiskReadEnabled =
-    conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED)
-  val isPushBasedShuffleEnabled = conf.get(config.PUSH_BASED_SHUFFLE_ENABLED)
 
   @inline final private def isDecommissioning() = {
     decommissioner.isDefined
@@ -497,15 +494,14 @@ private[spark] class BlockManager(
     }
 
     hostLocalDirManager = {
-      if (isShuffleHostLocalDiskReadEnabled || isPushBasedShuffleEnabled) {
-        externalShuffleClient.map { blockStoreClient =>
-          new HostLocalDirManager(
-            futureExecutionContext,
-            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
-            blockStoreClient,
-            blockManagerId.host,
-            externalShuffleServicePort)
-        }
+      // PART OF SPARK-33350
+      if ((conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
+        !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL))
+          || conf.get(config.PUSH_BASED_SHUFFLE_ENABLED)) {
+        Some(new HostLocalDirManager(
+          futureExecutionContext,
+          conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+          blockStoreClient))
       } else {
         None
       }
@@ -733,19 +729,23 @@ private[spark] class BlockManager(
    * Instead of reading the entire file as a single block, we split it into smaller chunks
    * which will be memory efficient when performing certain operations.
    */
-  def getMergedBlockData(
-    blockId: ShuffleBlockId,
+  // PART OF SPARK-33350
+  override def getMergedBlockData(
+    blockId: BlockId,
     dirs: Array[String]): Seq[ManagedBuffer] = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
+    // PART OF SPARK-33350
+    Seq.empty
   }
 
   /**
    * Get the local merged shuffle block metada data for the given block ID.
    */
-  def getMergedBlockMeta(
-    blockId: ShuffleBlockId,
+  // PART OF SPARK-33350
+  override def getMergedBlockMeta(
+    blockId: BlockId,
     dirs: Array[String]): MergedBlockMeta = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
+    // PART OF SPARK-33350
+    null
   }
 
   /**
