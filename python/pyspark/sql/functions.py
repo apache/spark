@@ -227,9 +227,9 @@ def product(col, scale=1.0):
     >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
     >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
     >>> prods.orderBy('mod3').show()
-    +----+---------+
-    |mod3|  product|
-    +----+---------+
+    +----+-------+
+    |mod3|product|
+    +----+-------+
     |   0|  162.0|
     |   1|   28.0|
     |   2|   80.0|
