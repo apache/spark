@@ -308,7 +308,9 @@ class Dataset[T] private[sql](
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ => cell.toString
+          case _ =>
+            // Escapes meta-characters not to break the `showString` format
+            cell.toString.replaceAll("\n", "\\\\n").replaceAll("\t", "\\\\t")
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
