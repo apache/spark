@@ -1375,7 +1375,7 @@ object SQLConf {
         "The maintenance task executes background maintenance task in all the loaded store " +
         "providers if they are still the active instances according to the coordinator. If not, " +
         "inactive instances of store providers will be closed.")
-      .version("3.2.0")
+      .version("2.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
