@@ -660,8 +660,7 @@ object ExcludedDependencies {
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api")
-    )
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -770,8 +769,7 @@ object YARN {
     excludeDependencies --= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api")
-    )
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
