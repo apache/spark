@@ -1563,8 +1563,6 @@ setMethod("overlay",
 #' @details
 #' \code{product}: Returns the product of the values in a group.
 #'
-#' @param column values that are to be multiplied together
-#'
 #' @rdname column_aggregate_functions
 #' @aliases product product,Column-method
 #' @note mean since 3.2.0
@@ -1576,9 +1574,8 @@ setMethod("product",
           })
 
 #' @details
-#' \code{product}: Returns the product of the values in a group.
+#' \code{product}: Returns the product of the values in a group, after scaling.
 #'
-#' @param column values that are to be multiplied together
 #' @param scale pre-scaling to be applied to each value in the group
 #'
 #' @rdname column_aggregate_functions

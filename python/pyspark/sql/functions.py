@@ -236,13 +236,14 @@ def product(col, scale=1.0):
     +----+-------+
 
     >>> df.groupBy('mod3').agg(product('x', 0.5).alias('product')).orderBy('mod3').show()
-    +----+---------+
-    |mod3|  product|
-    +----+---------+
+    +----+-------+
+    |mod3|product|
+    +----+-------+
     |   0|  20.25|
     |   1|    3.5|
     |   2|   10.0|
     +----+-------+
+
     """
     return _invoke_function("product", _to_java_column(col), scale)
 
