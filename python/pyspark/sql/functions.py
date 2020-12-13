@@ -212,6 +212,35 @@ def sumDistinct(col):
 def product(col, scale=1.0):
     """
     Aggregate function: returns the product of the values in a group.
+
+    Parameters
+    ----------
+    col : str, :class:`Column`
+        column containing values to be multiplied together
+    scale : float
+        scaling to be applied to each value in the group
+
+    Examples
+    --------
+    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
+    >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
+    >>> prods.orderBy('mod3').show()
+    +----+---------+
+    |mod3|  product|
+    +----+---------+
+    |   0|  162.0|
+    |   1|   28.0|
+    |   2|   80.0|
+    +----+-------+
+
+    >>> df.groupBy('mod3').agg(product('x', 0.5).alias('product')).orderBy('mod3').show()
+    +----+-------+
+    |mod3|product|
+    +----+-------+
+    |   0|  20.25|
+    |   1|    3.5|
+    |   2|   10.0|
+    +----+-------+
     """
     return _invoke_function("product", _to_java_column(col), scale)
 

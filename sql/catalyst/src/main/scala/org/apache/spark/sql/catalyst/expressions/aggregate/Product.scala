@@ -74,9 +74,10 @@ case class Product(child: Expression, scale: Double = 1.0)
 
     val protoResult =
       coalesce(product, one) * (scale match {
-                                        case 1.0 => castChild
-                                        case -1.0 => -castChild
-                                        case _ => castChild * scale })
+        case 1.0 => castChild
+        case -1.0 => -castChild
+        case _ => castChild * scale
+      })
 
     if (child.nullable) {
       Seq(coalesce(protoResult, product))

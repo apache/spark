@@ -30,7 +30,7 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
   test("bare factorial") {
     implicit val enc = Encoders.scalaDouble
 
-    val prod = data16.agg(product("x")).as[Double].head
+    val prod = data16.agg(product(col("x"))).as[Double].head
     val expected = (1L to 16L).reduce { _ * _ }.toDouble
 
     assert(prod === expected)
@@ -43,7 +43,7 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     implicit val enc = Encoders.product[(Long, Double)]
     val win = Window.partitionBy(lit(1)).orderBy("x")
 
-    val prodFactorials = data16.withColumn("f", product("x").over(win))
+    val prodFactorials = data16.withColumn("f", product(col("x")).over(win))
 
     val prodMap = prodFactorials.as[(Long, Double)].collect.toMap
 
@@ -64,11 +64,11 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     implicit val enc = Encoders.scalaDouble
 
     val grouped = data16.groupBy((col("x") % 3) as "mod3")
-                        .agg(product(col("x")) as "product",
-                             product(col("x"), 0.5) as "product_scaled",
-                             product(col("x"), 1.0) as "product_unity",
-                             product(col("x"), -1.0) as "product_minus")
-                        .orderBy("mod3")
+      .agg(product(col("x")) as "product",
+           product(col("x"), 0.5) as "product_scaled",
+           product(col("x"), 1.0) as "product_unity",
+           product(col("x"), -1.0) as "product_minus")
+      .orderBy("mod3")
 
     def col2seq(s: String): Seq[Double] =
       grouped.select(s).as[Double].collect.toSeq
