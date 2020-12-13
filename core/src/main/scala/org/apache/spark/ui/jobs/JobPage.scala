@@ -243,9 +243,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val pendingOrSkippedTableId =
       if (isComplete) {
-        "pending"
-      } else {
         "skipped"
+      } else {
+        "pending"
       }
 
     val activeStagesTable =
