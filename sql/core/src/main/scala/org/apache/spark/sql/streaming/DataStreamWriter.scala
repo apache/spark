@@ -387,8 +387,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       }
       val sink = new MemorySink()
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink, df.schema.toAttributes))
-      val recoverFromChkpoint = outputMode == OutputMode.Complete()
-      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromChkpoint)
+      val recoverFromCheckpoint = outputMode == OutputMode.Complete()
+      val query = startQuery(sink, extraOptions, recoverFromCheckpoint = recoverFromCheckpoint)
       resultDf.createOrReplaceTempView(query.name)
       query
     } else if (source == SOURCE_NAME_FOREACH) {

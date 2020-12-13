@@ -1055,6 +1055,9 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
+    // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
+    // longer than two minutes.
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",

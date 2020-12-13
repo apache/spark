@@ -907,7 +907,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    * - year, month (stored as HiveIntervalYearMonth)
    * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
    *
-   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   * e.g. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
    *
    * This method mimics HiveIntervalDayTime.hashCode() in Hive.
    *
@@ -919,7 +919,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    *
    * - Spark's [[CalendarInterval]] has precision upto microseconds but Hive's
    *   HiveIntervalDayTime can store data with precision upto nanoseconds. So, any input intervals
-   *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
+   *   with nanosecond values will lead to wrong output hashes (i.e. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
     val totalMicroSeconds = calendarInterval.days * MICROS_PER_DAY + calendarInterval.microseconds

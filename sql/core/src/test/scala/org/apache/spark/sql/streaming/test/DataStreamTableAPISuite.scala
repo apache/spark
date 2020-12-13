@@ -107,12 +107,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("read: read table without streaming capability support") {
-    val tableIdentifer = "testcat.table_name"
+    val tableIdentifier = "testcat.table_name"
 
-    spark.sql(s"CREATE TABLE $tableIdentifer (id bigint, data string) USING foo")
+    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
 
     intercept[AnalysisException] {
-      spark.readStream.table(tableIdentifer)
+      spark.readStream.table(tableIdentifier)
     }.message.contains("does not support either micro-batch or continuous scan")
   }
 
@@ -213,7 +213,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("write: write to non-exist table with custom catalog") {
-    val tableIdentifier = "testcat.nonexisttable"
+    val tableIdentifier = "testcat.nonexistenttable"
 
     withTable(tableIdentifier) {
       runTestWithStreamAppend(tableIdentifier)
