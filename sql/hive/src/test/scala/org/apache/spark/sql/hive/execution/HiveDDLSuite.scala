@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -601,8 +602,8 @@ class HiveDDLSuite
     val tab = "tab_with_partitions"
     withTempDir { tmpDir =>
       val basePath = new File(tmpDir.getCanonicalPath)
-      val part1Path = new File(basePath + "/part1")
-      val part2Path = new File(basePath + "/part2")
+      val part1Path = new File(new File(basePath, "part10"), "part11")
+      val part2Path = new File(new File(basePath, "part20"), "part21")
       val dirSet = part1Path :: part2Path :: Nil
 
       // Before data insertion, all the directory are empty
@@ -2771,7 +2772,7 @@ class HiveDDLSuite
 
   test("Create Table LIKE with row format") {
     val catalog = spark.sessionState.catalog
-    withTable("sourceHiveTable", "sourceDsTable", "targetHiveTable1", "targetHiveTable2") {
+    withTable("sourceHiveTable", "sourceDsTable") {
       sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
       sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
 
@@ -2817,34 +2818,6 @@ class HiveDDLSuite
             """.stripMargin)
       }.getMessage
       assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS"))
-
-      // row format works with STORED AS hive format (from hive table)
-      spark.sql(
-        """
-          |CREATE TABLE targetHiveTable1 LIKE sourceHiveTable STORED AS PARQUET
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = 'test')
-          """.stripMargin)
-      var table = catalog.getTableMetadata(TableIdentifier("targetHiveTable1"))
-      assert(table.provider === Some("hive"))
-      assert(table.storage.inputFormat ===
-        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
-      assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      assert(table.storage.properties("test") == "test")
-
-      // row format works with STORED AS hive format (from datasource table)
-      spark.sql(
-        """
-          |CREATE TABLE targetHiveTable2 LIKE sourceDsTable STORED AS PARQUET
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = 'test')
-          """.stripMargin)
-      table = catalog.getTableMetadata(TableIdentifier("targetHiveTable2"))
-      assert(table.provider === Some("hive"))
-      assert(table.storage.inputFormat ===
-        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
-      assert(table.storage.serde === Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      assert(table.storage.properties("test") == "test")
     }
   }
 
@@ -2870,6 +2843,105 @@ class HiveDDLSuite
       // make sure there is no exception
       assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
       assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
+    }
+  }
+
+  test("SPARK-33546: CREATE TABLE LIKE should validate row format & file format") {
+    val catalog = spark.sessionState.catalog
+    withTable("sourceHiveTable", "sourceDsTable") {
+      sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
+      sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
+
+      // ROW FORMAT SERDE ... STORED AS [SEQUENCEFILE | RCFILE | TEXTFILE]
+      val allowSerdeFileFormats = Seq("TEXTFILE", "SEQUENCEFILE", "RCFILE")
+      Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+        allowSerdeFileFormats.foreach { format =>
+          withTable("targetTable") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+                 |STORED AS $format
+             """.stripMargin)
+
+            val expectedSerde = HiveSerDe.sourceToSerDe(format)
+            val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+            assert(table.provider === Some("hive"))
+            assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+            assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+            assert(table.storage.serde ===
+              Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          }
+        }
+
+        // negative case
+        hiveFormats.filterNot(allowSerdeFileFormats.contains(_)).foreach { format =>
+          withTable("targetTable") {
+            val ex = intercept[AnalysisException] {
+              spark.sql(
+                s"""
+                   |CREATE TABLE targetTable LIKE $sourceTable
+                   |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+                   |STORED AS $format
+             """.stripMargin)
+            }.getMessage
+            assert(ex.contains(
+              s"ROW FORMAT SERDE is incompatible with format '${format.toLowerCase(Locale.ROOT)}'"))
+          }
+        }
+      }
+
+      // ROW FORMAT DELIMITED ... STORED AS TEXTFILE
+      Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+        withTable("targetTable") {
+          spark.sql(
+            s"""
+               |CREATE TABLE targetTable LIKE $sourceTable
+               |ROW FORMAT DELIMITED
+               |STORED AS TEXTFILE
+             """.stripMargin)
+
+          val expectedSerde = HiveSerDe.sourceToSerDe("TEXTFILE")
+          val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+          assert(table.provider === Some("hive"))
+          assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+          assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+          assert(table.storage.serde === Some(expectedSerde.get.serde.get))
+
+          // negative case
+          val ex = intercept[AnalysisException] {
+            spark.sql(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT DELIMITED
+                 |STORED AS PARQUET
+             """.stripMargin)
+          }.getMessage
+          assert(ex.contains("ROW FORMAT DELIMITED is only compatible with 'textfile'"))
+        }
+      }
+
+      // ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+          withTable("targetTable") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT SERDE '${expectedSerde.get.serde.get}'
+                 |STORED AS INPUTFORMAT '${expectedSerde.get.inputFormat.get}'
+                 |OUTPUTFORMAT '${expectedSerde.get.outputFormat.get}'
+               """.stripMargin)
+
+            val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+            assert(table.provider === Some("hive"))
+            assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+            assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+            assert(table.storage.serde === Some(expectedSerde.get.serde.get))
+          }
+        }
+      }
     }
   }
 }

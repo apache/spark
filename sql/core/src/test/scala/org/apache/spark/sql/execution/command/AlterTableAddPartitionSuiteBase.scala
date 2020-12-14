@@ -154,7 +154,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
         |  part8 = '2020-11-23',
         |  part9 = '2020-11-23 22:13:10.123456'
         |""".stripMargin
-      sql(s"ALTER TABLE $t ADD PARTITION ($partSpec) LOCATION 'loc1'")
+      sql(s"ALTER TABLE $t ADD PARTITION ($partSpec)")
       val expected = Map(
         "part0" -> "-1",
         "part1" -> "0",

@@ -2105,14 +2105,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ALTER VIEW AS QUERY") {
-    val v = "testcat.ns1.ns2.v"
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER VIEW $v AS SELECT 1")
-    }
-    assert(e.message.contains("ALTER VIEW QUERY is only supported with temp views or v1 tables"))
-  }
-
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
@@ -2618,6 +2610,11 @@ class DataSourceV2SQLSuite
       "testcat",
       "v",
       "ALTER VIEW ... UNSET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v AS SELECT 1",
+      "testcat",
+      "v",
+      "ALTER VIEW ... AS")
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {

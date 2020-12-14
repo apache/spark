@@ -316,14 +316,6 @@ case class AlterTableSerDePropertiesStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * ALTER VIEW ... Query command, as parsed from SQL.
- */
-case class AlterViewAsStatement(
-    viewName: Seq[String],
-    originalText: String,
-    query: LogicalPlan) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
