@@ -37,7 +37,7 @@ class StatePartitionReader(
       partition.operatorId, partition.partition, partition.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
 
-    val store = StateStore.get(stateStoreProviderId, keySchema, valueSchema,
+    val store = StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
       indexOrdinal = None, version = partition.version, storeConf = storeConf,
       hadoopConf = hadoopConf.value)
 
