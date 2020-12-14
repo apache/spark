@@ -1,4 +1,4 @@
-/*
+SPARK-32406: reset - single configuration/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -190,7 +190,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
     val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores;")
+    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores")
 
     // user defined settings
     sql("SET spark.abc=xyz")
