@@ -34,7 +34,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
-    super.test(s"ALTER TABLE .. ADD PARTITION $version: " + testName, testTags: _*)(testFun)
+    super.test(s"ALTER TABLE .. DROP PARTITION $version: " + testName, testTags: _*)(testFun)
   }
 
   protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
