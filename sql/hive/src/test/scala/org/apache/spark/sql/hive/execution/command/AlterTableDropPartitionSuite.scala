@@ -22,8 +22,9 @@ import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class AlterTableDropPartitionSuite
-    extends v1.AlterTableDropPartitionSuiteBase
-    with TestHiveSingleton {
+  extends v1.AlterTableDropPartitionSuiteBase
+  with TestHiveSingleton {
+
   override def version: String = "Hive V1"
   override def defaultUsing: String = "USING HIVE"
 
