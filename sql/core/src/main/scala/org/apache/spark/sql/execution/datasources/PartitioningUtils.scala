@@ -453,7 +453,7 @@ object PartitioningUtils {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
-      // It reduces the cases for decimals by disallowing values having scale (eg. `1.1`).
+      // It reduces the cases for decimals by disallowing values having scale (e.g. `1.1`).
       require(bigDecimal.scale <= 0)
       // `DecimalType` conversion can fail when
       //   1. The precision is bigger than 38.

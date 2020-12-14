@@ -835,13 +835,13 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel, avgMetrics=[], subModels=None):
+    def __init__(self, bestModel, avgMetrics=None, subModels=None):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in
         #: CrossValidator.estimatorParamMaps, in the corresponding order.
-        self.avgMetrics = avgMetrics
+        self.avgMetrics = avgMetrics or []
         #: sub model list from cross validation
         self.subModels = subModels
 
@@ -1323,12 +1323,12 @@ class TrainValidationSplitModel(Model, _TrainValidationSplitParams, MLReadable, 
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, bestModel, validationMetrics=[], subModels=None):
+    def __init__(self, bestModel, validationMetrics=None, subModels=None):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from train validation split
         self.bestModel = bestModel
         #: evaluated validation metrics
-        self.validationMetrics = validationMetrics
+        self.validationMetrics = validationMetrics or []
         #: sub models from train validation split
         self.subModels = subModels
 

@@ -499,7 +499,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      if (ansiEnabled) {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, zoneId))
+      } else {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      }
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -1135,15 +1139,22 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         val zid = getZoneId()
         (c, evPrim, evNull) =>
-          code"""
-          scala.Option<Integer> $intOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
-          if ($intOpt.isDefined()) {
-            $evPrim = ((Integer) $intOpt.get()).intValue();
+          if (ansiEnabled) {
+            code"""
+              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c, $zid);
+            """
           } else {
-            $evNull = true;
+            code"""
+              scala.Option<Integer> $intOpt =
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+              if ($intOpt.isDefined()) {
+                $evPrim = ((Integer) $intOpt.get()).intValue();
+              } else {
+                $evNull = true;
+              }
+            """
           }
-         """
+
       case TimestampType =>
         val zid = getZoneId()
         (c, evPrim, evNull) =>

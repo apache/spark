@@ -175,7 +175,7 @@ class CodegenContext extends Logging {
     mutable.ArrayBuffer.empty[(String, String)]
 
   /**
-   * The mapping between mutable state types and corrseponding compacted arrays.
+   * The mapping between mutable state types and corresponding compacted arrays.
    * The keys are java type string. The values are [[MutableStateArrays]] which encapsulates
    * the compacted arrays for the mutable states with the same java type.
    *

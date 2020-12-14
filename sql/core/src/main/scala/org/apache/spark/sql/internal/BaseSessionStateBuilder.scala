@@ -273,7 +273,9 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
+  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildDataSourceRewriteRules(session)
+  }
 
   /**
    * Planner that converts optimized logical plans to physical plans.

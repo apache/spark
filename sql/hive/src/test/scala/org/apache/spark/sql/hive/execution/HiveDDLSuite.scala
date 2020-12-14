@@ -166,10 +166,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testDropPartitions(isDatasourceTable = false)
   }
 
-  test("alter table: add partition") {
-    testAddPartitions(isDatasourceTable = false)
-  }
-
   test("drop table") {
     testDropTable(isDatasourceTable = false)
   }
@@ -879,11 +875,17 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
+        assertAnalysisError(
+          s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
+          s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
+            "Please use ALTER TABLE instead.")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
+        assertAnalysisError(
+          s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
+          s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
+            "Please use ALTER TABLE instead.")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
@@ -1048,7 +1050,8 @@ class HiveDDLSuite
       val message = intercept[AnalysisException] {
         sql("DROP VIEW tab1")
       }.getMessage
-      assert(message.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+      assert(message.contains(
+        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
     }
   }
 

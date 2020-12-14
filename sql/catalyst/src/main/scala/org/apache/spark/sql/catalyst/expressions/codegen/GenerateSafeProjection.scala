@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.types._
 
 /**
- * Java can not access Projection (in package object)
+ * Java cannot access Projection (in package object)
  */
 abstract class BaseProjection extends Projection {}
 
