@@ -163,7 +163,7 @@
     <dependency>
       <groupId>jakarta.servlet</groupId>
       <artifactId>jakarta.servlet-api</artifactId>
-      <version>${javaxservlet.version}</version>
+      <version>${jakartaservlet.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
