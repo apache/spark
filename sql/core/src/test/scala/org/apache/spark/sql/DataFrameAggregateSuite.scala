@@ -1077,6 +1077,18 @@ class DataFrameAggregateSuite extends QueryTest
     assert(aggs.head.output.map(_.dataType.simpleString).head ===
       aggs.last.output.map(_.dataType.simpleString).head)
   }
+  
+  test("SPARK-33726 Duplicate field name aggregation should not have null values in dataframe") {
+    val query =
+      """|with T as (select id as a, -id as x from range(3)), U as (select id as b,
+         |cast(id as string) as x from range(3)) select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    val nullCount = df.filter($"ma".isNull ).count + df.filter($"mb".isNull ).count
+    + df.filter($"U.x".isNull ).count + df.filter($"T.x".isNull).count
+    assert(nullCount == 0)
+  }
 }
 
 case class B(c: Option[Double])
