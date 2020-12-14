@@ -55,6 +55,7 @@ trait SharedThriftServer extends SharedSparkSession {
   def mode: ServerMode.Value
 
   override def beforeAll(): Unit = {
+    SharedState.GLOBAL_SHARED_STATE.set(null)
     super.beforeAll()
     // Retries up to 3 times with different port numbers if the server fails to start
     (1 to 3).foldLeft(Try(startThriftServer(0))) { case (started, attempt) =>
