@@ -21,7 +21,7 @@ import java.text.{DecimalFormat, DecimalFormatSymbols, ParsePosition}
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -30,7 +30,9 @@ object ExprUtils {
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
       exp.eval() match {
-        case s: UTF8String if s != null => DataType.fromDDL(s.toString)
+        case s: UTF8String if s != null =>
+          val dataType = DataType.fromDDL(s.toString)
+          CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw new AnalysisException(
           s"The expression '${exp.sql}' is not a valid schema string.")
       }

@@ -48,7 +48,7 @@ private[kafka010] class KafkaBatch(
     // id. Hence, we should generate a unique id for each query.
     val uniqueGroupId = KafkaSourceProvider.batchUniqueGroupId(sourceOptions)
 
-    val kafkaOffsetReader = new KafkaOffsetReader(
+    val kafkaOffsetReader = KafkaOffsetReader.build(
       strategy,
       KafkaSourceProvider.kafkaParamsForDriver(specifiedKafkaParams),
       sourceOptions,

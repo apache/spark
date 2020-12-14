@@ -502,22 +502,15 @@ class Word2VecModel private[spark] (
   private val vectorSize = wordVectors.length / numWords
 
   // wordList: Ordered list of words obtained from wordIndex.
-  private val wordList: Array[String] = {
-    val (wl, _) = wordIndex.toSeq.sortBy(_._2).unzip
-    wl.toArray
+  private lazy val wordList: Array[String] = {
+    wordIndex.toSeq.sortBy(_._2).iterator.map(_._1).toArray
   }
 
   // wordVecNorms: Array of length numWords, each value being the Euclidean norm
   //               of the wordVector.
-  private val wordVecNorms: Array[Float] = {
-    val wordVecNorms = new Array[Float](numWords)
-    var i = 0
-    while (i < numWords) {
-      val vec = wordVectors.slice(i * vectorSize, i * vectorSize + vectorSize)
-      wordVecNorms(i) = blas.snrm2(vectorSize, vec, 1)
-      i += 1
-    }
-    wordVecNorms
+  private lazy val wordVecNorms: Array[Float] = {
+    val size = vectorSize
+    Array.tabulate(numWords)(i => blas.snrm2(size, wordVectors, i * size, 1))
   }
 
   @Since("1.5.0")
@@ -538,9 +531,13 @@ class Word2VecModel private[spark] (
   @Since("1.1.0")
   def transform(word: String): Vector = {
     wordIndex.get(word) match {
-      case Some(ind) =>
-        val vec = wordVectors.slice(ind * vectorSize, ind * vectorSize + vectorSize)
-        Vectors.dense(vec.map(_.toDouble))
+      case Some(index) =>
+        val size = vectorSize
+        val offset = index * size
+        val array = Array.ofDim[Double](size)
+        var i = 0
+        while (i < size) { array(i) = wordVectors(offset + i); i += 1 }
+        Vectors.dense(array)
       case None =>
         throw new IllegalStateException(s"$word not in vocabulary")
     }
@@ -560,7 +557,7 @@ class Word2VecModel private[spark] (
 
   /**
    * Find synonyms of the vector representation of a word, possibly
-   * including any words in the model vocabulary whose vector respresentation
+   * including any words in the model vocabulary whose vector representation
    * is the supplied vector.
    * @param vector vector representation of a word
    * @param num number of synonyms to find

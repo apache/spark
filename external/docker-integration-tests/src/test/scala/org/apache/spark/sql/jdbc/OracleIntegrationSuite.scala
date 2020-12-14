@@ -401,7 +401,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val values = rows(0)
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
-    assert(values.getBoolean(2).equals(false))
+    assert(values.getBoolean(2) == false)
   }
 
   test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {

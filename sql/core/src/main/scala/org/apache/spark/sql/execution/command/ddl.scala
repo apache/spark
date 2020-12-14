@@ -89,8 +89,8 @@ case class CreateDatabaseCommand(
  * A command for users to remove a database from the system.
  *
  * 'ifExists':
- * - true, if database_name does't exist, no action
- * - false (default), if database_name does't exist, a warning message will be issued
+ * - true, if database_name doesn't exist, no action
+ * - false (default), if database_name doesn't exist, a warning message will be issued
  * 'cascade':
  * - true, the dependent objects are automatically dropped before dropping database.
  * - false (default), it is in the Restrict mode. The database cannot be dropped if
@@ -738,7 +738,8 @@ case class AlterTableRecoverPartitionsCommand(
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
       val numParallelism = Math.min(serializedPaths.length,
-        Math.min(spark.sparkContext.defaultParallelism, 10000))
+        Math.min(spark.sessionState.conf.defaultParallelism
+          .getOrElse(spark.sparkContext.defaultParallelism), 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
       logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")

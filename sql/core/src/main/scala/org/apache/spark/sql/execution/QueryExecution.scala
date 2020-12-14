@@ -344,7 +344,7 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements,
-      // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,

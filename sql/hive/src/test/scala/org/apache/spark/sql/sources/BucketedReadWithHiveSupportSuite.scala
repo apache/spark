@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class BucketedReadWithHiveSupportSuite extends BucketedReadSuite with TestHiveSingleton {
+class BucketedReadWithHiveSupportSuite
+  extends BucketedReadSuite with DisableAdaptiveExecutionSuite with TestHiveSingleton {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")

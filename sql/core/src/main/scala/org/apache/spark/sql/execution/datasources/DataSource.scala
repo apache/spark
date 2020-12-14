@@ -211,7 +211,7 @@ case class DataSource(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
 
-    // We just print a waring message if the data schema and partition schema have the duplicate
+    // We just print a warning message if the data schema and partition schema have the duplicate
     // columns. This is because we allow users to do so in the previous Spark releases and
     // we have the existing tests for the cases (e.g., `ParquetHadoopFsRelationSuite`).
     // See SPARK-18108 and SPARK-21144 for related discussions.

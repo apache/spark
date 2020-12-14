@@ -198,7 +198,7 @@ object SparkBuild extends PomBuild {
   )
 
   // Silencer: Scala compiler plugin for warning suppression
-  // Aim: enable fatal warnings, but supress ones related to using of deprecated APIs
+  // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
   // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
   // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
@@ -222,7 +222,7 @@ object SparkBuild extends PomBuild {
           "-Xfatal-warnings",
           "-deprecation",
           "-Ywarn-unused-import",
-          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and supress them
+          "-P:silencer:globalFilters=.*deprecated.*" //regex to catch deprecation warnings and suppress them
         )
       } else {
         Seq(
@@ -327,7 +327,7 @@ object SparkBuild extends PomBuild {
     // to be enabled in specific ones that have previous artifacts
     MimaKeys.mimaFailOnNoPrevious := false,
 
-    // To prevent intermittent compliation failures, see also SPARK-33297
+    // To prevent intermittent compilation failures, see also SPARK-33297
     // Apparently we can remove this when we use JDK 11.
     Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
   )
@@ -394,6 +394,8 @@ object SparkBuild extends PomBuild {
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
+
+  enable(YARN.settings)(yarn)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -654,7 +656,21 @@ object DependencyOverrides {
  */
 object ExcludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
+    // SPARK-33705: Due to sbt compiler issues, it brings exclusions defined in maven pom back to
+    // the classpath directly and assemble test scope artifacts to assembly/target/scala-xx/jars,
+    // which is also will be added to the classpath of some unit tests that will build a subprocess
+    // to run `spark-submit`, e.g. HiveThriftServer2Test.
+    //
+    // These artifacts are for the jersey-1 API but Spark use jersey-2 ones, so it cause test
+    // flakiness w/ jar conflicts issues.
+    //
+    // Also jersey-1 is only used by yarn module(see resource-managers/yarn/pom.xml) for testing
+    // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
+    excludeDependencies ++= Seq(
+      ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -755,6 +771,15 @@ object Hive {
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
+  )
+}
+
+object YARN {
+  lazy val settings = Seq(
+    excludeDependencies --= Seq(
+      ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -1055,6 +1080,9 @@ object TestSettings {
       }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
+    // Slowpoke notifications: receive notifications every 5 minute of tests that have been running
+    // longer than two minutes.
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
