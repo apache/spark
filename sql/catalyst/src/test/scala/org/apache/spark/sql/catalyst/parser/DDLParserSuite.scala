@@ -2143,8 +2143,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = true,
-      purge = false,
-      retainData = false)
+      purge = false)
     val expected2_table = expected1_table.copy(ifExists = false)
     val expected1_purge = expected1_table.copy(purge = true)
 
@@ -2157,8 +2156,7 @@ class DDLParserSuite extends AnalysisTest {
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
-      purge = false,
-      retainData = false)
+      purge = false)
 
     val parsed3_table = parsePlan(sql3_table)
     comparePlans(parsed3_table, expected3_table)

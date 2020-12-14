@@ -666,8 +666,7 @@ case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command {
+    purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
 
