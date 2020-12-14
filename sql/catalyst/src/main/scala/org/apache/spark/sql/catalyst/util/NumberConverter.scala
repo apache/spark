@@ -33,7 +33,7 @@ object NumberConverter {
     var i = value.length - 1
     while (tmpV != 0) {
       val q = tmpV / radix
-      value(i) = (tmpV - q * radix).byteValue()
+      value(i) = (tmpV - q * radix).byteValue
       tmpV = q
       i -= 1
     }
