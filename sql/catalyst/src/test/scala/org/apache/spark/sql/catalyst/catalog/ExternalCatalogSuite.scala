@@ -385,8 +385,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
-    val newLocationPart1 = newUriForDatabase()
-    val newLocationPart2 = newUriForDatabase()
+    val newLocationPart1 = newUriForPartition(Seq("p1=1", "p2=2"))
+    val newLocationPart2 = newUriForPartition(Seq("p1=3", "p2=4"))
 
     val partition1 =
       CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
@@ -968,6 +968,11 @@ abstract class CatalogTestUtils {
   def newFunc(): CatalogFunction = newFunc("funcName")
 
   def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+
+  def newUriForPartition(parts: Seq[String]): URI = {
+    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
+    new URI(path.toURI.toString.stripSuffix("/"))
+  }
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
