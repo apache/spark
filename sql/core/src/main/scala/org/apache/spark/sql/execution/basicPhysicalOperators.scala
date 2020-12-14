@@ -805,11 +805,19 @@ case class SubqueryExec(name: String, child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute()
+    throw new IllegalStateException("SubqueryExec.doExecute should never be called")
   }
 
   override def executeCollect(): Array[InternalRow] = {
     ThreadUtils.awaitResult(relationFuture, Duration.Inf)
+  }
+
+  override def executeTake(n: Int): Array[InternalRow] = {
+    executeCollect().take(n)
+  }
+
+  override def executeTail(n: Int): Array[InternalRow] = {
+    executeCollect().takeRight(n)
   }
 
   override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
