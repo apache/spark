@@ -992,9 +992,7 @@ abstract class CatalogTestUtils {
   def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
 
   def newUriForPartition(parts: Seq[String]): URI = {
-    val path = parts.foldLeft(Utils.createTempDir()) {
-      case (parent, part) => new java.io.File(parent, part)
-    }
+    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
     new URI(path.toURI.toString.stripSuffix("/"))
   }
 
