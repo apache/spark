@@ -18,19 +18,22 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import java.util
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.execution.streaming.CommitLog
 import org.apache.spark.sql.execution.streaming.state.{StateSchemaFileManager, StateStore, StateStoreId}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StateDataSourceV2 extends TableProvider with DataSourceRegister {
 
   import StateDataSourceV2._
 
-  lazy val session = SparkSession.active
+  lazy val session: SparkSession = SparkSession.active
 
   override def shortName(): String = "state"
 
@@ -42,18 +45,19 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
       throw new AnalysisException(s"'$PARAM_CHECKPOINT_LOCATION' must be specified.")
     }.get
 
-    val version = Option(properties.get(PARAM_VERSION)).map(_.toInt).orElse {
-      throw new AnalysisException(s"'$PARAM_VERSION' must be specified.")
+    val version = Option(properties.get(PARAM_VERSION)).map(_.toLong).orElse {
+      Some(getLastCommittedBatch(checkpointLocation))
     }.get
 
-    val operatorId = Option(properties.get(PARAM_OPERATOR_ID)).map(_.toInt).orElse {
-      throw new AnalysisException(s"'$PARAM_OPERATOR_ID' must be specified.")
-    }.get
+    val operatorId = Option(properties.get(PARAM_OPERATOR_ID)).map(_.toInt)
+      .orElse(Some(0)).get
 
     val storeName = Option(properties.get(PARAM_STORE_NAME))
       .orElse(Some(StateStoreId.DEFAULT_STORE_NAME)).get
 
-    new StateTable(session, schema, checkpointLocation, version, operatorId, storeName)
+    val stateCheckpointLocation = new Path(checkpointLocation, "state")
+    new StateTable(session, schema, stateCheckpointLocation.toString, version, operatorId,
+      storeName)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -61,15 +65,16 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
       throw new AnalysisException(s"'$PARAM_CHECKPOINT_LOCATION' must be specified.")
     }.get
 
-    val operatorId = Option(options.get(PARAM_OPERATOR_ID)).map(_.toInt).orElse {
-      throw new AnalysisException(s"'$PARAM_OPERATOR_ID' must be specified.")
-    }.get
+    val operatorId = Option(options.get(PARAM_OPERATOR_ID)).map(_.toInt)
+      .orElse(Some(0)).get
 
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val storeName = Option(options.get(PARAM_STORE_NAME))
       .orElse(Some(StateStoreId.DEFAULT_STORE_NAME)).get
 
-    val storeId = new StateStoreId(checkpointLocation, operatorId, partitionId, storeName)
+    val stateCheckpointLocation = new Path(checkpointLocation, "state")
+    val storeId = new StateStoreId(stateCheckpointLocation.toString, operatorId, partitionId,
+      storeName)
     val manager = new StateSchemaFileManager(storeId, session.sessionState.newHadoopConf())
     if (manager.fileExist()) {
       val (keySchema, valueSchema) = manager.readSchema()
@@ -80,6 +85,20 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
       throw new UnsupportedOperationException("Schema information file doesn't exist - schema " +
         "should be explicitly specified.")
     }
+  }
+
+  private def getLastCommittedBatch(checkpointLocation: String): Long = {
+    val commitLog = new CommitLog(session, new Path(checkpointLocation, "commits").toString)
+    val lastCommittedBatchId = commitLog.getLatest() match {
+      case Some((lastId, _)) => lastId
+      case None => -1
+    }
+
+    if (lastCommittedBatchId < 0) {
+      throw new AnalysisException("No committed batch found.")
+    }
+
+    lastCommittedBatchId.toLong + 1
   }
 
   override def supportsExternalMetadata(): Boolean = true

@@ -29,8 +29,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class StateTable(
     session: SparkSession,
     override val schema: StructType,
-    checkpointLocation: String,
-    version: Int,
+    stateCheckpointLocation: String,
+    version: Long,
     operatorId: Int,
     storeName: String)
   extends Table with SupportsRead {
@@ -43,15 +43,15 @@ class StateTable(
   }
 
   override def name(): String =
-    s"state-table-cp-$checkpointLocation-ver-$version-operator-$operatorId-store-$storeName"
+    s"state-table-cp-$stateCheckpointLocation-ver-$version-operator-$operatorId-store-$storeName"
 
   override def capabilities(): util.Set[TableCapability] = CAPABILITY
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-    new StateScanBuilder(session, schema, checkpointLocation, version, operatorId, storeName)
+    new StateScanBuilder(session, schema, stateCheckpointLocation, version, operatorId, storeName)
 
   override def properties(): util.Map[String, String] = Map(
-      "checkpointLocation" -> checkpointLocation,
+      "stateCheckpointLocation" -> stateCheckpointLocation,
       "version" -> version.toString,
       "operatorId" -> operatorId.toString,
       "storeName" -> storeName).asJava

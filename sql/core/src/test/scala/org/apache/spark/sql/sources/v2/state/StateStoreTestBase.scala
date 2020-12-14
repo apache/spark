@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.state
 import java.io.File
 import java.sql.Timestamp
 
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
@@ -292,6 +292,19 @@ trait StateStoreTestBase extends StreamTest {
     }
 
     sessionUpdates.map(si => (si.id, si.numEvents, si.durationMs, si.expired))
+  }
+
+  protected def getSchemaForFlatMapGroupsWithStateQuery(stateVersion: Int): StructType = {
+    val keySchema = new StructType().add("value", StringType, nullable = true)
+    val valueSchema = if (stateVersion == 1) {
+      Encoders.product[SessionInfo].schema.add("timeoutTimestamp", IntegerType, nullable = false)
+    } else { // stateVersion == 2
+      new StructType()
+        .add("groupState", Encoders.product[SessionInfo].schema)
+        .add("timeoutTimestamp", LongType, nullable = false)
+    }
+
+    new StructType().add("key", keySchema).add("value", valueSchema)
   }
 }
 
