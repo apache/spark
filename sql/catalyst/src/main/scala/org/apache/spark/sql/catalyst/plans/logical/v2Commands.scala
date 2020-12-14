@@ -1,4 +1,4 @@
-/*
+		/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -666,8 +666,7 @@ case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command {
+    purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
 

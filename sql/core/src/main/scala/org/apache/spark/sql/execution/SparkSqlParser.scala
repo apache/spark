@@ -447,14 +447,16 @@ class SparkSqlAstBuilder extends AstBuilder {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
     val location = visitLocationSpecList(ctx.locationSpec())
-    // TODO: Do not skip serde check for CREATE TABLE LIKE.
     val serdeInfo = getSerdeInfo(
-      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx, skipCheck = true)
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    // TODO: remove this restriction as it seems unnecessary.
+    // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
+    // it's a bit weird to use the default file format, but it's also weird to get file format
+    // from the source table while the serde class is user-specified.
+    // Here we require both serde and format to be specified, to avoid confusion.
     serdeInfo match {
       case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
         if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
@@ -463,7 +465,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
     }
 
-    // TODO: also look at `HiveSerDe.getDefaultStorage`.
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(

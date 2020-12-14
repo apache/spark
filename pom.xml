@@ -138,7 +138,7 @@
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.6.6</orc.version>
     <jetty.version>9.4.28.v20200408</jetty.version>
-    <javaxservlet.version>3.1.0</javaxservlet.version>
+    <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -169,11 +169,10 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.10.5</fasterxml.jackson.version>
-    <fasterxml.jackson-databind.version>2.10.5.1</fasterxml.jackson-databind.version>
+    <fasterxml.jackson.version>2.11.4</fasterxml.jackson.version>
     <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <commons-codec.version>1.10</commons-codec.version>
+    <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.5</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -774,7 +773,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${fasterxml.jackson-databind.version}</version>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
