@@ -62,7 +62,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
       t: String,
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
-    checkPartitions(t, specs.map(_.mapValues(_.toString)): _*)
+    checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
     val specStr = specs.map(
       _.map {
         case (k, v: String) => s"$k = '$v'"
