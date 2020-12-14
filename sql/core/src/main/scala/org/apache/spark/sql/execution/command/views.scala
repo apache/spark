@@ -285,9 +285,6 @@ case class AlterViewAsCommand(
 
   private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
     val viewMeta = session.sessionState.catalog.getTableMetadata(name)
-    if (viewMeta.tableType != CatalogTableType.VIEW) {
-      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
-    }
 
     // Detect cyclic view reference on ALTER VIEW.
     val viewIdent = viewMeta.identifier

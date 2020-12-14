@@ -742,6 +742,16 @@ case class RepairTable(child: LogicalPlan) extends Command {
 }
 
 /**
+ * The logical plan of the ALTER VIEW ... AS command.
+ */
+case class AlterViewAs(
+    child: LogicalPlan,
+    originalText: String,
+    query: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class AlterViewSetProperties(
