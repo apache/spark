@@ -605,8 +605,8 @@ class HiveDDLSuite
     val tab = "tab_with_partitions"
     withTempDir { tmpDir =>
       val basePath = new File(tmpDir.getCanonicalPath)
-      val part1Path = new File(basePath + "/part1")
-      val part2Path = new File(basePath + "/part2")
+      val part1Path = new File(new File(basePath, "part10"), "part11")
+      val part2Path = new File(new File(basePath, "part20"), "part21")
       val dirSet = part1Path :: part2Path :: Nil
 
       // Before data insertion, all the directory are empty
