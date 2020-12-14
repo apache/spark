@@ -21,7 +21,6 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrate
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.util.S3FileUtils
 
 
 /**
@@ -123,6 +123,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
         val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        S3FileUtils.tryOpenClose(hadoopConf, tablePath)
         fs.getContentSummary(tablePath).getLength
       } catch {
         case e: IOException =>
