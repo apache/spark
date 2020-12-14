@@ -2053,7 +2053,6 @@ class Analyzer(override val catalogManager: CatalogManager)
               other
           }
         }
-      case e => e
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
