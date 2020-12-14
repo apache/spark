@@ -174,7 +174,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("sorted output") {
+  test("SPARK-33777: sorted output") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       val table = s"$catalog.ns.dateTable"
