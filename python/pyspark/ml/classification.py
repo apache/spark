@@ -611,12 +611,14 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
+                 aggregationDepth=2, maxBlockSizeInMB=0.0,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
+                 aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -629,12 +631,14 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                  aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
+                  aggregationDepth=2, maxBlockSizeInMB=0.0,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
+                  aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
