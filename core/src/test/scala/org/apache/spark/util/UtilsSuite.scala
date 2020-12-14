@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
@@ -1431,6 +1432,17 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.executorOffHeapMemorySizeAsMb(sparkConf)
     }.getMessage
     assert(message.contains(expected))
+  }
+
+  test("isPushBasedShuffleEnabled when both PUSH_BASED_SHUFFLE_ENABLED" +
+    " and SHUFFLE_SERVICE_ENABLED are true") {
+    val conf = new SparkConf()
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, false)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
 }
 

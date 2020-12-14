@@ -368,7 +368,7 @@ class CleanerTester(
 
   val toBeCleanedRDDIds = new HashSet[Int] ++= rddIds
   val toBeCleanedShuffleIds = new HashSet[Int] ++= shuffleIds
-  val toBeCleanedBroadcstIds = new HashSet[Long] ++= broadcastIds
+  val toBeCleanedBroadcastIds = new HashSet[Long] ++= broadcastIds
   val toBeCheckpointIds = new HashSet[Long] ++= checkpointIds
   val isDistributed = !sc.isLocal
 
@@ -384,7 +384,7 @@ class CleanerTester(
     }
 
     def broadcastCleaned(broadcastId: Long): Unit = {
-      toBeCleanedBroadcstIds.synchronized { toBeCleanedBroadcstIds -= broadcastId }
+      toBeCleanedBroadcastIds.synchronized { toBeCleanedBroadcastIds -= broadcastId }
       logInfo("Broadcast " + broadcastId + " cleaned")
     }
 
@@ -508,8 +508,8 @@ class CleanerTester(
     val s2 = toBeCleanedShuffleIds.synchronized {
       toBeCleanedShuffleIds.toSeq.sorted.mkString("[", ", ", "]")
     }
-    val s3 = toBeCleanedBroadcstIds.synchronized {
-      toBeCleanedBroadcstIds.toSeq.sorted.mkString("[", ", ", "]")
+    val s3 = toBeCleanedBroadcastIds.synchronized {
+      toBeCleanedBroadcastIds.toSeq.sorted.mkString("[", ", ", "]")
     }
     s"""
        |\tRDDs = $s1
@@ -521,7 +521,7 @@ class CleanerTester(
   private def isAllCleanedUp =
     toBeCleanedRDDIds.synchronized { toBeCleanedRDDIds.isEmpty } &&
     toBeCleanedShuffleIds.synchronized { toBeCleanedShuffleIds.isEmpty } &&
-    toBeCleanedBroadcstIds.synchronized { toBeCleanedBroadcstIds.isEmpty } &&
+    toBeCleanedBroadcastIds.synchronized { toBeCleanedBroadcastIds.isEmpty } &&
     toBeCheckpointIds.synchronized { toBeCheckpointIds.isEmpty }
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {

@@ -390,8 +390,6 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
-      // Make maintenance thread do snapshots and cleanups very fast
-      .set(StateStore.MAINTENANCE_INTERVAL_CONFIG, "10ms")
       // Make sure that when SparkContext stops, the StateStore maintenance thread 'quickly'
       // fails to talk to the StateStoreCoordinator and unloads all the StateStores
       .set(RPC_NUM_RETRIES, 1)
@@ -400,6 +398,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
+    // Make maintenance thread do snapshots and cleanups very fast
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10L)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = newStoreProvider(storeProviderId.storeId)

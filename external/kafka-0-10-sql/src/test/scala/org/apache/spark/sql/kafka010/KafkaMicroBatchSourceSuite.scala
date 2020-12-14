@@ -608,7 +608,9 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     // in executors.
     val query = kafka.map(kv => kv._2.toInt).writeStream.foreach(new ForeachWriter[Int] {
       override def open(partitionId: Long, version: Long): Boolean = {
+        // Re-create topic since Kafka auto topic creation is not supported by Spark
         KafkaSourceSuite.globalTestUtils.deleteTopic(topic)
+        KafkaSourceSuite.globalTestUtils.createTopic(topic)
         true
       }
 
@@ -690,19 +692,25 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("allow group.id prefix") {
-    testGroupId("groupIdPrefix", (expected, actual) => {
-      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
-        "Valid consumer groups don't contain the expected group id - " +
-        s"Valid consumer groups: $actual / expected group id: $expected")
-    })
+    // Group ID prefix is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("groupIdPrefix", (expected, actual) => {
+        assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+          "Valid consumer groups don't contain the expected group id - " +
+            s"Valid consumer groups: $actual / expected group id: $expected")
+      })
+    }
   }
 
   test("allow group.id override") {
-    testGroupId("kafka.group.id", (expected, actual) => {
-      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
-        s"contain the expected group id - Valid consumer groups: $actual / " +
-        s"expected group id: $expected")
-    })
+    // Group ID override is only supported by consumer based offset reader
+    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+      testGroupId("kafka.group.id", (expected, actual) => {
+        assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+          s"contain the expected group id - Valid consumer groups: $actual / " +
+          s"expected group id: $expected")
+      })
+    }
   }
 
   private def testGroupId(groupIdKey: String,
@@ -1120,6 +1128,20 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 }
 
+
+class KafkaMicroBatchV1SourceWithAdminSuite extends KafkaMicroBatchV1SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
+
+class KafkaMicroBatchV2SourceWithAdminSuite extends KafkaMicroBatchV2SourceSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING.key, "false")
+  }
+}
 
 class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.TimeZone
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -41,9 +42,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.InMemoryTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
@@ -52,6 +55,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
       testRelation.select('b).analyze
+    }
+  }
+
+  test("fail if a leaf node has char/varchar type output") {
+    val schema1 = new StructType().add("c", CharType(5))
+    val schema2 = new StructType().add("c", VarcharType(5))
+    val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+    Seq(schema1, schema2, schema3).foreach { schema =>
+      val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+      intercept[IllegalStateException] {
+        DataSourceV2Relation(
+          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+      }
     }
   }
 
@@ -411,7 +427,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+  test("SPARK-12102: Ignore nullability when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
     val plan = relation.select(
@@ -649,6 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)

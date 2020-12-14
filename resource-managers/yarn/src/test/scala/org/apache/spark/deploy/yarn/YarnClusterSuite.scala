@@ -230,6 +230,37 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
+  test("running Spark in yarn-cluster mode displays driver log links") {
+    val log4jConf = new File(tempDir, "log4j.properties")
+    val logOutFile = new File(tempDir, "logs")
+    Files.write(
+      s"""log4j.rootCategory=DEBUG,file
+         |log4j.appender.file=org.apache.log4j.FileAppender
+         |log4j.appender.file.file=$logOutFile
+         |log4j.appender.file.layout=org.apache.log4j.PatternLayout
+         |""".stripMargin,
+      log4jConf, StandardCharsets.UTF_8)
+    // Since this test is trying to extract log output from the SparkSubmit process itself,
+    // standard options to the Spark process don't take effect. Leverage the java-opts file which
+    // will get picked up for the SparkSubmit process.
+    val confDir = new File(tempDir, "conf")
+    confDir.mkdir()
+    val javaOptsFile = new File(confDir, "java-opts")
+    Files.write(s"-Dlog4j.configuration=file://$log4jConf\n", javaOptsFile, StandardCharsets.UTF_8)
+
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode = false,
+      mainClassName(YarnClusterDriver.getClass),
+      appArgs = Seq(result.getAbsolutePath),
+      extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
+      extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
+    checkResult(finalState, result)
+    val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
+    val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
+    logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
+    logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
+  }
+
   test("timeout to get SparkContext in cluster mode triggers failure") {
     val timeout = 2000
     val finalState = runSpark(false, mainClassName(SparkContextTimeoutApp.getClass),

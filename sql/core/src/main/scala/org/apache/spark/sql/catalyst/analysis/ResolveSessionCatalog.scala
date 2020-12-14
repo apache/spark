@@ -27,7 +27,8 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -50,9 +51,6 @@ class ResolveSessionCatalog(
       cols.foreach(c => failNullType(c.dataType))
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
-            cols.foreach(c => failCharType(c.dataType))
-          }
           cols.foreach { c =>
             assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
             if (!c.nullable) {
@@ -62,7 +60,6 @@ class ResolveSessionCatalog(
           }
           AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
       }.getOrElse {
-        cols.foreach(c => failCharType(c.dataType))
         val changes = cols.map { col =>
           TableChange.addColumn(
             col.name.toArray,
@@ -81,7 +78,6 @@ class ResolveSessionCatalog(
         case Some(_: V1Table) =>
           throw new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
         case Some(table) =>
-          cols.foreach(c => failCharType(c.dataType))
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
           val deleteChanges = table.schema.fieldNames.map { name =>
             TableChange.deleteColumn(Array(name))
@@ -104,10 +100,6 @@ class ResolveSessionCatalog(
       a.dataType.foreach(failNullType)
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          if (!DDLUtils.isHiveTable(v1Table.v1Table)) {
-            a.dataType.foreach(failCharType)
-          }
-
           if (a.column.length > 1) {
             throw new AnalysisException(
               "ALTER COLUMN with qualified column is only supported with v2 tables.")
@@ -133,19 +125,13 @@ class ResolveSessionCatalog(
                     s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
               }
           }
-          // Add Hive type string to metadata.
-          val cleanedDataType = HiveStringType.replaceCharType(dataType)
-          if (dataType != cleanedDataType) {
-            builder.putString(HIVE_TYPE_STRING, dataType.catalogString)
-          }
           val newColumn = StructField(
             colName,
-            cleanedDataType,
+            dataType,
             nullable = true,
             builder.build())
           AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
       }.getOrElse {
-        a.dataType.foreach(failCharType)
         val colName = a.column.toArray
         val typeChange = a.dataType.map { newDataType =>
           TableChange.updateColumnType(colName, newDataType)
@@ -223,12 +209,11 @@ class ResolveSessionCatalog(
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
-    case AlterViewSetPropertiesStatement(SessionCatalogAndTable(_, tbl), props) =>
-      AlterTableSetPropertiesCommand(tbl.asTableIdentifier, props, isView = true)
+    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
+      AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
-      AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
+    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
       if (ns.length != 1) {
@@ -251,8 +236,7 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(ns.head, location)
 
-    // v1 RENAME TABLE supports temp view.
-    case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
+    case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
@@ -265,40 +249,38 @@ class ResolveSessionCatalog(
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
-      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
+      val (storageFormat, provider) = getStorageFormatAndProvider(
+        c.provider, c.options, c.location, c.serde, ctas = false)
       if (!isV2Provider(provider)) {
-        if (!DDLUtils.isHiveTable(Some(provider))) {
-          assertNoCharTypeInSchema(c.tableSchema)
-        }
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, c.tableSchema,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
-          c.comment, c.ifNotExists)
+          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
+          c.comment, storageFormat, c.external)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, None)
       } else {
-        assertNoCharTypeInSchema(c.tableSchema)
         CreateV2Table(
           catalog.asTableCatalog,
           tbl.asIdentifier,
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           ignoreIfExists = c.ifNotExists)
       }
 
     case c @ CreateTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
-      val provider = c.provider.getOrElse(conf.defaultDataSourceName)
+      val (storageFormat, provider) = getStorageFormatAndProvider(
+        c.provider, c.options, c.location, c.serde, ctas = true)
       if (!isV2Provider(provider)) {
         val tableDesc = buildCatalogTable(tbl.asTableIdentifier, new StructType,
-          c.partitioning, c.bucketSpec, c.properties, provider, c.options, c.location,
-          c.comment, c.ifNotExists)
+          c.partitioning, c.bucketSpec, c.properties, provider, c.location,
+          c.comment, storageFormat, c.external)
         val mode = if (c.ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
         CreateTable(tableDesc, mode, Some(c.asSelect))
       } else {
@@ -308,7 +290,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           writeOptions = c.writeOptions,
           ignoreIfExists = c.ifNotExists)
       }
@@ -322,25 +304,24 @@ class ResolveSessionCatalog(
     // For REPLACE TABLE [AS SELECT], we should fail if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
       } else {
-        assertNoCharTypeInSchema(c.tableSchema)
         ReplaceTable(
           catalog.asTableCatalog,
           tbl.asIdentifier,
           c.tableSchema,
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           orCreate = c.orCreate)
       }
 
     case c @ ReplaceTableAsSelectStatement(
-         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
+         SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       if (c.asSelect.resolved) {
         assertNoNullTypeInSchema(c.asSelect.schema)
       }
@@ -354,7 +335,7 @@ class ResolveSessionCatalog(
           // convert the bucket spec and add it as a transform
           c.partitioning ++ c.bucketSpec.map(_.asTransform),
           c.asSelect,
-          convertTableProperties(c.properties, c.options, c.location, c.comment, Some(provider)),
+          convertTableProperties(c),
           writeOptions = c.writeOptions,
           orCreate = c.orCreate)
       }
@@ -370,9 +351,8 @@ class ResolveSessionCatalog(
       }
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
 
-    // v1 DROP TABLE supports temp view.
-    case DropViewStatement(TempViewOrV1Table(name), ifExists) =>
-      DropTableCommand(name.asTableIdentifier, ifExists, isView = true, purge = false)
+    case DropView(r: ResolvedView, ifExists) =>
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
     case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
         if isSessionCatalog(catalog) =>
@@ -401,14 +381,20 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(ns.head), pattern)
 
-    case ShowTableStatement(ns, pattern, partitionsSpec) =>
-      val db = ns match {
-        case Some(ns) if ns.length != 1 =>
-          throw new AnalysisException(
-            s"The database name is not valid: ${ns.quoted}")
-        case _ => ns.map(_.head)
+    case ShowTableExtended(
+        SessionCatalogAndNamespace(_, ns),
+        pattern,
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+      assert(ns.nonEmpty)
+      if (ns.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${ns.quoted}")
       }
-      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
+      ShowTablesCommand(
+        databaseName = Some(ns.head),
+        tableIdentifierPattern = Some(pattern),
+        isExtended = true,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -421,11 +407,8 @@ class ResolveSessionCatalog(
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
-    case RepairTableStatement(tbl) =>
-      val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
-      AlterTableRecoverPartitionsCommand(
-        v1TableName.asTableIdentifier,
-        "MSCK REPAIR TABLE")
+    case RepairTable(ResolvedV1TableIdentifier(ident)) =>
+      AlterTableRecoverPartitionsCommand(ident.asTableIdentifier, "MSCK REPAIR TABLE")
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -442,51 +425,25 @@ class ResolveSessionCatalog(
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    case CacheTableStatement(tbl, plan, isLazy, options) =>
-      val name = if (plan.isDefined) {
-        // CACHE TABLE ... AS SELECT creates a temp view with the input query.
-        // Temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
-        tbl
-      } else {
-        parseTempViewOrV1Table(tbl, "CACHE TABLE")
-      }
-      CacheTableCommand(name.asTableIdentifier, plan, isLazy, options)
-
-    case UncacheTableStatement(tbl, ifExists) =>
-      val name = parseTempViewOrV1Table(tbl, "UNCACHE TABLE")
-      UncacheTableCommand(name.asTableIdentifier, ifExists)
-
-    case TruncateTableStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "TRUNCATE TABLE")
+    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitionsStatement(tbl, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "SHOW PARTITIONS")
+    case ShowPartitions(
+        ResolvedV1TableOrViewIdentifier(ident),
+        pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowPartitionsCommand(
-        v1TableName.asTableIdentifier,
-        partitionSpec)
+        ident.asTableIdentifier,
+        pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumnsStatement(tbl, ns) =>
-      if (ns.isDefined && ns.get.length > 1) {
-        throw new AnalysisException(
-          s"Namespace name should have only one part if specified: ${ns.get.quoted}")
-      }
-      // Use namespace only if table name doesn't specify it. If namespace is already specified
-      // in the table name, it's checked against the given namespace below.
-      val nameParts = if (ns.isDefined && tbl.length == 1) {
-        ns.get ++ tbl
-      } else {
-        tbl
-      }
-      val sql = "SHOW COLUMNS"
-      val v1TableName = parseTempViewOrV1Table(nameParts, sql).asTableIdentifier
+    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
+      val v1TableName = ident.asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
         case Some(db) if v1TableName.database.exists(!resolver(_, db.head)) =>
           throw new AnalysisException(
-            s"SHOW COLUMNS with conflicting databases: " +
+            "SHOW COLUMNS with conflicting databases: " +
               s"'${db.head}' != '${v1TableName.database.get}'")
         case _ => ns.map(_.head)
       }
@@ -570,11 +527,8 @@ class ResolveSessionCatalog(
             "SHOW VIEWS, only SessionCatalog supports this command.")
       }
 
-    case ShowTableProperties(ResolvedV1TableIdentifier(ident), propertyKey) =>
+    case ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
-
-    case ShowTableProperties(r: ResolvedView, propertyKey) =>
-      ShowTablePropertiesCommand(r.identifier.asTableIdentifier, propertyKey)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
@@ -634,6 +588,69 @@ class ResolveSessionCatalog(
     case _ => throw new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
   }
 
+  private def getStorageFormatAndProvider(
+      provider: Option[String],
+      options: Map[String, String],
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo],
+      ctas: Boolean): (CatalogStorageFormat, String) = {
+    val nonHiveStorageFormat = CatalogStorageFormat.empty.copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
+    val defaultHiveStorage = HiveSerDe.getDefaultStorage(conf).copy(
+      locationUri = location.map(CatalogUtils.stringToURI),
+      properties = options)
+
+    if (provider.isDefined) {
+      // The parser guarantees that USING and STORED AS/ROW FORMAT won't co-exist.
+      if (maybeSerdeInfo.isDefined) {
+        throw new AnalysisException(
+          s"Cannot create table with both USING $provider and ${maybeSerdeInfo.get.describe}")
+      }
+      (nonHiveStorageFormat, provider.get)
+    } else if (maybeSerdeInfo.isDefined) {
+      val serdeInfo = maybeSerdeInfo.get
+      SerdeInfo.checkSerdePropMerging(serdeInfo.serdeProperties, defaultHiveStorage.properties)
+      val storageFormat = if (serdeInfo.storedAs.isDefined) {
+        // If `STORED AS fileFormat` is used, infer inputFormat, outputFormat and serde from it.
+        HiveSerDe.sourceToSerDe(serdeInfo.storedAs.get) match {
+          case Some(hiveSerde) =>
+            defaultHiveStorage.copy(
+              inputFormat = hiveSerde.inputFormat.orElse(defaultHiveStorage.inputFormat),
+              outputFormat = hiveSerde.outputFormat.orElse(defaultHiveStorage.outputFormat),
+              // User specified serde takes precedence over the one inferred from file format.
+              serde = serdeInfo.serde.orElse(hiveSerde.serde).orElse(defaultHiveStorage.serde),
+              properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
+          case _ => throw new AnalysisException(
+            s"STORED AS with file format '${serdeInfo.storedAs.get}' is invalid.")
+        }
+      } else {
+        defaultHiveStorage.copy(
+          inputFormat =
+            serdeInfo.formatClasses.map(_.input).orElse(defaultHiveStorage.inputFormat),
+          outputFormat =
+            serdeInfo.formatClasses.map(_.output).orElse(defaultHiveStorage.outputFormat),
+          serde = serdeInfo.serde.orElse(defaultHiveStorage.serde),
+          properties = serdeInfo.serdeProperties ++ defaultHiveStorage.properties)
+      }
+      (storageFormat, DDLUtils.HIVE_PROVIDER)
+    } else {
+      // If neither USING nor STORED AS/ROW FORMAT is specified, we create native data source
+      // tables if:
+      //   1. `LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT` is false, or
+      //   2. It's a CTAS and `conf.convertCTAS` is true.
+      val createHiveTableByDefault = conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
+      if (!createHiveTableByDefault || (ctas && conf.convertCTAS)) {
+        (nonHiveStorageFormat, conf.defaultDataSourceName)
+      } else {
+        logWarning("A Hive serde table will be created as there is no table provider " +
+          s"specified. You can set ${SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key} to false " +
+          "so that native data source table will be created instead.")
+        (defaultHiveStorage, DDLUtils.HIVE_PROVIDER)
+      }
+    }
+  }
+
   private def buildCatalogTable(
       table: TableIdentifier,
       schema: StructType,
@@ -641,15 +658,11 @@ class ResolveSessionCatalog(
       bucketSpec: Option[BucketSpec],
       properties: Map[String, String],
       provider: String,
-      options: Map[String, String],
       location: Option[String],
       comment: Option[String],
-      ifNotExists: Boolean): CatalogTable = {
-    val storage = CatalogStorageFormat.empty.copy(
-      locationUri = location.map(CatalogUtils.stringToURI),
-      properties = options)
-
-    val tableType = if (location.isDefined) {
+      storageFormat: CatalogStorageFormat,
+      external: Boolean): CatalogTable = {
+    val tableType = if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -658,7 +671,7 @@ class ResolveSessionCatalog(
     CatalogTable(
       identifier = table,
       tableType = tableType,
-      storage = storage,
+      storage = storageFormat,
       schema = schema,
       provider = Some(provider),
       partitionColumnNames = partitioning.asPartitionColumns,
@@ -716,20 +729,13 @@ class ResolveSessionCatalog(
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-
-    val cleanedDataType = HiveStringType.replaceCharType(col.dataType)
-    if (col.dataType != cleanedDataType) {
-      builder.putString(HIVE_TYPE_STRING, col.dataType.catalogString)
-    }
-
-    StructField(
-      col.name.head,
-      cleanedDataType,
-      nullable = true,
-      builder.build())
+    StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 
   private def isV2Provider(provider: String): Boolean = {
+    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
+    // `HiveFileFormat`, when running tests in sql/core.
+    if (DDLUtils.isHiveTable(Some(provider))) return false
     DataSource.lookupDataSourceV2(provider, conf) match {
       // TODO(SPARK-28396): Currently file source v2 can't work with tables.
       case Some(_: FileDataSourceV2) => false

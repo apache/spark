@@ -118,7 +118,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testElt(null, 1, null, "world")
     testElt(null, null, "hello", "world")
 
-    // Invalid ranages
+    // Invalid ranges
     testElt(null, 3, "hello", "world")
     testElt(null, 0, "hello", "world")
     testElt(null, -1, "hello", "world")
@@ -349,23 +349,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(
-      Decode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
+      StringDecode(Encode(Literal("大千世界"), Literal("UTF-16LE")), Literal("UTF-16LE")), "大千世界")
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "大千世界", create_row("大千世界"))
     checkEvaluation(
-      Decode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
+      StringDecode(Encode(a, Literal("utf-8")), Literal("utf-8")), "", create_row(""))
     // scalastyle:on
     checkEvaluation(Encode(a, Literal("utf-8")), null, create_row(null))
     checkEvaluation(Encode(Literal.create(null, StringType), Literal("utf-8")), null)
     checkEvaluation(Encode(a, Literal.create(null, StringType)), null, create_row(""))
 
-    checkEvaluation(Decode(b, Literal("utf-8")), null, create_row(null))
-    checkEvaluation(Decode(Literal.create(null, BinaryType), Literal("utf-8")), null)
-    checkEvaluation(Decode(b, Literal.create(null, StringType)), null, create_row(null))
+    checkEvaluation(StringDecode(b, Literal("utf-8")), null, create_row(null))
+    checkEvaluation(StringDecode(Literal.create(null, BinaryType), Literal("utf-8")), null)
+    checkEvaluation(StringDecode(b, Literal.create(null, StringType)), null, create_row(null))
 
     // Test escaping of charset
     GenerateUnsafeProjection.generate(Encode(a, Literal("\"quote")) :: Nil)
-    GenerateUnsafeProjection.generate(Decode(b, Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
   }
 
   test("initcap unit test") {
@@ -941,6 +941,20 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
+  }
+
+  test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val msg = intercept[IllegalArgumentException] {
+        evaluateWithoutCodegen(
+          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
+      }.getMessage
+      assert(msg.contains("Find an invaild url string"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(
+        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+    }
   }
 
   test("Sentences") {

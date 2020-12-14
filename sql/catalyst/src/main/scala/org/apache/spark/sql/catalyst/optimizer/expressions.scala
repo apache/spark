@@ -41,12 +41,25 @@ import org.apache.spark.sql.types._
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
+
+  private def hasNoSideEffect(e: Expression): Boolean = e match {
+    case _: Attribute => true
+    case _: Literal => true
+    case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
       case l: Literal => l
+
+      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length)
+      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length / 2)
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
@@ -57,7 +70,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 /**
  * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
  * value in conjunctive [[Expression Expressions]]
- * eg.
+ * e.g.
  * {{{
  *   SELECT * FROM table WHERE i = 5 AND j = i + 3
  *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
@@ -530,27 +543,33 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(input, Literal(pattern, StringType), escapeChar) =>
+    case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        val escapeStr = String.valueOf(escapeChar)
         pattern.toString match {
-          case startsWith(prefix) if !prefix.endsWith(escapeStr) =>
+          // There are three different situations when pattern containing escapeChar:
+          // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
+          // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
+          // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
+          // Although there are patterns can be optimized if we handle the escape first, we just
+          // skip this rule if pattern contains any escapeChar for simplicity.
+          case p if p.contains(escapeChar) => l
+          case startsWith(prefix) =>
             StartsWith(input, Literal(prefix))
           case endsWith(postfix) =>
             EndsWith(input, Literal(postfix))
           // 'a%a' pattern is basically same with 'a%' && '%a'.
           // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith(escapeStr) =>
+          case startsAndEndsWith(prefix, postfix) =>
             And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-          case contains(infix) if !infix.endsWith(escapeStr) =>
+          case contains(infix) =>
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
-          case _ => Like(input, Literal.create(pattern, StringType), escapeChar)
+          case _ => l
         }
       }
   }
@@ -685,6 +704,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           case LeftOuter => newJoin.right.output
           case RightOuter => newJoin.left.output
           case FullOuter => newJoin.left.output ++ newJoin.right.output
+          case _ => Nil
         })
         val newFoldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
           case (attr, _) => missDerivedAttrsSet.contains(attr)

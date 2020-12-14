@@ -136,7 +136,7 @@ abstract class LogicalPlan
   def outputOrdering: Seq[SortOrder] = Nil
 
   /**
-   * Returns true iff `other`'s output is semantically the same, ie.:
+   * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
    *  - the order is equal too.

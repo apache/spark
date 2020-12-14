@@ -15,7 +15,7 @@
     specific language governing permissions and limitations
     under the License.
 
-.. Workaround to avoud documenting __init__.
+.. Workaround to avoid documenting __init__.
 
 {% extends "!autosummary/class.rst" %}
 

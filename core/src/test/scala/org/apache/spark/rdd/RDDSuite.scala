@@ -1102,7 +1102,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
   }
 
-  test("RDD.partitions() fails fast when partitions indicies are incorrect (SPARK-13021)") {
+  test("RDD.partitions() fails fast when partitions indices are incorrect (SPARK-13021)") {
     class BadRDD[T: ClassTag](prev: RDD[T]) extends RDD[T](prev) {
 
       override def compute(part: Partition, context: TaskContext): Iterator[T] = {

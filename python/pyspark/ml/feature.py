@@ -1507,7 +1507,8 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
     strategy = Param(Params._dummy(), "strategy",
                      "strategy for imputation. If mean, then replace missing values using the mean "
                      "value of the feature. If median, then replace missing values using the "
-                     "median value of the feature.",
+                     "median value of the feature. If mode, then replace missing using the most "
+                     "frequent value of the feature.",
                      typeConverter=TypeConverters.toString)
 
     missingValue = Param(Params._dummy(), "missingValue",
@@ -1541,7 +1542,7 @@ class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
 
-    Note that the mean/median value is computed after filtering out missing values.
+    Note that the mean/median/mode value is computed after filtering out missing values.
     All Null values in the input columns are treated as missing, and so are also imputed. For
     computing median, :py:meth:`pyspark.sql.DataFrame.approxQuantile` is used with a
     relative error of `0.001`.
@@ -3851,8 +3852,20 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
     def labels(self):
         """
         Ordered list of labels, corresponding to indices to be assigned.
+
+        .. deprecated:: 3.1.0
+            It will be removed in future versions. Use `labelsArray` method instead.
         """
         return self._call_java("labels")
+
+    @property
+    @since("3.0.2")
+    def labelsArray(self):
+        """
+        Array of ordered list of labels, corresponding to indices to be assigned
+        for each input column.
+        """
+        return self._call_java("labelsArray")
 
 
 @inherit_doc
@@ -5797,7 +5810,7 @@ class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReada
 class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
     """
     Params for :py:class:`VarianceThresholdSelector` and
-    :py:class:`VarianceThresholdSelectorrModel`.
+    :py:class:`VarianceThresholdSelectorModel`.
 
     .. versionadded:: 3.1.0
     """

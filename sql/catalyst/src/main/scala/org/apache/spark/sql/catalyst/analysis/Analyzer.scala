@@ -39,16 +39,17 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 /**
@@ -86,8 +87,8 @@ object FakeV2SessionCatalog extends TableCatalog {
 }
 
 /**
- * Provides a way to keep state during the analysis, this enables us to decouple the concerns
- * of analysis environment from the catalog.
+ * Provides a way to keep state during the analysis, mostly for resolving views. This enables us to
+ * decouple the concerns of analysis environment from the catalog.
  * The state that is kept here is per-query.
  *
  * Note this is thread local.
@@ -97,14 +98,24 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                            views.
  * @param nestedViewDepth The nested depth in the view resolution, this enables us to limit the
  *                        depth of nested views.
+ * @param maxNestedViewDepth The maximum allowed depth of nested view resolution.
  * @param relationCache A mapping from qualified table names to resolved relations. This can ensure
  *                      that the table is resolved only once if a table is used multiple times
  *                      in a query.
+ * @param referredTempViewNames All the temp view names referred by the current view we are
+ *                              resolving. It's used to make sure the relation resolution is
+ *                              consistent between view creation and view resolution. For example,
+ *                              if `t` was a permanent table when the current view was created, it
+ *                              should still be a permanent table when resolving the current view,
+ *                              even if a temp view `t` has been created.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
-    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty)
+    maxNestedViewDepth: Int = -1,
+    relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
+    referredTempViewNames: Seq[Seq[String]] = Seq.empty,
+    referredTempFunctionNames: Seq[String] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -116,10 +127,21 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](catalogAndNamespace: Seq[String])(f: => A): A = {
+  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
     val originContext = value.get()
+    val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
+      // Here we start to resolve views, get `maxNestedViewDepth` from configs.
+      SQLConf.get.maxNestedViewDepth
+    } else {
+      originContext.maxNestedViewDepth
+    }
     val context = AnalysisContext(
-      catalogAndNamespace, originContext.nestedViewDepth + 1, originContext.relationCache)
+      viewDesc.viewCatalogAndNamespace,
+      originContext.nestedViewDepth + 1,
+      maxNestedViewDepth,
+      originContext.relationCache,
+      viewDesc.viewReferredTempViewNames,
+      viewDesc.viewReferredTempFunctionNames)
     set(context)
     try f finally { set(originContext) }
   }
@@ -130,7 +152,7 @@ object AnalysisContext {
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(override val catalogManager: CatalogManager)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog with SQLConfHelper {
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis with SQLConfHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
@@ -217,6 +239,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveTableValuedFunctions ::
       ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
+      ResolveUserSpecifiedColumns ::
       ResolveInsertInto ::
       ResolveRelations ::
       ResolveTables ::
@@ -256,7 +279,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveNoopDropTable) ++
+      Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
@@ -347,10 +370,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
         case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
-          val errorMessage =
-            s"Window specification $windowName is not defined in the WINDOW clause."
-          val windowSpecDefinition =
-            windowDefinitions.getOrElse(windowName, failAnalysis(errorMessage))
+          val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
           WindowExpression(c, windowSpecDefinition)
       }
     }
@@ -448,9 +469,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
             Alias(gid, toPrettySQL(e))()
           } else {
-            throw new AnalysisException(
-              s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
-                s"grouping columns (${groupByExprs.mkString(",")})")
+            throw QueryCompilationErrors.groupingIDMismatchError(e, groupByExprs)
           }
         case e @ Grouping(col: Expression) =>
           val idx = groupByExprs.indexWhere(_.semanticEquals(col))
@@ -458,8 +477,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
               Literal(1L)), ByteType), toPrettySQL(e))()
           } else {
-            throw new AnalysisException(s"Column of grouping ($col) can't be found " +
-              s"in grouping columns ${groupByExprs.mkString(",")}")
+            throw QueryCompilationErrors.groupingColInvalidError(col, groupByExprs)
           }
       }
     }
@@ -497,7 +515,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val groupingSetsAttributes = selectedGroupByExprs.map { groupingSetExprs =>
         groupingSetExprs.map { expr =>
           val alias = groupByAliases.find(_.child.semanticEquals(expr)).getOrElse(
-            failAnalysis(s"$expr doesn't show up in the GROUP BY list $groupByAliases"))
+            throw QueryCompilationErrors.selectExprNotInGroupByError(expr, groupByAliases))
           // Map alias to expanded attribute.
           expandedAttributes.find(_.semanticEquals(alias.toAttribute)).getOrElse(
             alias.toAttribute)
@@ -575,8 +593,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val finalGroupByExpressions = getFinalGroupByExpressions(selectedGroupByExprs, groupByExprs)
 
       if (finalGroupByExpressions.size > GroupingID.dataType.defaultSize * 8) {
-        throw new AnalysisException(
-          s"Grouping sets size cannot be greater than ${GroupingID.dataType.defaultSize * 8}")
+        throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
       }
 
       // Expand works by setting grouping expressions to null as determined by the
@@ -602,11 +619,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           val gid = a.groupingExpressions.last
           if (!gid.isInstanceOf[AttributeReference]
             || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
           }
           a.groupingExpressions.take(a.groupingExpressions.length - 1)
       }.getOrElse {
-        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+        throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
       }
     }
 
@@ -712,8 +729,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         || !p.pivotColumn.resolved || !p.pivotValues.forall(_.resolved) => p
       case Pivot(groupByExprsOpt, pivotColumn, pivotValues, aggregates, child) =>
         if (!RowOrdering.isOrderable(pivotColumn.dataType)) {
-          throw new AnalysisException(
-            s"Invalid pivot column '${pivotColumn}'. Pivot columns must be comparable.")
+          throw QueryCompilationErrors.unorderablePivotColError(pivotColumn)
         }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
@@ -724,13 +740,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             case _ => value.foldable
           }
           if (!foldable) {
-            throw new AnalysisException(
-              s"Literal expressions required for pivot values, found '$value'")
+            throw QueryCompilationErrors.nonLiteralPivotValError(value)
           }
           if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
-            throw new AnalysisException(s"Invalid pivot value '$value': " +
-              s"value data type ${value.dataType.simpleString} does not match " +
-              s"pivot column data type ${pivotColumn.dataType.catalogString}")
+            throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)
           }
           Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
         }
@@ -820,11 +833,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case _: AggregateExpression => // OK and leave the argument check to CheckAnalysis.
       case expr: PythonUDF if PythonUDF.isGroupedAggPandasUDF(expr) =>
-        failAnalysis("Pandas UDF aggregate expressions are currently not supported in pivot.")
+        throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
       case e: Attribute =>
-        failAnalysis(
-          s"Aggregate expression required for pivot, but '${e.sql}' " +
-          s"did not appear in any aggregate function.")
+        throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
       case e => e.children.foreach(checkValidAggregateExpression)
     }
   }
@@ -833,6 +844,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
@@ -844,6 +857,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
+  private def referredTempViewNames: Seq[Seq[String]] = AnalysisContext.get.referredTempViewNames
 
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
@@ -853,10 +867,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _, isStreaming) =>
         lookupTempView(ident, isStreaming).getOrElse(u)
-      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _) =>
+      case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
         lookupTempView(ident)
           .map(view => i.copy(table = view))
           .getOrElse(i)
+      case c @ CacheTable(UnresolvedRelation(ident, _, false), _, _, _) =>
+        lookupTempView(ident)
+          .map(view => c.copy(table = view))
+          .getOrElse(c)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -868,16 +886,25 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-      case u @ UnresolvedTable(ident) =>
+      case u @ UnresolvedTable(ident, cmd) =>
         lookupTempView(ident).foreach { _ =>
-          u.failAnalysis(s"${ident.quoted} is a temp view not table.")
+          throw QueryCompilationErrors.expectTableNotTempViewError(ident.quoted, cmd, u)
         }
         u
-      case u @ UnresolvedTableOrView(ident, allowTempView) =>
+      case u @ UnresolvedView(ident, cmd, allowTemp, _) =>
+        lookupTempView(ident).map { _ =>
+          if (!allowTemp) {
+            u.failAnalysis(s"${ident.quoted} is a temp view. '$cmd' expects a permanent view.")
+          }
+          ResolvedView(ident.asIdentifier, isTemp = true)
+        }
+        .getOrElse(u)
+      case u @ UnresolvedTableOrView(ident, cmd, allowTempView) =>
         lookupTempView(ident)
           .map { _ =>
             if (!allowTempView) {
-              u.failAnalysis(s"${ident.quoted} is a temp view not table or permanent view.")
+              throw QueryCompilationErrors.expectTableOrPermanentViewNotTempViewError(
+                ident.quoted, cmd, u)
             }
             ResolvedView(ident.asIdentifier, isTemp = true)
           }
@@ -887,7 +914,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView) return None
+      if (isResolvingView && !referredTempViewNames.contains(identifier)) return None
 
       val tmpView = identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
@@ -899,14 +926,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
           s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
       }
-      tmpView
+      tmpView.map(ResolveRelations.resolveViews)
     }
   }
 
   // If we are resolving relations insides views, we need to expand single-part relation names with
   // the current catalog and namespace of when the view was created.
   private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    if (!isResolvingView) return nameParts
+    if (!isResolvingView || referredTempViewNames.contains(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
       AnalysisContext.get.catalogAndNamespace :+ nameParts.head
@@ -957,21 +984,26 @@ class Analyzer(override val catalogManager: CatalogManager)
             SubqueryAlias(catalog.get.name +: ident.namespace :+ ident.name, relation)
           }.getOrElse(u)
 
-      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident)) =>
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
+      case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(ResolvedTable(catalog.asTableCatalog, ident, _))
           .getOrElse(u)
 
-      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
           if i.query.resolved =>
         lookupV2Relation(u.multipartIdentifier, u.options, false)
           .map(v2Relation => i.copy(table = v2Relation))
           .getOrElse(i)
+
+      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
+        lookupV2Relation(u.multipartIdentifier, u.options, false)
+          .map(v2Relation => c.copy(table = v2Relation))
+          .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
@@ -1027,20 +1059,22 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    private def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, _, child) if !child.resolved =>
+      case view @ View(desc, isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc.viewCatalogAndNamespace) {
-          if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
-            view.failAnalysis(s"The depth of view ${desc.identifier} exceeds the maximum " +
-              s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
-              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
-              "around this.")
+        val newChild = AnalysisContext.withAnalysisContext(desc) {
+          val nestedViewDepth = AnalysisContext.get.nestedViewDepth
+          val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
+          if (nestedViewDepth > maxNestedViewDepth) {
+            throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
+              desc.identifier, maxNestedViewDepth, view)
           }
-          executeSameContext(child)
+          SQLConf.withExistingConf(View.effectiveSQLConf(desc.viewSQLConfigs, isTempView)) {
+            executeSameContext(child)
+          }
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
@@ -1049,7 +1083,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = ResolveTempViews(plan).resolveOperatorsUp {
-      case i @ InsertIntoStatement(table, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _) if i.query.resolved =>
         val relation = table match {
           case u @ UnresolvedRelation(_, _, false) =>
             lookupRelation(u.multipartIdentifier, u.options, false).getOrElse(u)
@@ -1058,9 +1092,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         EliminateSubqueryAliases(relation) match {
           case v: View =>
-            table.failAnalysis(s"Inserting into a view is not allowed. View: ${v.desc.identifier}.")
+            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
         }
+
+      case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
+        lookupRelation(u.multipartIdentifier, u.options, false)
+          .map(v2Relation => c.copy(table = v2Relation))
+          .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
@@ -1069,10 +1108,11 @@ class Analyzer(override val catalogManager: CatalogManager)
             lookupRelation(u.multipartIdentifier, u.options, false)
               .map(EliminateSubqueryAliases(_))
               .map {
-                case v: View => write.failAnalysis(
-                  s"Writing into a view is not allowed. View: ${v.desc.identifier}.")
-                case u: UnresolvedCatalogRelation => write.failAnalysis(
-                  "Cannot write into v1 table: " + u.tableMeta.identifier)
+                case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+                  v.desc.identifier, write)
+                case u: UnresolvedCatalogRelation =>
+                  throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
+                    u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
                 case other => throw new IllegalStateException(
                   "[BUG] unexpected plan returned by `lookupRelation`: " + other)
@@ -1084,15 +1124,21 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
           .map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier) =>
+      case u @ UnresolvedTable(identifier, cmd) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView =>
-            val viewStr = if (v.isTemp) "temp view" else "view"
-            u.failAnalysis(s"${v.identifier.quoted} is a $viewStr not table.")
+          case v: ResolvedView => throw QueryCompilationErrors.expectTableNotViewError(v, cmd, u)
           case table => table
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, _) =>
+      case u @ UnresolvedView(identifier, cmd, _, relationTypeMismatchHint) =>
+        lookupTableOrView(identifier).map {
+          case v: ResolvedView => v
+          case _ =>
+            u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view." +
+              relationTypeMismatchHint.map(" " + _).getOrElse(""))
+        }.getOrElse(u)
+
+      case u @ UnresolvedTableOrView(identifier, _, _) =>
         lookupTableOrView(identifier).getOrElse(u)
     }
 
@@ -1164,11 +1210,11 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _) if i.query.resolved =>
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _)
+          if i.query.resolved && i.userSpecifiedCols.isEmpty =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
-          throw new AnalysisException(
-            s"Cannot write, IF NOT EXISTS is not supported for table: ${r.table.name}")
+          throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
         }
 
         val partCols = partitionColumnNames(r.table)
@@ -1205,8 +1251,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
           case Some(_) =>
           case None =>
-            throw new AnalysisException(
-              s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+            throw QueryCompilationErrors.nonPartitionColError(partitionName)
         }
       }
     }
@@ -1228,8 +1273,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
-                throw new AnalysisException(
-                  s"Cannot add static value for unknown column: $staticName")
+                throw QueryCompilationErrors.addStaticValToUnknownColError(staticName)
             }).toMap
 
           val queryColumns = query.output.iterator
@@ -1271,7 +1315,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               // an UnresolvedAttribute.
               EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
             case None =>
-              throw new AnalysisException(s"Unknown static partition column: $name")
+              throw QueryCompilationErrors.unknownStaticPartitionColError(name)
           }
         }.reduce(And)
       }
@@ -1453,8 +1497,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
-          failAnalysis(
-            "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
+          throw QueryCompilationErrors.starNotAllowedWhenGroupByOrdinalPositionUsedError()
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
@@ -1467,7 +1510,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         )
       case g: Generate if containsStar(g.generator.children) =>
-        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
+        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
@@ -1478,7 +1521,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val rightRes = rightAttributes
           .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
         f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
-      // intersect/except will be rewritten to join at the begininng of optimizer. Here we need to
+      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
@@ -1727,7 +1770,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
       }
     }
   }
@@ -1827,11 +1870,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         val newOrders = orders map {
           case s @ SortOrder(UnresolvedOrdinal(index), direction, nullOrdering, _) =>
             if (index > 0 && index <= child.output.size) {
-              SortOrder(child.output(index - 1), direction, nullOrdering, Set.empty)
+              SortOrder(child.output(index - 1), direction, nullOrdering, Seq.empty)
             } else {
-              s.failAnalysis(
-                s"ORDER BY position $index is not in select list " +
-                  s"(valid range is [1, ${child.output.size}])")
+              throw QueryCompilationErrors.orderByPositionRangeError(index, child.output.size, s)
             }
           case o => o
         }
@@ -1845,9 +1886,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u @ UnresolvedOrdinal(index) if index > 0 && index <= aggs.size =>
             aggs(index - 1)
           case ordinal @ UnresolvedOrdinal(index) =>
-            ordinal.failAnalysis(
-              s"GROUP BY position $index is not in select list " +
-                s"(valid range is [1, ${aggs.size}])")
+            throw QueryCompilationErrors.groupByPositionRangeError(index, aggs.size, ordinal)
           case o => o
         }
         Aggregate(newGroups, aggs, child)
@@ -2054,9 +2093,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             withPosition(u) {
               v1SessionCatalog.lookupFunction(name, children) match {
                 case generator: Generator => generator
-                case other =>
-                  failAnalysis(s"$name is expected to be a generator. However, " +
-                    s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
+                case other => throw QueryCompilationErrors.generatorNotExpectedError(
+                  name, other.getClass.getCanonicalName)
               }
             }
           case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
@@ -2067,22 +2105,21 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
                   if (isDistinct || filter.isDefined) {
-                    failAnalysis("DISTINCT or FILTER specified, " +
-                      s"but ${wf.prettyName} is not an aggregate function")
+                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                      wf.prettyName)
                   } else {
                     wf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
-                    failAnalysis("FILTER expression is non-deterministic, " +
-                      "it cannot be used in aggregate functions")
+                    throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
                   }
                   AggregateExpression(agg, Complete, isDistinct, filter)
                 // This function is not an aggregate function, just return the resolved one.
                 case other if (isDistinct || filter.isDefined) =>
-                  failAnalysis("DISTINCT or FILTER specified, " +
-                    s"but ${other.prettyName} is not an aggregate function")
+                  throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                    other.prettyName)
                 case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
                     log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
@@ -2221,9 +2258,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         // Checks if the number of the aliases equals to the number of output columns
         // in the subquery.
         if (columnNames.size != outputAttrs.size) {
-          u.failAnalysis("Number of column aliases does not match number of columns. " +
-            s"Number of column aliases: ${columnNames.size}; " +
-            s"number of columns: ${outputAttrs.size}.")
+          throw QueryCompilationErrors.aliasNumberNotMatchColumnNumberError(
+            columnNames.size, outputAttrs.size, u)
         }
         val aliases = outputAttrs.zip(columnNames).map { case (attr, aliasName) =>
           Alias(attr, aliasName)()
@@ -2483,23 +2519,19 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
         val nestedGenerator = projectList.find(hasNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.filter(hasGenerator).map(trimAlias)
-        throw new AnalysisException("Only one generator allowed per select clause but found " +
-          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
 
       case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
-        throw new AnalysisException("Generators are not supported when it's nested in " +
-          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+        throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
       case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
-        throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
-          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+        throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
 
       case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
           case AliasedGenerator(_, _, _) => true
@@ -2582,8 +2614,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g: Generate => g
 
       case p if p.expressions.exists(hasGenerator) =>
-        throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
-          "got: " + p.simpleString(SQLConf.get.maxToStringFields))
+        throw QueryCompilationErrors.generatorOutsideSelectError(p)
     }
   }
 
@@ -2619,10 +2650,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       } else if (names.isEmpty) {
         elementAttrs
       } else {
-        failAnalysis(
-          "The number of aliases supplied in the AS clause does not match the number of columns " +
-          s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
-          s"${names.mkString(",")} ")
+        throw QueryCompilationErrors.aliasesNumberNotMatchUDTFOutputError(
+          elementAttrs.size, names.mkString(","))
       }
     }
   }
@@ -2731,8 +2760,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
 
           case WindowExpression(ae: AggregateExpression, _) if ae.filter.isDefined =>
-            failAnalysis(
-              "window aggregate function with filter predicate is not supported yet.")
+            throw QueryCompilationErrors.windowAggregateFunctionWithFilterNotSupportedError
 
           // Extract Windowed AggregateExpression
           case we @ WindowExpression(
@@ -2745,8 +2773,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             WindowExpression(newAgg, spec)
 
           case AggregateExpression(aggFunc, _, _, _, _) if hasWindowFunction(aggFunc.children) =>
-            failAnalysis("It is not allowed to use a window function inside an aggregate " +
-              "function. Please use the inner window function in a sub-query.")
+            throw QueryCompilationErrors.windowFunctionInsideAggregateFunctionNotAllowedError
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
@@ -2810,12 +2837,12 @@ class Analyzer(override val catalogManager: CatalogManager)
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
         if (distinctWindowSpec.isEmpty) {
-          failAnalysis(s"$expr does not have any WindowExpression.")
+          throw QueryCompilationErrors.expressionWithoutWindowExpressionError(expr)
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
           // WindowExpression. If we reach here, we have a bug.
-          failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
-            s"Please file a bug report with this error message, stack trace, and the query.")
+          throw QueryCompilationErrors.expressionWithMultiWindowExpressionsError(
+            expr, distinctWindowSpec)
         } else {
           val spec = distinctWindowSpec.head
           val specKey = (spec.partitionSpec, spec.orderSpec, WindowFunctionType.functionType(expr))
@@ -2843,10 +2870,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
-        failAnalysis("It is not allowed to use window functions inside WHERE clause")
+        throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
 
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
-        failAnalysis("It is not allowed to use window functions inside HAVING clause")
+        throw QueryCompilationErrors.windowFunctionNotAllowedError("HAVING")
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
@@ -3046,10 +3073,10 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
-        failAnalysis(s"Cannot specify window frame for ${wf.prettyName} function")
+        throw QueryCompilationErrors.cannotSpecifyWindowFrameError(wf.prettyName)
       case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
-        failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
+        throw QueryCompilationErrors.windowFrameNotMatchRequiredFrameError(f, wf.frame)
       case WindowExpression(wf: WindowFunction, s @ WindowSpecDefinition(_, _, UnspecifiedFrame))
           if wf.frame != UnspecifiedFrame =>
         WindowExpression(wf, s.copy(frameSpecification = wf.frame))
@@ -3070,9 +3097,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveWindowOrder extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
-        failAnalysis(s"Window function $wf requires window to be ordered, please add ORDER BY " +
-          s"clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
-          s"ORDER BY window_ordering) from table")
+        throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
         val order = spec.orderSpec.map(_.child)
         WindowExpression(rank.withOrder(order), spec)
@@ -3112,20 +3137,62 @@ class Analyzer(override val catalogManager: CatalogManager)
         val projection = TableOutputResolver.resolveOutputColumns(
           v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf)
         if (projection != v2Write.query) {
-          v2Write.withNewQuery(projection)
+          val cleanedTable = v2Write.table match {
+            case r: DataSourceV2Relation =>
+              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+            case other => other
+          }
+          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
         } else {
           v2Write
         }
     }
   }
 
+  object ResolveUserSpecifiedColumns extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case i: InsertIntoStatement if i.table.resolved && i.query.resolved &&
+          i.userSpecifiedCols.nonEmpty =>
+        val resolved = resolveUserSpecifiedColumns(i)
+        val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
+        i.copy(userSpecifiedCols = Nil, query = projection)
+    }
+
+    private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
+      SchemaUtils.checkColumnNameDuplication(
+        i.userSpecifiedCols, "in the column list", resolver)
+
+      i.userSpecifiedCols.map { col =>
+          i.table.resolve(Seq(col), resolver)
+            .getOrElse(throw QueryCompilationErrors.cannotResolveUserSpecifiedColumnsError(
+              col, i.table))
+      }
+    }
+
+    private def addColumnListOnQuery(
+        tableOutput: Seq[Attribute],
+        cols: Seq[NamedExpression],
+        query: LogicalPlan): LogicalPlan = {
+      if (cols.size != query.output.size) {
+        throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
+          cols.size, query.output.size, query)
+      }
+      val nameToQueryExpr = cols.zip(query.output).toMap
+      // Static partition columns in the table output should not appear in the column list
+      // they will be handled in another rule ResolveInsertInto
+      val reordered = tableOutput.flatMap { nameToQueryExpr.get(_).orElse(None) }
+      if (reordered == query.output) {
+        query
+      } else {
+        Project(reordered, query)
+      }
+    }
+  }
+
   private def validateStoreAssignmentPolicy(): Unit = {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
-      val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
-      throw new AnalysisException(s"""
-        |"LEGACY" store assignment policy is disallowed in Spark data source V2.
-        |Please set the configuration $configKey to other values.""".stripMargin)
+      throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
   }
 
@@ -3138,14 +3205,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       hint: JoinHint) = {
     val leftKeys = joinNames.map { keyName =>
       left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the left " +
-          s"side of the join. The left-side columns: [${left.output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
       }
     }
     val rightKeys = joinNames.map { keyName =>
       right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-        throw new AnalysisException(s"USING column `$keyName` cannot be resolved on the right " +
-          s"side of the join. The right-side columns: [${right.output.map(_.name).mkString(", ")}]")
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, right, "right")
       }
     }
     val joinPairs = leftKeys.zip(rightKeys)
@@ -3208,7 +3273,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw new AnalysisException("need an array field but got " + other.catalogString)
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other,
+                    "array")
               }
             case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
               u.child.dataType match {
@@ -3218,7 +3284,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                       ExtractValue(child, fieldName, resolver)
                   }
                 case other =>
-                  throw new AnalysisException("need a map field but got " + other.catalogString)
+                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other, "map")
               }
           }
           validateNestedTupleFields(result)
@@ -3227,8 +3293,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
-      throw new AnalysisException(s"Try to map ${schema.catalogString} to Tuple${maxOrdinal + 1}" +
-        ", but failed as the number of fields does not line up.")
+      throw QueryCompilationErrors.fieldNumberMismatchForDeserializerError(schema, maxOrdinal)
     }
 
     /**
@@ -3287,10 +3352,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case n: NewInstance if n.childrenResolved && !n.resolved =>
           val outer = OuterScopes.getOuterScope(n.cls)
           if (outer == null) {
-            throw new AnalysisException(
-              s"Unable to generate an encoder for inner class `${n.cls.getName}` without " +
-                "access to the scope that this class was defined in.\n" +
-                "Try moving this class out of its parent class.")
+            throw QueryCompilationErrors.outerScopeFailureForNewInstanceError(n.cls.getName)
           }
           n.copy(outerPointer = Some(outer))
       }
@@ -3306,11 +3368,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case l: LambdaVariable => "array element"
         case e => e.sql
       }
-      throw new AnalysisException(s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
-        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
+      throw QueryCompilationErrors.upCastFailureError(fromStr, from, to, walkedTypePath)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -3321,8 +3379,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw new AnalysisException(
-            s"UpCast only support DecimalType as AbstractDataType yet, but got: $target")
+          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
@@ -3501,8 +3558,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             case Some(colName) =>
               ColumnPosition.after(colName)
             case None =>
-              throw new AnalysisException("Couldn't find the reference column for " +
-                s"$after at $parentName")
+              throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(after,
+                parentName)
           }
         case other => other
       }
@@ -3698,8 +3755,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
       } else if (numWindowExpr > 1) {
-        p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
-          "of rows, therefore they are currently not supported.")
+        throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {
         p // Return unchanged. Analyzer will throw exception later
       }

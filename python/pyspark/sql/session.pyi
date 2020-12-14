@@ -17,7 +17,8 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Iterable, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Iterable, List, Optional, Tuple, Type, TypeVar, Union
+from types import TracebackType
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -122,4 +123,9 @@ class SparkSession(SparkConversionMixin):
     def streams(self) -> StreamingQueryManager: ...
     def stop(self) -> None: ...
     def __enter__(self) -> SparkSession: ...
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None: ...

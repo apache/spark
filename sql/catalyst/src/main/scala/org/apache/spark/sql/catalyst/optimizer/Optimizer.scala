@@ -85,7 +85,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
-        CombineLimits,
+        EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
         TransposeWindow,
@@ -185,6 +185,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    // This batch rewrites data source plans and should be run after the operator
+    // optimization batch and before any batches that depend on stats.
+    Batch("Data Source Rewrite Rules", Once, dataSourceRewriteRules: _*) :+
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
@@ -288,6 +291,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * Override to provide additional rules for early projection and filter pushdown to scans.
    */
   def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules for rewriting data source plans. Such rules will be
+   * applied after operator optimization rules and before any rules that depend on stats.
+   */
+  def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
@@ -811,9 +820,12 @@ object CollapseRepartition extends Rule[LogicalPlan] {
  */
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _), spec)
-      if spec.orderSpec.nonEmpty &&
-        spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame].frameType == RowFrame =>
+    case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _),
+        WindowSpecDefinition(_, orderSpec, frameSpecification: SpecifiedWindowFrame))
+        if orderSpec.nonEmpty && frameSpecification.frameType == RowFrame &&
+          frameSpecification.lower == UnboundedPreceding &&
+          (frameSpecification.upper == UnboundedFollowing ||
+            frameSpecification.upper == CurrentRow) =>
       we.copy(windowFunction = NthValue(first.child, Literal(1), first.ignoreNulls))
   }
 }
@@ -841,7 +853,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   of the child window expression, transpose them.
  */
 object TransposeWindow extends Rule[LogicalPlan] {
-  private def compatibleParititions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+  private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
     ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
       case (l, r) => l.semanticEquals(r)
     })
@@ -852,7 +864,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
         if w1.references.intersect(w2.windowOutputSet).isEmpty &&
            w1.expressions.forall(_.deterministic) &&
            w2.expressions.forall(_.deterministic) &&
-           compatibleParititions(ps1, ps2) =>
+           compatiblePartitions(ps1, ps2) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
@@ -1451,11 +1463,20 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Combines two adjacent [[Limit]] operators into one, merging the
- * expressions into one single expression.
+ * This rule optimizes Limit operators by:
+ * 1. Eliminate [[Limit]] operators if it's child max row <= limit.
+ * 2. Combines two adjacent [[Limit]] operators into one, merging the
+ *    expressions into one single expression.
  */
-object CombineLimits extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+object EliminateLimits extends Rule[LogicalPlan] {
+  private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
+    limitExpr.foldable && child.maxRows.exists { _ <= limitExpr.eval().asInstanceOf[Int] }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Limit(l, child) if canEliminate(l, child) =>
+      child
+
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
       GlobalLimit(Least(Seq(ne, le)), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>

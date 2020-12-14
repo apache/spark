@@ -722,7 +722,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replay the given log file, saving the application in the listing db.
-   * Visable for testing
+   * Visible for testing
    */
   private[history] def doMergeApplicationListing(
       reader: EventLogFileReader,

@@ -1001,7 +1001,9 @@ class DataFrameAggregateSuite extends QueryTest
 
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         withTempView("t1", "t2") {
           sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
           sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")

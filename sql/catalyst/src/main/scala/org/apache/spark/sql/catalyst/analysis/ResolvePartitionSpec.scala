@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requireExactMatchedPartitionSpec}
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
@@ -33,56 +35,59 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r @ AlterTableAddPartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
-      r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
+      val partitionSchema = table.partitionSchema()
+      r.copy(parts = resolvePartitionSpecs(
+        table.name,
+        partSpecs,
+        partitionSchema,
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableDropPartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
-      r.copy(parts = resolvePartitionSpecs(partSpecs, table.partitionSchema()))
+      val partitionSchema = table.partitionSchema()
+      r.copy(parts = resolvePartitionSpecs(
+        table.name,
+        partSpecs,
+        partitionSchema,
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
+
+    case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
+      r.copy(pattern = resolvePartitionSpecs(
+        table.name,
+        partSpecs.toSeq,
+        table.partitionSchema()).headOption)
   }
 
   private def resolvePartitionSpecs(
-      partSpecs: Seq[PartitionSpec], partSchema: StructType): Seq[ResolvedPartitionSpec] =
+      tableName: String,
+      partSpecs: Seq[PartitionSpec],
+      partSchema: StructType,
+      checkSpec: TablePartitionSpec => Unit = _ => ()): Seq[ResolvedPartitionSpec] =
     partSpecs.map {
       case unresolvedPartSpec: UnresolvedPartitionSpec =>
+        val normalizedSpec = normalizePartitionSpec(
+          unresolvedPartSpec.spec,
+          partSchema.map(_.name),
+          tableName,
+          conf.resolver)
+        checkSpec(normalizedSpec)
+        val partitionNames = normalizedSpec.keySet
+        val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
         ResolvedPartitionSpec(
-          convertToPartIdent(unresolvedPartSpec.spec, partSchema), unresolvedPartSpec.location)
+          requestedFields.map(_.name),
+          convertToPartIdent(normalizedSpec, requestedFields),
+          unresolvedPartSpec.location)
       case resolvedPartitionSpec: ResolvedPartitionSpec =>
         resolvedPartitionSpec
     }
 
-  private def convertToPartIdent(
-      partSpec: TablePartitionSpec, partSchema: StructType): InternalRow = {
-    val conflictKeys = partSpec.keys.toSeq.diff(partSchema.map(_.name))
-    if (conflictKeys.nonEmpty) {
-      throw new AnalysisException(s"Partition key ${conflictKeys.mkString(",")} not exists")
-    }
-
-    val partValues = partSchema.map { part =>
-      val partValue = partSpec.get(part.name).orNull
-      if (partValue == null) {
-        null
-      } else {
-        // TODO: Support other datatypes, such as DateType
-        part.dataType match {
-          case _: ByteType =>
-            partValue.toByte
-          case _: ShortType =>
-            partValue.toShort
-          case _: IntegerType =>
-            partValue.toInt
-          case _: LongType =>
-            partValue.toLong
-          case _: FloatType =>
-            partValue.toFloat
-          case _: DoubleType =>
-            partValue.toDouble
-          case _: StringType =>
-            partValue
-          case _ =>
-            throw new AnalysisException(
-              s"Type ${part.dataType.typeName} is not supported for partition.")
-        }
-      }
+  private[sql] def convertToPartIdent(
+      partitionSpec: TablePartitionSpec,
+      schema: Seq[StructField]): InternalRow = {
+    val partValues = schema.map { part =>
+      val raw = partitionSpec.get(part.name).orNull
+      val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
+      Cast(Literal.create(raw, StringType), dt, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }

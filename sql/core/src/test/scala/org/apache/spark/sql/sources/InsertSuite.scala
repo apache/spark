@@ -845,7 +845,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         .add("s", StringType, false)
       val newTable = CatalogTable(
         identifier = TableIdentifier("test_table", None),
-        tableType = CatalogTableType.EXTERNAL,
+        tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,

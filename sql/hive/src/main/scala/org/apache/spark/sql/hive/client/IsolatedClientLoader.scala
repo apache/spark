@@ -112,24 +112,11 @@ private[hive] object IsolatedClientLoader extends Logging {
       hadoopVersion: String,
       ivyPath: Option[String],
       remoteRepos: String): Seq[URL] = {
-    val hadoopJarNames = if (hadoopVersion.startsWith("3")) {
-      Seq(s"org.apache.hadoop:hadoop-client-api:$hadoopVersion",
-        s"org.apache.hadoop:hadoop-client-runtime:$hadoopVersion")
-    } else {
-      Seq(s"org.apache.hadoop:hadoop-client:$hadoopVersion")
-    }
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
-      Seq("com.google.guava:guava:14.0.1") ++ hadoopJarNames
-
-    val extraExclusions = if (hadoopVersion.startsWith("3")) {
-      // this introduced from lower version of Hive could conflict with jars in Hadoop 3.2+, so
-      // exclude here in favor of the ones in Hadoop 3.2+
-      Seq("org.apache.hadoop:hadoop-auth")
-    } else {
-      Seq.empty
-    }
+      Seq("com.google.guava:guava:14.0.1",
+        s"org.apache.hadoop:hadoop-client:$hadoopVersion")
 
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
@@ -137,7 +124,7 @@ private[hive] object IsolatedClientLoader extends Logging {
         SparkSubmitUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
-        exclusions = version.exclusions ++ extraExclusions)
+        exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
 

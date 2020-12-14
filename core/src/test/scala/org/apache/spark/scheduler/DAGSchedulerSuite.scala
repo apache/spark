@@ -2569,7 +2569,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val newTaskSet = taskSets(1)
     // 2 tasks should have been re-submitted, for tasks 0 and 1 (which ran on hostA).
     assert(newTaskSet.tasks.size === 2)
-    // Complete task 0 from the original task set (i.e., not hte one that's currently active).
+    // Complete task 0 from the original task set (i.e., not the one that's currently active).
     // This should still be counted towards the job being complete (but there's still one
     // outstanding task).
     runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
@@ -3057,7 +3057,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertResultStageFailToRollback(shuffleMapRdd)
   }
 
-  private def assertResultStageNotRollbacked(mapRdd: MyRDD): Unit = {
+  private def assertResultStageNotRolledBack(mapRdd: MyRDD): Unit = {
     val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
@@ -3097,7 +3097,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
       shuffleMapRdd.checkpoint()
       shuffleMapRdd.doCheckpoint()
-      assertResultStageNotRollbacked(shuffleMapRdd)
+      assertResultStageNotRolledBack(shuffleMapRdd)
     }
   }
 

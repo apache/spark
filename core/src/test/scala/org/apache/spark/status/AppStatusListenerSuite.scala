@@ -234,7 +234,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Send two executor metrics update. Only update one metric to avoid a lot of boilerplate code.
     // The tasks are distributed among the two executors, so the executor-level metrics should
-    // hold half of the cummulative value of the metric being updated.
+    // hold half of the cumulative value of the metric being updated.
     Seq(1L, 2L).foreach { value =>
       s1Tasks.foreach { task =>
         val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
