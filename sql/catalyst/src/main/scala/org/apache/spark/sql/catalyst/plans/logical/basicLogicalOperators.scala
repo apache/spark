@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelat
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -484,21 +483,6 @@ object View {
       sqlConf.settings.put(k, v)
     }
     sqlConf
-  }
-
-  def fromCatalogTable(
-      metadata: CatalogTable, isTempView: Boolean, parser: ParserInterface): View = {
-    val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
-    val viewConfigs = metadata.viewSQLConfigs
-    val viewPlan =
-      SQLConf.withExistingConf(effectiveSQLConf(viewConfigs, isTempView = isTempView)) {
-        parser.parsePlan(viewText)
-      }
-    View(
-      desc = metadata,
-      isTempView = isTempView,
-      output = metadata.schema.toAttributes,
-      child = viewPlan)
   }
 }
 
