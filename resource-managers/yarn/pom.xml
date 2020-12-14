@@ -88,13 +88,6 @@
       <artifactId>hadoop-client</artifactId>
     </dependency>
 
-    <dependency>
-      <groupId>jakarta.servlet</groupId>
-      <artifactId>jakarta.servlet-api</artifactId>
-      <version>4.0.3</version>
-      <scope>test</scope>
-    </dependency>
-
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
     <dependency>
       <groupId>com.google.guava</groupId>
