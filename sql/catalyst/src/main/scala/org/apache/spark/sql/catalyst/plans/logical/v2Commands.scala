@@ -666,8 +666,7 @@ case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command {
+    purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
 
@@ -739,6 +738,16 @@ case class DropView(
  * The logical plan of the MSCK REPAIR TABLE command.
  */
 case class RepairTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... AS command.
+ */
+case class AlterViewAs(
+    child: LogicalPlan,
+    originalText: String,
+    query: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
