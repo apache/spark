@@ -60,7 +60,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
-    if (recacheTable) {
+    if (recacheTable && cache.isDefined) {
       // save the cache name and cache level for recreation
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel

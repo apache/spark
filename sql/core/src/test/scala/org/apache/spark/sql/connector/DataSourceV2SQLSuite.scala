@@ -1752,14 +1752,19 @@ class DataSourceV2SQLSuite
   test("SPARK-33653: REFRESH TABLE should recache the target table itself") {
     val tblName = "testcat.ns.t"
     withTable(tblName) {
-      withTempView("t") {
-        sql(s"CREATE TABLE $tblName (id bigint) USING foo")
-        sql(s"CACHE TABLE $tblName")
+      sql(s"CREATE TABLE $tblName (id bigint) USING foo")
 
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
-        sql(s"REFRESH TABLE $tblName")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
-      }
+      // if the table is not cached, refreshing it should not recache it
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+
+      sql(s"CACHE TABLE $tblName")
+
+      // after caching & refreshing the table should be recached
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
     }
   }
 
