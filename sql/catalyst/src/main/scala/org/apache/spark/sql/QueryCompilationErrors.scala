@@ -486,10 +486,6 @@ object QueryCompilationErrors {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
 
-  def sqlOnlySupportedWithTempViewOrV1TablesError(sql: String): Throwable = {
-    new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
-  }
-
   def cannotCreateTableWithBothProviderAndSerdeError(
       provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
     new AnalysisException(
