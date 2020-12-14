@@ -184,7 +184,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
-  test("SPARK-33118 CREATE TMEPORARY TABLE with LOCATION") {
+  test("SPARK-33118 CREATE TEMPORARY TABLE with LOCATION") {
     assertEqual("CREATE TEMPORARY TABLE t USING parquet OPTIONS (path '/data/tmp/testspark1')",
       CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
         Map("path" -> "/data/tmp/testspark1")))
@@ -337,35 +337,6 @@ class SparkSqlParserSuite extends AnalysisTest {
          |FROM v
         """.stripMargin,
       "LINES TERMINATED BY only supports newline '\\n' right now")
-  }
-
-  test("CACHE TABLE") {
-    assertEqual(
-      "CACHE TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, false, Map.empty))
-
-    assertEqual(
-      "CACHE TABLE t AS SELECT * FROM testData",
-      CacheTableCommand(
-        Seq("t"),
-        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
-        false,
-        Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, true, Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')",
-      CacheTableCommand(
-        Seq("a", "b", "c"),
-        None,
-        true,
-        Map("storageLevel" -> "DISK_ONLY")))
-
-    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/namespace prefix a.b")
   }
 
   test("UNCACHE TABLE") {

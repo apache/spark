@@ -365,11 +365,8 @@ object DateTimeUtils {
   }
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
-    val timestamp = stringToTimestamp(s, timeZoneId)
-    if (timestamp.isEmpty) {
+    stringToTimestamp(s, timeZoneId).getOrElse {
       throw new DateTimeException(s"Cannot cast $s to TimestampType.")
-    } else {
-      timestamp.get
     }
   }
 
@@ -463,6 +460,12 @@ object DateTimeUtils {
       Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
+    stringToDate(s, zoneId).getOrElse {
+      throw new DateTimeException(s"Cannot cast $s to DateType.")
     }
   }
 

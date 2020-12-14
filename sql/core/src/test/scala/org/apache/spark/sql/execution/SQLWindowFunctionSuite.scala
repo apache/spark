@@ -372,7 +372,7 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
     spark.catalog.dropTempView("nums")
   }
 
-  test("window function: mutiple window expressions specified by range in a single expression") {
+  test("window function: multiple window expressions specified by range in a single expression") {
     val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
     nums.createOrReplaceTempView("nums")
     withTempView("nums") {

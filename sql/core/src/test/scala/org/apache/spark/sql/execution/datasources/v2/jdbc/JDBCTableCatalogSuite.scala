@@ -23,7 +23,7 @@ import org.apache.log4j.Level
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -106,18 +106,16 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         Seq(Row("test", "dst_table"), Row("test", "people")))
     }
     // Rename not existing table or namespace
-    val exp1 = intercept[NoSuchTableException] {
-      sql(s"ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
+    val exp1 = intercept[AnalysisException] {
+      sql("ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
     assert(exp1.getMessage.contains(
-      "Failed table renaming from test.not_existing_table to test.dst_table"))
-    assert(exp1.cause.get.getMessage.contains("Table \"not_existing_table\" not found"))
-    val exp2 = intercept[NoSuchNamespaceException] {
-      sql(s"ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
+      "Table or view not found for 'ALTER TABLE ... RENAME TO': h2.test.not_existing_table"))
+    val exp2 = intercept[AnalysisException] {
+      sql("ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
     assert(exp2.getMessage.contains(
-      "Failed table renaming from bad_test.not_existing_table to test.dst_table"))
-    assert(exp2.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
+      "Table or view not found for 'ALTER TABLE ... RENAME TO': h2.bad_test.not_existing_table"))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>

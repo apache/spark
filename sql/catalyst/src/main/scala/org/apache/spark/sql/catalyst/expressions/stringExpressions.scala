@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -2082,6 +2083,65 @@ case class UnBase64(child: Expression)
   }
 }
 
+object Decode {
+  def createExpr(params: Seq[Expression]): Expression = {
+    params.length match {
+      case 0 | 1 =>
+        throw new AnalysisException("Invalid number of arguments for function decode. " +
+          s"Expected: 2; Found: ${params.length}")
+      case 2 => StringDecode(params.head, params.last)
+      case _ =>
+        val input = params.head
+        val other = params.tail
+        val itr = other.iterator
+        var default: Expression = Literal.create(null, StringType)
+        val branches = ArrayBuffer.empty[(Expression, Expression)]
+        while (itr.hasNext) {
+          val search = itr.next
+          if (itr.hasNext) {
+            val condition = EqualTo(input, search)
+            branches += ((condition, itr.next))
+          } else {
+            default = search
+          }
+        }
+        CaseWhen(branches.seq.toSeq, default)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+            |_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+            |
+            |_FUNC_(expr, search, result [, search, result ] ... [, default]) - Decode compares expr
+            |  to each search value one by one. If expr is equal to a search, returns the corresponding result.
+            |  If no match is found, then Oracle returns default. If default is omitted, returns null.
+          """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
+      > SELECT _FUNC_(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       San Francisco
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       Non domestic
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+       NULL
+  """,
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
+
+  def this(params: Seq[Expression]) = {
+    this(params, Decode.createExpr(params))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(params)
+  override def exprsReplaced: Seq[Expression] = params
+}
+
 /**
  * Decodes the first argument into a String using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
@@ -2097,7 +2157,7 @@ case class UnBase64(child: Expression)
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Decode(bin: Expression, charset: Expression)
+case class StringDecode(bin: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = bin

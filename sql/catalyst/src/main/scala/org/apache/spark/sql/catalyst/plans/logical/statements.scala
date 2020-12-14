@@ -316,42 +316,12 @@ case class AlterTableSerDePropertiesStatement(
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
- * ALTER VIEW ... SET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterViewSetPropertiesStatement(
-    viewName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER VIEW ... UNSET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterViewUnsetPropertiesStatement(
-    viewName: Seq[String],
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * ALTER VIEW ... Query command, as parsed from SQL.
  */
 case class AlterViewAsStatement(
     viewName: Seq[String],
     originalText: String,
     query: LogicalPlan) extends ParsedStatement
-
-/**
- * ALTER TABLE ... RENAME TO command, as parsed from SQL.
- */
-case class RenameTableStatement(
-    oldName: Seq[String],
-    newName: Seq[String],
-    isView: Boolean) extends ParsedStatement
-
-/**
- * A DROP VIEW statement, as parsed from SQL.
- */
-case class DropViewStatement(
-    viewName: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
@@ -386,15 +356,6 @@ case class InsertIntoStatement(
 }
 
 /**
- * A SHOW TABLE EXTENDED statement, as parsed from SQL.
- */
-case class ShowTableStatement(
-    namespace: Option[Seq[String]],
-    pattern: String,
-    partitionSpec: Option[TablePartitionSpec])
-  extends ParsedStatement
-
-/**
  * A CREATE NAMESPACE statement, as parsed from SQL.
  */
 case class CreateNamespaceStatement(
@@ -406,11 +367,6 @@ case class CreateNamespaceStatement(
  * A USE statement, as parsed from SQL.
  */
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
-
-/**
- * A REPAIR TABLE statement, as parsed from SQL
- */
-case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
  * A TRUNCATE TABLE statement, as parsed from SQL
