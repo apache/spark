@@ -54,7 +54,7 @@ import org.apache.spark.util.Utils
   """,
   since = "2.0.0")
 case class CallMethodViaReflection(children: Seq[Expression])
-  extends Expression with CodegenFallback {
+  extends Nondeterministic with CodegenFallback {
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("reflect")
 
@@ -77,11 +77,11 @@ case class CallMethodViaReflection(children: Seq[Expression])
     }
   }
 
-  override lazy val deterministic: Boolean = false
   override def nullable: Boolean = true
   override val dataType: DataType = StringType
+  override protected def initializeInternal(partitionIndex: Int): Unit = {}
 
-  override def eval(input: InternalRow): Any = {
+  override protected def evalInternal(input: InternalRow): Any = {
     var i = 0
     while (i < argExprs.length) {
       buffer(i) = argExprs(i).eval(input).asInstanceOf[Object]
