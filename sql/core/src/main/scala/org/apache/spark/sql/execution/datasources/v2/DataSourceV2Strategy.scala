@@ -316,7 +316,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
 
@@ -343,6 +343,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case RepairTable(_: ResolvedTable) =>
       throw new AnalysisException("MSCK REPAIR TABLE is not supported for v2 tables.")
+
+    case r: CacheTable =>
+      CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
+
+    case r: CacheTableAsSelect =>
+      CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
 
     case _ => Nil
   }

@@ -454,13 +454,13 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartition(
-        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
-        retainData)
+        retainData = false)
 
     case AlterTableSerDePropertiesStatement(tbl, serdeClassName, serdeProperties, partitionSpec) =>
       val v1TableName = parseV1Table(tbl, "ALTER TABLE SerDe Properties")
@@ -470,10 +470,9 @@ class ResolveSessionCatalog(
         serdeProperties,
         partitionSpec)
 
-    case AlterViewAsStatement(name, originalText, query) =>
-      val viewName = parseTempViewOrV1Table(name, "ALTER VIEW QUERY")
+    case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(
-        viewName.asTableIdentifier,
+        ident.asTableIdentifier,
         originalText,
         query)
 
@@ -564,12 +563,6 @@ class ResolveSessionCatalog(
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {
     case SessionCatalogAndTable(_, tbl) => tbl
     case _ => throw QueryCompilationErrors.sqlOnlySupportedWithV1TablesError(sql)
-  }
-
-  private def parseTempViewOrV1Table(
-      nameParts: Seq[String], sql: String): Seq[String] = nameParts match {
-    case TempViewOrV1Table(name) => name
-    case _ => throw QueryCompilationErrors.sqlOnlySupportedWithTempViewOrV1TablesError(sql)
   }
 
   private def getStorageFormatAndProvider(
@@ -667,14 +660,6 @@ class ResolveSessionCatalog(
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
-      case _ => None
-    }
-  }
-
-  object TempViewOrV1Table {
-    def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
-      case _ if isTempView(nameParts) => Some(nameParts)
-      case SessionCatalogAndIdentifier(_, tbl) => Some(tbl.asMultipartIdentifier)
       case _ => None
     }
   }
