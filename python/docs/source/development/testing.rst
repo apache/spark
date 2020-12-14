@@ -53,5 +53,5 @@ Running tests using GitHub Actions
 ----------------------------------
 
 You can run the full PySpark tests by using GitHub Actions in your own forked GitHub
-repositry with a few clicks. Please refer to
+repository with a few clicks. Please refer to
 `Running tests in your forked repository using GitHub Actions <https://spark.apache.org/developer-tools.html>`_ for more details.

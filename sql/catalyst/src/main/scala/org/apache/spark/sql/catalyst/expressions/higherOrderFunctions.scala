@@ -128,7 +128,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   def argumentTypes: Seq[AbstractDataType]
 
   /**
-   * All arguments have been resolved. This means that the types and nullabilty of (most of) the
+   * All arguments have been resolved. This means that the types and nullability of (most of) the
    * lambda function arguments is known, and that we can start binding the lambda functions.
    */
   lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)

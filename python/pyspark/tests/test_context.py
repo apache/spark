@@ -175,8 +175,8 @@ class ContextTests(unittest.TestCase):
         with SparkContext() as sc:
             temp_files = os.listdir(sc._temp_dir)
             rdd = sc.parallelize([0, 1, 2])
-            post_parallalize_temp_files = os.listdir(sc._temp_dir)
-            self.assertEqual(temp_files, post_parallalize_temp_files)
+            post_parallelize_temp_files = os.listdir(sc._temp_dir)
+            self.assertEqual(temp_files, post_parallelize_temp_files)
 
     def test_set_conf(self):
         # This is for an internal use case. When there is an existing SparkContext,

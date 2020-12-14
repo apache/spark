@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
 import java.util.jar.JarInputStream
+import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -311,7 +312,7 @@ private[spark] class SparkSubmit extends Logging {
         // In K8s client mode, when in the driver, add resolved jars early as we might need
         // them at the submit time for artifact downloading.
         // For example we might use the dependencies for downloading
-        // files from a Hadoop Compatible fs eg. S3. In this case the user might pass:
+        // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
         // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
         if (isKubernetesClusterModeDriver) {
           val loader = getSubmitClassLoader(sparkConf)
@@ -387,10 +388,18 @@ private[spark] class SparkSubmit extends Logging {
         // Executors will get the jars from the Spark file server.
         // Explicitly download the related files here
         args.jars = renameResourcesToLocalFS(args.jars, localJars)
-        val localFiles = Option(args.files).map {
+        val filesLocalFiles = Option(args.files).map {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
-        args.files = renameResourcesToLocalFS(args.files, localFiles)
+        val archiveLocalFiles = Option(args.archives).map { uri =>
+          val resolvedUri = Utils.resolveURI(uri)
+          val downloadedUri = downloadFileList(
+            UriBuilder.fromUri(resolvedUri).fragment(null).build().toString,
+            targetDir, sparkConf, hadoopConf, secMgr)
+          UriBuilder.fromUri(downloadedUri).fragment(resolvedUri.getFragment).build().toString
+        }.orNull
+        args.files = renameResourcesToLocalFS(args.files, filesLocalFiles)
+        args.archives = renameResourcesToLocalFS(args.archives, archiveLocalFiles)
         args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
       }
     }
@@ -607,6 +616,8 @@ private[spark] class SparkSubmit extends Logging {
         confKey = CORES_MAX.key),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = FILES.key),
+      OptionAssigner(args.archives, LOCAL | STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
+        confKey = ARCHIVES.key),
       OptionAssigner(args.jars, LOCAL, CLIENT, confKey = JARS.key),
       OptionAssigner(args.jars, STANDALONE | MESOS | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = JARS.key),
@@ -796,6 +807,7 @@ private[spark] class SparkSubmit extends Logging {
     val pathConfigs = Seq(
       JARS.key,
       FILES.key,
+      ARCHIVES.key,
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives",
       "spark.yarn.dist.jars")
@@ -1186,12 +1198,16 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): String = {
-    artifacts.map { ai =>
-      val artifactInfo = ai.asInstanceOf[Artifact]
-      val artifact = artifactInfo.getModuleRevisionId
-      val testSuffix = if (artifactInfo.getType == "test-jar") "-tests" else ""
+    artifacts.map { artifactInfo =>
+      val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
+      val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
+      val classifier = if (extraAttrs.containsKey("classifier")) {
+        "-" + extraAttrs.get("classifier")
+      } else {
+        ""
+      }
       cacheDirectory.getAbsolutePath + File.separator +
-        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}${testSuffix}.jar"
+        s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}$classifier.jar"
     }.mkString(",")
   }
 

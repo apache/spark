@@ -268,7 +268,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("add executors multiple profiles initial num same as needed") {
     // test when the initial number of executors equals the number needed for the first
-    // stage using a non default profile to make sure we request the intitial number
+    // stage using a non default profile to make sure we request the initial number
     // properly. Here initial is 2, each executor in ResourceProfile 1 can have 2 tasks
     // per executor, and start a stage with 4 tasks, which would need 2 executors.
     val clock = new ManualClock(8888L)

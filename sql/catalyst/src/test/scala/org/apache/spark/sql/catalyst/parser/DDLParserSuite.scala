@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -63,6 +63,7 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
+      None,
       None)
 
     Seq(createSql, replaceSql).foreach { sql =>
@@ -70,7 +71,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "no viable alternative at input")
+      "extraneous input ':'")
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -85,6 +86,7 @@ class DDLParserSuite extends AnalysisTest {
         Map.empty[String, String],
         Some("parquet"),
         Map.empty[String, String],
+        None,
         None,
         None),
       expectedIfNotExists = true)
@@ -105,6 +107,7 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       Some("parquet"),
       Map.empty[String, String],
+      None,
       None,
       None)
     Seq(createSql, replaceSql).foreach { sql =>
@@ -160,6 +163,7 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
+      None,
       None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
@@ -182,6 +186,7 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
+      None,
       None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
@@ -200,7 +205,8 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
-      Some("abc"))
+      Some("abc"),
+      None)
     Seq(createSql, replaceSql).foreach{ sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
@@ -220,6 +226,7 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
+      None,
       None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
@@ -238,6 +245,7 @@ class DDLParserSuite extends AnalysisTest {
         Some("parquet"),
         Map.empty[String, String],
         Some("/tmp/file"),
+        None,
         None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
@@ -256,19 +264,309 @@ class DDLParserSuite extends AnalysisTest {
       Some("parquet"),
       Map.empty[String, String],
       None,
+      None,
       None)
     Seq(createSql, replaceSql).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
+  test("create/replace table - partition column definitions") {
+    val createSql = "CREATE TABLE my_tab (id bigint) PARTITIONED BY (part string)"
+    val replaceSql = "REPLACE TABLE my_tab (id bigint) PARTITIONED BY (part string)"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - empty columns list") {
+    val createSql = "CREATE TABLE my_tab PARTITIONED BY (part string)"
+    val replaceSql = "REPLACE TABLE my_tab PARTITIONED BY (part string)"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - using with partition column definitions") {
+    val createSql = "CREATE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
+    val replaceSql = "REPLACE TABLE my_tab (id bigint) USING parquet PARTITIONED BY (part string)"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      Some("parquet"),
+      Map.empty[String, String],
+      None,
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - mixed partition references and column definitions") {
+    val createSql = "CREATE TABLE my_tab (id bigint, p1 string) PARTITIONED BY (p1, p2 string)"
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq(
+        "PARTITION BY: Cannot mix partition expressions and partition columns",
+        "Expressions: p1",
+        "Columns: p2 string"))
+    }
+
+    val createSqlWithExpr =
+      "CREATE TABLE my_tab (id bigint, p1 string) PARTITIONED BY (p2 string, truncate(p1, 16))"
+    val replaceSqlWithExpr = createSqlWithExpr.replaceFirst("CREATE", "REPLACE")
+    Seq(createSqlWithExpr, replaceSqlWithExpr).foreach { sql =>
+      assertUnsupported(sql, Seq(
+        "PARTITION BY: Cannot mix partition expressions and partition columns",
+        "Expressions: truncate(p1, 16)",
+        "Columns: p2 string"))
+    }
+  }
+
+  test("create/replace table - stored as") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint)
+        |PARTITIONED BY (part string)
+        |STORED AS parquet
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      Some(SerdeInfo(storedAs = Some("parquet"))))
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - stored as format with serde") {
+    Seq("sequencefile", "textfile", "rcfile").foreach { format =>
+      val createSql =
+        s"""CREATE TABLE my_tab (id bigint)
+          |PARTITIONED BY (part string)
+          |STORED AS $format
+          |ROW FORMAT SERDE 'customSerde'
+          |WITH SERDEPROPERTIES ('prop'='value')
+        """.stripMargin
+      val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+      val expectedTableSpec = TableSpec(
+        Seq("my_tab"),
+        Some(new StructType().add("id", LongType).add("part", StringType)),
+        Seq(IdentityTransform(FieldReference("part"))),
+        None,
+        Map.empty[String, String],
+        None,
+        Map.empty[String, String],
+        None,
+        None,
+        Some(SerdeInfo(storedAs = Some(format), serde = Some("customSerde"), serdeProperties = Map(
+          "prop" -> "value"
+        ))))
+      Seq(createSql, replaceSql).foreach { sql =>
+        testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+      }
+    }
+
+    val createSql =
+      s"""CREATE TABLE my_tab (id bigint)
+         |PARTITIONED BY (part string)
+         |STORED AS otherFormat
+         |ROW FORMAT SERDE 'customSerde'
+         |WITH SERDEPROPERTIES ('prop'='value')
+         """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq("ROW FORMAT SERDE is incompatible with format 'otherFormat'"))
+    }
+  }
+
+  test("create/replace table - stored as format with delimited clauses") {
+    val createSql =
+      s"""CREATE TABLE my_tab (id bigint)
+         |PARTITIONED BY (part string)
+         |STORED AS textfile
+         |ROW FORMAT DELIMITED
+         |FIELDS TERMINATED BY ',' ESCAPED BY '\\\\' -- double escape for Scala and for SQL
+         |COLLECTION ITEMS TERMINATED BY '#'
+         |MAP KEYS TERMINATED BY '='
+         |LINES TERMINATED BY '\\n'
+      """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      Some(SerdeInfo(storedAs = Some("textfile"), serdeProperties = Map(
+        "field.delim" -> ",", "serialization.format" -> ",", "escape.delim" -> "\\",
+        "colelction.delim" -> "#", "mapkey.delim" -> "=", "line.delim" -> "\n"
+      ))))
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+
+    val createFailSql =
+      s"""CREATE TABLE my_tab (id bigint)
+         |PARTITIONED BY (part string)
+         |STORED AS otherFormat
+         |ROW FORMAT DELIMITED
+         |FIELDS TERMINATED BY ','
+         """.stripMargin
+    val replaceFailSql = createFailSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createFailSql, replaceFailSql).foreach { sql =>
+      assertUnsupported(sql, Seq(
+        "ROW FORMAT DELIMITED is only compatible with 'textfile', not 'otherFormat'"))
+    }
+  }
+
+  test("create/replace table - stored as inputformat/outputformat") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint)
+        |PARTITIONED BY (part string)
+        |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      Some(SerdeInfo(formatClasses = Some(FormatClasses("inFormat", "outFormat")))))
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - stored as inputformat/outputformat with serde") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint)
+        |PARTITIONED BY (part string)
+        |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
+        |ROW FORMAT SERDE 'customSerde'
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("id", LongType).add("part", StringType)),
+      Seq(IdentityTransform(FieldReference("part"))),
+      None,
+      Map.empty[String, String],
+      None,
+      Map.empty[String, String],
+      None,
+      None,
+      Some(SerdeInfo(
+        formatClasses = Some(FormatClasses("inFormat", "outFormat")),
+        serde = Some("customSerde"))))
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
+    }
+  }
+
+  test("create/replace table - using with stored as") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint, part string)
+        |USING parquet
+        |STORED AS parquet
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... STORED AS"))
+    }
+  }
+
+  test("create/replace table - using with row format serde") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint, part string)
+        |USING parquet
+        |ROW FORMAT SERDE 'customSerde'
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... ROW FORMAT SERDE"))
+    }
+  }
+
+  test("create/replace table - using with row format delimited") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint, part string)
+        |USING parquet
+        |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq("CREATE TABLE ... USING ... ROW FORMAT DELIMITED"))
+    }
+  }
+
+  test("create/replace table - stored by") {
+    val createSql =
+      """CREATE TABLE my_tab (id bigint, p1 string)
+        |STORED BY 'handler'
+        """.stripMargin
+    val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
+    Seq(createSql, replaceSql).foreach { sql =>
+      assertUnsupported(sql, Seq("stored by"))
+    }
+  }
+
+  test("Unsupported skew clause - create/replace table") {
+    intercept("CREATE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)",
+      "CREATE TABLE ... SKEWED BY")
+    intercept("REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)",
+      "CREATE TABLE ... SKEWED BY")
+  }
+
   test("Duplicate clauses - create/replace table") {
     def createTableHeader(duplicateClause: String): String = {
-      s"CREATE TABLE my_tab(a INT, b STRING) USING parquet $duplicateClause $duplicateClause"
+      s"CREATE TABLE my_tab(a INT, b STRING) $duplicateClause $duplicateClause"
     }
 
     def replaceTableHeader(duplicateClause: String): String = {
-      s"CREATE TABLE my_tab(a INT, b STRING) USING parquet $duplicateClause $duplicateClause"
+      s"CREATE TABLE my_tab(a INT, b STRING) $duplicateClause $duplicateClause"
     }
 
     intercept(createTableHeader("TBLPROPERTIES('test' = 'test2')"),
@@ -281,6 +579,14 @@ class DDLParserSuite extends AnalysisTest {
       "Found duplicate clauses: CLUSTERED BY")
     intercept(createTableHeader("PARTITIONED BY (b)"),
       "Found duplicate clauses: PARTITIONED BY")
+    intercept(createTableHeader("PARTITIONED BY (c int)"),
+      "Found duplicate clauses: PARTITIONED BY")
+    intercept(createTableHeader("STORED AS parquet"),
+      "Found duplicate clauses: STORED AS")
+    intercept(createTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'"),
+      "Found duplicate clauses: STORED AS")
+    intercept(createTableHeader("ROW FORMAT SERDE 'serde'"),
+      "Found duplicate clauses: ROW FORMAT")
 
     intercept(replaceTableHeader("TBLPROPERTIES('test' = 'test2')"),
       "Found duplicate clauses: TBLPROPERTIES")
@@ -292,6 +598,14 @@ class DDLParserSuite extends AnalysisTest {
       "Found duplicate clauses: CLUSTERED BY")
     intercept(replaceTableHeader("PARTITIONED BY (b)"),
       "Found duplicate clauses: PARTITIONED BY")
+    intercept(replaceTableHeader("PARTITIONED BY (c int)"),
+      "Found duplicate clauses: PARTITIONED BY")
+    intercept(replaceTableHeader("STORED AS parquet"),
+      "Found duplicate clauses: STORED AS")
+    intercept(replaceTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'"),
+      "Found duplicate clauses: STORED AS")
+    intercept(replaceTableHeader("ROW FORMAT SERDE 'serde'"),
+      "Found duplicate clauses: ROW FORMAT")
   }
 
   test("support for other types in OPTIONS") {
@@ -316,6 +630,7 @@ class DDLParserSuite extends AnalysisTest {
           Map.empty[String, String],
           Some("json"),
           Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+          None,
           None,
           None),
         expectedIfNotExists = false)
@@ -372,7 +687,8 @@ class DDLParserSuite extends AnalysisTest {
         Some("parquet"),
         Map.empty[String, String],
         Some("/user/external/page_view"),
-        Some("This is the staging page view table"))
+        Some("This is the staging page view table"),
+        None)
     Seq(s1, s2, s3, s4).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = true)
     }
@@ -381,37 +697,42 @@ class DDLParserSuite extends AnalysisTest {
   test("drop table") {
     parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
       DropTable(
-        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl")),
+        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl"), "DROP TABLE"),
         ifExists = false,
         purge = false))
     parseCompare(s"DROP TABLE db.tab",
       DropTable(
-        UnresolvedTableOrView(Seq("db", "tab")), ifExists = false, purge = false))
+        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS db.tab",
       DropTable(
-        UnresolvedTableOrView(Seq("db", "tab")), ifExists = true, purge = false))
+        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = false))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = false))
     parseCompare(s"DROP TABLE IF EXISTS tab",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = false))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = false))
     parseCompare(s"DROP TABLE tab PURGE",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = false, purge = true))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = true))
     parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
       DropTable(
-        UnresolvedTableOrView(Seq("tab")), ifExists = true, purge = true))
+        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = true))
   }
 
   test("drop view") {
+    val cmd = "DROP VIEW"
+    val hint = Some("Please use DROP TABLE instead.")
     parseCompare(s"DROP VIEW testcat.db.view",
-      DropViewStatement(Seq("testcat", "db", "view"), ifExists = false))
-    parseCompare(s"DROP VIEW db.view", DropViewStatement(Seq("db", "view"), ifExists = false))
+      DropView(UnresolvedView(Seq("testcat", "db", "view"), cmd, true, hint), ifExists = false))
+    parseCompare(s"DROP VIEW db.view",
+      DropView(UnresolvedView(Seq("db", "view"), cmd, true, hint), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS db.view",
-      DropViewStatement(Seq("db", "view"), ifExists = true))
-    parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
-    parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
+      DropView(UnresolvedView(Seq("db", "view"), cmd, true, hint), ifExists = true))
+    parseCompare(s"DROP VIEW view",
+      DropView(UnresolvedView(Seq("view"), cmd, true, hint), ifExists = false))
+    parseCompare(s"DROP VIEW IF EXISTS view",
+      DropView(UnresolvedView(Seq("view"), cmd, true, hint), ifExists = true))
   }
 
   private def testCreateOrReplaceDdl(
@@ -443,16 +764,22 @@ class DDLParserSuite extends AnalysisTest {
         "'comment' = 'new_comment')"
     val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val hint = Some("Please use ALTER TABLE instead.")
 
     comparePlans(parsePlan(sql1_view),
-      AlterViewSetPropertiesStatement(
-      Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+      AlterViewSetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... SET TBLPROPERTIES", false, hint),
+        Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(parsePlan(sql2_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = false))
+      AlterViewUnsetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... UNSET TBLPROPERTIES", false, hint),
+        Seq("comment", "test"),
+        ifExists = false))
     comparePlans(parsePlan(sql3_view),
-      AlterViewUnsetPropertiesStatement(
-      Seq("table_name"), Seq("comment", "test"), ifExists = true))
+      AlterViewUnsetProperties(
+        UnresolvedView(Seq("table_name"), "ALTER VIEW ... UNSET TBLPROPERTIES", false, hint),
+        Seq("comment", "test"),
+        ifExists = true))
   }
 
   // ALTER TABLE table_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -642,7 +969,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(first())))
   }
 
-  test("alter table: mutiple property changes are not allowed") {
+  test("alter table: multiple property changes are not allowed") {
     intercept[ParseException] {
       parsePlan("ALTER TABLE table_name ALTER COLUMN a.b.c " +
         "TYPE bigint COMMENT 'new comment'")}
@@ -787,35 +1114,41 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table/view: rename table/view") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = false))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = false))
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
-      RenameTableStatement(Seq("a", "b", "c"), Seq("x", "y", "z"), isView = true))
+      RenameTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO"),
+        Seq("x", "y", "z"),
+        isView = true))
   }
 
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("abc.xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc.xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("abc", "xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc", "xyz"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("a.b", "x.y"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("a.b", "x.y"), isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t")), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
@@ -834,13 +1167,17 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = false))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
-      DescribeRelation(UnresolvedTableOrView(Seq("t")), Map.empty, isExtended = true))
+      DescribeRelation(
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -852,6 +1189,22 @@ class DDLParserSuite extends AnalysisTest {
         InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false, ifPartitionNotExists = false))
+    }
+  }
+
+  test("insert table: basic append with a column list") {
+    Seq(
+      "INSERT INTO TABLE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source",
+      "INSERT INTO testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
           overwrite = false, ifPartitionNotExists = false))
     }
@@ -862,6 +1215,7 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map.empty,
+        Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testcat2", "db", "tbl"))),
         overwrite = false, ifPartitionNotExists = false))
   }
@@ -876,6 +1230,22 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
+        Nil,
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = false, ifPartitionNotExists = false))
+  }
+
+  test("insert table: append with partition and a column list") {
+    parseCompare(
+      """
+        |INSERT INTO testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
+        |SELECT * FROM source
+      """.stripMargin,
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = false, ifPartitionNotExists = false))
   }
@@ -889,6 +1259,22 @@ class DDLParserSuite extends AnalysisTest {
         InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = true, ifPartitionNotExists = false))
+    }
+  }
+
+  test("insert table: overwrite with column list") {
+    Seq(
+      "INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source",
+      "INSERT OVERWRITE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Seq("a", "b"),
           Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
           overwrite = true, ifPartitionNotExists = false))
     }
@@ -904,6 +1290,22 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
+        Nil,
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        overwrite = true, ifPartitionNotExists = false))
+  }
+
+  test("insert table: overwrite with partition and column list") {
+    parseCompare(
+      """
+        |INSERT OVERWRITE TABLE testcat.ns1.ns2.tbl
+        |PARTITION (p1 = 3, p2) (a, b)
+        |SELECT * FROM source
+      """.stripMargin,
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Map("p1" -> Some("3"), "p2" -> None),
+        Seq("a", "b"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = true, ifPartitionNotExists = false))
   }
@@ -918,6 +1320,7 @@ class DDLParserSuite extends AnalysisTest {
       InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3")),
+        Nil,
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
         overwrite = true, ifPartitionNotExists = true))
   }
@@ -1453,57 +1856,57 @@ class DDLParserSuite extends AnalysisTest {
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map.empty, noScan = false))
     comparePlans(parsePlan("analyze table a.b.c compute statistics noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map.empty, noScan = true))
     comparePlans(parsePlan("analyze table a.b.c partition (a) compute statistics nOscAn"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("a" -> None), noScan = true))
 
     // Partitions specified
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> Some("2008-04-09"), "hr" -> None), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr=11) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> Some("11")), noScan = true))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = false))
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c PARTITION(ds, hr) COMPUTE STATISTICS noscan"),
       AnalyzeTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE", allowTempView = false),
         Map("ds" -> None, "hr" -> None), noScan = true))
 
     intercept("analyze table a.b.c compute statistics xxxx",
@@ -1518,7 +1921,9 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        Option(Seq("key", "value")),
+        allColumns = false))
 
     // Partition specified - should be ignored
     comparePlans(
@@ -1528,7 +1933,9 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR COLUMNS key, value
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), Option(Seq("key", "value")), allColumns = false))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        Option(Seq("key", "value")),
+        allColumns = false))
 
     // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
     comparePlans(
@@ -1538,7 +1945,9 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR ALL COLUMNS
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c")), None, allColumns = true))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR ALL COLUMNS"),
+        None,
+        allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
       "mismatched input 'key' expecting {<EOF>, ';'}")
@@ -1549,21 +1958,21 @@ class DDLParserSuite extends AnalysisTest {
   test("MSCK REPAIR TABLE") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTableStatement(Seq("a", "b", "c")))
+      RepairTable(UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE")))
   }
 
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", false, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", false, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, false, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", true, false, None))
 
     comparePlans(
       parsePlan("LOAD DATA LOCAL INPATH 'filepath' OVERWRITE INTO TABLE a.b.c"),
-      LoadData(UnresolvedTable(Seq("a", "b", "c")), "filepath", true, true, None))
+      LoadData(UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"), "filepath", true, true, None))
 
     comparePlans(
       parsePlan(
@@ -1572,7 +1981,7 @@ class DDLParserSuite extends AnalysisTest {
            |PARTITION(ds='2017-06-10')
          """.stripMargin),
       LoadData(
-        UnresolvedTable(Seq("a", "b", "c")),
+        UnresolvedTable(Seq("a", "b", "c"), "LOAD DATA"),
         "filepath",
         true,
         true,
@@ -1582,56 +1991,63 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW CREATE table") {
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c"),
-      ShowCreateTable(UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false)))
+      ShowCreateTable(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false)))
 
     comparePlans(
       parsePlan("SHOW CREATE TABLE a.b.c AS SERDE"),
       ShowCreateTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), allowTempView = false),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW CREATE TABLE", allowTempView = false),
         asSerde = true))
   }
 
   test("CACHE TABLE") {
     comparePlans(
       parsePlan("CACHE TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, false, Map.empty))
+      CacheTable(
+        UnresolvedRelation(Seq("a", "b", "c")), Seq("a", "b", "c"), false, Map.empty))
+
+    comparePlans(
+      parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
+      CacheTableAsSelect(
+        "t",
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
+        false,
+        Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map.empty))
+      CacheTable(
+        UnresolvedRelation(Seq("a", "b", "c")), Seq("a", "b", "c"), true, Map.empty))
 
     comparePlans(
       parsePlan("CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')"),
-      CacheTableStatement(Seq("a", "b", "c"), None, true, Map("storageLevel" -> "DISK_ONLY")))
+      CacheTable(
+        UnresolvedRelation(Seq("a", "b", "c")),
+        Seq("a", "b", "c"),
+        true,
+        Map("storageLevel" -> "DISK_ONLY")))
 
     intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
       "It is not allowed to add catalog/namespace prefix a.b")
   }
 
-  test("UNCACHE TABLE") {
-    comparePlans(
-      parsePlan("UNCACHE TABLE a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = false))
-
-    comparePlans(
-      parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
-      UncacheTableStatement(Seq("a", "b", "c"), ifExists = true))
-  }
-
   test("TRUNCATE table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTableStatement(Seq("a", "b", "c"), None))
+      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"), None))
 
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTableStatement(Seq("a", "b", "c"), Some(Map("ds" -> "2017-06-10"))))
+      TruncateTable(
+        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"),
+        Some(Map("ds" -> "2017-06-10"))))
   }
 
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"))))
+      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE")))
   }
 
   test("show columns") {
@@ -1641,13 +2057,15 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
 
     val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumnsStatement(Seq("t1"), None)
+    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS"), None)
     val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumnsStatement(Seq("db1", "t1"), None)
+    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), None)
     val parsed3 = parsePlan(sql3)
-    val expected3 = ShowColumnsStatement(Seq("t1"), Some(Seq("db1")))
+    val expected3 =
+      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), Some(Seq("db1")))
     val parsed4 = parsePlan(sql4)
-    val expected4 = ShowColumnsStatement(Seq("db1", "t1"), Some(Seq("db1")))
+    val expected4 =
+      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), Some(Seq("db1")))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -1659,33 +2077,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
       AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
-  }
-
-  test("alter table: add partition") {
-    val sql1 =
-      """
-        |ALTER TABLE a.b.c ADD IF NOT EXISTS PARTITION
-        |(dt='2008-08-08', country='us') LOCATION 'location1' PARTITION
-        |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    val sql2 = "ALTER TABLE a.b.c ADD PARTITION (dt='2008-08-08') LOCATION 'loc'"
-
-    val parsed1 = parsePlan(sql1)
-    val parsed2 = parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
-      Seq(
-        UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
-        UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)
-    val expected2 = AlterTableAddPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
-      Seq(UnresolvedPartitionSpec(Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
   }
 
   test("alter view: add partition (not supported)") {
@@ -1747,7 +2138,7 @@ class DDLParserSuite extends AnalysisTest {
     assertUnsupported(sql2_view)
 
     val expected1_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name")),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -1763,7 +2154,7 @@ class DDLParserSuite extends AnalysisTest {
 
     val sql3_table = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected3_table = AlterTableDropPartition(
-      UnresolvedTable(Seq("a", "b", "c")),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false,
@@ -1982,11 +2373,12 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), None))
+      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
-      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c")), Some("propKey1")))
+      ShowTableProperties(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {
@@ -2103,7 +2495,9 @@ class DDLParserSuite extends AnalysisTest {
       provider: Option[String],
       options: Map[String, String],
       location: Option[String],
-      comment: Option[String])
+      comment: Option[String],
+      serdeInfo: Option[SerdeInfo],
+      external: Boolean = false)
 
   private object TableSpec {
     def apply(plan: LogicalPlan): TableSpec = {
@@ -2118,7 +2512,9 @@ class DDLParserSuite extends AnalysisTest {
             create.provider,
             create.options,
             create.location,
-            create.comment)
+            create.comment,
+            create.serde,
+            create.external)
         case replace: ReplaceTableStatement =>
           TableSpec(
             replace.tableName,
@@ -2129,7 +2525,8 @@ class DDLParserSuite extends AnalysisTest {
             replace.provider,
             replace.options,
             replace.location,
-            replace.comment)
+            replace.comment,
+            replace.serde)
         case ctas: CreateTableAsSelectStatement =>
           TableSpec(
             ctas.tableName,
@@ -2140,7 +2537,9 @@ class DDLParserSuite extends AnalysisTest {
             ctas.provider,
             ctas.options,
             ctas.location,
-            ctas.comment)
+            ctas.comment,
+            ctas.serde,
+            ctas.external)
         case rtas: ReplaceTableAsSelectStatement =>
           TableSpec(
             rtas.tableName,
@@ -2151,7 +2550,8 @@ class DDLParserSuite extends AnalysisTest {
             rtas.provider,
             rtas.options,
             rtas.location,
-            rtas.comment)
+            rtas.comment,
+            rtas.serde)
         case other =>
           fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")
@@ -2174,11 +2574,10 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
-      CommentOnTable(UnresolvedTable(Seq("a", "b", "c")), "xYz"))
+      CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
   }
 
-  // TODO: ignored by SPARK-31707, restore the test after create table syntax unification
-  ignore("create table - without using") {
+  test("create table - without using") {
     val sql = "CREATE TABLE 1m.2g(a INT)"
     val expectedTableSpec = TableSpec(
       Seq("1m", "2g"),
@@ -2188,6 +2587,7 @@ class DDLParserSuite extends AnalysisTest {
       Map.empty[String, String],
       None,
       Map.empty[String, String],
+      None,
       None,
       None)
 
