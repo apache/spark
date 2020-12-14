@@ -894,12 +894,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(fetched1.get.colStats.size == 2)
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
-            val file1 = new File(dir1 + "/data")
+            val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+            val file1 = new File(partDir1, "data")
+            file1.getParentFile.mkdirs()
             val writer1 = new PrintWriter(file1)
             writer1.write("1,a")
             writer1.close()
 
-            val file2 = new File(dir2 + "/data")
+            val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+            val file2 = new File(partDir2, "data")
+            file2.getParentFile.mkdirs()
             val writer2 = new PrintWriter(file2)
             writer2.write("1,a")
             writer2.close()
@@ -908,8 +912,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(
               s"""
                  |ALTER TABLE $table ADD
-                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
-                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${partDir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir1.toURI.toString}'
             """.stripMargin)
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
