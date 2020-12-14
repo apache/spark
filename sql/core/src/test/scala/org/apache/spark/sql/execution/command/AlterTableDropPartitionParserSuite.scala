@@ -35,8 +35,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = false,
-      purge = false,
-      retainData = false)
+      purge = false)
 
     comparePlans(parsePlan(sql), expected)
   }
@@ -53,8 +52,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
       ifExists = true,
-      purge = false,
-      retainData = false)
+      purge = false)
     comparePlans(parsePlan(sql), expected)
   }
 
@@ -64,8 +62,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
-      purge = false,
-      retainData = false)
+      purge = false)
 
     comparePlans(parsePlan(sql), expected)
   }
@@ -76,8 +73,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("p" -> "1"))),
       ifExists = false,
-      purge = true,
-      retainData = false)
+      purge = true)
 
     comparePlans(parsePlan(sql), expected)
   }
