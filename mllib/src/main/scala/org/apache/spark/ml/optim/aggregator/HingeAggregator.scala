@@ -200,6 +200,9 @@ private[ml] class BlockHingeAggregator(
       case sm: SparseMatrix if !fitIntercept =>
         val gradSumVec = new DenseVector(gradientSumArray)
         BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
+
+      case m =>
+        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
     if (fitIntercept) gradientSumArray(numFeatures) += vec.values.sum

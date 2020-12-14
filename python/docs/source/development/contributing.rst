@@ -123,11 +123,12 @@ Annotations can be validated using ``dev/lint-python`` script or by invoking myp
 
 
 
-Code Style Guide
-----------------
+Code and Docstring Guide
+----------------------------------
 
 Please follow the style of the existing codebase as is, which is virtually PEP 8 with one exception: lines can be up
 to 100 characters in length, not 79.
+For the docstring style, PySpark follows `NumPy documentation style <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
 
 Note that the method and variable names in PySpark are the similar case is ``threading`` library in Python itself where
 the APIs were inspired by Java. PySpark also follows `camelCase` for exposed APIs that match with Scala and Java.

@@ -189,7 +189,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         Generate 1 / (1 + exp(-x * scale + offset))
 
         where,
-        x is randomnly distributed and the threshold
+        x is randomly distributed and the threshold
         and labels for each sample in x is obtained from a random uniform
         distribution.
         """

@@ -39,9 +39,12 @@ from pyspark.ml.param.shared import (
     HasWeightCol,
 )
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.sql.dataframe import DataFrame
 
 class Evaluator(Params, metaclass=abc.ABCMeta):
-    def evaluate(self, dataset, params: Optional[ParamMap] = ...) -> float: ...
+    def evaluate(
+        self, dataset: DataFrame, params: Optional[ParamMap] = ...
+    ) -> float: ...
     def isLargerBetter(self) -> bool: ...
 
 class JavaEvaluator(JavaParams, Evaluator, metaclass=abc.ABCMeta):
@@ -75,16 +78,15 @@ class BinaryClassificationEvaluator(
     def setLabelCol(self, value: str) -> BinaryClassificationEvaluator: ...
     def setRawPredictionCol(self, value: str) -> BinaryClassificationEvaluator: ...
     def setWeightCol(self, value: str) -> BinaryClassificationEvaluator: ...
-
-def setParams(
-    self,
-    *,
-    rawPredictionCol: str = ...,
-    labelCol: str = ...,
-    metricName: BinaryClassificationEvaluatorMetricType = ...,
-    weightCol: Optional[str] = ...,
-    numBins: int = ...
-) -> BinaryClassificationEvaluator: ...
+    def setParams(
+        self,
+        *,
+        rawPredictionCol: str = ...,
+        labelCol: str = ...,
+        metricName: BinaryClassificationEvaluatorMetricType = ...,
+        weightCol: Optional[str] = ...,
+        numBins: int = ...
+    ) -> BinaryClassificationEvaluator: ...
 
 class RegressionEvaluator(
     JavaEvaluator,

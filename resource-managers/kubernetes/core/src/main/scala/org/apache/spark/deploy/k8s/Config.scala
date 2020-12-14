@@ -24,6 +24,14 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val DECOMMISSION_SCRIPT =
+    ConfigBuilder("spark.kubernetes.decommission.script")
+      .doc("The location of the script to use for graceful decommissioning")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("/opt/decom.sh")
+
+
   val KUBERNETES_CONTEXT =
     ConfigBuilder("spark.kubernetes.context")
       .doc("The desired context from your K8S config file used to configure the K8S " +
@@ -420,7 +428,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_FILE_UPLOAD_PATH =
     ConfigBuilder("spark.kubernetes.file.upload.path")
       .doc("Hadoop compatible file system path where files from the local file system " +
-        "will be uploded to in cluster mode.")
+        "will be uploaded to in cluster mode.")
       .version("3.0.0")
       .stringConf
       .createOptional

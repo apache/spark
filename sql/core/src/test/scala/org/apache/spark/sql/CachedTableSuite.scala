@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.io.{File, FilenameFilter}
+import java.nio.file.{Files, Paths}
+
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
@@ -25,6 +28,7 @@ import org.apache.spark.executor.DataReadMethod._
 import org.apache.spark.executor.DataReadMethod.DataReadMethod
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
@@ -137,6 +141,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql("CACHE TABLE tempTable AS SELECT key FROM testData")
       assertCached(sql("SELECT COUNT(*) FROM tempTable"))
       uncacheTable("tempTable")
+    }
+  }
+
+  test("cache table as select - existing temp view") {
+    withTempView("tempView") {
+      sql("CREATE TEMPORARY VIEW tempView as SELECT 1")
+      val e = intercept[TempTableAlreadyExistsException] {
+        sql("CACHE TABLE tempView AS SELECT 1")
+      }
+      assert(e.getMessage.contains("Temporary view 'tempView' already exists"))
     }
   }
 
@@ -824,7 +838,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-19993 nested subquery caching and scalar + predicate subqueris") {
+  test("SPARK-19993 nested subquery caching and scalar + predicate subqueries") {
     withTempView("t1", "t2", "t3", "t4") {
       Seq(1).toDF("c1").createOrReplaceTempView("t1")
       Seq(2).toDF("c1").createOrReplaceTempView("t2")
@@ -875,17 +889,17 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   private def checkIfNoJobTriggered[T](f: => T): T = {
-    var numJobTrigered = 0
+    var numJobTriggered = 0
     val jobListener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        numJobTrigered += 1
+        numJobTriggered += 1
       }
     }
     sparkContext.addSparkListener(jobListener)
     try {
       val result = f
       sparkContext.listenerBus.waitUntilEmpty()
-      assert(numJobTrigered === 0)
+      assert(numJobTriggered === 0)
       result
     } finally {
       sparkContext.removeSparkListener(jobListener)
@@ -1229,24 +1243,32 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-33290: querying temporary view after REFRESH TABLE fails with FNFE") {
-    withTable("t") {
-      withTempPath { path =>
-        withTempView("tempView1") {
-          Seq((1 -> "a")).toDF("i", "j").write.parquet(path.getCanonicalPath)
-          sql(s"CREATE TABLE t USING parquet LOCATION '${path.toURI}'")
-          sql("CREATE TEMPORARY VIEW tempView1 AS SELECT * FROM t")
-          checkAnswer(sql("SELECT * FROM tempView1"), Seq(Row(1, "a")))
+  test("SPARK-33729: REFRESH TABLE should not use cached/stale plan") {
+    def moveParquetFiles(src: File, dst: File): Unit = {
+      src.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = name.endsWith("parquet")
+      }).foreach { f =>
+        Files.move(f.toPath, Paths.get(dst.getAbsolutePath, f.getName))
+      }
+      // cleanup the rest of the files
+      src.listFiles().foreach(_.delete())
+      src.delete()
+    }
 
-          Utils.deleteRecursively(path)
-          sql("REFRESH TABLE t")
-          checkAnswer(sql("SELECT * FROM t"), Seq.empty)
-          val exception = intercept[Exception] {
-            checkAnswer(sql("SELECT * FROM tempView1"), Seq.empty)
-          }
-          assert(exception.getMessage.contains("FileNotFoundException"))
-          assert(exception.getMessage.contains("REFRESH TABLE"))
-        }
+    withTable("t") {
+      withTempDir { dir =>
+        val path1 = new File(dir, "path1")
+        Seq((1 -> "a")).toDF("i", "j").write.parquet(path1.getCanonicalPath)
+        moveParquetFiles(path1, dir)
+        sql(s"CREATE TABLE t (i INT, j STRING) USING parquet LOCATION '${dir.toURI}'")
+        sql("CACHE TABLE t")
+        checkAnswer(sql("SELECT * FROM t"), Row(1, "a") :: Nil)
+
+        val path2 = new File(dir, "path2")
+        Seq(2 -> "b").toDF("i", "j").write.parquet(path2.getCanonicalPath)
+        moveParquetFiles(path2, dir)
+        sql("REFRESH TABLE t")
+        checkAnswer(sql("SELECT * FROM t"), Row(1, "a") :: Row(2, "b") :: Nil)
       }
     }
   }

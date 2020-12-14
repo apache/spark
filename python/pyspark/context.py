@@ -222,8 +222,12 @@ class SparkContext(object):
         # data via a socket.
         # scala's mangled names w/ $ in them require special treatment.
         self._encryption_enabled = self._jvm.PythonUtils.isEncryptionEnabled(self._jsc)
+        os.environ["SPARK_AUTH_SOCKET_TIMEOUT"] = \
+            str(self._jvm.PythonUtils.getPythonAuthSocketTimeout(self._jsc))
+        os.environ["SPARK_BUFFER_SIZE"] = \
+            str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
+        self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python3')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -258,7 +262,7 @@ class SparkContext(object):
                         sys.path.insert(1, filepath)
                 except Exception:
                     warnings.warn(
-                        "Failed to add file [%s] speficied in 'spark.submit.pyFiles' to "
+                        "Failed to add file [%s] specified in 'spark.submit.pyFiles' to "
                         "Python path:\n  %s" % (path, "\n  ".join(sys.path)),
                         RuntimeWarning)
 
@@ -601,7 +605,7 @@ class SparkContext(object):
                     tempFile.close()
                 return reader_func(tempFile.name)
             finally:
-                # we eagerily reads the file so we can delete right after.
+                # we eagerly reads the file so we can delete right after.
                 os.unlink(tempFile.name)
 
     def pickleFile(self, name, minPartitions=None):

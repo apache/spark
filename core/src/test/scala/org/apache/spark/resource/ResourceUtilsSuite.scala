@@ -221,7 +221,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDisocveryScript",
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(DRIVER_GPU_ID.amountConf, "2")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, gpuDiscovery)

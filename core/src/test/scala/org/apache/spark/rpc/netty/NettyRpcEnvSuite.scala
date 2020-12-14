@@ -73,7 +73,7 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
     val nettyEnv = env.asInstanceOf[NettyRpcEnv]
     val client = mock[TransportClient]
-    val senderAddress = RpcAddress("locahost", 12345)
+    val senderAddress = RpcAddress("localhost", 12345)
     val receiverAddress = RpcEndpointAddress("localhost", 54321, "test")
     val receiver = new NettyRpcEndpointRef(nettyEnv.conf, receiverAddress, nettyEnv)
 
