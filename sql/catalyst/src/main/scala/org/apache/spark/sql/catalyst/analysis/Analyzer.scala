@@ -2002,7 +2002,9 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
 
-    def resolveFunction(expr: Expression): Expression = expr match {
+    def resolveFunction(): PartialFunction[Expression, Expression] = {
+      case gs: GroupingSet =>
+        gs.withNewChildren(gs.children.map(_.transformDown(resolveFunction)))
       case u if !u.childrenResolved => u // Skip until children are resolved.
       case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
         withPosition(u) {
@@ -2012,9 +2014,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         withPosition(u) {
           v1SessionCatalog.lookupFunction(name, children) match {
             case generator: Generator => generator
-            case other =>
-              failAnalysis(s"$name is expected to be a generator. However, " +
-                s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
+            case other => throw QueryCompilationErrors.generatorNotExpectedError(
+              name, other.getClass.getCanonicalName)
           }
         }
       case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
@@ -2025,25 +2026,24 @@ class Analyzer(override val catalogManager: CatalogManager)
             // AggregateExpression.
             case wf: AggregateWindowFunction =>
               if (isDistinct || filter.isDefined) {
-                failAnalysis("DISTINCT or FILTER specified, " +
-                  s"but ${wf.prettyName} is not an aggregate function")
+                throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                  wf.prettyName)
               } else {
                 wf
               }
             // We get an aggregate function, we need to wrap it in an AggregateExpression.
             case agg: AggregateFunction =>
               if (filter.isDefined && !filter.get.deterministic) {
-                failAnalysis("FILTER expression is non-deterministic, " +
-                  "it cannot be used in aggregate functions")
+                throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
               }
               AggregateExpression(agg, Complete, isDistinct, filter)
             // This function is not an aggregate function, just return the resolved one.
             case other if (isDistinct || filter.isDefined) =>
-              failAnalysis("DISTINCT or FILTER specified, " +
-                s"but ${other.prettyName} is not an aggregate function")
+              throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                other.prettyName)
             case e: String2TrimExpression if arguments.size == 2 =>
               if (trimWarningEnabled.get) {
-                logWarning("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+                log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
                   " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
                   " instead.")
                 trimWarningEnabled.set(false)
@@ -2056,69 +2056,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       case e => e
     }
 
-    def resolveExpr(): PartialFunction[Expression, Expression] = {
-      case gs: GroupingSet =>
-        gs.withNewChildren(gs.children.map(_.transformDown { case e => resolveFunction(e) }))
-      case e => resolveFunction(e)
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Resolve functions with concrete relations from v2 catalog.
       case UnresolvedFunc(multipartIdent) =>
         val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
-      case q: LogicalPlan =>
-        q transformExpressions {
-          case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-            withPosition(u) {
-              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
-            }
-          case u @ UnresolvedGenerator(name, children) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(name, children) match {
-                case generator: Generator => generator
-                case other => throw QueryCompilationErrors.generatorNotExpectedError(
-                  name, other.getClass.getCanonicalName)
-              }
-            }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(funcId, arguments) match {
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                      wf.prettyName)
-                  } else {
-                    wf
-                  }
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction =>
-                  if (filter.isDefined && !filter.get.deterministic) {
-                    throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
-                  }
-                  AggregateExpression(agg, Complete, isDistinct, filter)
-                // This function is not an aggregate function, just return the resolved one.
-                case other if (isDistinct || filter.isDefined) =>
-                  throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                    other.prettyName)
-                case e: String2TrimExpression if arguments.size == 2 =>
-                  if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-                      " instead.")
-                    trimWarningEnabled.set(false)
-                  }
-                  e
-                case other =>
-                  other
-              }
-            }
-        }
+      case q: LogicalPlan => q transformExpressions resolveFunction
     }
   }
 
