@@ -111,7 +111,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       e = intercept[AnalysisException] {
         sql("ALTER VIEW tab1 AS SELECT * FROM jt")
       }.getMessage
-      assert(e.contains("`tab1` is not a view"))
+      assert(e.contains("tab1 is a table. 'ALTER VIEW ... AS' expects a view."))
     }
   }
 
@@ -448,8 +448,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("should not allow ALTER VIEW AS when the view does not exist") {
-    assertNoSuchTable("ALTER VIEW testView AS SELECT 1, 2")
-    assertNoSuchTable("ALTER VIEW default.testView AS SELECT 1, 2")
+    assertAnalysisError(
+      "ALTER VIEW testView AS SELECT 1, 2",
+      "View not found for 'ALTER VIEW ... AS': testView")
+
+    assertAnalysisError(
+      "ALTER VIEW default.testView AS SELECT 1, 2",
+      "View not found for 'ALTER VIEW ... AS': default.testView")
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
@@ -808,20 +813,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW v1 AS SELECT 1")
         sql(s"CREATE GLOBAL TEMPORARY VIEW v2 AS SELECT * FROM v1")
         checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v2"), Seq(Row(1)))
-      }
-    }
-  }
-
-  test("creating local temp view should not affect existing table reference") {
-    withTable("t") {
-      withTempView("t") {
-        withGlobalTempView("v") {
-          val globalTempDB = spark.sharedState.globalTempViewManager.database
-          Seq(2).toDF("c1").write.format("parquet").saveAsTable("t")
-          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT * FROM t")
-          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
-          checkAnswer(sql(s"SELECT * FROM ${globalTempDB}.v"), Seq(Row(2)))
-        }
       }
     }
   }
