@@ -30,6 +30,7 @@ from pyspark.ml.param.shared import (  # noqa: F401
     HasStepSize as HasStepSize,
     HasValidationIndicatorCol as HasValidationIndicatorCol,
     HasWeightCol as HasWeightCol,
+    HasIntermediateStorageLevel as HasIntermediateStorageLevel,
     Param as Param,
     TypeConverters as TypeConverters,
 )
@@ -44,7 +45,12 @@ class _DecisionTreeModel(JavaPredictionModel[T]):
     def toDebugString(self) -> str: ...
     def predictLeaf(self, value: Vector) -> float: ...
 
-class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
+class _DecisionTreeParams(
+    HasCheckpointInterval,
+    HasSeed,
+    HasWeightCol,
+    HasIntermediateStorageLevel
+):
     leafCol: Param[str]
     maxDepth: Param[int]
     maxBins: Param[int]

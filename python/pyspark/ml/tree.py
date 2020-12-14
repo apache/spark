@@ -18,7 +18,8 @@
 from pyspark import since
 from pyspark.ml.param import Params
 from pyspark.ml.param.shared import HasCheckpointInterval, HasSeed, HasWeightCol, Param, \
-    TypeConverters, HasMaxIter, HasStepSize, HasValidationIndicatorCol
+    TypeConverters, HasMaxIter, HasStepSize, HasValidationIndicatorCol, \
+    HasIntermediateStorageLevel
 from pyspark.ml.wrapper import JavaPredictionModel
 from pyspark.ml.common import inherit_doc
 
@@ -57,7 +58,8 @@ class _DecisionTreeModel(JavaPredictionModel):
         return self._call_java("predictLeaf", value)
 
 
-class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
+class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol,
+                          HasIntermediateStorageLevel):
     """
     Mixin for Decision Tree parameters.
     """

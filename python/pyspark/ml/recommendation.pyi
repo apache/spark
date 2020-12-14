@@ -28,6 +28,7 @@ from pyspark.ml.param.shared import (
     HasPredictionCol,
     HasRegParam,
     HasSeed,
+    HasIntermediateStorageLevel,
 )
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc  # noqa: F401
@@ -45,7 +46,12 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
     def getColdStartStrategy(self) -> str: ...
 
 class _ALSParams(
-    _ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed
+    _ALSModelParams,
+    HasMaxIter,
+    HasRegParam,
+    HasCheckpointInterval,
+    HasSeed,
+    HasIntermediateStorageLevel
 ):
     rank: Param[int]
     numUserBlocks: Param[int]
@@ -54,7 +60,6 @@ class _ALSParams(
     alpha: Param[float]
     ratingCol: Param[str]
     nonnegative: Param[bool]
-    intermediateStorageLevel: Param[str]
     finalStorageLevel: Param[str]
     def __init__(self, *args: Any): ...
     def getRank(self) -> int: ...
@@ -64,7 +69,6 @@ class _ALSParams(
     def getAlpha(self) -> float: ...
     def getRatingCol(self) -> str: ...
     def getNonnegative(self) -> bool: ...
-    def getIntermediateStorageLevel(self) -> str: ...
     def getFinalStorageLevel(self) -> str: ...
 
 class ALS(JavaEstimator[ALSModel], _ALSParams, JavaMLWritable, JavaMLReadable[ALS]):

@@ -25,7 +25,7 @@ from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol, \
     Param, Params, TypeConverters, HasMaxIter, HasTol, HasFitIntercept, HasAggregationDepth, \
     HasMaxBlockSizeInMB, HasRegParam, HasSolver, HasStepSize, HasSeed, HasElasticNetParam, \
-    HasStandardization, HasLoss, HasVarianceCol
+    HasStandardization, HasLoss, HasVarianceCol, HasIntermediateStorageLevel
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, _TreeRegressorParams
 from pyspark.ml.util import JavaMLWritable, JavaMLReadable, HasTrainingSummary, \
@@ -87,7 +87,8 @@ class _JavaRegressionModel(RegressionModel, JavaPredictionModel, metaclass=ABCMe
 
 class _LinearRegressionParams(_PredictorParams, HasRegParam, HasElasticNetParam, HasMaxIter,
                               HasTol, HasFitIntercept, HasStandardization, HasWeightCol, HasSolver,
-                              HasAggregationDepth, HasLoss, HasMaxBlockSizeInMB):
+                              HasAggregationDepth, HasLoss, HasMaxBlockSizeInMB,
+                              HasIntermediateStorageLevel):
     """
     Params for :py:class:`LinearRegression` and :py:class:`LinearRegressionModel`.
 
@@ -168,6 +169,8 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     5
     >>> model.getMaxBlockSizeInMB()
     0.0
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
     True
@@ -207,12 +210,14 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0):
+                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
+                 loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -225,12 +230,14 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0):
+                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
+                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -312,6 +319,13 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class LinearRegressionModel(_JavaRegressionModel, _LinearRegressionParams, GeneralJavaMLWritable,
@@ -859,7 +873,8 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
         super(_DecisionTreeRegressorParams, self).__init__(*args)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance", leafCol="", minWeightFractionPerNode=0.0)
+                         impurity="variance", leafCol="", minWeightFractionPerNode=0.0,
+                         intermediateStorageLevel="MEMORY_AND_DISK")
 
 
 @inherit_doc
@@ -882,6 +897,8 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
     >>> dt.setVarianceCol("variance")
     DecisionTreeRegressor...
     >>> model = dt.fit(df)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getVarianceCol()
     'variance'
     >>> model.setLeafCol("leafId")
@@ -938,13 +955,14 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
                  seed=None, varianceCol=None, weightCol=None, leafCol="",
-                 minWeightFractionPerNode=0.0):
+                 minWeightFractionPerNode=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                 leafCol="", minWeightFractionPerNode=0.0)
+                 leafCol="", minWeightFractionPerNode=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -958,13 +976,15 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", seed=None, varianceCol=None, weightCol=None,
-                  leafCol="", minWeightFractionPerNode=0.0):
+                  leafCol="", minWeightFractionPerNode=0.0,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", seed=None, varianceCol=None, weightCol=None, \
-                  leafCol="", minWeightFractionPerNode=0.0)
+                  leafCol="", minWeightFractionPerNode=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -1056,6 +1076,13 @@ class DecisionTreeRegressor(_JavaRegressor, _DecisionTreeRegressorParams, JavaML
         """
         return self._set(varianceCol=value)
 
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 @inherit_doc
 class DecisionTreeRegressionModel(
@@ -1113,7 +1140,7 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
                          featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
-                         bootstrap=True)
+                         bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK")
 
 
 @inherit_doc
@@ -1139,6 +1166,8 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
     >>> rf.setSeed(42)
     RandomForestRegressor...
     >>> model = rf.fit(df)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getBootstrap()
     True
     >>> model.getSeed()
@@ -1188,14 +1217,14 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
                  featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
-                 weightCol=None, bootstrap=True):
+                 weightCol=None, bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
                  featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
-                 weightCol=None, bootstrap=True)
+                 weightCol=None, bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1210,14 +1239,14 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
                   featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0,
-                  weightCol=None, bootstrap=True):
+                  weightCol=None, bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
                   featureSubsetStrategy="auto", leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None, bootstrap=True)
+                  weightCol=None, bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1323,6 +1352,13 @@ class RandomForestRegressor(_JavaRegressor, _RandomForestRegressorParams, JavaML
         """
         return self._set(minWeightFractionPerNode=value)
 
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class RandomForestRegressionModel(
     _JavaRegressionModel, _TreeEnsembleModel, _RandomForestRegressorParams,
@@ -1379,7 +1415,8 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
                          impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                         leafCol="", minWeightFractionPerNode=0.0)
+                         leafCol="", minWeightFractionPerNode=0.0,
+                         intermediateStorageLevel="MEMORY_AND_DISK")
 
     @since("1.4.0")
     def getLossType(self):
@@ -1417,6 +1454,8 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
     >>> print(gbt.getFeatureSubsetStrategy())
     all
     >>> model = gbt.fit(df)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1470,7 +1509,7 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                 weightCol=None):
+                 weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
@@ -1478,7 +1517,7 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                 weightCol=None)
+                 weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
@@ -1493,7 +1532,7 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                  weightCol=None):
+                  weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
@@ -1501,7 +1540,7 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None)
+                  weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs
@@ -1629,6 +1668,13 @@ class GBTRegressor(_JavaRegressor, _GBTRegressorParams, JavaMLWritable, JavaMLRe
         """
         return self._set(minWeightFractionPerNode=value)
 
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class GBTRegressionModel(
     _JavaRegressionModel, _TreeEnsembleModel, _GBTRegressorParams,
@@ -1683,7 +1729,8 @@ class GBTRegressionModel(
 
 
 class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitIntercept,
-                                   HasAggregationDepth, HasMaxBlockSizeInMB):
+                                   HasAggregationDepth, HasMaxBlockSizeInMB,
+                                   HasIntermediateStorageLevel):
     """
     Params for :py:class:`AFTSurvivalRegression` and :py:class:`AFTSurvivalRegressionModel`.
 
@@ -1710,7 +1757,8 @@ class _AFTSurvivalRegressionParams(_PredictorParams, HasMaxIter, HasTol, HasFitI
         super(_AFTSurvivalRegressionParams, self).__init__(*args)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-                         maxIter=100, tol=1E-6, maxBlockSizeInMB=0.0)
+                         maxIter=100, tol=1E-6, maxBlockSizeInMB=0.0,
+                         intermediateStorageLevel="MEMORY_AND_DISK")
 
     @since("1.6.0")
     def getCensorCol(self):
@@ -1764,6 +1812,8 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     >>> model = aftsr.fit(df)
     >>> model.getMaxBlockSizeInMB()
     0.0
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.setFeaturesCol("features")
     AFTSurvivalRegressionModel...
     >>> model.predict(Vectors.dense(6.3))
@@ -1802,12 +1852,14 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),  # noqa: B005
-                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
+                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0)
+                 quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(AFTSurvivalRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1820,12 +1872,14 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),  # noqa: B005
-                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
+                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0):
+                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
@@ -1888,6 +1942,13 @@ class AFTSurvivalRegression(_JavaRegressor, _AFTSurvivalRegressionParams,
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class AFTSurvivalRegressionModel(_JavaRegressionModel, _AFTSurvivalRegressionParams,
@@ -2477,7 +2538,8 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
 
 
 class _FactorizationMachinesParams(_PredictorParams, HasMaxIter, HasStepSize, HasTol,
-                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam, HasWeightCol):
+                                   HasSolver, HasSeed, HasFitIntercept, HasRegParam, HasWeightCol,
+                                   HasIntermediateStorageLevel):
     """
     Params for :py:class:`FMRegressor`, :py:class:`FMRegressionModel`, :py:class:`FMClassifier`
     and :py:class:`FMClassifierModel`.
@@ -2562,6 +2624,8 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     >>> fm.setSeed(16)
     FMRegressor...
     >>> model = fm.fit(df)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getMaxIter()
     100
     >>> test0 = spark.createDataFrame([
@@ -2602,12 +2666,12 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW", seed=None):
+                 tol=1e-6, solver="adamW", seed=None, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", seed=None)
+                 tol=1e-6, solver="adamW", seed=None, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(FMRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2620,12 +2684,12 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW", seed=None):
+                  tol=1e-6, solver="adamW", seed=None, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", seed=None)
+                  tol=1e-6, solver="adamW", seed=None, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets Params for FMRegressor.
         """
         kwargs = self._input_kwargs
@@ -2710,6 +2774,13 @@ class FMRegressor(_JavaRegressor, _FactorizationMachinesParams, JavaMLWritable, 
         Sets the value of :py:attr:`regParam`.
         """
         return self._set(regParam=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class FMRegressionModel(_JavaRegressionModel, _FactorizationMachinesParams, JavaMLWritable,

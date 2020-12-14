@@ -169,7 +169,9 @@ if __name__ == "__main__":
         ("maxBlockSizeInMB", "maximum memory in MB for stacking input data into blocks. Data is " +
          "stacked within partitions. If more than remaining data size in a partition then it " +
          "is adjusted to the data size. Default 0.0 represents choosing optimal value, depends " +
-         "on specific algorithm. Must be >= 0.", "0.0", "TypeConverters.toFloat")]
+         "on specific algorithm. Must be >= 0.", "0.0", "TypeConverters.toFloat"),
+        ("intermediateStorageLevel", "storageLevel for intermediate datasets. Cannot be NONE.",
+         "'MEMORY_AND_DISK'", "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

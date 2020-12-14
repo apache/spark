@@ -19,7 +19,7 @@ import sys
 
 from pyspark import since, keyword_only
 from pyspark.ml.param.shared import HasPredictionCol, HasBlockSize, HasMaxIter, HasRegParam, \
-    HasCheckpointInterval, HasSeed
+    HasCheckpointInterval, HasSeed, HasIntermediateStorageLevel
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Params, TypeConverters, Param
@@ -75,7 +75,8 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
 
 
 @inherit_doc
-class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed):
+class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval, HasSeed,
+                 HasIntermediateStorageLevel):
     """
     Params for :py:class:`ALS`.
 
@@ -98,9 +99,6 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     nonnegative = Param(Params._dummy(), "nonnegative",
                         "whether to use nonnegative constraint for least squares",
                         typeConverter=TypeConverters.toBoolean)
-    intermediateStorageLevel = Param(Params._dummy(), "intermediateStorageLevel",
-                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-                                     typeConverter=TypeConverters.toString)
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
                               "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)

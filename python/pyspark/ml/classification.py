@@ -28,7 +28,8 @@ from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import HasRawPredictionCol, HasProbabilityCol, HasThresholds, \
     HasRegParam, HasMaxIter, HasFitIntercept, HasTol, HasStandardization, HasWeightCol, \
     HasAggregationDepth, HasThreshold, HasBlockSize, HasMaxBlockSizeInMB, Param, Params, \
-    TypeConverters, HasElasticNetParam, HasSeed, HasStepSize, HasSolver, HasParallelism
+    TypeConverters, HasElasticNetParam, HasSeed, HasStepSize, HasSolver, HasParallelism, \
+    HasIntermediateStorageLevel
 from pyspark.ml.tree import _DecisionTreeModel, _DecisionTreeParams, \
     _TreeEnsembleModel, _RandomForestParams, _GBTParams, \
     _HasVarianceImpurity, _TreeClassifierParams
@@ -507,7 +508,7 @@ class _BinaryClassificationSummary(_ClassificationSummary):
 
 class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitIntercept, HasTol,
                        HasStandardization, HasWeightCol, HasAggregationDepth, HasThreshold,
-                       HasMaxBlockSizeInMB):
+                       HasMaxBlockSizeInMB, HasIntermediateStorageLevel):
     """
     Params for :py:class:`LinearSVC` and :py:class:`LinearSVCModel`.
 
@@ -524,7 +525,7 @@ class _LinearSVCParams(_ClassifierParams, HasRegParam, HasMaxIter, HasFitInterce
         super(_LinearSVCParams, self).__init__(*args)
         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
                          standardization=True, threshold=0.0, aggregationDepth=2,
-                         maxBlockSizeInMB=0.0)
+                         maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK")
 
 
 @inherit_doc
@@ -570,6 +571,8 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     0.5
     >>> model.getMaxBlockSizeInMB()
     0.0
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -608,12 +611,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                 aggregationDepth=2, maxBlockSizeInMB=0.0):
+                 aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                 aggregationDepth=2, maxBlockSizeInMB=0.0):
+                 aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         super(LinearSVC, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -626,12 +629,12 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
-                  aggregationDepth=2, maxBlockSizeInMB=0.0):
+                  aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
                   fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
-                  aggregationDepth=2, maxBlockSizeInMB=0.0):
+                  aggregationDepth=2, maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for Linear SVM Classifier.
         """
         kwargs = self._input_kwargs
@@ -702,6 +705,13 @@ class LinearSVC(_JavaClassifier, _LinearSVCParams, JavaMLWritable, JavaMLReadabl
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable, JavaMLReadable,
@@ -786,7 +796,7 @@ class LinearSVCTrainingSummary(LinearSVCSummary, _TrainingSummary):
 class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
                                 HasElasticNetParam, HasMaxIter, HasFitIntercept, HasTol,
                                 HasStandardization, HasWeightCol, HasAggregationDepth,
-                                HasThreshold, HasMaxBlockSizeInMB):
+                                HasThreshold, HasMaxBlockSizeInMB, HasIntermediateStorageLevel):
     """
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
@@ -839,7 +849,7 @@ class _LogisticRegressionParams(_ProbabilisticClassifierParams, HasRegParam,
     def __init__(self, *args):
         super(_LogisticRegressionParams, self).__init__(*args)
         self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto",
-                         maxBlockSizeInMB=0.0)
+                         maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK")
 
     @since("1.4.0")
     def setThreshold(self, value):
@@ -985,6 +995,8 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
     'newProbability'
     >>> blorModel.getMaxBlockSizeInMB()
     0.0
+    >>> blorModel.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> blorModel.setThreshold(0.1)
     LogisticRegressionModel...
     >>> blorModel.getThreshold()
@@ -1050,7 +1062,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  aggregationDepth=2, family="auto",
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
-                 maxBlockSizeInMB=0.0):
+                 maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
 
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
@@ -1060,7 +1072,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                  aggregationDepth=2, family="auto", \
                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                 maxBlockSizeInMB=0.0):
+                 maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
@@ -1079,7 +1091,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   aggregationDepth=2, family="auto",
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None,
-                  maxBlockSizeInMB=0.0):
+                  maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
@@ -1088,7 +1100,7 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
                   aggregationDepth=2, family="auto", \
                   lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
                   lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                  maxBlockSizeInMB=0.0):
+                  maxBlockSizeInMB=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
@@ -1189,6 +1201,13 @@ class LogisticRegression(_JavaProbabilisticClassifier, _LogisticRegressionParams
         Sets the value of :py:attr:`maxBlockSizeInMB`.
         """
         return self._set(maxBlockSizeInMB=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRegressionParams,
@@ -1339,7 +1358,8 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
         super(_DecisionTreeClassifierParams, self).__init__(*args)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
+                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0,
+                         intermediateStorageLevel="MEMORY_AND_DISK")
 
 
 @inherit_doc
@@ -1365,6 +1385,8 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed", leafCol="leafId")
     >>> model = dt.fit(td)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getLabelCol()
     'indexed'
     >>> model.setFeaturesCol("features")
@@ -1430,13 +1452,15 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0):
+                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1451,13 +1475,14 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="gini", seed=None, weightCol=None, leafCol="",
-                  minWeightFractionPerNode=0.0):
+                  minWeightFractionPerNode=0.0, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
+                  seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs
@@ -1536,6 +1561,13 @@ class DecisionTreeClassifier(_JavaProbabilisticClassifier, _DecisionTreeClassifi
         """
         return self._set(weightCol=value)
 
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 @inherit_doc
 class DecisionTreeClassificationModel(_DecisionTreeModel, _JavaProbabilisticClassificationModel,
@@ -1584,7 +1616,7 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="gini", numTrees=20, featureSubsetStrategy="auto",
                          subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
-                         bootstrap=True)
+                         bootstrap=True, intermediateStorageLevel="MEMORY_AND_DISK")
 
 
 @inherit_doc
@@ -1615,6 +1647,8 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
     >>> rf.getMinWeightFractionPerNode()
     0.0
     >>> model = rf.fit(td)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getLabelCol()
     'indexed'
     >>> model.setFeaturesCol("features")
@@ -1670,14 +1704,16 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True):
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1692,14 +1728,16 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True):
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)
+                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1804,6 +1842,13 @@ class RandomForestClassifier(_JavaProbabilisticClassifier, _RandomForestClassifi
         Sets the value of :py:attr:`minWeightFractionPerNode`.
         """
         return self._set(minWeightFractionPerNode=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificationModel,
@@ -1938,7 +1983,8 @@ class _GBTClassifierParams(_GBTParams, _HasVarianceImpurity):
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
                          impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                         leafCol="", minWeightFractionPerNode=0.0)
+                         leafCol="", minWeightFractionPerNode=0.0,
+                         intermediateStorageLevel="MEMORY_AND_DISK")
 
     @since("1.4.0")
     def getLossType(self):
@@ -1995,6 +2041,8 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
     >>> gbt.getFeatureSubsetStrategy()
     'all'
     >>> model = gbt.fit(td)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getLabelCol()
     'indexed'
     >>> model.setFeaturesCol("features")
@@ -2061,7 +2109,8 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
                  maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
                  featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None,
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None):
+                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
@@ -2069,7 +2118,7 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                 weightCol=None)
+                 weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2085,7 +2134,7 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
-                  weightCol=None):
+                  weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
@@ -2093,7 +2142,7 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
                   validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0, \
-                  weightCol=None)
+                  weightCol=None, intermediateStorageLevel="MEMORY_AND_DISK")
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -2214,6 +2263,13 @@ class GBTClassifier(_JavaProbabilisticClassifier, _GBTClassifierParams,
         Sets the value of :py:attr:`minWeightFractionPerNode`.
         """
         return self._set(minWeightFractionPerNode=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class GBTClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClassificationModel,
@@ -2478,7 +2534,8 @@ class NaiveBayesModel(_JavaProbabilisticClassificationModel, _NaiveBayesParams, 
 
 
 class _MultilayerPerceptronParams(_ProbabilisticClassifierParams, HasSeed, HasMaxIter,
-                                  HasTol, HasStepSize, HasSolver, HasBlockSize):
+                                  HasTol, HasStepSize, HasSolver, HasBlockSize,
+                                  HasIntermediateStorageLevel):
     """
     Params for :py:class:`MultilayerPerceptronClassifier`.
 
@@ -2548,6 +2605,8 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
     MultilayerPerceptronClassificationModel...
     >>> model.getMaxIter()
     100
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getLayers()
     [2, 2, 2]
     >>> model.weights.size
@@ -2595,12 +2654,12 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
     def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                 rawPredictionCol="rawPrediction"):
+                 rawPredictionCol="rawPrediction", intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                 rawPredictionCol="rawPrediction")
+                 rawPredictionCol="rawPrediction", intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -2613,12 +2672,12 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
     def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability",
-                  rawPredictionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction", intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
                   solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction"):
+                  rawPredictionCol="rawPrediction", intermediateStorageLevel="MEMORY_AND_DISK"):
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self._input_kwargs
@@ -2678,6 +2737,13 @@ class MultilayerPerceptronClassifier(_JavaProbabilisticClassifier, _MultilayerPe
         Sets the value of :py:attr:`solver`.
         """
         return self._set(solver=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationModel,
@@ -3307,6 +3373,8 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
     >>> fm.setSeed(11)
     FMClassifier...
     >>> model = fm.fit(df)
+    >>> model.getIntermediateStorageLevel()
+    'MEMORY_AND_DISK'
     >>> model.getMaxIter()
     100
     >>> test0 = spark.createDataFrame([
@@ -3352,13 +3420,15 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                 tol=1e-6, solver="adamW", thresholds=None, seed=None):
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None,
+                 intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                 tol=1e-6, solver="adamW", thresholds=None, seed=None)
+                 tol=1e-6, solver="adamW", thresholds=None, seed=None, \
+                 intermediateStorageLevel="MEMORY_AND_DISK")
         """
         super(FMClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -3372,13 +3442,15 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0,
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0,
-                  tol=1e-6, solver="adamW", thresholds=None, seed=None):
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None,
+                  intermediateStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   factorSize=8, fitIntercept=True, fitLinear=True, regParam=0.0, \
                   miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
-                  tol=1e-6, solver="adamW", thresholds=None, seed=None)
+                  tol=1e-6, solver="adamW", thresholds=None, seed=None, \
+                  intermediateStorageLevel="MEMORY_AND_DISK")
         Sets Params for FMClassifier.
         """
         kwargs = self._input_kwargs
@@ -3463,6 +3535,13 @@ class FMClassifier(_JavaProbabilisticClassifier, _FactorizationMachinesParams, J
         Sets the value of :py:attr:`regParam`.
         """
         return self._set(regParam=value)
+
+    @since("3.2.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class FMClassificationModel(_JavaProbabilisticClassificationModel, _FactorizationMachinesParams,
