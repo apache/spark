@@ -1052,7 +1052,7 @@ final class ShuffleBlockFetcherIterator(
             blocksToRequest += ((blockChunkId, approxChunkSize, -1))
           }
           val additionalRemoteReqs = new ArrayBuffer[FetchRequest]
-          collectFetchReqsFromMergedBlocks(address, blocksToRequest, additionalRemoteReqs)
+          collectFetchReqsFromMergedBlocks(address, blocksToRequest.toSeq, additionalRemoteReqs)
           fetchRequests ++= additionalRemoteReqs
           // Set result to null to force another iteration.
           result = null
