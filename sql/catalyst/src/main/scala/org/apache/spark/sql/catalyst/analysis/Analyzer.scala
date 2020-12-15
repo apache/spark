@@ -2099,9 +2099,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
 
       case q: LogicalPlan =>
+        val isGroupingIdAllowed = q match {
+          case _: Aggregate | _: GroupingSets | _: Filter | _: Sort => true
+          case _ => false
+        }
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
+          case u: UnresolvedAttribute
+            if isGroupingIdAllowed && resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
             withPosition(u) {
               Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
             }
