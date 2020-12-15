@@ -293,12 +293,6 @@ case class AlterTableSetLocationStatement(
     location: String) extends ParsedStatement
 
 /**
- * ALTER TABLE ... RECOVER PARTITIONS command, as parsed from SQL.
- */
-case class AlterTableRecoverPartitionsStatement(
-    tableName: Seq[String]) extends ParsedStatement
-
-/**
  * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
  */
 case class AlterTableRenamePartitionStatement(
@@ -314,14 +308,6 @@ case class AlterTableSerDePropertiesStatement(
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
     partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
- * ALTER VIEW ... Query command, as parsed from SQL.
- */
-case class AlterViewAsStatement(
-    viewName: Seq[String],
-    originalText: String,
-    query: LogicalPlan) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

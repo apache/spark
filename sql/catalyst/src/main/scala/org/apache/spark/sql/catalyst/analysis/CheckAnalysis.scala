@@ -586,7 +586,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
             checkAlterTablePartition(table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
+          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
             checkAlterTablePartition(table, parts)
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
