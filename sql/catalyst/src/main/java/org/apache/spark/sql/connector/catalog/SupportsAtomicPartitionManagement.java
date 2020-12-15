@@ -87,7 +87,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * Drop an array of partitions atomically from table.
    * <p>
    * If any partition doesn't exist,
-   * the operation of dropPartitions need to be safely rolled back.
+   * the operation of dropPartitions needs to be safely rolled back.
    *
    * If the catalog supports the option to purge a table, this method must be overridden. The
    * default implementation falls back to {@link #dropPartitions(InternalRow[])} dropPartitions} if
