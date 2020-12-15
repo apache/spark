@@ -106,10 +106,12 @@ object JsonConstants {
     """
       |{"id":"id","starttime":3,"name":"name",
       |"cores":0,"user":"%s",
+      |"request_cores":4,
       |"memoryperexecutor":1234,
       |"resourcesperexecutor":[{"name":"gpu",
       |"amount":3},{"name":"fpga","amount":3}],
       |"memoryperslave":1234,
+      |"coreperslave":1,
       |"resourcesperslave":[{"name":"gpu",
       |"amount":3},{"name":"fpga","amount":3}],
       |"submitdate":"%s",

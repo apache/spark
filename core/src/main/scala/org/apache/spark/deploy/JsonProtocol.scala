@@ -101,9 +101,11 @@ private[deploy] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.coresGranted) ~
+    ("request_cores" -> obj.desc.maxCores) ~
     ("user" -> obj.desc.user) ~
     ("memoryperexecutor" -> obj.desc.memoryPerExecutorMB) ~
     ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
+    ("coreperslave" -> obj.desc.coresPerExecutor) ~
     ("resourcesperexecutor" -> obj.desc.resourceReqsPerExecutor
       .toList.map(writeResourceRequirement)) ~
     ("resourcesperslave" -> obj.desc.resourceReqsPerExecutor
