@@ -239,7 +239,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
-          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s"
+          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
+          "-Wconf:msg=Unicode escapes in triple quoted strings are deprecated:s",
+          "-Wconf:msg=method copyArrayToImmutableIndexedSeq in class LowPriorityImplicits2 is deprecated:s"
         )
       }
     }
