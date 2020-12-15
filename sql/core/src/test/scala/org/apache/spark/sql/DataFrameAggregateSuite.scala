@@ -1077,7 +1077,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(aggs.head.output.map(_.dataType.simpleString).head ===
       aggs.last.output.map(_.dataType.simpleString).head)
   }
-  
+
   test("SPARK-33726 Duplicate field name aggregation should not have null values in dataframe") {
     val query =
       """|with T as (select id as a, -id as x from range(3)), U as (select id as b,
