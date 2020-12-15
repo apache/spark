@@ -28,18 +28,6 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with DDLCommandTestUti
 
   protected def notFullPartitionSpecErr: String
 
-  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
-    (f: String => Unit): Unit = {
-    val nsCat = s"$cat.$ns"
-    withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
-      val t = s"$nsCat.$tableName"
-      withTable(t) {
-        f(t)
-      }
-    }
-  }
-
   protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
     val partitions = sql(s"SHOW PARTITIONS $t")
       .collect()

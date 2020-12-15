@@ -25,7 +25,6 @@ import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
-  protected def catalog: String
   protected def defaultUsing: String
 
   protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
@@ -37,18 +36,6 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     assert(partitions === expected.toSet)
   }
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
-
-  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
-      (f: String => Unit): Unit = {
-    val nsCat = s"$cat.$ns"
-    withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
-      val t = s"$nsCat.$tableName"
-      withTable(t) {
-        f(t)
-      }
-    }
-  }
 
   test("one partition") {
     withNsTable("ns", "tbl") { t =>

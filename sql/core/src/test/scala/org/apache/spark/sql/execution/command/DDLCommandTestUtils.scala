@@ -25,11 +25,24 @@ import org.apache.spark.sql.test.SQLTestUtils
 trait DDLCommandTestUtils extends SQLTestUtils {
   // The version of the catalog under testing such as "V1", "V2", "Hive V1".
   protected def version: String
-  // Name of the command
+  // Name of the command as SQL statement, for instance "SHOW PARTITIONS"
   protected def command: String
+  protected def catalog: String
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     super.test(s"$command $version: " + testName, testTags: _*)(testFun)
+  }
+
+  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
+      (f: String => Unit): Unit = {
+    val nsCat = s"$cat.$ns"
+    withNamespace(nsCat) {
+      sql(s"CREATE NAMESPACE $nsCat")
+      val t = s"$nsCat.$tableName"
+      withTable(t) {
+        f(t)
+      }
+    }
   }
 }
