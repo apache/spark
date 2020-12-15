@@ -217,7 +217,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     val e2 = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}"))
     assert(e2.getMessage ===
-      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key};")
+      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key}")
 
   }
 
