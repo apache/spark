@@ -25,9 +25,7 @@ import org.apache.spark.sql.types.StructType
 
 trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TABLES"
-  protected def catalog: String
   protected def defaultNamespace: Seq[String]
-  protected def defaultUsing: String
   case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
   protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
   // Gets the schema of `SHOW TABLES`

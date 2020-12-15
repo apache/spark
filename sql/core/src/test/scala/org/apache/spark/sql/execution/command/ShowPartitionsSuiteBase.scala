@@ -23,8 +23,6 @@ import org.apache.spark.sql.types.{StringType, StructType}
 
 trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW PARTITIONS"
-  protected def catalog: String
-  protected def defaultUsing: String
   // Gets the schema of `SHOW PARTITIONS`
   private val showSchema: StructType = new StructType().add("partition", StringType, false)
   protected def runShowPartitionsSql(sqlText: String, expected: Seq[Row]): Unit = {

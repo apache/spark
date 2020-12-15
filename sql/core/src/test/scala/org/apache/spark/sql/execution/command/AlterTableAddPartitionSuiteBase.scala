@@ -24,7 +24,6 @@ import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
-  protected def defaultUsing: String
 
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 

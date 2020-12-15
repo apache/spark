@@ -22,8 +22,6 @@ import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. DROP PARTITION"
-  protected def catalog: String
-  protected def defaultUsing: String
 
   protected def notFullPartitionSpecErr: String
 
