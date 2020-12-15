@@ -201,7 +201,7 @@ case class AlterTableRenameCommand(
           sparkSession.table(oldName.unquotedString))
         optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
       }.getOrElse(None)
-      optStorageLevel.foreach { _ =>
+      if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
