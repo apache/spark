@@ -27,7 +27,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
-import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -515,6 +515,45 @@ class DatasetSuite extends QueryTest
       ds1.joinWith(ds2, $"a.value" === $"b.value", "anti")
     }.getMessage
     assert(e4.contains("Invalid join type in joinWith: " + LeftAnti.sql))
+  }
+
+  test("SPARK-33778: joinPartial join types") {
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    val e1 = intercept[AnalysisException] {
+      ds1.joinPartial(ds2, $"a.value" === $"b.value", "inner")
+    }.getMessage
+    assert(e1.contains("Invalid join type in joinPartial: " + Inner.sql))
+
+    val e2 = intercept[AnalysisException] {
+      ds1.joinPartial(ds2, $"a.value" === $"b.value", "cross")
+    }.getMessage
+    assert(e2.contains("Invalid join type in joinPartial: " + Cross.sql))
+
+    Seq("outer", "full", "fullouter", "full_outer").foreach(joinType => {
+      val e = intercept[AnalysisException] {
+        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+      }.getMessage
+      assert(e.contains("Invalid join type in joinPartial: " + FullOuter.sql))
+    })
+
+    Seq("left", "leftouter", "left_outer").foreach(joinType => {
+      val e = intercept[AnalysisException] {
+        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+      }.getMessage
+      assert(e.contains("Invalid join type in joinPartial: " + LeftOuter.sql))
+    })
+
+    Seq("right", "rightouter", "right_outer").foreach(joinType => {
+      val e = intercept[AnalysisException] {
+        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+      }.getMessage
+      assert(e.contains("Invalid join type in joinPartial: " + RightOuter.sql))
+    })
+
+    checkDataset(ds1.joinPartial(ds2, $"a.value" === $"b.value", "left_semi"), (1), (2))
+    checkDataset(ds1.joinPartial(ds2, $"a.value" === $"b.value", "left_anti"), (3))
   }
 
   test("groupBy function, keys") {

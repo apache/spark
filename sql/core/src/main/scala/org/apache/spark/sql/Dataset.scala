@@ -1241,6 +1241,87 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Joins this Dataset returning value of left where `condition` evaluates to true.
+   *
+   * This is similar to the relation `join` function with one important difference in the
+   * result schema. Since `joinPartial` preserves objects present on left side of the join, the
+   * result schema is similarly nested into one column names `_1`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column
+   * names in common.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType Type of join to perform. Default `inner`. Must be one of:
+   *                 `left_semi`, `left_anti`.
+   *
+   * @group typedrel
+   * @since 3.1.0
+   */
+  def joinPartial[U](other: Dataset[U], condition: Column, joinType: String): Dataset[T] = {
+    // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
+    // etc.
+    val joined = sparkSession.sessionState.executePlan(
+      Join(
+        this.logicalPlan,
+        other.logicalPlan,
+        JoinType(joinType),
+        Some(condition.expr),
+        JoinHint.NONE)).analyzed.asInstanceOf[Join]
+
+    if (joined.joinType != LeftSemi && joined.joinType != LeftAnti) {
+      throw new AnalysisException("Invalid join type in joinPartial: " + joined.joinType.sql)
+    }
+
+    val leftResultExpr = {
+      if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+        assert(joined.left.output.length == 1)
+        Alias(joined.left.output.head, "_1")()
+      } else {
+        Alias(CreateStruct(joined.left.output), "_1")()
+      }
+    }
+
+    val rightResultExpr = {
+      if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+        assert(joined.right.output.length == 1)
+        Alias(joined.right.output.head, "_2")()
+      } else {
+        Alias(CreateStruct(joined.right.output), "_2")()
+      }
+    }
+
+    // For both join sides, combine all outputs into a single column and alias it with "_1
+    // or "_2", to match the schema for the encoder of the join result.
+    // Note that we do this before joining them, to enable the join operator to return null
+    // for one side, in cases like outer-join.
+    val left = Project(leftResultExpr :: Nil, joined.left)
+    val right = Project(rightResultExpr :: Nil, joined.right)
+
+    // Rewrites the join condition to make the attribute point to correct column/field,
+    // after we combine the outputs of each join side.
+    val conditionExpr = joined.condition.get transformUp {
+      case a: Attribute if joined.left.outputSet.contains(a) =>
+        if (!this.exprEnc.isSerializedAsStructForTopLevel) {
+          left.output.head
+        } else {
+          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(left.output.head, index)
+        }
+      case a: Attribute if joined.right.outputSet.contains(a) =>
+        if (!other.exprEnc.isSerializedAsStructForTopLevel) {
+          right.output.head
+        } else {
+          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(right.output.head, index)
+        }
+    }
+
+    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
+  }
+
+  /**
    * Returns a new Dataset with each partition sorted by the given expressions.
    *
    * This is the same operation as "SORT BY" in SQL (Hive QL).
