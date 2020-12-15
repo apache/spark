@@ -319,9 +319,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement),
+        parts,
+        ignoreIfNotExists,
+        purge,
+        _) =>
       AlterTableDropPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+        table, parts.asResolvedPartitionSpecs, ignoreIfNotExists, purge) :: Nil
 
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")

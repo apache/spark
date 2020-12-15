@@ -281,4 +281,20 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-33787: purge partition data") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      try {
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+        }.getMessage
+        assert(errMsg.contains("Purge option is not supported"))
+      } finally {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+    }
+  }
 }

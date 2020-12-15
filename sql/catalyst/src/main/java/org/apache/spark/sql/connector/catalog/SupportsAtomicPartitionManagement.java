@@ -82,4 +82,27 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @return true if partitions were deleted, false if any partition not exists
    */
   boolean dropPartitions(InternalRow[] idents);
+
+  /**
+   * Drop an array of partitions atomically from table.
+   * <p>
+   * If any partition doesn't exists,
+   * the operation of dropPartitions need to be safely rolled back.
+   *
+   * If the catalog supports the option to purge a table, this method must be overridden. The
+   * default implementation falls back to {@link #dropPartitions(InternalRow[])} dropPartitions} if
+   * the purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
+   *
+   * @param idents an array of partition identifiers
+   * @param purge whether a partition should be purged
+   * @return true if partitions were deleted, false if any partition not exists
+   *
+   * @since 3.2.0
+   */
+  default boolean dropPartitions(InternalRow[] idents, boolean purge) {
+    if (purge) {
+      throw new UnsupportedOperationException("Purge option is not supported.");
+    }
+    return dropPartitions(idents);
+  }
 }
