@@ -239,9 +239,15 @@ object SparkBuild extends PomBuild {
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
-          "-Wconf:msg=-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+          // SPARK-33775 Suppress compilation warnings that contain the following contents.
+          "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+          "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-          "-Wconf:msg=Unicode escapes in triple quoted strings are deprecated:s"
+          "-Wconf:msg=Unicode escapes in triple quoted strings are deprecated:s",
+          "-Wconf:msg=view bounds are deprecated:s",
+          "-Wconf:msg=symbol literal is deprecated:s",
+          "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
         )
       }
     }
