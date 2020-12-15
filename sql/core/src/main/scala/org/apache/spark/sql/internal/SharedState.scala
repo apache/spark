@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import java.net.URL
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -68,11 +67,12 @@ private[sql] class SharedState(
       case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
         logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
           s"in SparkSession's options, it should be set statically for cross-session usages")
-      case (k, v) =>
-        logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
+      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+        logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
+      case (k, v) =>
+        logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
         hadoopConfClone.set(k, v)
-
     }
     (confClone, hadoopConfClone)
   }
@@ -172,7 +172,6 @@ private[sql] class SharedState(
 }
 
 object SharedState extends Logging {
-
   @volatile private var fsUrlStreamHandlerFactoryInitialized = false
 
   private def setFsUrlStreamHandlerFactory(conf: SparkConf, hadoopConf: Configuration): Unit = {
@@ -273,18 +272,5 @@ object SharedState extends Logging {
       sparkWarehouseDir
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
-  }
-
-  // visable for testing
-  private[spark] val GLOBAL_SHARED_STATE = new AtomicReference[SharedState]
-
-  def getOrCreate(
-      sc: SparkContext,
-      initialConfigs: scala.collection.Map[String, String]): SharedState = synchronized {
-    val state = GLOBAL_SHARED_STATE.get()
-    if (state != null) return state
-    val newState = new SharedState(sc, initialConfigs)
-    GLOBAL_SHARED_STATE.set(newState)
-    newState
   }
 }

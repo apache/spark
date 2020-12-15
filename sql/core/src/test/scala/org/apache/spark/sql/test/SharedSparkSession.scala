@@ -27,7 +27,7 @@ import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.internal.{SharedState, SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
@@ -146,7 +146,6 @@ trait SharedSparkSessionBase
       } finally {
         SparkSession.clearActiveSession()
         SparkSession.clearDefaultSession()
-        SharedState.GLOBAL_SHARED_STATE.set(null)
       }
     }
   }
