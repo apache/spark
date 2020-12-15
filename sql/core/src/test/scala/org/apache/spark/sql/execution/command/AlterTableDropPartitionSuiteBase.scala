@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
 
-trait AlterTableDropPartitionSuiteBase  extends QueryTest with DDLCommandTestUtils {
+trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. DROP PARTITION"
   protected def catalog: String
   protected def defaultUsing: String
