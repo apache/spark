@@ -711,7 +711,6 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
-
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
@@ -742,3 +741,40 @@ case class DropView(
 case class RepairTable(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
+ */
+case class AlterViewSetProperties(
+    child: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
+ */
+case class AlterViewUnsetProperties(
+    child: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the CACHE TABLE command.
+ */
+case class CacheTable(
+    table: LogicalPlan,
+    multipartIdentifier: Seq[String],
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the CACHE TABLE ... AS SELECT command.
+ */
+case class CacheTableAsSelect(
+    tempViewName: String,
+    plan: LogicalPlan,
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command

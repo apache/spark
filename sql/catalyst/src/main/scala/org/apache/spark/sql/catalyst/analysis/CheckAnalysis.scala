@@ -104,7 +104,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
 
-      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _) =>
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
           s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
             "because view support in v2 catalog has not been implemented yet. " +
@@ -123,6 +123,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case CacheTable(u: UnresolvedRelation, _, _, _) =>
+        failAnalysis(s"Table or view not found for `CACHE TABLE`: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
