@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
+    // mllib module
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel")
   )
 
   // Exclude rules for 3.1.x
