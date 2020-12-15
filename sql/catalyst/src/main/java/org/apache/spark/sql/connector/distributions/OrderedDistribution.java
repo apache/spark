@@ -15,24 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.distributions;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 
-case class RefreshTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    invalidateCache: () => Unit) extends V2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    catalog.invalidateTable(ident)
-
-    // invalidate all caches referencing the given table
-    invalidateCache()
-
-    Seq.empty
-  }
-
-  override def output: Seq[Attribute] = Seq.empty
+/**
+ * A distribution where tuples have been ordered across partitions according
+ * to ordering expressions, but not necessarily within a given partition.
+ *
+ * @since 3.2.0
+ */
+@Experimental
+public interface OrderedDistribution extends Distribution {
+  /**
+   * Returns ordering expressions.
+   */
+  SortOrder[] ordering();
 }

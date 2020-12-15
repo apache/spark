@@ -674,6 +674,13 @@ case class AlterTableDropPartition(
 }
 
 /**
+ * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
+ */
+case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the LOAD DATA INTO TABLE command.
  */
 case class LoadData(

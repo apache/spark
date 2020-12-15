@@ -15,24 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.distributions;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.annotation.Experimental;
 
-case class RefreshTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    invalidateCache: () => Unit) extends V2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    catalog.invalidateTable(ident)
-
-    // invalidate all caches referencing the given table
-    invalidateCache()
-
-    Seq.empty
-  }
-
-  override def output: Seq[Attribute] = Seq.empty
-}
+/**
+ * An interface that defines how data is distributed across partitions.
+ *
+ * @since 3.2.0
+ */
+@Experimental
+public interface Distribution {}

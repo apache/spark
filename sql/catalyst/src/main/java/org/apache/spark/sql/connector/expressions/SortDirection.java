@@ -15,24 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.annotation.Experimental;
 
-case class RefreshTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    invalidateCache: () => Unit) extends V2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    catalog.invalidateTable(ident)
+/**
+ * A sort direction used in sorting expressions.
+ *
+ * @since 3.2.0
+ */
+@Experimental
+public enum SortDirection {
+  ASCENDING, DESCENDING;
 
-    // invalidate all caches referencing the given table
-    invalidateCache()
-
-    Seq.empty
+  @Override
+  public String toString() {
+    switch (this) {
+      case ASCENDING:
+        return "ASC";
+      case DESCENDING:
+        return "DESC";
+      default:
+        throw new IllegalArgumentException("Unexpected sort direction: " + this);
+    }
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }

@@ -163,10 +163,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testRenamePartitions(isDatasourceTable = false)
   }
 
-  test("alter table: drop partition") {
-    testDropPartitions(isDatasourceTable = false)
-  }
-
   test("drop table") {
     testDropTable(isDatasourceTable = false)
   }
@@ -899,7 +895,9 @@ class HiveDDLSuite
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
+          s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
 
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")

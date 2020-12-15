@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
+import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -56,9 +56,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  private def invalidateCache(r: ResolvedTable)(): Unit = {
+  private def invalidateCache(r: ResolvedTable, recacheTable: Boolean = false)(): Unit = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+    if (recacheTable && cache.isDefined) {
+      // save the cache name and cache level for recreation
+      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
+
+      // recache with the same name and cache level.
+      val ds = Dataset.ofRows(session, v2Relation)
+      session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+    }
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -137,7 +147,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r)) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r, recacheTable = true)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -319,6 +329,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+
+    case AlterTableRecoverPartitions(_: ResolvedTable) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
 
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
