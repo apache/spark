@@ -3090,6 +3090,7 @@ object functions {
    * @return A date, or null if `date` was a string that could not be cast to a date or if
    *         `dayOfWeek` was an invalid value
    * @group datetime_funcs
+   * @since 3.2.0
    */
   def next_day(date: Column, dayOfWeek: Column): Column = withExpr {
     NextDay(date.expr, dayOfWeek.expr)
