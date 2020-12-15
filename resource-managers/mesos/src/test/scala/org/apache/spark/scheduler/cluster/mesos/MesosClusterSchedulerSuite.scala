@@ -201,7 +201,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     })
   }
 
-  test("supports spark.mesos.driver.memoryOverhead with 384mb default") {
+  test("SPARK-22256: supports spark.mesos.driver.memoryOverhead with 384mb default") {
     setScheduler()
 
     val mem = 1000
@@ -228,7 +228,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(1384.0 === taskMem)
   }
 
-  test("supports spark.mesos.driver.memoryOverhead with 10% default") {
+  test("SPARK-22256: supports spark.mesos.driver.memoryOverhead with 10% default") {
     setScheduler()
 
     val mem = 10000

@@ -410,8 +410,9 @@ trait MesosSchedulerUtils extends Logging {
    * container overheads.
    *
    * @param driverDesc used to get driver memory
-   * @return memory requirement as (0.1 * memoryOverhead) or MEMORY_OVERHEAD_MINIMUM
-   *         (whichever is larger)
+   * @return memory requirement defined as `DRIVER_MEMORY_OVERHEAD` if set in the config,
+   *         otherwise the larger of `MEMORY_OVERHEAD_MINIMUM (=384MB)` or
+   *         `MEMORY_OVERHEAD_FRACTION (=0.1) * driverMemory`
    */
   def driverContainerMemory(driverDesc: MesosDriverDescription): Int = {
     val defaultMem = math.max(MEMORY_OVERHEAD_FRACTION * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
