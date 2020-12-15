@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -144,6 +145,22 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
         sql(s"ALTER TABLE $t DROP PARTITION (part0 = 1)")
       }.getMessage
       assert(errMsg.contains(notFullPartitionSpecErr))
+    }
+  }
+
+  test("partition not exists") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
+
+      val errMsg = intercept[NoSuchPartitionsException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("partitions not found in table"))
+
+      checkPartitions(t, Map("id" -> "1"))
+      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+      checkPartitions(t)
     }
   }
 }
