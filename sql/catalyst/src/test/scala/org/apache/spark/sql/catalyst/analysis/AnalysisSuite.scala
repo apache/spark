@@ -27,6 +27,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -656,5 +657,27 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisError(r5,
       Seq("Intersect can only be performed on tables with the compatible column types. " +
         "timestamp <> double at the second column of the second table"))
+  }
+
+  test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
+    }
   }
 }
