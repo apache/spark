@@ -1219,6 +1219,22 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       }
     }
   }
+
+  test("SPARK-33084: Add jar support ivy url in SQL") {
+    val testData = TestHive.getHiveFile("data/files/sample.json").toURI
+    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    sql(
+      """CREATE TABLE t1(a string, b string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql("select * from src join t1 on src.key = t1.a")
+    sql("DROP TABLE t1")
+    assert(sql("list jars").filter(_.getString(0).contains(
+      "org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")).count() > 0)
+    assert(sql("list jar").
+      filter(_.getString(0).contains(
+        "org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")).count() > 0)
+  }
 }
 
 // for SPARK-2180 test
