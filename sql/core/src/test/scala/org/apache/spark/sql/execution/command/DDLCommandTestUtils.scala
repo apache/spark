@@ -30,6 +30,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   // Name of the command as SQL statement, for instance "SHOW PARTITIONS"
   protected def command: String
   protected def catalog: String
+  protected def defaultUsing: String
 
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {

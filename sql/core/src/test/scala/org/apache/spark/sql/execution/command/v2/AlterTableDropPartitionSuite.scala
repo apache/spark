@@ -17,26 +17,15 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableDropPartitionSuite
   extends command.AlterTableDropPartitionSuiteBase
-  with SharedSparkSession {
-
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
-  override def defaultUsing: String = "USING _"
+  with CommandSuiteBase {
 
   override protected val notFullPartitionSpecErr = "Partition spec is invalid"
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
 
   test("partition not exists") {
     withNsTable("ns", "tbl") { t =>

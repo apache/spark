@@ -18,17 +18,12 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   override def defaultNamespace: Seq[String] = Seq("default")
-  override def defaultUsing: String = "USING parquet"
   override def showSchema: StructType = {
     new StructType()
       .add("database", StringType, nullable = false)
@@ -107,7 +102,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 }
 
-class ShowTablesSuite extends ShowTablesSuiteBase with SharedSparkSession {
+class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._
     withNamespace(s"$catalog.ns") {

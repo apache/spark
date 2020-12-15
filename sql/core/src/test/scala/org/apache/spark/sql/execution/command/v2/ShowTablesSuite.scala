@@ -17,18 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSession {
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
+class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
-  override def defaultUsing: String = "USING _"
   override def showSchema: StructType = {
     new StructType()
       .add("namespace", StringType, nullable = false)
@@ -39,9 +33,6 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with SharedSparkSessio
       case ShowRow(namespace, table, _) => Row(namespace, table)
     }
   }
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
 
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:
