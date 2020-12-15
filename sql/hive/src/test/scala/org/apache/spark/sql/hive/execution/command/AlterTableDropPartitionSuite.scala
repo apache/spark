@@ -26,6 +26,4 @@ class AlterTableDropPartitionSuite
 
   override def version: String = "Hive V1"
   override def defaultUsing: String = "USING HIVE"
-
-  override protected val notFullPartitionSpecErr = "No partition is dropped"
 }
