@@ -40,12 +40,9 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show an existing table") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      withTable(s"$catalog.ns.table") {
-        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
-        runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
-      }
+    withNsTable("ns", "table") { t =>
+      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
+      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
     }
   }
 
@@ -108,20 +105,17 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      withTable(s"$catalog.ns.table") {
-        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
+    withNsTable("ns", "table") { t =>
+      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
-        sql(s"USE $catalog")
-        // No table is matched since the current namespace is not ["ns"]
-        assert(defaultNamespace != Seq("ns"))
-        runShowTablesSql("SHOW TABLES", Seq())
+      sql(s"USE $catalog")
+      // No table is matched since the current namespace is not ["ns"]
+      assert(defaultNamespace != Seq("ns"))
+      runShowTablesSql("SHOW TABLES", Seq())
 
-        // Update the current namespace to match "ns.tbl".
-        sql(s"USE $catalog.ns")
-        runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
-      }
+      // Update the current namespace to match "ns.tbl".
+      sql(s"USE $catalog.ns")
+      runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
     }
   }
 }

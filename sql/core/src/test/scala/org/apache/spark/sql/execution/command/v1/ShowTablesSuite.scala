@@ -87,24 +87,20 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 
   test("case sensitivity of partition spec") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val t = s"$catalog.ns.part_table"
-      withTable(t) {
-        sql(s"""
-          |CREATE TABLE $t (price int, qty int, year int, month int)
-          |$defaultUsing
-          |partitioned by (year, month)""".stripMargin)
-        sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
-        Seq(
-          true -> "PARTITION(year = 2015, month = 1)",
-          false -> "PARTITION(YEAR = 2015, Month = 1)"
-        ).foreach { case (caseSensitive, partitionSpec) =>
-          withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-            val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
-            val information = df.select("information").first().getString(0)
-            assert(information.contains("Partition Values: [year=2015, month=1]"))
-          }
+    withNsTable("ns", "part_table") { t =>
+      sql(s"""
+        |CREATE TABLE $t (price int, qty int, year int, month int)
+        |$defaultUsing
+        |partitioned by (year, month)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+      Seq(
+        true -> "PARTITION(year = 2015, month = 1)",
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+          val information = df.select("information").first().getString(0)
+          assert(information.contains("Partition Values: [year=2015, month=1]"))
         }
       }
     }
