@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class AlterTableAddPartitionSuite
     extends v1.AlterTableAddPartitionSuiteBase

@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
