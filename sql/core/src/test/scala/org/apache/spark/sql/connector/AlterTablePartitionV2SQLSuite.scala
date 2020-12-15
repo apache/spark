@@ -37,7 +37,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t RECOVER PARTITIONS")
       }
-      assert(e.message.contains("ALTER TABLE RECOVER PARTITIONS is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
     }
   }
 
