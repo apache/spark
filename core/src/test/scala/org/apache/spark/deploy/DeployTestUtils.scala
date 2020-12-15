@@ -28,7 +28,7 @@ import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 private[deploy] object DeployTestUtils {
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl")
+    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", None, None, Some(1))
   }
 
   def createAppInfo() : ApplicationInfo = {
