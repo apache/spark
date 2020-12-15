@@ -86,7 +86,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
   /**
    * Drop an array of partitions atomically from table.
    * <p>
-   * If any partition doesn't exists,
+   * If any partition doesn't exist,
    * the operation of dropPartitions need to be safely rolled back.
    *
    * If the catalog supports the option to purge a table, this method must be overridden. The
