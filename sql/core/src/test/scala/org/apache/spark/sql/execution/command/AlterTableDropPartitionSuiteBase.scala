@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableDropPartitionSuiteBase  extends QueryTest with DDLCommandTestUtils {
@@ -27,15 +26,6 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with DDLCommandTestUti
   protected def defaultUsing: String
 
   protected def notFullPartitionSpecErr: String
-
-  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
-    val partitions = sql(s"SHOW PARTITIONS $t")
-      .collect()
-      .toSet
-      .map((row: Row) => row.getString(0))
-      .map(PartitioningUtils.parsePathFragment)
-    assert(partitions === expected.toSet)
-  }
 
   protected def checkDropPartition(
       t: String,

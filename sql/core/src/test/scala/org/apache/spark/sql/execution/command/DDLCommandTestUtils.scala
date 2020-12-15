@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
 
 trait DDLCommandTestUtils extends SQLTestUtils {
@@ -44,5 +46,14 @@ trait DDLCommandTestUtils extends SQLTestUtils {
         f(t)
       }
     }
+  }
+
+  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
+    val partitions = sql(s"SHOW PARTITIONS $t")
+      .collect()
+      .toSet
+      .map((row: Row) => row.getString(0))
+      .map(PartitioningUtils.parsePathFragment)
+    assert(partitions === expected.toSet)
   }
 }

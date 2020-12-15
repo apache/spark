@@ -17,24 +17,15 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
   protected def defaultUsing: String
 
-  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
-    val partitions = sql(s"SHOW PARTITIONS $t")
-      .collect()
-      .toSet
-      .map((row: Row) => row.getString(0))
-      .map(PartitioningUtils.parsePathFragment)
-    assert(partitions === expected.toSet)
-  }
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
