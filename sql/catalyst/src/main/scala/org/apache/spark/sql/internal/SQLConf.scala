@@ -1389,6 +1389,16 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
+  val STATE_STORE_PROVIDER_KEEP_ALIVE_TIME =
+    buildConf("spark.sql.streaming.stateStore.keepAliveTime")
+      .doc("The time in milliseconds that a loaded store provider will be kept alive " +
+        "as inactive instance in an executor. Spark runs a maintenance task and periodically " +
+        "checks inactive instances. Once a loaded store provider is inactive over this " +
+        "configured time, Spark will unload it to release resources such as memory.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -3230,6 +3240,8 @@ class SQLConf extends Serializable with Logging {
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
+
+  def stateStoreKeepAliveTime: Long = getConf(STATE_STORE_PROVIDER_KEEP_ALIVE_TIME)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 

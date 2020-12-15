@@ -61,6 +61,9 @@ class StateStoreConf(
   /** The interval of maintenance tasks. */
   val maintenanceInterval = sqlConf.streamingMaintenanceInterval
 
+  /** The time a inactive statestore provider can keep alive. */
+  val stateStoreKeepAliveTime = sqlConf.stateStoreKeepAliveTime
+
   /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific

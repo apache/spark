@@ -387,6 +387,16 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   test("maintenance") {
+    runMainTenanceTest()
+  }
+
+  test("maintenance: configured keep alive time") {
+    runMainTenanceTest(30L, 3000L)
+  }
+
+  private def runMainTenanceTest(
+      maintenanceInterval: Long = 10L,
+      keepAliveTime: Long = 60000L): Unit = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
@@ -399,7 +409,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     // Make maintenance thread do snapshots and cleanups very fast
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10L)
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, maintenanceInterval)
+    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_KEEP_ALIVE_TIME, keepAliveTime)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = newStoreProvider(storeProviderId.storeId)
@@ -463,8 +474,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           assert(StateStore.isLoaded(storeProviderId))
 
           // If some other executor loads the store, then this instance should be unloaded
+          // after configured keep alive time.
           coordinatorRef.reportActiveInstance(storeProviderId, "other-host", "other-exec")
-          eventually(timeout(timeoutDuration)) {
+          eventually(timeout(1.milliseconds * 0.5 * keepAliveTime)) {
+            assert(StateStore.isLoaded(storeProviderId))
+          }
+          eventually(
+            timeout(1.milliseconds * keepAliveTime + 1.milliseconds * maintenanceInterval)) {
             assert(!StateStore.isLoaded(storeProviderId))
           }
 

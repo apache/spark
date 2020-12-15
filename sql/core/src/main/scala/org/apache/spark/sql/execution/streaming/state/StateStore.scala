@@ -393,6 +393,9 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
 
+  @GuardedBy("loadedProviders")
+  private val lastAliveTime = new mutable.HashMap[StateStoreProviderId, Long]()
+
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
    * will be called when an exception happens.
@@ -494,6 +497,7 @@ object StateStore extends Logging {
         StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
+      lastAliveTime(storeProviderId) = System.currentTimeMillis()
       reportActiveStoreInstance(storeProviderId)
       provider
     }
@@ -537,7 +541,7 @@ object StateStore extends Logging {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { doMaintenance() },
+          task = { doMaintenance(storeConf) },
           onError = { loadedProviders.synchronized { loadedProviders.clear() } }
         )
         logInfo("State Store maintenance task started")
@@ -548,7 +552,7 @@ object StateStore extends Logging {
    * Execute background maintenance task in all the loaded store providers if they are still
    * the active instances according to the coordinator.
    */
-  private def doMaintenance(): Unit = {
+  private def doMaintenance(storeConf: StateStoreConf): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
@@ -556,10 +560,13 @@ object StateStore extends Logging {
     loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
       try {
         if (verifyIfStoreInstanceActive(id)) {
+          lastAliveTime(id) = System.currentTimeMillis()
           provider.doMaintenance()
         } else {
-          unload(id)
-          logInfo(s"Unloaded $provider")
+          if (System.currentTimeMillis() - lastAliveTime(id) > storeConf.stateStoreKeepAliveTime) {
+            unload(id)
+            logInfo(s"Unloaded $provider")
+          }
         }
       } catch {
         case NonFatal(e) =>
