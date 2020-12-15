@@ -75,8 +75,8 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
   /**
    * Drop an array of partitions atomically from table.
    * <p>
-   * If any partition doesn't exists,
-   * the operation of dropPartitions need to be safely rolled back.
+   * If any partition doesn't exist,
+   * the operation of dropPartitions needs to be safely rolled back.
    *
    * @param idents an array of partition identifiers
    * @return true if partitions were deleted, false if any partition not exists
