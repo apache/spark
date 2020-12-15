@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
-  protected def version: String
+trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "SHOW TABLES"
   protected def catalog: String
   protected def defaultNamespace: Seq[String]
   protected def defaultUsing: String
@@ -41,11 +37,6 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
     checkAnswer(df, getRows(expected))
-  }
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-      (implicit pos: Position): Unit = {
-    super.test(s"SHOW TABLES $version: " + testName, testTags: _*)(testFun)
   }
 
   test("show an existing table") {

@@ -17,25 +17,16 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
-trait AlterTableAddPartitionSuiteBase extends QueryTest with SQLTestUtils {
-  protected def version: String
+trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "ALTER TABLE .. ADD PARTITION"
   protected def catalog: String
   protected def defaultUsing: String
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
-    super.test(s"ALTER TABLE .. ADD PARTITION $version: " + testName, testTags: _*)(testFun)
-  }
 
   protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
     val partitions = sql(s"SHOW PARTITIONS $t")

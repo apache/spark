@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{StringType, StructType}
 
-trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
-  protected def version: String
+trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "SHOW PARTITIONS"
   protected def catalog: String
   protected def defaultUsing: String
   // Gets the schema of `SHOW PARTITIONS`
@@ -35,11 +31,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
     val df = spark.sql(sqlText)
     assert(df.schema === showSchema)
     checkAnswer(df, expected)
-  }
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-      (implicit pos: Position): Unit = {
-    super.test(s"SHOW PARTITIONS $version: " + testName, testTags: _*)(testFun)
   }
 
   protected def createDateTable(table: String): Unit = {

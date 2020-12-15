@@ -17,25 +17,16 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
-trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
-  protected def version: String
+trait AlterTableDropPartitionSuiteBase  extends QueryTest with DDLCommandTestUtils {
+  override val command = "ALTER TABLE .. DROP PARTITION"
   protected def catalog: String
   protected def defaultUsing: String
 
   protected def notFullPartitionSpecErr: String
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
-    super.test(s"ALTER TABLE .. DROP PARTITION $version: " + testName, testTags: _*)(testFun)
-  }
 
   protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
     (f: String => Unit): Unit = {
