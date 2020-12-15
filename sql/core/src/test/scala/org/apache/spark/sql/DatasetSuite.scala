@@ -518,42 +518,44 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-33778: joinPartial join types") {
-    val ds1 = Seq(1, 2, 3).toDS().as("a")
-    val ds2 = Seq(1, 2).toDS().as("b")
+    val ds1 = Seq(("1", 1), ("2", 2), ("3", 3)).toDS().as("a")
+    val ds2 = Seq(("1", 1), ("2", 2)).toDS().as("b")
 
     val e1 = intercept[AnalysisException] {
-      ds1.joinPartial(ds2, $"a.value" === $"b.value", "inner")
+      ds1.joinPartial(ds2, $"a._1" === $"b._1", "inner")
     }.getMessage
     assert(e1.contains("Invalid join type in joinPartial: " + Inner.sql))
 
     val e2 = intercept[AnalysisException] {
-      ds1.joinPartial(ds2, $"a.value" === $"b.value", "cross")
+      ds1.joinPartial(ds2, $"a._1" === $"b._1", "cross")
     }.getMessage
     assert(e2.contains("Invalid join type in joinPartial: " + Cross.sql))
 
     Seq("outer", "full", "fullouter", "full_outer").foreach(joinType => {
       val e = intercept[AnalysisException] {
-        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+        ds1.joinPartial(ds2, $"a._1" === $"b._1", joinType)
       }.getMessage
       assert(e.contains("Invalid join type in joinPartial: " + FullOuter.sql))
     })
 
     Seq("left", "leftouter", "left_outer").foreach(joinType => {
       val e = intercept[AnalysisException] {
-        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+        ds1.joinPartial(ds2, $"a._1" === $"b._1", joinType)
       }.getMessage
       assert(e.contains("Invalid join type in joinPartial: " + LeftOuter.sql))
     })
 
     Seq("right", "rightouter", "right_outer").foreach(joinType => {
       val e = intercept[AnalysisException] {
-        ds1.joinPartial(ds2, $"a.value" === $"b.value", joinType)
+        ds1.joinPartial(ds2, $"a._1" === $"b._1", joinType)
       }.getMessage
       assert(e.contains("Invalid join type in joinPartial: " + RightOuter.sql))
     })
 
-    checkDataset(ds1.joinPartial(ds2, $"a.value" === $"b.value", "left_semi"), (1), (2))
-    checkDataset(ds1.joinPartial(ds2, $"a.value" === $"b.value", "left_anti"), (3))
+    checkDataset(ds1.joinPartial(ds2, $"a._1" === $"b._1", "left_semi"),
+      ("1", 1), ("2", 2))
+    checkDataset(ds1.joinPartial(ds2, $"a._1" === $"b._1", "left_anti"),
+      ("3", 3))
   }
 
   test("groupBy function, keys") {

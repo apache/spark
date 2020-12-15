@@ -1260,65 +1260,18 @@ class Dataset[T] private[sql](
    * @since 3.1.0
    */
   def joinPartial[U](other: Dataset[U], condition: Column, joinType: String): Dataset[T] = {
-    // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
-    // etc.
-    val joined = sparkSession.sessionState.executePlan(
-      Join(
-        this.logicalPlan,
-        other.logicalPlan,
-        JoinType(joinType),
-        Some(condition.expr),
-        JoinHint.NONE)).analyzed.asInstanceOf[Join]
+    val joinedType = JoinType(joinType)
 
-    if (joined.joinType != LeftSemi && joined.joinType != LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinPartial: " + joined.joinType.sql)
+    if (joinedType != LeftSemi && joinedType != LeftAnti) {
+      throw new AnalysisException("Invalid join type in joinPartial: " + joinedType.sql)
     }
 
-    val leftResultExpr = {
-      if (!this.exprEnc.isSerializedAsStructForTopLevel) {
-        assert(joined.left.output.length == 1)
-        Alias(joined.left.output.head, "_1")()
-      } else {
-        Alias(CreateStruct(joined.left.output), "_1")()
-      }
-    }
-
-    val rightResultExpr = {
-      if (!other.exprEnc.isSerializedAsStructForTopLevel) {
-        assert(joined.right.output.length == 1)
-        Alias(joined.right.output.head, "_2")()
-      } else {
-        Alias(CreateStruct(joined.right.output), "_2")()
-      }
-    }
-
-    // For both join sides, combine all outputs into a single column and alias it with "_1
-    // or "_2", to match the schema for the encoder of the join result.
-    // Note that we do this before joining them, to enable the join operator to return null
-    // for one side, in cases like outer-join.
-    val left = Project(leftResultExpr :: Nil, joined.left)
-    val right = Project(rightResultExpr :: Nil, joined.right)
-
-    // Rewrites the join condition to make the attribute point to correct column/field,
-    // after we combine the outputs of each join side.
-    val conditionExpr = joined.condition.get transformUp {
-      case a: Attribute if joined.left.outputSet.contains(a) =>
-        if (!this.exprEnc.isSerializedAsStructForTopLevel) {
-          left.output.head
-        } else {
-          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(left.output.head, index)
-        }
-      case a: Attribute if joined.right.outputSet.contains(a) =>
-        if (!other.exprEnc.isSerializedAsStructForTopLevel) {
-          right.output.head
-        } else {
-          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
-          GetStructField(right.output.head, index)
-        }
-    }
-
-    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr), JoinHint.NONE))
+    withTypedPlan(Join(
+      this.logicalPlan,
+      other.logicalPlan,
+      joinedType,
+      Some(condition.expr),
+      JoinHint.NONE))
   }
 
   /**
