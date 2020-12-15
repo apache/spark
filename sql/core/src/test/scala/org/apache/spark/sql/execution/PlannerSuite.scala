@@ -1008,10 +1008,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = planned.collect { case p: ProjectExec => p }
         assert(projects.exists(_.outputPartitioning match {
-          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _)
-            if ar1.name == "t1id" =>
-            true
-          case _ => false
+          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
+            ar1.name == "t1id"
+          case _ =>
+            false
         }))
       }
     }
