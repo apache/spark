@@ -827,7 +827,7 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
     throw new IllegalStateException("SubqueryExec.executeTail should never be called")
   }
 
-  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
+  override def stringArgs: Iterator[Any] = Iterator(name, child) ++ Iterator(s"[id=#$id]")
 }
 
 object SubqueryExec {
