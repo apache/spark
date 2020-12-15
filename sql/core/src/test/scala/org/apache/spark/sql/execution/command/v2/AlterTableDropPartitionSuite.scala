@@ -63,4 +63,19 @@ class AlterTableDropPartitionSuite
       assert(errMsg.contains("can not alter partitions"))
     }
   }
+
+  test("purge partition data") {
+    withNsTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      try {
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+        }.getMessage
+        assert(errMsg.contains("Purge option is not supported"))
+      } finally {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+    }
+  }
 }
