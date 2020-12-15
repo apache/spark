@@ -2503,9 +2503,6 @@
             <recompileMode>incremental</recompileMode>
             <useZincServer>true</useZincServer>
             <args>
-              <arg>-unchecked</arg>
-              <arg>-deprecation</arg>
-              <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-target:jvm-1.8</arg>
             </args>
@@ -3220,9 +3217,34 @@
 
     <profile>
       <id>scala-2.12</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <build>
         <pluginManagement>
           <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <version>4.4.0</version>
+              <configuration>
+                <args combine.children="append">
+                    <arg>-unchecked</arg>
+                    <arg>-Xfatal-warnings</arg>
+                    <arg>-deprecation</arg>
+                    <arg>-Ywarn-unused-import</arg>
+                    <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
+                    <arg>-feature</arg>
+                </args>
+                <compilerPlugins>
+                  <compilerPlugin>
+                    <groupId>com.github.ghik</groupId>
+                    <artifactId>silencer-plugin_${scala.version}</artifactId>
+                    <version>1.6.0</version>
+                  </compilerPlugin>
+                </compilerPlugins>
+              </configuration>
+            </plugin>
           </plugins>
         </pluginManagement>
       </build>
@@ -3243,6 +3265,32 @@
           </dependency>
         </dependencies>
       </dependencyManagement>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <version>4.4.0</version>
+              <configuration>
+                <args combine.children="append">
+                  <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                  <arg>-Wconf:cat=scaladoc:wv</arg>
+                  <arg>-Wconf:cat=unchecked:wv</arg>
+                  <arg>-Wconf:cat=feature:wv</arg>
+                  // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
+                  <!-- <arg>-Wunused:imports</arg> -->
+                  <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
+                  <arg>-Wconf:cat=other-nullary-override:wv</arg>
+                  <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
+                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
+                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
+                </args>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
 
     <!--
