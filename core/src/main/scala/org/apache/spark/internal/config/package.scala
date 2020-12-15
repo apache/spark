@@ -2193,6 +2193,56 @@ package object config {
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
 
+<<<<<<< HEAD
+=======
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_THREADS =
+    ConfigBuilder("spark.shuffle.push.merge.finalizeThreads")
+      .doc("Specify the number of threads used by DAGScheduler to finalize shuffle merge. " +
+        "Since it could potentially take seconds for a large shuffle to finalize, having " +
+        "multiple threads helps DAGScheduler to handle multiple concurrent shuffle merge " +
+        "finalize requests when push-based shuffle is enabled.")
+      .intConf
+      .createWithDefault(3)
+
+  private[spark] val PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT =
+    ConfigBuilder("spark.shuffle.push.minShuffleSizeToWait")
+      .doc("The min size of total shuffle size for DAGScheduler to actually wait for merge " +
+        "finalization when push based shuffle is enabled.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("500m")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MIN_PUSH_RATIO =
+    ConfigBuilder("spark.shuffle.push.minPushRatio")
+      .doc("The min percentage of map tasks that have completed pushing their shuffle output " +
+        "for DAGScheduler to start merge finalization.")
+      .doubleConf
+      .createWithDefault(1.0)
+
+  private[spark] val PUSH_BASED_SHUFFLE_REUSE_MERGER_LOCATIONS =
+    ConfigBuilder("spark.shuffle.push.reuse.merger.locations")
+      .doc("For sibling shuffle map stages, i.e. ones that share common child stages, reusing " +
+        "merger locations between them can help to further increase shuffle locality ratio " +
+        "when push based shuffle is enabled. Examples include joins where the reduce stage " +
+        "needs to fetch shuffle data from multiple parent shuffle map stages. Set to 'true' " +
+        "to enable this feature.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_MAP_OUTPUT_MIN_SIZE_FOR_BROADCAST =
+    ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
+      .doc("The size at which we use Broadcast to send the map output statuses to the executors.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("512k")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULT_MIN_SIZE_FOR_REDUCED_CACHE =
+    ConfigBuilder("spark.shuffle.push.based.mergeResult.minSizeForReducedCache")
+      .doc("If the size of the serialized MergeStatus array for a given shuffle gets larger " +
+        "than this threshold, we cache individual MergeStatus as needed instead of the entire " +
+        "MergeStatus array for this shuffle on the executor side in order to save memory.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("5m")
+
+>>>>>>> 7fb51d7d58... LIHADOOP-56788 Improve caching of MergeStatus on the executor side
   private[spark] val JAR_IVY_REPO_PATH =
     ConfigBuilder("spark.jars.ivy")
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +

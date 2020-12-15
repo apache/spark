@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -629,8 +630,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, newConf)
       val mergeOutput =
         MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, newConf)
-      assert(mapOutput.length == 100)
-      assert(mergeOutput.length == 1)
+      assert(mapOutput._1.length == 100)
+      assert(mergeOutput._1.length == 1)
       mapWorkerTracker.stop()
       masterTracker.stop()
     }
@@ -693,7 +694,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(serializedBroadcast.value.dropRight(1).forall(_.length == 1024 * 1024))
 
       val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
-      assert(result.length == numMaps)
+      assert(result._1.length == numMaps)
 
       tracker.unregisterShuffle(shuffleId)
       tracker.stop()
@@ -728,10 +729,62 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(serializedBroadcast.value.foldLeft(0L)(_ + _.length) > 2L * 1024 * 1024 * 1024)
 
       val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
-      assert(result.length == numMaps)
+      assert(result._1.length == numMaps)
 
       tracker.unregisterShuffle(shuffleId)
       tracker.stop()
+    }
+  }
+
+  test("cache serialized merge statuses for large result") {
+    val newConf = new SparkConf
+    newConf.set("spark.shuffle.push.based.enabled", "true")
+    newConf.set("spark.shuffle.service.enabled", "true")
+    newConf.set("spark.rpc.message.maxSize", "1")
+    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
+    newConf.set("spark.shuffle.push.based.mergeResult.minSizeForReducedCache", "2m")
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val masterTracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
+      rpcEnv.stop(masterTracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+
+      val slaveTracker = new MapOutputTrackerWorker(newConf)
+      slaveTracker.trackerEndpoint =
+        rpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+      val bitmap = new RoaringBitmap()
+      val random = new Random()
+      for (i <- 0 until 4000000) {
+        if (random.nextDouble() < 0.7) {
+          bitmap.add(i)
+        }
+      }
+      masterTracker.registerShuffle(20, 100, 100)
+      slaveTracker.updateEpoch(masterTracker.getEpoch)
+
+      (0 until 100).foreach { i =>
+        masterTracker.registerMergeResult(20, i, MergeStatus(BlockManagerId("999", "mps", 1000), 0,
+          bitmap, 4000L))
+        masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
+          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), i))
+      }
+
+      // Verify the merge status is transmitted via broadcast and the slave caches the
+      // serialized version of it.
+      slaveTracker.getMapSizesByExecutorId(20, 0, 99, 1, 2)
+      assert(1 == masterTracker.getNumCachedSerializedBroadcast)
+      assert(1 == masterTracker.getNumCachedSerializedBroadcastMergeStatus)
+      assert(1 == slaveTracker.getNumCachedSerializedMergeStatus)
+      masterTracker.unregisterShuffle(20)
+      slaveTracker.unregisterShuffle(20)
+      assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+      assert(0 == masterTracker.getNumCachedSerializedBroadcastMergeStatus)
+      assert(0 == slaveTracker.getNumCachedSerializedMergeStatus)
     }
   }
 }

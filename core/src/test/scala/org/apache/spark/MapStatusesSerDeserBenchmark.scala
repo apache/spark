@@ -81,7 +81,7 @@ object MapStatusesSerDeserBenchmark extends BenchmarkBase {
 
     benchmark.addCase("Deserialization") { _ =>
       val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
-      assert(result.length == numMaps)
+      assert(result._1.length == numMaps)
     }
 
     benchmark.run()

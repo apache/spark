@@ -33,7 +33,7 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -380,6 +380,11 @@ private class ShuffleStatus(
     cachedSerializedBroadcast != null
   }
 
+  // Used in testing.
+  def hasCachedSerializedBroadcastMergeStatus: Boolean = withReadLock {
+    cachedSerializedBroadcastMergeStatus != null
+  }
+
   /**
    * Helper function which provides thread-safe access to the mapStatuses array.
    * The function should NOT mutate the array.
@@ -697,6 +702,11 @@ private[spark] class MapOutputTrackerMaster(
   // Used only in unit tests.
   private[spark] def getNumCachedSerializedBroadcast: Int = {
     shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcast)
+  }
+
+  // Used only in unit tests.
+  private[spark] def getNumCachedSerializedBroadcastMergeStatus: Int = {
+    shuffleStatuses.valuesIterator.count(_.hasCachedSerializedBroadcastMergeStatus)
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
@@ -1120,11 +1130,20 @@ private[spark] class MapOutputTrackerMaster(
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
 
+  private val minSizeForBroadcast =
+    conf.get(config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
+
+  private val minSizeForMergeStatusReducedCache =
+    conf.get(config.PUSH_BASED_SHUFFLE_MERGE_RESULT_MIN_SIZE_FOR_REDUCED_CACHE).toInt
+
   val mapStatuses: Map[Int, Array[MapStatus]] =
     new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
 
   val mergeStatuses: Map[Int, Array[MergeStatus]] =
     new ConcurrentHashMap[Int, Array[MergeStatus]]().asScala
+
+  val mergeStatusesSerializedBytes: Map[Int, Array[Byte]] =
+    new ConcurrentHashMap[Int, Array[Byte]]().asScala
 
   private val fetchMergeResult = Utils.isPushBasedShuffleEnabled(conf)
 
@@ -1134,6 +1153,22 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private val fetchingLock = new KeyLock[Int]
 
+  // Make sure that MergeStatus reduced cache is only enabled for MergeStatus arrays that
+  // use broadcast to transmit.
+  if (minSizeForBroadcast > minSizeForMergeStatusReducedCache) {
+    val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
+      s"be <= spark.shuffle.push.based.mergeResult.minSizeForReducedCache (" +
+      s"$minSizeForMergeStatusReducedCache bytes) so only broadcast MergeStatus arrays are " +
+      s"using reduced cache."
+    logError(msg)
+    throw new IllegalArgumentException(msg)
+  }
+
+  // Used only in unit tests.
+  private[spark] def getNumCachedSerializedMergeStatus: Int = {
+    mergeStatusesSerializedBytes.valuesIterator.count(_ != null)
+  }
+
   override def getMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
@@ -1141,7 +1176,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       startPartition: Int,
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId")
-    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergedOutputStatuses) = getStatuses(shuffleId, startPartition,
+      endPartition, conf)
     try {
       val actualEndMapIndex =
         if (endMapIndex == Int.MaxValue) mapOutputStatuses.length else endMapIndex
@@ -1155,6 +1191,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
         mergeStatuses.clear()
+        mergeStatusesSerializedBytes.clear()
         throw e
     }
   }
@@ -1165,7 +1202,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, mergeResultStatuses) = getStatuses(shuffleId, partitionId,
+      partitionId + 1, conf)
     try {
       val mergeStatus = mergeResultStatuses(partitionId)
       // If the original MergeStatus is no longer available, we cannot identify the list of
@@ -1179,6 +1217,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       case e: MetadataFetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
+        mergeStatusesSerializedBytes.clear()
         throw e
     }
   }
@@ -1190,7 +1229,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     logDebug(s"Fetching backup outputs for shuffle $shuffleId, partition $partitionId")
     // Fetch the map statuses and merge statuses again since they might have already been
     // cleared by another task running in the same executor.
-    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf)
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, partitionId, partitionId + 1, conf)
     try {
       MapOutputTracker.getMapStatusesForMergeStatus(shuffleId, partitionId, mapOutputStatuses,
         chunkTracker)
@@ -1199,6 +1238,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       case e: MetadataFetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
+        mergeStatusesSerializedBytes.clear()
         throw e
     }
   }
@@ -1212,43 +1252,88 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    */
   private def getStatuses(
       shuffleId: Int,
+      startPartitionId: Int,
+      endPartitionId: Int,
       conf: SparkConf): (Array[MapStatus], Array[MergeStatus]) = {
     if (fetchMergeResult) {
       val mapOutputStatuses = mapStatuses.get(shuffleId).orNull
       val mergeOutputStatuses = mergeStatuses.get(shuffleId).orNull
-
-      if (mapOutputStatuses == null || mergeOutputStatuses == null) {
-        logInfo("Don't have map/merge outputs for shuffle " + shuffleId + ", fetching them")
-        val startTimeNs = System.nanoTime()
-        fetchingLock.withLock(shuffleId) {
-          var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
-          var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
-          if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
-            logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
-            val fetchedBytes =
-              askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
-            try {
-              fetchedMapStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
-              fetchedMergeStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
-            } catch {
-              case e: SparkException =>
-                throw new MetadataFetchFailedException(shuffleId, -1,
-                  s"Unable to deserialize broadcasted map/merge statuses" +
-                    s" for shuffle $shuffleId: " + e.getCause)
+      val (resultMapStatuses, resultMergeStatuses) = {
+        if (mapOutputStatuses == null || mergeOutputStatuses == null) {
+          logInfo("Don't have map/merge outputs for shuffle " + shuffleId + ", fetching them")
+          val startTimeNs = System.nanoTime()
+          fetchingLock.withLock(shuffleId) {
+            var fetchedMapStatuses = mapStatuses.get(shuffleId).orNull
+            var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
+            if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
+              logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
+              val fetchedBytes =
+                askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
+              try {
+                fetchedMapStatuses =
+                  MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)._1
+                val (mergeStatues, serializedMergeStatuses) =
+                  MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
+                // If serialized MergeStatuse array size is larger than threshold, cache the
+                // much more compact serialized bytes instead and only cache the deserialized
+                // MergeStatus objects that are needed (within startPartitionId until
+                // endPartitionId). We can do this because different from MapStatus, each reduce
+                // task only need one or a few MergeStatus object based on the number of shuffle
+                // partitions this task is processing. When the number of shuffle partitions is
+                // large (10s or 100s of K), each executor is probably only going to process ~100
+                // or so tasks. Caching the entire deserialized MergeStatus array while only using
+                // 0.1% of it is a huge waste of memory compared with caching the much more compact
+                // serialized bytes. By doing this, we might need to deserialize from the cached
+                // bytes once per task. However, this is still better because the memory saving
+                // would lead to less GC in the executors.
+                if (serializedMergeStatuses != null &&
+                  serializedMergeStatuses.length >= minSizeForMergeStatusReducedCache) {
+                  mergeStatusesSerializedBytes.put(shuffleId, serializedMergeStatuses)
+                  mergeStatues.indices.foreach { index =>
+                    if (index < startPartitionId || index >= endPartitionId) {
+                      mergeStatues(index) = null
+                    }
+                  }
+                  fetchedMergeStatuses = mergeStatues
+                  logInfo(s"Got the merge output locations for $shuffleId. Serialized size " +
+                    s"(${serializedMergeStatuses.length}) larger than reduced cache threshold " +
+                    s"($minSizeForMergeStatusReducedCache). Cached the serialized bytes instead.")
+                } else {
+                  fetchedMergeStatuses = mergeStatues
+                }
+              } catch {
+                case e: SparkException =>
+                  throw new MetadataFetchFailedException(shuffleId, -1,
+                    s"Unable to deserialize broadcasted map/merge statuses" +
+                      s" for shuffle $shuffleId: " + e.getCause)
+              }
+              logInfo("Got the map/merge output locations")
+              mapStatuses.put(shuffleId, fetchedMapStatuses)
+              mergeStatuses.put(shuffleId, fetchedMergeStatuses)
             }
-            logInfo("Got the map/merge output locations")
-            mapStatuses.put(shuffleId, fetchedMapStatuses)
-            mergeStatuses.put(shuffleId, fetchedMergeStatuses)
+            logDebug(s"Fetching map/merge output statuses for shuffle $shuffleId took " +
+              s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
+            (fetchedMapStatuses, fetchedMergeStatuses)
           }
-          logDebug(s"Fetching map/merge output statuses for shuffle $shuffleId took " +
-            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
-          (fetchedMapStatuses, fetchedMergeStatuses)
+        } else {
+          (mapOutputStatuses, mergeOutputStatuses)
         }
-      } else {
-        (mapOutputStatuses, mergeOutputStatuses)
       }
+      val nullMergeStatusIndexes = (startPartitionId until endPartitionId)
+        .filter(resultMergeStatuses(_) == null)
+      if (nullMergeStatusIndexes.nonEmpty) {
+        val serializedMergeStatuses = mergeStatusesSerializedBytes.get(shuffleId).orNull
+        if (serializedMergeStatuses != null) {
+          // Here we deserialize the MergeStatus array from the cached serialized bytes again.
+          // Although this might increase deserialization time, the saving on memory could
+          // translate into GC time saving which offsets the increased deserialization time.
+          val mergeStatuses = MapOutputTracker.deserializeOutputStatuses[MergeStatus](
+            serializedMergeStatuses, conf)._1
+          nullMergeStatusIndexes.foreach(
+            index => resultMergeStatuses(index) = mergeStatuses(index))
+        }
+      }
+      (resultMapStatuses, resultMergeStatuses)
     } else {
       val statuses = mapStatuses.get(shuffleId).orNull
       if (statuses == null) {
@@ -1261,7 +1346,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
             val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
             try {
               fetchedStatuses =
-                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
+                MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)._1
             } catch {
               case e: SparkException =>
                 throw new MetadataFetchFailedException(shuffleId, -1,
@@ -1285,6 +1370,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   def unregisterShuffle(shuffleId: Int): Unit = {
     mapStatuses.remove(shuffleId)
     mergeStatuses.remove(shuffleId)
+    mergeStatusesSerializedBytes.remove(shuffleId)
   }
 
   /**
@@ -1299,6 +1385,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         epoch = newEpoch
         mapStatuses.clear()
         mergeStatuses.clear()
+        mergeStatusesSerializedBytes.clear()
       }
     }
   }
@@ -1364,7 +1451,7 @@ private[spark] object MapOutputTracker extends Logging {
 
   // Opposite of serializeOutputStatuses.
   def deserializeOutputStatuses[T <: ShuffleOutputStatus](
-      bytes: Array[Byte], conf: SparkConf): Array[T] = {
+      bytes: Array[Byte], conf: SparkConf): (Array[T], Array[Byte]) = {
     assert (bytes.length > 0)
 
     def deserializeObject(in: InputStream): AnyRef = {
@@ -1383,17 +1470,18 @@ private[spark] object MapOutputTracker extends Logging {
     val in = new ByteArrayInputStream(bytes, 1, bytes.length - 1)
     bytes(0) match {
       case DIRECT =>
-        deserializeObject(in).asInstanceOf[Array[T]]
+        (deserializeObject(in).asInstanceOf[Array[T]], null)
       case BROADCAST =>
         try {
           // deserialize the Broadcast, pull .value array out of it, and then deserialize that
           val bcast = deserializeObject(in).asInstanceOf[Broadcast[Array[Array[Byte]]]]
           logInfo("Broadcast outputstatuses size = " + bytes.length +
             ", actual size = " + bcast.value.foldLeft(0L)(_ + _.length))
-          val bcastIn = new ChunkedByteBuffer(bcast.value.map(ByteBuffer.wrap)).toInputStream()
+          val bcastBuffer = new ChunkedByteBuffer(bcast.value.map(ByteBuffer.wrap))
+          val bcastIn = bcastBuffer.toInputStream()
           // Important - ignore the DIRECT tag ! Start from offset 1
           bcastIn.skip(1)
-          deserializeObject(bcastIn).asInstanceOf[Array[T]]
+          (deserializeObject(bcastIn).asInstanceOf[Array[T]], bcastBuffer.toArray)
         } catch {
           case e: IOException =>
             logWarning("Exception encountered during deserializing broadcasted" +
