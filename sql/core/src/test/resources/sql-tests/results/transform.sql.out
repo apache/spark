@@ -93,7 +93,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp
 -- !query schema
-struct<a:string,b:string,decode(CAST(c AS BINARY), UTF-8):string,d:string,e:string,f:string,g:string,h:string,i:string,j:string,k:string,l:string>
+struct<a:string,b:string,decode(c, UTF-8):string,d:string,e:string,f:string,g:string,h:string,i:string,j:string,k:string,l:string>
 -- !query output
 1	true	Spark SQL	1	1	100	1	1.0	1.0	1	1997-01-02 00:00:00	2000-04-01
 2	false	Spark SQL	2	2	200	2	2.0	2.0	2	1997-01-02 03:04:05	2000-04-02
