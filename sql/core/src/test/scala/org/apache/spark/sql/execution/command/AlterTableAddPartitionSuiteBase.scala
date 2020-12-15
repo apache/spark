@@ -28,7 +28,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"ALTER TABLE $t ADD $exists PARTITION (id=1) LOCATION 'loc'")
@@ -40,7 +40,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("multiple partitions") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"""
@@ -56,7 +56,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("multi-part partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
       Seq("", "IF NOT EXISTS").foreach { exists =>
         sql(s"ALTER TABLE $t ADD $exists PARTITION (a=2, b='abc')")
@@ -67,7 +67,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("table to alter does not exist") {
-    withNsTable("ns", "does_not_exist") { t =>
+    withNamespaceAndTable("ns", "does_not_exist") { t =>
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t ADD IF NOT EXISTS PARTITION (a='4', b='9')")
       }.getMessage
@@ -76,7 +76,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("case sensitivity in resolving partition specs") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
@@ -93,7 +93,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("SPARK-33521: universal type conversions of partition values") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (
         |  id int,
@@ -141,7 +141,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("SPARK-33676: not fully specified partition spec") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (id bigint, part0 int, part1 string)
         |$defaultUsing
@@ -155,7 +155,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
   }
 
   test("partition already exists") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=2) LOCATION 'loc1'")
 

@@ -37,7 +37,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     super.test(s"$command $version: " + testName, testTags: _*)(testFun)
   }
 
-  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
+  protected def withNamespaceAndTable(ns: String, tableName: String, cat: String = catalog)
       (f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {

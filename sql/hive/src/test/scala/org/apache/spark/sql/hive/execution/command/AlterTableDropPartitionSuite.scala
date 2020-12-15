@@ -27,7 +27,7 @@ class AlterTableDropPartitionSuite
   override protected val notFullPartitionSpecErr = "No partition is dropped"
 
   test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 

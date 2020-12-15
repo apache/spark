@@ -38,7 +38,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show an existing table") {
-    withNsTable("ns", "table") { t =>
+    withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
       runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
     }
@@ -103,7 +103,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNsTable("ns", "table") { t =>
+    withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
       sql(s"USE $catalog")

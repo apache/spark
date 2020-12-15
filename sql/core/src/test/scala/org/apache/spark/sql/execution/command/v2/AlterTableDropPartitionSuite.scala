@@ -28,7 +28,7 @@ class AlterTableDropPartitionSuite
   override protected val notFullPartitionSpecErr = "Partition spec is invalid"
 
   test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
@@ -44,7 +44,7 @@ class AlterTableDropPartitionSuite
   }
 
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
-    withNsTable("ns", "tbl", s"non_part_$catalog") { t =>
+    withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")

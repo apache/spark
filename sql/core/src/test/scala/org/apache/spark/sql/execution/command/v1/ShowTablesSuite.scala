@@ -82,7 +82,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 
   test("case sensitivity of partition spec") {
-    withNsTable("ns", "part_table") { t =>
+    withNamespaceAndTable("ns", "part_table") { t =>
       sql(s"""
         |CREATE TABLE $t (price int, qty int, year int, month int)
         |$defaultUsing

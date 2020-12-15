@@ -61,7 +61,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show partitions of non-partitioned table") {
-    withNsTable("ns", "not_partitioned_table") { t =>
+    withNamespaceAndTable("ns", "not_partitioned_table") { t =>
       sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $t")
@@ -71,7 +71,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("non-partitioning columns") {
-    withNsTable("ns", "dateTable") { t =>
+    withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1)")
@@ -81,7 +81,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show everything") {
-    withNsTable("ns", "dateTable") { t =>
+    withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       runShowPartitionsSql(
         s"show partitions $t",
@@ -93,7 +93,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("filter by partitions") {
-    withNsTable("ns", "dateTable") { t =>
+    withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
       runShowPartitionsSql(
         s"show partitions $t PARTITION(year=2015)",
@@ -110,7 +110,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("show everything more than 5 part keys") {
-    withNsTable("ns", "wideTable") { t =>
+    withNamespaceAndTable("ns", "wideTable") { t =>
       createWideTable(t)
       runShowPartitionsSql(
         s"show partitions $t",
@@ -120,7 +120,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("SPARK-33667: case sensitivity of partition spec") {
-    withNsTable("ns", "part_table") { t =>
+    withNamespaceAndTable("ns", "part_table") { t =>
       sql(s"""
         |CREATE TABLE $t (price int, qty int, year int, month int)
         |$defaultUsing
@@ -140,7 +140,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   test("SPARK-33777: sorted output") {
-    withNsTable("ns", "dateTable") { t =>
+    withNamespaceAndTable("ns", "dateTable") { t =>
       sql(s"""
         |CREATE TABLE $t (id int, part string)
         |$defaultUsing

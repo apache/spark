@@ -41,7 +41,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("single partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
@@ -51,7 +51,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("multiple partitions") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"""
@@ -64,7 +64,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("multi-part partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"ALTER TABLE $t ADD PARTITION (a = 2, b = 'abc')")
@@ -74,7 +74,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("table to alter does not exist") {
-    withNsTable("ns", "does_not_exist") { t =>
+    withNamespaceAndTable("ns", "does_not_exist") { t =>
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
       }.getMessage
@@ -83,7 +83,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("case sensitivity in resolving partition specs") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
@@ -102,7 +102,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("SPARK-33676: not fully specified partition spec") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (id bigint, part0 int, part1 string)
         |$defaultUsing
