@@ -2076,7 +2076,8 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: recover partitions") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
-      AlterTableRecoverPartitionsStatement(Seq("a", "b", "c")))
+      AlterTableRecoverPartitions(
+        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("alter view: add partition (not supported)") {

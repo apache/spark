@@ -330,6 +330,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
 
+    case AlterTableRecoverPartitions(_: ResolvedTable) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
+
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
 
