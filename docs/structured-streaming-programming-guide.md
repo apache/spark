@@ -1689,6 +1689,12 @@ hence the number is not same as the number of original input rows. You'd like to
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
+### State Store and task locality
+
+The stateful operations stores states for events in state stores of executors. State stores occupies resources such as memory and disk space to store the states. So it is more efficient to keep a state store provider running in the same executor across different streaming batches. Changing the location of state store provider requires to load from checkpointed states from HDFS in the new executor. The stateful operations in Structured Streaming queries rely on the preferred location feature of Spark's RDD to run the state store provider on the same executor. However, generally the preferred location is not a hard requirement and it is still possible that Spark schedules tasks to the executors other than the preferred ones. In this case, Spark will load state store providers from checkpointed states on HDFS to new executors. The state store providers ran in previous batch will not be unloaded immediately. If in next batch the corresponding state store provider is scheduled on this executor again, it could reuse the previous states and save the time of loading checkpointed state. Spark runs a maintenance task which checks and unloads the state store providers which are inactive on the executors.
+
+For some use cases like processing very large state data, loading new state store providers from checkpointed states can be very time-consuming and inefficient. By changing the Spark configs related to task scheduling, for example `spark.locality.wait`, users can config Spark how long to wait to launch data-local task. For stateful operations in Structured Streaming, it can be used to let state store providers running on the same executors across batches.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs)
