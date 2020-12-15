@@ -105,7 +105,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val response = scheduler.submitDriver(
       new MesosDriverDescription("d1", "jar", 1200, 1.5, true,
         command,
-        Map((config.EXECUTOR_HOME.key, "test"), ("spark.app.name", "test")),
+        Map((config.EXECUTOR_HOME.key, "test"), ("spark.app.name", "test"),
+          (config.DRIVER_MEMORY_OVERHEAD.key, "0")),
         "s1",
         new Date()))
     assert(response.success)
@@ -200,6 +201,60 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     })
   }
 
+  test("SPARK-22256: supports spark.mesos.driver.memoryOverhead with 384mb default") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test"),
+        "s1",
+        new Date()))
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem*2, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+    val tasks = Utils.verifyTaskLaunched(driver, "o1")
+    // 1384.0
+    val taskMem = tasks.head.getResourcesList
+      .asScala
+      .filter(_.getName.equals("mem"))
+      .map(_.getScalar.getValue)
+      .head
+    assert(1384.0 === taskMem)
+  }
+
+  test("SPARK-22256: supports spark.mesos.driver.memoryOverhead with 10% default") {
+    setScheduler()
+
+    val mem = 10000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test"),
+        "s1",
+        new Date()))
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem*2, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+    val tasks = Utils.verifyTaskLaunched(driver, "o1")
+    // 11000.0
+    val taskMem = tasks.head.getResourcesList
+      .asScala
+      .filter(_.getName.equals("mem"))
+      .map(_.getScalar.getValue)
+      .head
+    assert(11000.0 === taskMem)
+  }
+
   test("supports spark.mesos.driverEnv.*") {
     setScheduler()
 
@@ -211,7 +266,9 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
           "spark.app.name" -> "test",
-          config.DRIVER_ENV_PREFIX + "TEST_ENV" -> "TEST_VAL"),
+          config.DRIVER_ENV_PREFIX + "TEST_ENV" -> "TEST_VAL",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"
+        ),
         "s1",
         new Date()))
     assert(response.success)
@@ -236,7 +293,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         Map(config.EXECUTOR_HOME.key -> "test",
           "spark.app.name" -> "test",
           config.NETWORK_NAME.key -> "test-network-name",
-          config.NETWORK_LABELS.key -> "key1:val1,key2:val2"),
+          config.NETWORK_LABELS.key -> "key1:val1,key2:val2",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
         "s1",
         new Date()))
 
@@ -266,7 +324,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
           config.ENABLE_FETCHER_CACHE.key -> "true",
-          "spark.app.name" -> "test"),
+          "spark.app.name" -> "test",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
         "s1",
         new Date()))
 
@@ -290,7 +349,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       new MesosDriverDescription("d1", "jar", mem, cpu, true,
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
-          "spark.app.name" -> "test"),
+          "spark.app.name" -> "test",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
         "s1",
         new Date()))
 
@@ -315,7 +375,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
           config.ENABLE_FETCHER_CACHE.key -> "false",
-          "spark.app.name" -> "test"),
+          "spark.app.name" -> "test",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
         "s1",
         new Date()))
 
@@ -349,7 +410,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
           command,
           Map(config.EXECUTOR_HOME.key -> "test",
             "spark.app.name" -> "test",
-            config.DRIVER_CONSTRAINTS.key -> driverConstraints),
+            config.DRIVER_CONSTRAINTS.key -> driverConstraints,
+            config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
           "s1",
           new Date()))
       assert(response.success)
@@ -387,7 +449,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map(config.EXECUTOR_HOME.key -> "test",
           "spark.app.name" -> "test",
-          config.DRIVER_LABELS.key -> "key:value"),
+          config.DRIVER_LABELS.key -> "key:value",
+          config.DRIVER_MEMORY_OVERHEAD.key -> "0"),
         "s1",
         new Date()))
 
@@ -745,7 +808,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       true,
       command,
       Map(config.EXECUTOR_HOME.key -> "test",
-        "spark.app.name" -> "test") ++
+        "spark.app.name" -> "test",
+        config.DRIVER_MEMORY_OVERHEAD.key -> "0") ++
         addlSparkConfVars,
       "s1",
       new Date())
