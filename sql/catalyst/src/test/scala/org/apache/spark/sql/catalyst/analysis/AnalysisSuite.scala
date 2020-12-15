@@ -27,7 +27,6 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -666,7 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: String) => s,
       StringType,
       Literal.create(null, StringType) :: Nil,
-      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      true :: Nil,
       udfDeterministic = false)
 
     Seq(reflect, udf).foreach { e: Expression =>
