@@ -517,6 +517,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ORC_SKIP_ROW_FORMAT_DELIMITED_ERROR = buildConf("spark.sql.orc.skipRowFormatDelimitedError")
+    .doc("Whether to support row format delimited when creating orc table. If true  SparkSQL will catch " +
+      "exception when creating table like " +
+      "\"create table test(c1 int) row format delimited fields terminated by '002';\"" +
+      ", default is true.")
+    .booleanConf
+    .createWithDefault(true)
+
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
@@ -1712,6 +1720,8 @@ class SQLConf extends Serializable with Logging {
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def orcSkipRowFormatDelimitedError: Boolean = getConf(ORC_SKIP_ROW_FORMAT_DELIMITED_ERROR)
 
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 

@@ -153,4 +153,18 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-33755: Allow creating orc table when row format separator is defined") {
+    withTable("row_format_orc") {
+      sql(
+        s"""CREATE TABLE row_format_orc(
+           |  intField INT,
+           |  stringField STRING
+           |)
+           |ROW FORMAT DELIMITED FIELDS TERMINATED BY '002'
+           |STORED AS ORC
+           |LOCATION '${orcTableAsDir.toURI}'
+       """.stripMargin)
+    }
+  }
 }
