@@ -396,7 +396,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   private def runMainTenanceTest(
       maintenanceInterval: Long = 10L,
-      keepAliveTime: Long = 60000L): Unit = {
+      keepAliveTime: Long = 30000L): Unit = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test")
