@@ -200,7 +200,7 @@ object QueryCompilationErrors {
       t.origin.line, t.origin.startPosition)
   }
 
-  def nonStreamingTempViewError(quoted: String): Throwable = {
+  def readNonStreamingTempViewError(quoted: String): Throwable = {
     new AnalysisException(s"$quoted is not a temp view of streaming " +
       "logical plan, please use batch API such as `DataFrameReader.table` to read it.")
   }
@@ -355,16 +355,17 @@ object QueryCompilationErrors {
   }
 
   def cannotUpCastAsAttributeTruncateError(
-      originAttr: Attribute, catalogString: String): Throwable = {
-    new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-      s"${originAttr.dataType.catalogString} to $catalogString as it may truncate\n")
+      fromAttr: Attribute, toAttr: Attribute): Throwable = {
+    new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
+      s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
+      "as it may truncate\n")
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(s"undefined function $name")
   }
 
-  def invalidFunctionArgumentsError(
+  def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
     val invalidArgumentsMsg = if (validParametersCount.length == 0) {
       s"Invalid arguments for function $name"
@@ -389,18 +390,18 @@ object QueryCompilationErrors {
     new AnalysisException("ALTER TABLE SET LOCATION does not support partition for v2 tables.")
   }
 
-  def joinStrategyHintParameterNotExpectedError(unsupported: Any): Throwable = {
+  def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
     new AnalysisException("Join strategy hint parameter " +
       s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
   }
 
-  def hintParameterNotIncludeColumnsError(
+  def invalidHintParameterError(
       hintName: String, invalidParams: Seq[Any]): Throwable = {
     new AnalysisException(s"$hintName Hint parameter should include columns, but " +
       s"${invalidParams.mkString(", ")} found")
   }
 
-  def hintParameterNotExpectedError(hintName: String): Throwable = {
+  def invalidCoalesceHintParameterError(hintName: String): Throwable = {
     new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
   }
 
@@ -408,32 +409,32 @@ object QueryCompilationErrors {
     new AnalysisException(s"syntax error in attribute name: $name")
   }
 
-  def onlyStarExpandStructDataTypesError(target: Option[Seq[String]]): Throwable = {
-    new AnalysisException(s"Can only star expand struct data types. Attribute: `${target.get}`")
+  def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
+    new AnalysisException(s"Can only star expand struct data types. Attribute: `$attributes`")
   }
 
-  def cannotResolveTargetAccordingGivenInputColumnsError(
-      targetString: String, from: String): Throwable = {
-    new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
+  def cannotResolveStarExpandGivenInputColumnsError(
+      targetString: String, columns: String): Throwable = {
+    new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$columns'")
   }
 
   def addColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def replaceColumnsOnlySupportedWithV2TablesError(): Throwable = {
+  def replaceColumnsOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
   }
 
-  def alterQualifiedColumnOnlySupportedWithV2TablesError(): Throwable = {
+  def alterQualifiedColumnOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("ALTER COLUMN with qualified column is only supported with v2 tables.")
   }
 
-  def alterColumnWithV1TablesCannotSpecifyNotNullError(): Throwable = {
+  def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
     new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
   }
 
-  def alterOnlySupportedWithV2TablesError(): Throwable = {
+  def alterOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
   }
 
@@ -443,11 +444,11 @@ object QueryCompilationErrors {
         s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
   }
 
-  def renameColumnOnlySupportedWithV2TablesError(): Throwable = {
+  def renameColumnOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
   }
 
-  def dropColumnOnlySupportedWithV2TablesError(): Throwable = {
+  def dropColumnOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("DROP COLUMN is only supported with v2 tables.")
   }
 
@@ -455,11 +456,11 @@ object QueryCompilationErrors {
     new AnalysisException(s"The database name is not valid: $quoted")
   }
 
-  def replaceTableOnlySupportedWithV2TablesError(): Throwable = {
+  def replaceTableOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
   }
 
-  def replaceTableAsSelectOnlySupportedWithV2TablesError(): Throwable = {
+  def replaceTableAsSelectOnlySupportedWithV2TableError(): Throwable = {
     new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
   }
 

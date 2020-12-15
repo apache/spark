@@ -922,7 +922,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
 
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw QueryCompilationErrors.nonStreamingTempViewError(identifier.quoted)
+        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
       }
       tmpView.map(ResolveRelations.resolveViews)
     }

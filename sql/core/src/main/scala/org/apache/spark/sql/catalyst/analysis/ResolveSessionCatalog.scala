@@ -76,7 +76,7 @@ class ResolveSessionCatalog(
       cols.foreach(c => failNullType(c.dataType))
       val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
         case Some(_: V1Table) =>
-          throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TablesError
+          throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
         case Some(table) =>
           // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
           val deleteChanges = table.schema.fieldNames.map { name =>
@@ -101,13 +101,13 @@ class ResolveSessionCatalog(
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
           if (a.column.length > 1) {
-            throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TablesError
+            throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
           }
           if (a.nullable.isDefined) {
-            throw QueryCompilationErrors.alterColumnWithV1TablesCannotSpecifyNotNullError
+            throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
           }
           if (a.position.isDefined) {
-            throw QueryCompilationErrors.alterOnlySupportedWithV2TablesError
+            throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
           }
           val builder = new MetadataBuilder
           // Add comment to metadata
@@ -152,7 +152,7 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalogAndTable(catalog, tbl), col, newName) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TablesError
+          throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
       }.getOrElse {
         val changes = Seq(TableChange.renameColumn(col.toArray, newName))
         createAlterTable(nameParts, catalog, tbl, changes)
@@ -162,7 +162,7 @@ class ResolveSessionCatalog(
          nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
       loadTable(catalog, tbl.asIdentifier).collect {
         case v1Table: V1Table =>
-          throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TablesError
+          throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
       }.getOrElse {
         val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
         createAlterTable(nameParts, catalog, tbl, changes)
@@ -300,7 +300,7 @@ class ResolveSessionCatalog(
       assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TablesError
+        throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TableError
       } else {
         ReplaceTable(
           catalog.asTableCatalog,
@@ -319,7 +319,7 @@ class ResolveSessionCatalog(
       }
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
-        throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TablesError
+        throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError
       } else {
         ReplaceTableAsSelect(
           catalog.asTableCatalog,

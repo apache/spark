@@ -154,7 +154,7 @@ object ResolveHints {
             case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
             case unsupported =>
-              throw QueryCompilationErrors.joinStrategyHintParameterNotExpectedError(unsupported)
+              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
           }.toSet
           val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
           val applied = applyJoinStrategyHint(
@@ -193,7 +193,7 @@ object ResolveHints {
            """.stripMargin)
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
-          throw QueryCompilationErrors.hintParameterNotIncludeColumnsError(hintName, invalidParams)
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
         RepartitionByExpression(
           partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
@@ -206,7 +206,7 @@ object ResolveHints {
           Repartition(numPartitions, shuffle, hint.child)
         // The "COALESCE" hint (shuffle = false) must have a partition number only
         case _ if !shuffle =>
-          throw QueryCompilationErrors.hintParameterNotExpectedError(hintName)
+          throw QueryCompilationErrors.invalidCoalesceHintParameterError(hintName)
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
@@ -228,7 +228,7 @@ object ResolveHints {
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
-          throw QueryCompilationErrors.hintParameterNotIncludeColumnsError(hintName, invalidParams)
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
         val sortOrder = partitionExprs.map {
           case expr: SortOrder => expr

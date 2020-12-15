@@ -245,13 +245,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+    throw QueryExecutionErrors.cannotEvaluateGeneratorError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    throw QueryExecutionErrors.cannotGenerateCodeForGeneratorError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw QueryExecutionErrors.cannotTerminateExpressionError(this)
+    throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 }
 
 case class UnresolvedFunction(
@@ -358,12 +358,12 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
         }
 
         case _ =>
-          throw QueryCompilationErrors.onlyStarExpandStructDataTypesError(target)
+          throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw QueryCompilationErrors.cannotResolveTargetAccordingGivenInputColumnsError(
+      throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
         targetString, from)
     }
   }

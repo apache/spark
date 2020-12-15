@@ -623,7 +623,7 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          throw QueryCompilationErrors.invalidFunctionArgumentsError(
+          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
             validParametersCount, name, params)
         }
         try {

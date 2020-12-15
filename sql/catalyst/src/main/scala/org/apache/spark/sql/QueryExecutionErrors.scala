@@ -45,15 +45,15 @@ object QueryExecutionErrors {
       s"[BUG] logical plan should not have output of char/varchar type: $leaf")
   }
 
-  def cannotEvaluateExpressionError(generator: UnresolvedGenerator): Throwable = {
+  def cannotEvaluateGeneratorError(generator: UnresolvedGenerator): Throwable = {
     new UnsupportedOperationException(s"Cannot evaluate expression: $generator")
   }
 
-  def cannotGenerateCodeForExpressionError(generator: UnresolvedGenerator): Throwable = {
+  def cannotGenerateCodeForGeneratorError(generator: UnresolvedGenerator): Throwable = {
     new UnsupportedOperationException(s"Cannot generate code for expression: $generator")
   }
 
-  def cannotTerminateExpressionError(generator: UnresolvedGenerator): Throwable = {
+  def cannotTerminateGeneratorError(generator: UnresolvedGenerator): Throwable = {
     new UnsupportedOperationException(s"Cannot terminate expression: $generator")
   }
 }
