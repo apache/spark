@@ -3228,12 +3228,12 @@
               <artifactId>scala-maven-plugin</artifactId>
               <configuration>
                 <args combine.children="append">
-                    <arg>-unchecked</arg>
-                    <arg>-Xfatal-warnings</arg>
-                    <arg>-deprecation</arg>
-                    <arg>-Ywarn-unused-import</arg>
-                    <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
-                    <arg>-feature</arg>
+                  <arg>-unchecked</arg>
+                  <arg>-deprecation</arg>
+                  <arg>-feature</arg>
+                  <arg>-Xfatal-warnings</arg>
+                  <arg>-Ywarn-unused-import</arg>
+                  <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
                 </args>
                 <compilerPlugins>
                   <compilerPlugin>
