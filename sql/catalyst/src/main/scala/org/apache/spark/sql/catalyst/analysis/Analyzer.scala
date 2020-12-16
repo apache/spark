@@ -259,6 +259,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveColumnsExpression ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
@@ -968,6 +969,38 @@ class Analyzer(override val catalogManager: CatalogManager)
           case rel: DataSourceV2Relation =>
             rel.withMetadataColumns()
         }
+    }
+  }
+
+  /**
+   * Resolve complex column generator expression.
+   */
+  object ResolveColumnsExpression extends Rule[LogicalPlan] {
+
+    def containsColumnsExpression(expr: Expression): Boolean = expr.collect {
+      case a: AllColumnExcept => a
+    }.nonEmpty
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+      case p: Project =>
+        val newProjectList = p.projectList.flatMap {
+          case UnresolvedAlias(child: AllColumnExcept, _) =>
+            p.child.output.filter(!child.children.contains(_))
+          case UnresolvedAlias(child: AllColumnExcept, _) =>
+            p.child.output.filter(!child.children.contains(_))
+          case Alias(child: AllColumnExcept, _) =>
+            p.child.output.filter(!child.children.contains(_))
+          case MultiAlias(child: AllColumnExcept, _) =>
+            p.child.output.filter(!child.children.contains(_))
+          case e if containsColumnsExpression(e) =>
+            throw QueryCompilationErrors
+              .complexColumnExpressionsNotSupportOutsideOfProject("all_column_except", p)
+          case e => Seq(e)
+        }
+        p.copy(projectList = newProjectList)
+      case p if p.expressions.exists(containsColumnsExpression) =>
+        throw QueryCompilationErrors
+          .complexColumnExpressionsNotSupportOutsideOfProject("all_column_except", p)
     }
   }
 

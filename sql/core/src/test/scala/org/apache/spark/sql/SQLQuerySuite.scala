@@ -3732,6 +3732,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
     }
   }
+
+  test("SPARK: column_exclude") {
+    withTempView("src") {
+      val df = Seq((1, 2)).toDF("key", "value")
+      df.createOrReplaceTempView("src")
+      checkAnswer(sql("SELECT all_column_except(key) FROM src"), Row(2))
+      checkAnswer(sql("SELECT key, all_column_except(key) FROM src"), Row(1, 2))
+      checkAnswer(sql("SELECT key, all_column_except(value) FROM src"), Row(1, 1))
+      val e1 = intercept[AnalysisException] {
+        sql("SELECT key, all_column_except(value, invalid_column) FROM src")
+      }.getMessage
+      assert(e1.contains("cannot resolve '`invalid_column`' given input columns:" +
+        " [src.key, src.value]"))
+      val e2 = intercept[AnalysisException] {
+        sql("SELECT all_column_except(value), count(value) FROM src GROUP BY key")
+      }.getMessage
+      assert(e2.contains("Complex column expressions `all_column_except` not supported" +
+        " outside of Project's projection list."))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

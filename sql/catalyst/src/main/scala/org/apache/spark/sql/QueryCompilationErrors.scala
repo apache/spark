@@ -326,4 +326,11 @@ object QueryCompilationErrors {
       "of rows, therefore they are currently not supported.", t.origin.line, t.origin.startPosition)
   }
 
+  def complexColumnExpressionsNotSupportOutsideOfProject(
+      method: String,
+      t: TreeNode[_]): Throwable = {
+    new AnalysisException(s"Complex column expressions `${method}`" +
+      s" not supported outside of Project's projection list.",
+      t.origin.line, t.origin.startPosition)
+  }
 }
