@@ -93,8 +93,7 @@ case class UncacheTableExec(
     cascade: Boolean) extends V2CommandExec {
   override def run(): Seq[InternalRow] = {
     val sparkSession = sqlContext.sparkSession
-    val df = Dataset.ofRows(sparkSession, relation)
-    sparkSession.sharedState.cacheManager.uncacheQuery(df, cascade)
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, relation, cascade)
     Seq.empty
   }
 
