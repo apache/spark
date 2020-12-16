@@ -1702,7 +1702,7 @@ In this case, Spark will load state store providers from checkpointed states on 
 If in the next batch the corresponding state store provider is scheduled on this executor again, it could reuse the previous states and save the time of loading checkpointed states.
 Spark runs a maintenance task which checks and unloads the state store providers which are inactive on the executors.
 
-For some use cases like processing very large state data, loading new state store providers from checkpointed states can be very time-consuming and inefficient.
+For some use cases such as processing very large state data, loading new state store providers from checkpointed states can be very time-consuming and inefficient.
 By changing the Spark configurations related to task scheduling, for example `spark.locality.wait`, users can configure Spark how long to wait to launch a data-local task.
 For stateful operations in Structured Streaming, it can be used to let state store providers running on the same executors across batches.
 
