@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchPartitionsException, PartitionsAlreadyExistException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -2884,6 +2884,22 @@ class HiveDDLSuite
       sql(s"ALTER TABLE t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
         " PARTITION (id=2) LOCATION 'loc1'")
       checkAnswer(sql("SHOW PARTITIONS t"), Seq(Row("id=1"), Row("id=2")))
+    }
+  }
+
+  test("SPARK-33788: partition not exists") {
+    withTable("t") {
+      sql(s"CREATE TABLE t (data string) PARTITIONED BY (id bigint)")
+      sql(s"ALTER TABLE t ADD PARTITION (id=1)")
+
+      val errMsg = intercept[NoSuchPartitionsException] {
+        sql(s"ALTER TABLE t DROP PARTITION (id=1), PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("partitions not found in table"))
+
+      checkAnswer(sql("SHOW PARTITIONS t"), Seq(Row("id=1")))
+      sql(s"ALTER TABLE t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+      checkAnswer(sql("SHOW PARTITIONS t"), Seq.empty)
     }
   }
 }
