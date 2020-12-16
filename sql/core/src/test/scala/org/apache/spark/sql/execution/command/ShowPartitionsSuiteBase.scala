@@ -173,4 +173,21 @@ trait ShowPartitionsSuiteBase extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-33777: sorted output") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val table = s"$catalog.ns.dateTable"
+      withTable(table) {
+        sql(s"""
+          |CREATE TABLE $table (id int, part string)
+          |$defaultUsing
+          |PARTITIONED BY (part)""".stripMargin)
+        sql(s"ALTER TABLE $table ADD PARTITION(part = 'b')")
+        sql(s"ALTER TABLE $table ADD PARTITION(part = 'a')")
+        val partitions = sql(s"show partitions $table")
+        assert(partitions.first().getString(0) === "part=a")
+      }
+    }
+  }
 }

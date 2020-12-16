@@ -374,12 +374,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DEFAULT_PARALLELISM = buildConf("spark.sql.default.parallelism")
-    .doc("The number of parallelism for Spark SQL, the default value is " +
-      "`spark.default.parallelism`.")
+  val LEAF_NODE_DEFAULT_PARALLELISM = buildConf("spark.sql.leafNodeDefaultParallelism")
+    .doc("The default parallelism of Spark SQL leaf nodes that produce data, such as the file " +
+      "scan node, the local data scan node, the range node, etc. The default value of this " +
+      "config is 'SparkContext#defaultParallelism'.")
     .version("3.2.0")
     .intConf
-    .checkValue(_ > 0, "The value of spark.sql.default.parallelism must be positive.")
+    .checkValue(_ > 0, "The value of spark.sql.leafNodeDefaultParallelism must be positive.")
     .createOptional
 
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
@@ -922,13 +923,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_FORCE_CANCEL =
+    buildConf("spark.sql.thriftServer.interruptOnCancel")
+      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
+        "When false, all running tasks will remain until finished.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
       .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence.")
+        "than this configuration value, they take precedence. If you set this timeout and prefer" +
+        "to cancel the queries right away without waiting task to finish, consider enabling" +
+        s"${THRIFTSERVER_FORCE_CANCEL.key} together.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
@@ -1367,6 +1378,17 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(2)
+
+  val STREAMING_MAINTENANCE_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.maintenanceInterval")
+      .internal()
+      .doc("The interval in milliseconds between triggering maintenance tasks in StateStore. " +
+        "The maintenance task executes background maintenance task in all the loaded store " +
+        "providers if they are still the active instances according to the coordinator. If not, " +
+        "inactive instances of store providers will be closed.")
+      .version("2.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -3182,8 +3204,6 @@ class SQLConf extends Serializable with Logging {
 
   def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
-  def defaultParallelism: Option[Int] = getConf(DEFAULT_PARALLELISM)
-
   def defaultNumShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
   def numShufflePartitions: Int = {
@@ -3208,6 +3228,8 @@ class SQLConf extends Serializable with Logging {
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 

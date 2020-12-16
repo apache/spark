@@ -339,35 +339,6 @@ class SparkSqlParserSuite extends AnalysisTest {
       "LINES TERMINATED BY only supports newline '\\n' right now")
   }
 
-  test("CACHE TABLE") {
-    assertEqual(
-      "CACHE TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, false, Map.empty))
-
-    assertEqual(
-      "CACHE TABLE t AS SELECT * FROM testData",
-      CacheTableCommand(
-        Seq("t"),
-        Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
-        false,
-        Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, true, Map.empty))
-
-    assertEqual(
-      "CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')",
-      CacheTableCommand(
-        Seq("a", "b", "c"),
-        None,
-        true,
-        Map("storageLevel" -> "DISK_ONLY")))
-
-    intercept("CACHE TABLE a.b.c AS SELECT * FROM testData",
-      "It is not allowed to add catalog/namespace prefix a.b")
-  }
-
   test("UNCACHE TABLE") {
     assertEqual(
       "UNCACHE TABLE a.b.c",
