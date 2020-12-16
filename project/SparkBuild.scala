@@ -415,6 +415,11 @@ object SparkBuild extends PomBuild {
     outputStrategy in run := Some (StdoutOutput),
 
     javaOptions += "-Xmx2g",
+    javaOptions += {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major >= 16) "--add-modules=jdk.incubator.vector" else ""
+    },
 
     sparkShell := {
       (runMain in Compile).toTask(" org.apache.spark.repl.Main -usejavacp").value
@@ -1027,6 +1032,11 @@ object TestSettings {
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
+    javaOptions in Test += {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major >= 16) "--add-modules=jdk.incubator.vector" else ""
+    },
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
