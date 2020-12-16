@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
@@ -213,15 +214,39 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
       extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
 
+    lazy private val executorMap: mutable.HashMap[String, Int] = {
+      val map = mutable.HashMap.empty[String, Int]
+      context.getExecutorIds().map(map(_) = 0)
+      map
+    }
+
+    /**
+     * If there is no location info of state store providers, trying to distribute state
+     * stores across all executors.
+     */
+    private def defaultPreferredLocations(): Seq[String] = {
+      val executorIds = executorMap.toSeq.sortBy(_._2).map(_._1)
+      if (executorIds.nonEmpty) {
+        executorMap(executorIds.head) += 1
+      }
+      executorIds.take(1)
+    }
+
     /**
      * Set the preferred location of each partition using the executor that has the related
      * [[StateStoreProvider]] already loaded.
      */
     override def getPreferredLocations(partition: Partition): Seq[String] = {
-      stateStoreNames.flatMap { storeName =>
+      val stateStoreLocs = stateStoreNames.flatMap { storeName =>
         val stateStoreProviderId = StateStoreProviderId(stateInfo, partition.index, storeName)
         storeCoordinator.flatMap(_.getLocation(stateStoreProviderId))
       }.distinct
+
+      if (stateStoreLocs.isEmpty) {
+        defaultPreferredLocations
+      } else {
+        stateStoreLocs
+      }
     }
 
     override def compute(s: Partition, context: TaskContext): Iterator[V] = {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
@@ -42,6 +43,24 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val hadoopConfBroadcast = dataRDD.context.broadcast(
     new SerializableConfiguration(sessionState.newHadoopConf()))
 
+  lazy private val executorMap: mutable.HashMap[String, Int] = {
+    val map = mutable.HashMap.empty[String, Int]
+    context.getExecutorIds().map(map(_) = 0)
+    map
+  }
+
+  /**
+   * If there is no location info of state store providers, trying to distribute state
+   * stores across all executors.
+   */
+  private def defaultPreferredLocations(): Seq[String] = {
+    val executorIds = executorMap.toSeq.sortBy(_._2).map(_._1)
+    if (executorIds.nonEmpty) {
+      executorMap(executorIds.head) += 1
+    }
+    executorIds.take(1)
+  }
+
   /**
    * Set the preferred location of each partition using the executor that has the related
    * [[StateStoreProvider]] already loaded.
@@ -50,7 +69,12 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val stateStoreProviderId = getStateProviderId(partition)
-    storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
+    val stateStoreLocs = storeCoordinator.flatMap(_.getLocation(stateStoreProviderId)).toSeq
+    if (stateStoreLocs.isEmpty) {
+      defaultPreferredLocations
+    } else {
+      stateStoreLocs
+    }
   }
 
   protected def getStateProviderId(partition: Partition): StateStoreProviderId = {
