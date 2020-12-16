@@ -433,7 +433,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
   }
 
-  test("ExecutorMonitor should handle " +
+  test("SPARK-33799: ExecutorMonitor should handle " +
     "SparkListenerExecutorExcluded/SparkListenerExecutorUnexcluded") {
     monitor = new ExecutorMonitor(conf, client, null, clock)
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
@@ -448,7 +448,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 1)
   }
 
-  test("ExecutorMonitor should handle " +
+  test("SPARK-33799: ExecutorMonitor should handle " +
     "SparkListenerNodeExcluded/SparkListenerNodeUnexcluded") {
     monitor = new ExecutorMonitor(conf, client, null, clock)
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
@@ -467,7 +467,7 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.executorCount === 2)
   }
 
-  test("Excluded executor can still be timedout") {
+  test("SPARK-33799: Excluded executor can still be timedout") {
     monitor = new ExecutorMonitor(conf, client, null, clock)
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
     assert(monitor.executorCount === 1)

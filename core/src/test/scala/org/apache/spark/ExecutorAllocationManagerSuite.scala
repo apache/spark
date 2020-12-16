@@ -1648,7 +1648,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
-  test("excluded executors should not be considered as available executors") {
+  test("SPARK-33799: excluded executors should not be considered as available executors") {
     val manager = createManager(createConf(1, 4, 1,
       exclusionEnabled = true))
     post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
