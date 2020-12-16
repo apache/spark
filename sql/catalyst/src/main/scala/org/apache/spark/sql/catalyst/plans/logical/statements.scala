@@ -413,13 +413,6 @@ case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends
 case class RepairTableStatement(tableName: Seq[String]) extends ParsedStatement
 
 /**
- * A TRUNCATE TABLE statement, as parsed from SQL
- */
-case class TruncateTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL
  */
 case class ShowCurrentNamespaceStatement() extends ParsedStatement
