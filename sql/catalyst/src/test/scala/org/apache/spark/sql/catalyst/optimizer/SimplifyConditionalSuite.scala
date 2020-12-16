@@ -220,14 +220,13 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // null check, SPARK-33798 will change the following two behaviors.
+    // Null value should be handled by NullPropagation.
     assertEquivalent(
       EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(2)),
-      FalseLiteral)
+      EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(2)))
     assertEquivalent(
       EqualTo(If(a =!= Literal(1), Literal(1), Literal(2)), Literal(null, IntegerType)),
-      FalseLiteral)
-
+      EqualTo(If(a =!= Literal(1), Literal(1), Literal(2)), Literal(null, IntegerType)))
     assertEquivalent(
       EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)),
       EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)))
@@ -273,14 +272,13 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // null check, SPARK-33798 will change the following two behaviors.
+    // Null value should be handled by NullPropagation.
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)),
-      FalseLiteral)
+      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), Literal(null, IntegerType)),
-      FalseLiteral)
-
+      EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), Literal(null, IntegerType)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(1)),
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(1)))
