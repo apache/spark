@@ -563,8 +563,10 @@ object StateStore extends Logging {
           lastAliveTime(id) = System.currentTimeMillis()
           provider.doMaintenance()
         } else {
-          unload(id)
-          logInfo(s"Unloaded $provider")
+          if (System.currentTimeMillis() - lastAliveTime(id) > storeConf.stateStoreKeepAliveTime) {
+            unload(id)
+            logInfo(s"Unloaded $provider")
+          }
         }
       } catch {
         case NonFatal(e) =>
