@@ -21,7 +21,6 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -193,18 +192,19 @@ case class AlterTableRenameCommand(
     } else {
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
-      // If an exception is thrown here we can just assume the table is uncached;
-      // this can happen with Hive tables when the underlying catalog is in-memory.
-      val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
-      if (wasCached) {
+      // If `optStorageLevel` is defined, the old table was cached.
+      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
+        sparkSession.table(oldName.unquotedString))
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      if (wasCached) {
-        sparkSession.catalog.cacheTable(newName.unquotedString)
+      optStorageLevel.foreach { storageLevel =>
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]
