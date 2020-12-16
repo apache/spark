@@ -49,7 +49,7 @@ number of columns in the output of subquery.
 Left side columns:
 [tab_a.`a1`, tab_a.`b1`].
 Right side columns:
-[`named_struct(a2, a2, b2, b2)`].;
+[`named_struct(a2, a2, b2, b2)`].
 
 
 -- !query
