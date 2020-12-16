@@ -523,8 +523,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
-    range(start, end, step = 1,
-      numPartitions = sqlContext.conf.defaultParallelism.getOrElse(sparkContext.defaultParallelism))
+    range(start, end, step = 1, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -534,8 +533,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    range(start, end, step,
-      numPartitions = sqlContext.conf.defaultParallelism.getOrElse(sparkContext.defaultParallelism))
+    range(start, end, step, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -774,6 +772,10 @@ class SparkSession private(
     try block finally {
       SparkSession.setActiveSession(old)
     }
+  }
+
+  private[sql] def leafNodeDefaultParallelism: Int = {
+    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
   }
 }
 
