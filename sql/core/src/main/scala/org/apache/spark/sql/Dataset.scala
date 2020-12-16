@@ -1253,8 +1253,7 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   * @param joinType Type of join to perform. Default `inner`. Must be one of:
-   *                 `left_semi`, `left_anti`.
+   * @param joinType Type of join to perform. Must be one of: `left_semi`, `left_anti`.
    *
    * @group typedrel
    * @since 3.1.0
@@ -1263,7 +1262,8 @@ class Dataset[T] private[sql](
     val joinedType = JoinType(joinType)
 
     if (joinedType != LeftSemi && joinedType != LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinPartial: " + joinedType.sql)
+      throw new AnalysisException("Invalid join type in joinPartial: " + joinedType.sql + "." +
+        " This join type is supported in join or joinWith API of Dataset")
     }
 
     withTypedPlan(Join(
