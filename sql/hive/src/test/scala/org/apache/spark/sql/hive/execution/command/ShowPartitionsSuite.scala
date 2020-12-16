@@ -18,9 +18,5 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with TestHiveSingleton {
-  override def version: String = "Hive V1"
-  override def defaultUsing: String = "USING HIVE"
-}
+class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase
