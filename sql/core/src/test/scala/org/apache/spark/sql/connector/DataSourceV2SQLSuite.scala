@@ -731,7 +731,7 @@ class DataSourceV2SQLSuite
     val ex = intercept[AnalysisException] {
       sql("DROP TABLE testcat.db.notbl")
     }
-    assert(ex.getMessage.contains("Table or view not found for 'DROP TABLE': testcat.db.notbl"))
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
@@ -2015,7 +2015,7 @@ class DataSourceV2SQLSuite
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
     assert(e.getMessage.contains(
-      "Table or view not found for 'ALTER VIEW ... RENAME TO': testcat.ns.tbl"))
+      "Table or view not found: testcat.ns.tbl"))
   }
 
   test("ANALYZE TABLE") {
