@@ -978,29 +978,29 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveColumnsExpression extends Rule[LogicalPlan] {
 
     def containsColumnsExpression(expr: Expression): Boolean = expr.collect {
-      case a: AllColumnExcept => a
+      case a: AllColumnsExcept => a
     }.nonEmpty
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case p: Project =>
         val newProjectList = p.projectList.flatMap {
-          case UnresolvedAlias(child: AllColumnExcept, _) =>
+          case UnresolvedAlias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
-          case UnresolvedAlias(child: AllColumnExcept, _) =>
+          case UnresolvedAlias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
-          case Alias(child: AllColumnExcept, _) =>
+          case Alias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
-          case MultiAlias(child: AllColumnExcept, _) =>
+          case MultiAlias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
           case e if containsColumnsExpression(e) =>
             throw QueryCompilationErrors
-              .complexColumnExpressionsNotSupportOutsideOfProject("all_column_except", p)
+              .complexColumnExpressionsNotSupportOutsideOfProject("all_columns_except", p)
           case e => Seq(e)
         }
         p.copy(projectList = newProjectList)
       case p if p.expressions.exists(containsColumnsExpression) =>
         throw QueryCompilationErrors
-          .complexColumnExpressionsNotSupportOutsideOfProject("all_column_except", p)
+          .complexColumnExpressionsNotSupportOutsideOfProject("all_columns_except", p)
     }
   }
 

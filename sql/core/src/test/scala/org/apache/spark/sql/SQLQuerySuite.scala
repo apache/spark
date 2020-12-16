@@ -3733,22 +3733,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK: column_exclude") {
+  test("SPARK-33809: Support `all_columns_except` complex column expression") {
     withTempView("src") {
       val df = Seq((1, 2)).toDF("key", "value")
       df.createOrReplaceTempView("src")
-      checkAnswer(sql("SELECT all_column_except(key) FROM src"), Row(2))
-      checkAnswer(sql("SELECT key, all_column_except(key) FROM src"), Row(1, 2))
-      checkAnswer(sql("SELECT key, all_column_except(value) FROM src"), Row(1, 1))
+      checkAnswer(sql("SELECT all_columns_except(key) FROM src"), Row(2))
+      checkAnswer(sql("SELECT key, all_columns_except(key) FROM src"), Row(1, 2))
+      checkAnswer(sql("SELECT key, all_columns_except(value) FROM src"), Row(1, 1))
       val e1 = intercept[AnalysisException] {
-        sql("SELECT key, all_column_except(value, invalid_column) FROM src")
+        sql("SELECT key, all_columns_except(value, invalid_column) FROM src")
       }.getMessage
       assert(e1.contains("cannot resolve '`invalid_column`' given input columns:" +
         " [src.key, src.value]"))
       val e2 = intercept[AnalysisException] {
-        sql("SELECT all_column_except(value), count(value) FROM src GROUP BY key")
+        sql("SELECT all_columns_except(value), count(value) FROM src GROUP BY key")
       }.getMessage
-      assert(e2.contains("Complex column expressions `all_column_except` not supported" +
+      assert(e2.contains("Complex column expressions `all_columns_except` not supported" +
         " outside of Project's projection list."))
     }
   }

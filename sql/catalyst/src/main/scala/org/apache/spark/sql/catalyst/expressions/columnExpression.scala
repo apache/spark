@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.DataType
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class AllColumnExcept(exclude: Expression*) extends Expression with CodegenFallback {
+case class AllColumnsExcept(exclude: Expression*) extends Expression with CodegenFallback {
 
   override def children: Seq[Expression] = exclude
 

@@ -578,7 +578,7 @@ object FunctionRegistry {
     expression[StructsToCsv]("to_csv"),
 
     // column
-    expression[AllColumnExcept]("all_column_except")
+    expression[AllColumnsExcept]("all_columns_except")
   )
 
   val builtin: SimpleFunctionRegistry = {
