@@ -470,6 +470,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  private def isAlwaysFalse(exps: Seq[Expression], equalTo: Literal): Boolean = {
+    exps.forall(!EqualTo(_, equalTo).eval(EmptyRow).asInstanceOf[Boolean])
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case If(TrueLiteral, trueValue, _) => trueValue
@@ -523,6 +527,15 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case EqualTo(i @ If(_, trueValue: Literal, falseValue: Literal), right: Literal)
+          if i.deterministic && isAlwaysFalse(trueValue :: falseValue :: Nil, right) =>
+        FalseLiteral
+
+      case EqualTo(c @ CaseWhen(branches, elseValue), right: Literal) if c.deterministic &&
+          (branches.map(_._2) ++ elseValue).forall(_.isInstanceOf[Literal]) &&
+          isAlwaysFalse(branches.map(_._2) ++ elseValue, right) =>
+        FalseLiteral
     }
   }
 }
