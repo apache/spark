@@ -452,11 +452,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("should not allow ALTER VIEW AS when the view does not exist") {
     assertAnalysisError(
       "ALTER VIEW testView AS SELECT 1, 2",
-      "View not found for 'ALTER VIEW ... AS': testView")
+      "View not found: testView")
 
     assertAnalysisError(
       "ALTER VIEW default.testView AS SELECT 1, 2",
-      "View not found for 'ALTER VIEW ... AS': default.testView")
+      "View not found: default.testView")
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {
