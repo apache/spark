@@ -243,7 +243,6 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
           "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
-          "-Wconf:msg=view bounds are deprecated:s",
           "-Wconf:msg=symbol literal is deprecated:s",
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
           "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
