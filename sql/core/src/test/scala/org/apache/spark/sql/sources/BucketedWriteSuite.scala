@@ -111,7 +111,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
     }
-    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now;")
+    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now")
   }
 
   test("write bucketed data using insertInto()") {
