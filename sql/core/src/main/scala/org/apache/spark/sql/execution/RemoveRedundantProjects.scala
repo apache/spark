@@ -63,8 +63,9 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
         val keepOrdering = a.aggregateExpressions
           .exists(ae => ae.mode.equals(Final) || ae.mode.equals(PartialMerge))
         a.mapChildren(removeProject(_, keepOrdering))
-      case p if canPassThrough(p) => p.mapChildren(removeProject(_, requireOrdering))
-      case o => o.mapChildren(removeProject(_, requireOrdering = true))
+      case o =>
+        val required = if (canPassThrough(o)) requireOrdering else true
+        o.mapChildren(removeProject(_, requireOrdering = required))
     }
   }
 

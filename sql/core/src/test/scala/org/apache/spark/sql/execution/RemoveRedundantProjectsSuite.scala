@@ -199,7 +199,7 @@ abstract class RemoveRedundantProjectsSuiteBase
     }
   }
 
-  test("SPARK-33697: expand") {
+  test("SPARK-33697: remove redundant projects under expand") {
     val query =
       """
         |SELECT t1.key, t2.key, sum(t1.a) AS s1, sum(t2.b) AS s2 FROM
