@@ -364,6 +364,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: CacheTableAsSelect =>
       CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
 
+    case r: UncacheTable =>
+      UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
+
     case _ => Nil
   }
 }

@@ -17,36 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultUsing: String = "USING parquet"
-
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
 }
 
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
-  with SharedSparkSession {
-
-  test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      val errMsg = intercept[NoSuchPartitionsException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("partitions not found in table"))
-
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      checkPartitions(t)
-    }
-  }
-}
+  with CommandSuiteBase

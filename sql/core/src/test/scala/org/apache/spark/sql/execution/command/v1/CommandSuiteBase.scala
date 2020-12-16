@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.test.SharedSparkSession
 
-class AlterTableAddPartitionSuite
-    extends v1.AlterTableAddPartitionSuiteBase
-    with CommandSuiteBase
+trait CommandSuiteBase extends SharedSparkSession {
+  def version: String = "V1"
+  def catalog: String = CatalogManager.SESSION_CATALOG_NAME
+  def defaultUsing: String = "USING parquet"
+}

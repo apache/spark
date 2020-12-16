@@ -17,32 +17,8 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class AlterTableDropPartitionSuite
   extends v1.AlterTableDropPartitionSuiteBase
-  with TestHiveSingleton {
-
-  override def version: String = "Hive V1"
-  override def defaultUsing: String = "USING HIVE"
-
-  override protected val notFullPartitionSpecErr = "No partition is dropped"
-
-  test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("No partition is dropped"))
-
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      checkPartitions(t)
-    }
-  }
-}
+  with CommandSuiteBase
