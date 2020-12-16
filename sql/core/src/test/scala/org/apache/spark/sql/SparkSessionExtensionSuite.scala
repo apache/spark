@@ -88,9 +88,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-33621: inject data source rewrite rule") {
-    withSession(Seq(_.injectDataSourceRewriteRule(MyRule))) { session =>
-      assert(session.sessionState.optimizer.dataSourceRewriteRules.contains(MyRule(session)))
+  test("SPARK-33621: inject post operator optimization rule") {
+    withSession(Seq(_.injectPostOperatorOptimizationRule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.postOperatorOptimizationRules.contains(MyRule(session)))
     }
   }
 
