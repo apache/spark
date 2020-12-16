@@ -3226,7 +3226,6 @@
             <plugin>
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
-              <version>4.4.0</version>
               <configuration>
                 <args combine.children="append">
                     <arg>-unchecked</arg>
@@ -3271,7 +3270,6 @@
             <plugin>
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
-              <version>4.4.0</version>
               <configuration>
                 <args combine.children="append">
                   <arg>-Wconf:cat=deprecation:wv,any:e</arg>
