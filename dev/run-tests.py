@@ -521,8 +521,10 @@ def post_python_tests_results():
         # 6. Commit current HTMLs.
         run_cmd([
             "git",
-            "-c user.name='Apache Spark Test Account'",
-            "-c user.email='sparktestacc@gmail.com'",
+            "-c",
+            "user.name='Apache Spark Test Account'",
+            "-c",
+            "user.email='sparktestacc@gmail.com'",
             "commit",
             "-am",
             "Coverage report at latest commit in Apache Spark"])
