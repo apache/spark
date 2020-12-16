@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-/**
- * Clear all cached data from the in-memory cache.
- */
-case object ClearCacheCommand extends RunnableCommand with IgnoreCachedData {
+class AlterTableDropPartitionSuite
+  extends v1.AlterTableDropPartitionSuiteBase
+  with TestHiveSingleton {
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.clearCache()
-    Seq.empty[Row]
-  }
+  override def version: String = "Hive V1"
+  override def defaultUsing: String = "USING HIVE"
 }

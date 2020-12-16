@@ -125,7 +125,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        failAnalysis(s"Table or view not found for `CACHE TABLE`: ${u.multipartIdentifier.quoted}")
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case UncacheTable(u: UnresolvedRelation, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>

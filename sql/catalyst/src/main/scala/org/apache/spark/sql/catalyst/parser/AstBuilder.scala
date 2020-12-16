@@ -3633,6 +3633,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create an [[UncacheTable]] logical plan.
+   */
+  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
+    UncacheTable(
+      UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      ctx.EXISTS != null)
+  }
+
+  /**
    * Create a [[TruncateTable]] command.
    *
    * For example:
@@ -3705,7 +3714,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRecoverPartitionsStatement]]
+   * Create an [[AlterTableRecoverPartitions]]
    *
    * For example:
    * {{{
@@ -3714,7 +3723,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
+    AlterTableRecoverPartitions(
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
   /**

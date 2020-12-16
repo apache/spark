@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedSparkSession
 
-/**
- * Clear all cached data from the in-memory cache.
- */
-case object ClearCacheCommand extends RunnableCommand with IgnoreCachedData {
+trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
+  override def version: String = "V1"
+  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
+  override def defaultUsing: String = "USING parquet"
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.clearCache()
-    Seq.empty[Row]
-  }
+  override protected val notFullPartitionSpecErr = "The following partitions not found in table"
 }
+
+class AlterTableDropPartitionSuite
+  extends AlterTableDropPartitionSuiteBase
+  with SharedSparkSession
