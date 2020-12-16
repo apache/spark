@@ -58,6 +58,9 @@ class StateStoreConf(
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled
 
+  /** The interval of maintenance tasks. */
+  val maintenanceInterval = sqlConf.streamingMaintenanceInterval
+
   /**
    * Additional configurations related to state store. This will capture all configs in
    * SQLConf that start with `spark.sql.streaming.stateStore.` and extraOptions for a specific
