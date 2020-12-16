@@ -164,6 +164,27 @@ class FrameLessOffsetWindowFunctionFrame(
   /** Cache some UnsafeRow that will be used many times. */
   private val rowBuffer = new ArrayBuffer[UnsafeRow]
 
+  /** Holder the UnsafeRow where the input operator by function is not null. */
+  private var nextSelectedRow = EmptyRow
+
+  /**
+   *  The number of UnsafeRows skipped to get the next UnsafeRow where
+   *  the input operator by function is not null.
+   */
+  private var skipNonNullCount = 0
+
+  /** find the offset row whose input is not null */
+  private def findNextRowWithNonNullInput(): Unit = {
+    while (skipNonNullCount < offset && inputIndex < input.length) {
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      if (!r.isNullAt(idx)) {
+        nextSelectedRow = r
+        skipNonNullCount += 1
+      }
+      inputIndex += 1
+    }
+  }
+
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
     inputIterator = input.generateIterator()
@@ -175,40 +196,39 @@ class FrameLessOffsetWindowFunctionFrame(
         inputIndex += 1
       }
       inputIndex = offset
+    } else {
+      findNextRowWithNonNullInput
     }
   }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
     // For illustration, here is one example: the input data contains six rows,
-    // and the input values of each row are: null, x, null, y, null, z, null.
-    // We use Lead(input, 1) with IGNORE NULLS and the process is as follows:
-    // 1. current row -> null, row buffer: [x], output: x;
-    // 2. current row -> x, row buffer: [null, y], output: y;
-    // 3. current row -> null, row buffer: [y], output: y;
-    // 4. current row -> y, row buffer: [null, z], output: z;
-    // 5. current row -> null, row buffer: [z], output: z;
-    // 6. current row -> z, row buffer: [null], output: null;
-    // 7. current row -> null, row buffer: [], output: null;
+    // and the input values of each row are: null, x, null, null, y, null, z, null.
+    // We use Lead(input, 2) with IGNORE NULLS and the process is as follows:
+    // 1. current row -> null, next selected row -> y, output: y;
+    // 2. current row -> x, next selected row -> z, output: z;
+    // 3. current row -> null, next selected row -> z, output: z;
+    // 4. current row -> null, next selected row -> z, output: z;
+    // 5. current row -> y, next selected row -> empty, output: null;
+    // ... next selected row is empty, all following return null.
     (index: Int, current: InternalRow) =>
-      while (inputIndex <= index) {
-        if (inputIterator.hasNext) inputIterator.next()
-        inputIndex += 1
-      }
-      while (rowBuffer.filterNot(_ == null).size < offset && inputIndex < input.length) {
-        val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-        if (r.isNullAt(idx)) {
-          rowBuffer += null
+      if (current.isNullAt(idx)) {
+        if (nextSelectedRow == EmptyRow) {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(current)
         } else {
-          rowBuffer += r
+          projection(nextSelectedRow)
         }
-        inputIndex += 1
-      }
-      if (rowBuffer.filterNot(_ == null).size == offset) {
-        projection(rowBuffer.filterNot(_ == null).last)
-        rowBuffer.remove(0)
       } else {
-        // Use default values since the offset row whose input value is not null does not exist.
-        fillDefaultValue(current)
+        skipNonNullCount -= 1
+        findNextRowWithNonNullInput
+        if (skipNonNullCount == offset) {
+          projection(nextSelectedRow)
+        } else {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(current)
+          nextSelectedRow = EmptyRow
+        }
       }
   } else if (ignoreNulls && offset < 0) {
     // For illustration, here is one example: the input data contains six rows,
