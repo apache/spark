@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,22 +36,6 @@ class AlterTableDropPartitionSuite
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
-
-  test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
-
-      val errMsg = intercept[NoSuchPartitionsException] {
-        sql(s"ALTER TABLE $t DROP PARTITION (id=1), PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("partitions not found in table"))
-
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
-      checkPartitions(t)
-    }
-  }
 
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
     withNsTable("ns", "tbl", s"non_part_$catalog") { t =>
