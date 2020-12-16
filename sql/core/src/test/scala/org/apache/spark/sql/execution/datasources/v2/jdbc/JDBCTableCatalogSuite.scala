@@ -81,9 +81,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SHOW TABLES IN h2.test"), Seq(Row("test", "people")))
     Seq(
       "h2.test.not_existing_table" ->
-        "Table or view not found for 'DROP TABLE': h2.test.not_existing_table",
+        "Table or view not found: h2.test.not_existing_table",
       "h2.bad_test.not_existing_table" ->
-        "Table or view not found for 'DROP TABLE': h2.bad_test.not_existing_table"
+        "Table or view not found: h2.bad_test.not_existing_table"
     ).foreach { case (table, expectedMsg) =>
       val msg = intercept[AnalysisException] {
         sql(s"DROP TABLE $table")
@@ -110,12 +110,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
     assert(exp1.getMessage.contains(
-      "Table or view not found for 'ALTER TABLE ... RENAME TO': h2.test.not_existing_table"))
+      "Table or view not found: h2.test.not_existing_table"))
     val exp2 = intercept[AnalysisException] {
       sql("ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
     assert(exp2.getMessage.contains(
-      "Table or view not found for 'ALTER TABLE ... RENAME TO': h2.bad_test.not_existing_table"))
+      "Table or view not found: h2.bad_test.not_existing_table"))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>

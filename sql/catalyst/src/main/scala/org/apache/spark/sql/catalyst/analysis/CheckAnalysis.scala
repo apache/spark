@@ -102,7 +102,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
@@ -111,12 +111,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             s"$cmd expects a view.")
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
         u.failAnalysis(
-          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
