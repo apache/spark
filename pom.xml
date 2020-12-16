@@ -3276,8 +3276,10 @@
                   <arg>-Wconf:cat=scaladoc:wv</arg>
                   <arg>-Wconf:cat=unchecked:wv</arg>
                   <arg>-Wconf:cat=feature:wv</arg>
-                  // TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
-                  <!-- <arg>-Wunused:imports</arg> -->
+                  <!--
+                    TODO(SPARK-33499): Enable this option when Scala 2.12 is no longer supported.
+                    <arg>-Wunused:imports</arg>
+                  -->
                   <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
                   <arg>-Wconf:cat=other-nullary-override:wv</arg>
                   <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
