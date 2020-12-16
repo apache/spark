@@ -37,7 +37,7 @@ class AlterTableDropPartitionSuite
   }
 
   test("purge partition data") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
       try {
