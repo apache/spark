@@ -25,7 +25,7 @@ import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.LocalSparkSession._
@@ -179,6 +179,33 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
           rdd.preferredLocations(rdd.partitions(1)) ===
             Seq(ExecutorCacheTaskLocation("host2", "exec2").toString))
 
+        rdd.collect()
+      }
+    }
+  }
+
+  test("preferred locations without reported state store locations") {
+    quietly {
+      val queryRunId = UUID.randomUUID
+      val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+
+      withSparkSession(
+        SparkSession.builder
+          .config(sparkConf.setMaster("local-cluster[2, 1, 1024]"))
+          .getOrCreate()) { spark =>
+        TestUtils.waitUntilExecutorsUp(spark.sparkContext, 2, 60000)
+
+        implicit val sqlContext = spark.sqlContext
+        val rdd = makeRDD(spark.sparkContext, Seq("a", "b", "a")).mapPartitionsWithStateStore(
+          sqlContext, operatorStateInfo(path, queryRunId = queryRunId),
+          keySchema, valueSchema, None)(increment)
+        require(rdd.partitions.length === 2)
+
+        assert(spark.sparkContext.getExecutorIds().size == 2)
+
+        val preferredLocs = rdd.preferredLocations(rdd.partitions(0)) ++
+          rdd.preferredLocations(rdd.partitions(1))
+        assert(preferredLocs.sorted == spark.sparkContext.getExecutorIds().sorted)
         rdd.collect()
       }
     }
