@@ -202,6 +202,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
   test("SPARK-33798: simplify EqualTo(If, Literal) always false") {
     val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
+    val b = UnresolvedAttribute("b")
     val ifExp = If(a === Literal(1), Literal(2), Literal(3))
 
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
@@ -210,8 +211,8 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assertEquivalent(EqualTo(ifExp, Literal("3")), EqualTo(ifExp, Literal(3)))
 
     // Do not simplify if it contains non foldable expressions.
-    assertEquivalent(EqualTo(ifExp, NonFoldableLiteral(true)),
-      EqualTo(ifExp, NonFoldableLiteral(true)))
+    assertEquivalent(EqualTo(If(a === Literal(1), b, Literal(2)), Literal(3)),
+      EqualTo(If(a === Literal(1), b, Literal(2)), Literal(3)))
     val nonFoldable = If(NonFoldableLiteral(true), Literal(1), Literal(2))
     assertEquivalent(EqualTo(nonFoldable, Literal(1)), EqualTo(nonFoldable, Literal(1)))
 
@@ -220,7 +221,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // Null value should be handled by NullPropagation.
+    // Should not handle Null values.
     assertEquivalent(
       EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(2)),
       EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(2)))
@@ -272,7 +273,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // Null value should be handled by NullPropagation.
+    // Should not handle Null values.
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)),
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)))
