@@ -220,22 +220,23 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // null check, SPARK-33798 will not change these behaviors.
+    // null check, SPARK-33798 will change the following two behaviors.
     assertEquivalent(
-      EqualTo(If(FalseLiteral, Literal(null, IntegerType), Literal(1)), Literal(1)),
-      TrueLiteral)
+      EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(2)),
+      FalseLiteral)
     assertEquivalent(
-      EqualTo(If(TrueLiteral, Literal(null, IntegerType), Literal(1)), Literal(1)),
-      Literal(null, BooleanType))
-    assertEquivalent(
-      EqualTo(If(FalseLiteral, Literal(null, IntegerType), Literal(null, IntegerType)), Literal(1)),
-      Literal(null, BooleanType))
+      EqualTo(If(a =!= Literal(1), Literal(1), Literal(2)), Literal(null, IntegerType)),
+      FalseLiteral)
 
     assertEquivalent(
-      EqualTo(If(FalseLiteral, Literal(1), Literal(2)), Literal(null, IntegerType)),
-      Literal(null, BooleanType))
+      EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)),
+      EqualTo(If(a === Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)))
     assertEquivalent(
-      EqualTo(If(TrueLiteral, Literal(1), Literal(2)), Literal(null, IntegerType)),
+      EqualTo(If(a =!= Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)),
+      EqualTo(If(a =!= Literal(1), Literal(null, IntegerType), Literal(1)), Literal(1)))
+    assertEquivalent(
+      EqualTo(If(a =!= Literal(1), Literal(null, IntegerType), Literal(null, IntegerType)),
+        Literal(1)),
       Literal(null, BooleanType))
   }
 
