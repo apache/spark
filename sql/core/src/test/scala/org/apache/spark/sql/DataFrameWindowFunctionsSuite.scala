@@ -700,7 +700,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 3, null, null, null)))
   }
 
-  test("lead with ignoreNulls") {
+  test("lead/lag with ignoreNulls") {
     val nullStr: String = null
     val df = Seq(
       ("a", 0, nullStr),

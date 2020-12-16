@@ -116,15 +116,19 @@ trait WindowExecBase extends UnaryExecNode {
    * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression, Expression)
+    type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = fn match {
+        // This branch is used for Lead/Lag to support ignoring null.
+        // All window frames move in rows. If there are multiple Leads or Lags acting on a row
+        // and operating on different input expressions, they should not be moved uniformly
+        // by row. Therefore, we put these functions in different window frames.
         case f: FrameLessOffsetWindowFunction if f.ignoreNulls =>
-          (tpe, fr.frameType, fr.lower, fr.upper, f.canonicalized)
+          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
         case _ => (tpe, fr.frameType, fr.lower, fr.upper, null)
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
