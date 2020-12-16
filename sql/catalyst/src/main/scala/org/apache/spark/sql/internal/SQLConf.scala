@@ -521,9 +521,9 @@ object SQLConf {
     .doc("Whether to support row format delimited when creating orc table. If true  SparkSQL will catch " +
       "exception when creating table like " +
       "\"create table test(c1 int) row format delimited fields terminated by '002';\"" +
-      ", default is true.")
+      ", default is false.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
