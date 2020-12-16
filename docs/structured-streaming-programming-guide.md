@@ -1691,7 +1691,7 @@ end-to-end exactly once per query. Ensuring end-to-end exactly once for the last
 
 ### State Store and task locality
 
-The stateful operations stores states for events in state stores of executors. State stores occupy resources such as memory and disk space to store the states.
+The stateful operations store states for events in state stores of executors. State stores occupy resources such as memory and disk space to store the states.
 So it is more efficient to keep a state store provider running in the same executor across different streaming batches.
 Changing the location of a state store provider requires to load from checkpointed states from HDFS in the new executor.
 
