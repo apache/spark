@@ -476,13 +476,16 @@ class ResolveSessionCatalog(
         purge,
         retainData = false)
 
-    case AlterTableSerDePropertiesStatement(tbl, serdeClassName, serdeProperties, partitionSpec) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE SerDe Properties")
-      AlterTableSerDePropertiesCommand(
-        v1TableName.asTableIdentifier,
+    case AlterTableSerDeProperties(
+        ResolvedV1TableIdentifier(ident),
         serdeClassName,
         serdeProperties,
-        partitionSpec)
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+      AlterTableSerDePropertiesCommand(
+        ident.asTableIdentifier,
+        serdeClassName,
+        serdeProperties,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(

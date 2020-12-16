@@ -778,6 +778,17 @@ case class AlterViewUnsetProperties(
 }
 
 /**
+ * The logical plan of the ALTER TABLE ... SERDEPROPERTIES command.
+ */
+case class AlterTableSerDeProperties(
+    child: LogicalPlan,
+    serdeClassName: Option[String],
+    serdeProperties: Option[Map[String, String]],
+    partitionSpec: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the CACHE TABLE command.
  */
 case class CacheTable(
