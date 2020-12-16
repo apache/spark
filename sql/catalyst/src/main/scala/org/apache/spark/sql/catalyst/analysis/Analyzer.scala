@@ -875,6 +875,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupTempView(ident)
           .map(view => c.copy(table = view))
           .getOrElse(c)
+      case c @ UncacheTable(UnresolvedRelation(ident, _, false), _, _) =>
+        lookupTempView(ident)
+          .map(view => c.copy(table = view, isTempView = true))
+          .getOrElse(c)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -1005,6 +1009,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(v2Relation => c.copy(table = v2Relation))
           .getOrElse(c)
 
+      case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
+        lookupV2Relation(u.multipartIdentifier, u.options, false)
+          .map(v2Relation => c.copy(table = v2Relation))
+          .getOrElse(c)
+
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
@@ -1098,7 +1107,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(v2Relation => c.copy(table = v2Relation))
+          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
+          .getOrElse(c)
+
+      case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
+        lookupRelation(u.multipartIdentifier, u.options, false)
+          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
           .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.

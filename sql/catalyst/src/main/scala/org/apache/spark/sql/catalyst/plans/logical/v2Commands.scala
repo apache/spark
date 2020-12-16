@@ -794,3 +794,11 @@ case class CacheTableAsSelect(
     plan: LogicalPlan,
     isLazy: Boolean,
     options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the UNCACHE TABLE command.
+ */
+case class UncacheTable(
+    table: LogicalPlan,
+    ifExists: Boolean,
+    isTempView: Boolean = false) extends Command

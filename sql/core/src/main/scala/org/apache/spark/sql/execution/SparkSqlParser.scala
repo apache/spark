@@ -193,15 +193,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[UncacheTableCommand]] logical plan.
-   */
-  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.EXISTS != null)
-  }
-
-  /**
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
