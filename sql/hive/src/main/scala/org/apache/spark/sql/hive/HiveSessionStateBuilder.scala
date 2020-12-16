@@ -39,8 +39,9 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
 @Unstable
 class HiveSessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState])
-  extends BaseSessionStateBuilder(session, parentState) {
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
@@ -117,7 +118,7 @@ class HiveSessionStateBuilder(
     }
   }
 
-  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _, Map.empty)
 }
 
 class HiveSessionResourceLoader(
