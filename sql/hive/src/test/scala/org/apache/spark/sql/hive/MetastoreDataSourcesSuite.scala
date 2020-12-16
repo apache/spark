@@ -701,7 +701,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("SPARK-6024 wide schema support") {
-    assert(spark.sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 4000)
+    assert(conf.getConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD) == 4000)
     withTable("wide_schema") {
       withTempDir { tempDir =>
         // We will need 80 splits for this schema if the threshold is 4000.
@@ -1355,7 +1355,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val newSession = sparkSession.newSession()
       newSession.sql("CREATE TABLE abc(i int) USING json")
       val tableMeta = newSession.sessionState.catalog.getTableMetadata(TableIdentifier("abc"))
-      assert(tableMeta.properties(DATASOURCE_SCHEMA_NUMPARTS).toInt == 1)
+      assert(tableMeta.properties.contains(DATASOURCE_SCHEMA))
       assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
     }
   }
