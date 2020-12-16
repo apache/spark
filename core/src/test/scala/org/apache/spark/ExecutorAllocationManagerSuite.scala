@@ -1648,11 +1648,45 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
   }
 
+  test("excluded executors should not be considered as available executors") {
+    val manager = createManager(createConf(1, 4, 1,
+      exclusionEnabled = true))
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    onExecutorAdded(manager, "executor-0", defaultProfile)
+
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    // Keep adding until the limit is reached
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    onExecutorAdded(manager, "executor-1", defaultProfile)
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 2)
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    onExecutorAdded(manager, "executor-2", defaultProfile)
+    onExecutorAdded(manager, "executor-3", defaultProfile)
+
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 4)
+    assert(numExecutorsToAddForDefaultProfile(manager) === 4)
+    // reach the maxExecutors, so no more executor will be added
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    // mark executor-0 as excluded, so manager would launch a new executor to replace it
+    post(SparkListenerExecutorExcluded(clock.getTimeMillis(), "executor-0", 1))
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+  }
+
   private def createConf(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
       initialExecutors: Int = 1,
-      decommissioningEnabled: Boolean = false): SparkConf = {
+      decommissioningEnabled: Boolean = false,
+      exclusionEnabled: Boolean = false): SparkConf = {
     val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
@@ -1670,6 +1704,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       // and thread "pool-1-thread-1-ScalaTest-running".
       .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
       .set(DECOMMISSION_ENABLED, decommissioningEnabled)
+      .set(config.EXCLUDE_ON_FAILURE_ENABLED, exclusionEnabled)
     sparkConf
   }
 

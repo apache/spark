@@ -166,6 +166,7 @@ private[spark] class ExecutorMonitor(
 
   def executorCount: Int = executors.size()
 
+  // executors that are available for running tasks. Excluded executors are already excluded.
   def executorCountWithResourceProfile(id: Int): Int = {
     execResourceProfileCount.getOrDefault(id, 0)
   }
@@ -177,6 +178,15 @@ private[spark] class ExecutorMonitor(
       execTrackingInfo.resourceProfileId
     } else {
       UNKNOWN_RESOURCE_PROFILE_ID
+    }
+  }
+
+  def excludedExecutorCount: Int = {
+    if (conf.get(EXCLUDE_ON_FAILURE_ENABLED).getOrElse(false) &&
+        !conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
+      executors.values().asScala.count(_.isExcluded)
+    } else {
+      0
     }
   }
 
@@ -307,7 +317,8 @@ private[spark] class ExecutorMonitor(
     val executorId = event.taskInfo.executorId
     // Guard against a late arriving task start event (SPARK-26927).
     if (client.isExecutorActive(executorId)) {
-      val exec = ensureExecutorIsTracked(executorId, UNKNOWN_RESOURCE_PROFILE_ID)
+      val exec = ensureExecutorIsTracked(
+        executorId, event.taskInfo.host, UNKNOWN_RESOURCE_PROFILE_ID)
       exec.updateRunningTasks(1)
     }
   }
@@ -337,7 +348,8 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
-    val exec = ensureExecutorIsTracked(event.executorId, event.executorInfo.resourceProfileId)
+    val exec = ensureExecutorIsTracked(
+      event.executorId, event.executorInfo.executorHost, event.executorInfo.resourceProfileId)
     exec.updateRunningTasks(0)
     logInfo(s"New executor ${event.executorId} has registered (new total is ${executors.size()})")
   }
@@ -346,6 +358,11 @@ private[spark] class ExecutorMonitor(
     val count = execResourceProfileCount.getOrDefault(rpId, 0)
     execResourceProfileCount.replace(rpId, count, count - 1)
     execResourceProfileCount.remove(rpId, 0)
+  }
+
+  private def increaseExecResourceProfileCount(rpId: Int): Unit = {
+    val count = execResourceProfileCount.computeIfAbsent(rpId, _ => 0)
+    execResourceProfileCount.replace(rpId, count, count + 1)
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
@@ -359,7 +376,9 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
-    val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
+    val exec = ensureExecutorIsTracked(
+      event.blockUpdatedInfo.blockManagerId.executorId,
+      event.blockUpdatedInfo.blockManagerId.host,
       UNKNOWN_RESOURCE_PROFILE_ID)
 
     // Check if it is a shuffle file, or RDD to pick the correct codepath for update
@@ -418,6 +437,36 @@ private[spark] class ExecutorMonitor(
     }
   }
 
+  override def onExecutorExcluded(executorExcluded: SparkListenerExecutorExcluded): Unit = {
+    if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
+      val exec = executors.get(executorExcluded.executorId)
+      exec.isExcluded = true
+      decrementExecResourceProfileCount(exec.resourceProfileId)
+    }
+  }
+
+  override def onExecutorUnexcluded(executorUnexcluded: SparkListenerExecutorUnexcluded): Unit = {
+    val exec = executors.get(executorUnexcluded.executorId)
+    exec.isExcluded = false
+    increaseExecResourceProfileCount(exec.resourceProfileId)
+  }
+
+  override def onNodeExcluded(nodeExcluded: SparkListenerNodeExcluded): Unit = {
+    if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
+      executors.values().asScala.filter(_.host == nodeExcluded.hostId).foreach { exec =>
+        exec.isExcluded = true
+        decrementExecResourceProfileCount(exec.resourceProfileId)
+      }
+    }
+  }
+
+  override def onNodeUnexcluded(nodeUnexcluded: SparkListenerNodeUnexcluded): Unit = {
+    executors.values().asScala.filter(_.host == nodeUnexcluded.hostId).foreach { exec =>
+      exec.isExcluded = false
+      increaseExecResourceProfileCount(exec.resourceProfileId)
+    }
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case ShuffleCleanedEvent(id) => cleanupShuffle(id)
     case _ =>
@@ -467,15 +516,13 @@ private[spark] class ExecutorMonitor(
    * which the `SparkListenerTaskStart` event is posted before the `SparkListenerBlockManagerAdded`
    * event, which is possible because these events are posted in different threads. (see SPARK-4951)
    */
-  private def ensureExecutorIsTracked(id: String, resourceProfileId: Int): Tracker = {
-    val numExecsWithRpId = execResourceProfileCount.computeIfAbsent(resourceProfileId, _ => 0)
+  private def ensureExecutorIsTracked(id: String, host: String, resourceProfileId: Int): Tracker = {
     val execTracker = executors.computeIfAbsent(id, _ => {
-        val newcount = numExecsWithRpId + 1
-        execResourceProfileCount.put(resourceProfileId, newcount)
-        logDebug(s"Executor added with ResourceProfile id: $resourceProfileId " +
-          s"count is now $newcount")
-        new Tracker(resourceProfileId)
-      })
+      increaseExecResourceProfileCount(resourceProfileId)
+      logDebug(s"Executor added with ResourceProfile id: $resourceProfileId " +
+        s"count is now ${execResourceProfileCount.get(resourceProfileId)}")
+      new Tracker(resourceProfileId, host)
+    })
     // if we had added executor before without knowing the resource profile id, fix it up
     if (execTracker.resourceProfileId == UNKNOWN_RESOURCE_PROFILE_ID &&
         resourceProfileId != UNKNOWN_RESOURCE_PROFILE_ID) {
@@ -483,7 +530,7 @@ private[spark] class ExecutorMonitor(
         s"it to $resourceProfileId")
       execTracker.resourceProfileId = resourceProfileId
       // fix up the counts for each resource profile id
-      execResourceProfileCount.put(resourceProfileId, numExecsWithRpId + 1)
+      increaseExecResourceProfileCount(resourceProfileId)
       decrementExecResourceProfileCount(UNKNOWN_RESOURCE_PROFILE_ID)
     }
     execTracker
@@ -506,7 +553,7 @@ private[spark] class ExecutorMonitor(
     }
   }
 
-  private class Tracker(var resourceProfileId: Int) {
+  private class Tracker(var resourceProfileId: Int, val host: String) {
     @volatile var timeoutAt: Long = Long.MaxValue
 
     // Tracks whether this executor is thought to be timed out. It's used to detect when the list
@@ -516,6 +563,8 @@ private[spark] class ExecutorMonitor(
     var pendingRemoval: Boolean = false
     var decommissioning: Boolean = false
     var hasActiveShuffle: Boolean = false
+    // whether the executor is temporarily excluded by the `HealthTracker`
+    var isExcluded: Boolean = false
 
     private var idleStart: Long = -1
     private var runningTasks: Int = 0

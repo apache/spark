@@ -433,6 +433,52 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
   }
 
+  test("ExecutorMonitor should handle " +
+    "SparkListenerExecutorExcluded/SparkListenerExecutorUnexcluded") {
+    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 1)
+
+    // the excluded executor should not be counted
+    monitor.onExecutorExcluded(SparkListenerExecutorExcluded(clock.getTimeMillis(), "1", 1))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 0)
+
+    // the unexcluded executor can be counted again
+    monitor.onExecutorUnexcluded(SparkListenerExecutorUnexcluded(clock.getTimeMillis(), "1"))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 1)
+  }
+
+  test("ExecutorMonitor should handle " +
+    "SparkListenerNodeExcluded/SparkListenerNodeUnexcluded") {
+    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "2", execInfo))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 2)
+
+    // executors on the excluded node should not be counted
+    monitor.onNodeExcluded(
+      SparkListenerNodeExcluded(clock.getTimeMillis(), execInfo.executorHost, 1))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 0)
+
+    // executors on the unexcluded node can be counted again
+    monitor.onNodeUnexcluded(
+      SparkListenerNodeUnexcluded(clock.getTimeMillis(), execInfo.executorHost))
+    assert(monitor.executorCountWithResourceProfile(execInfo.resourceProfileId) === 2)
+    assert(monitor.executorCount === 2)
+  }
+
+  test("Excluded executor can still be timedout") {
+    monitor = new ExecutorMonitor(conf, client, null, clock)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", execInfo))
+    assert(monitor.executorCount === 1)
+    // mark the executor as excluded
+    monitor.onExecutorExcluded(SparkListenerExecutorExcluded(clock.getTimeMillis(), "1", 1))
+    assert(monitor.isExecutorIdle("1"))
+    assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
+    assert(monitor.executorCountWithResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) === 0)
+    assert(monitor.getResourceProfileId("1") === DEFAULT_RESOURCE_PROFILE_ID)
+  }
+
   private def idleDeadline: Long = clock.nanoTime() + idleTimeoutNs + 1
   private def storageDeadline: Long = clock.nanoTime() + storageTimeoutNs + 1
   private def shuffleDeadline: Long = clock.nanoTime() + shuffleTimeoutNs + 1

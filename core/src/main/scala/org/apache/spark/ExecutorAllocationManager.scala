@@ -501,11 +501,16 @@ private[spark] class ExecutorAllocationManager(
    */
   private def addExecutors(maxNumExecutorsNeeded: Int, rpId: Int): Int = {
     val oldNumExecutorsTarget = numExecutorsTargetPerResourceProfileId(rpId)
+    // Increase the maxNumExecutors by adding the excluded executors so that manager can
+    // launch new executors to replace the excluded executors.
+    val exclude = executorMonitor.excludedExecutorCount
+    val maxOverheadExecutors = maxNumExecutors + exclude
     // Do not request more executors if it would put our target over the upper bound
     // this is doing a max check per ResourceProfile
-    if (oldNumExecutorsTarget >= maxNumExecutors) {
+    if (oldNumExecutorsTarget >= maxOverheadExecutors ) {
       logDebug("Not adding executors because our current target total " +
-        s"is already ${oldNumExecutorsTarget} (limit $maxNumExecutors)")
+        s"is already ${oldNumExecutorsTarget} (limit $maxOverheadExecutors " +
+        s"${if (exclude > 0) s"($exclude exclude)" else ""})")
       numExecutorsToAddPerResourceProfileId(rpId) = 1
       return 0
     }
@@ -518,7 +523,8 @@ private[spark] class ExecutorAllocationManager(
     // Ensure that our target doesn't exceed what we need at the present moment:
     numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
     // Ensure that our target fits within configured bounds:
-    numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
+    numExecutorsTarget = math.max(
+      math.min(numExecutorsTarget, maxOverheadExecutors), minNumExecutors)
     val delta = numExecutorsTarget - oldNumExecutorsTarget
     numExecutorsTargetPerResourceProfileId(rpId) = numExecutorsTarget
 
