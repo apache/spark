@@ -183,8 +183,12 @@ public interface TableCatalog extends CatalogPlugin {
    * purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
    *
    * @param ident a table identifier
-   * @param purge whether a table should be purged
+   * @param purge whether a table should be purged. If the purge parameter is set to true,
+   *              the information about the table in the catalog as well as table data
+   *              shall be deleted. If this is set to false, the catalog shall not delete
+   *              the data which belongs to the table.
    * @return true if a table was deleted, false if no table exists for the identifier
+   * @throws UnsupportedOperationException if the option purge is not supported
    *
    * @since 3.1.0
    */
