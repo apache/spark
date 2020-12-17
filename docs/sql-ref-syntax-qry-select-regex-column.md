@@ -33,7 +33,7 @@ SELECT `regex` FROM ...
     
 * **regex**
 
-    Quoted regex pattern to represents all of the input attributes to a given relational operator.
+    Quoted Java regex syntax to represents all of the input attributes to a given relational operator.
 
 ### Examples
 
