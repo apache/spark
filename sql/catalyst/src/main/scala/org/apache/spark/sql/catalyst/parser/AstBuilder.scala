@@ -3819,7 +3819,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableSerDeProperties(
       UnresolvedTable(
         visitMultipartIdentifier(ctx.multipartIdentifier),
-        "ALTER TABLE ... SERDEPROPERTIES"),
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.

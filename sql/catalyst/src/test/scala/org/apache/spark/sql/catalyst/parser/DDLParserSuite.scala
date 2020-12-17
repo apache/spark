@@ -2135,7 +2135,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val parsed1 = parsePlan(sql1)
     val expected1 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Some("org.apache.class"),
       None,
       None)
@@ -2148,7 +2148,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed2 = parsePlan(sql2)
     val expected2 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -2161,7 +2161,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed3 = parsePlan(sql3)
     val expected3 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -2175,7 +2175,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed4 = parsePlan(sql4)
     val expected4 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))
@@ -2188,7 +2188,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed5 = parsePlan(sql5)
     val expected5 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))
@@ -2201,7 +2201,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed6 = parsePlan(sql6)
     val expected6 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       None)
@@ -2214,7 +2214,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin
     val parsed7 = parsePlan(sql7)
     val expected7 = AlterTableSerDeProperties(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SERDEPROPERTIES"),
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
       Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))

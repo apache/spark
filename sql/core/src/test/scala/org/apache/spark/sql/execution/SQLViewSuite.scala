@@ -142,13 +142,13 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).createTempView(viewName)
       assertAnalysisError(
         s"ALTER TABLE $viewName SET SERDE 'whatever'",
-        s"$viewName is a temp view. 'ALTER TABLE ... SERDEPROPERTIES' expects a table")
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'",
-        s"$viewName is a temp view. 'ALTER TABLE ... SERDEPROPERTIES' expects a table")
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
-        s"$viewName is a temp view. 'ALTER TABLE ... SERDEPROPERTIES' expects a table")
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
       assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
       assertAnalysisError(
         s"ALTER TABLE $viewName RECOVER PARTITIONS",

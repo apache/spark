@@ -336,7 +336,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableSerDeProperties(_: ResolvedTable, _, _, _) =>
       throw new AnalysisException(
-        "ALTER TABLE ... SERDEPROPERTIES is not supported for v2 tables.")
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables.")
 
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
