@@ -784,7 +784,7 @@ case class AlterTableSerDeProperties(
     child: LogicalPlan,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
-    partitionSpec: Option[PartitionSpec]) extends Command {
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 

@@ -480,12 +480,12 @@ class ResolveSessionCatalog(
         ResolvedV1TableIdentifier(ident),
         serdeClassName,
         serdeProperties,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+        partitionSpec) =>
       AlterTableSerDePropertiesCommand(
         ident.asTableIdentifier,
         serdeClassName,
         serdeProperties,
-        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
+        partitionSpec)
 
     case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(

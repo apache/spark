@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, AlterTableSerDeProperties, LogicalPlan, ShowPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -50,15 +50,6 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         partSpecs,
         partitionSchema,
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
-
-    case r @ AlterTableSerDeProperties(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), _, _, Some(partSpec)) =>
-      val partitionSchema = table.partitionSchema()
-      r.copy(partitionSpec = resolvePartitionSpecs(
-        table.name,
-        Seq(partSpec),
-        partitionSchema,
-        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)).headOption)
 
     case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
       r.copy(pattern = resolvePartitionSpecs(

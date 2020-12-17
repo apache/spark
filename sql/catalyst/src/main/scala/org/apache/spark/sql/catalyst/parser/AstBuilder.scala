@@ -3823,9 +3823,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
-      Option(ctx.partitionSpec).map { spec =>
-        UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec))
-      })
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**

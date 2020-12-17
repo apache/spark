@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2178,7 +2178,7 @@ class DDLParserSuite extends AnalysisTest {
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     comparePlans(parsed4, expected4)
 
     val sql5 =
@@ -2191,7 +2191,7 @@ class DDLParserSuite extends AnalysisTest {
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     comparePlans(parsed5, expected5)
 
     val sql6 =
@@ -2217,7 +2217,7 @@ class DDLParserSuite extends AnalysisTest {
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(UnresolvedPartitionSpec(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us"))))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     comparePlans(parsed7, expected7)
   }
 
