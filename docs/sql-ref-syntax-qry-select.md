@@ -153,6 +153,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
      be referenced in the widow definitions in the query.
      
 * **regex_column_names**
+
      When `spark.sql.parser.quotedRegexColumnNames` is true, quoted Identifiers (using backticks) in SELECT
      statement are interpreted as regular expressions and SELECT statement can take regex-based column specification.
 
