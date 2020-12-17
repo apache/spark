@@ -167,8 +167,10 @@ object EventLogFileReader {
 private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
     path: Path,
-    maybeStatus: Option[FileStatus] = None) extends EventLogFileReader(fs, path) {
+    maybeStatus: Option[FileStatus]) extends EventLogFileReader(fs, path) {
   private lazy val status = maybeStatus.getOrElse(fileSystem.getFileStatus(rootPath))
+
+  def this(fs: FileSystem, path: Path) = this(fs, path, None)
 
   override def lastIndex: Option[Long] = None
 
