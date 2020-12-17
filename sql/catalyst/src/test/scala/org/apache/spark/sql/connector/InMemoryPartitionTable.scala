@@ -58,8 +58,10 @@ class InMemoryPartitionTable(
     }
   }
 
-  def dropPartition(ident: InternalRow): Boolean = {
-    if (memoryTablePartitions.containsKey(ident)) {
+  def dropPartition(ident: InternalRow, purge: Boolean): Boolean = {
+    if (purge) {
+      throw new UnsupportedOperationException("Purge option is not supported.")
+    } else if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
       true
     } else {

@@ -65,8 +65,8 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.partitionExists(InternalRow.apply("3")))
     assert(partTable.partitionExists(InternalRow.apply("4")))
 
-    partTable.dropPartition(InternalRow.apply("3"))
-    partTable.dropPartition(InternalRow.apply("4"))
+    partTable.dropPartition(InternalRow.apply("3"), purge = false)
+    partTable.dropPartition(InternalRow.apply("4"), purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -88,7 +88,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
         Array(new util.HashMap[String, String](), new util.HashMap[String, String]())))
     assert(!partTable.partitionExists(InternalRow.apply("3")))
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -106,7 +106,7 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.partitionExists(InternalRow.apply("3")))
     assert(partTable.partitionExists(InternalRow.apply("4")))
 
-    partTable.dropPartitions(partIdents)
+    partTable.dropPartitions(partIdents, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -121,10 +121,28 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
 
     val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
-    assert(!partTable.dropPartitions(partIdents))
+    assert(!partTable.dropPartitions(partIdents, purge = false))
     assert(partTable.partitionExists(partIdent))
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(!hasPartitions(partTable))
+  }
+
+  test("dropPartitions with purge") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryAtomicPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    assert(!hasPartitions(partTable))
+
+    val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
+    partTable.createPartitions(
+      partIdents,
+      Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
+    assert(hasPartitions(partTable))
+
+    val errMsg = intercept[UnsupportedOperationException] {
+      partTable.dropPartitions(partIdents, purge = true)
+    }.getMessage
+    assert(errMsg.contains("Purge option is not supported"))
   }
 }

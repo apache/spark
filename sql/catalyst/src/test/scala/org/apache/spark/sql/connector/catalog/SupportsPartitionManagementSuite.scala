@@ -63,7 +63,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -79,9 +79,9 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
-    partTable.dropPartition(partIdent1)
+    partTable.dropPartition(partIdent1, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -103,7 +103,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
     assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -120,7 +120,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
     assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -139,9 +139,9 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.listPartitionIdentifiers(Array("dt"), partIdent1).length == 1)
 
-    partTable.dropPartition(partIdent)
+    partTable.dropPartition(partIdent, purge = false)
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
-    partTable.dropPartition(partIdent1)
+    partTable.dropPartition(partIdent1, purge = false)
     assert(!hasPartitions(partTable))
   }
 
@@ -203,5 +203,21 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.partitionExists(InternalRow(0))
     }.getMessage
     assert(errMsg.contains("The identifier might not refer to one partition"))
+  }
+
+  test("dropPartition with purge") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    assert(!hasPartitions(partTable))
+
+    val partIdent = InternalRow.apply("3")
+    partTable.createPartition(partIdent, new util.HashMap[String, String]())
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
+
+    val errMsg = intercept[UnsupportedOperationException] {
+      partTable.dropPartition(partIdent, purge = true)
+    }.getMessage
+    assert(errMsg.contains("Purge option is not supported"))
   }
 }

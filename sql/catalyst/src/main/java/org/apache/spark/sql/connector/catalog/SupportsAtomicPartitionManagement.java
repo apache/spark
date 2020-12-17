@@ -52,8 +52,8 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
   }
 
   @Override
-  default boolean dropPartition(InternalRow ident) {
-    return dropPartitions(new InternalRow[]{ident});
+  default boolean dropPartition(InternalRow ident, boolean purge) {
+    return dropPartitions(new InternalRow[]{ident}, purge);
   }
 
   /**
@@ -79,30 +79,14 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * the operation of dropPartitions needs to be safely rolled back.
    *
    * @param idents an array of partition identifiers
+   * @param purge whether partitions should be purged. If the purge parameter is set to true,
+   *              the information about the partitions in the catalog as well as partitions data
+   *              shall be deleted. If this is set to false, the catalog shall not delete
+   *              the data which belongs to the partitions.
    * @return true if partitions were deleted, false if any partition not exists
-   */
-  boolean dropPartitions(InternalRow[] idents);
-
-  /**
-   * Drop an array of partitions atomically from table.
-   * <p>
-   * If any partition doesn't exist,
-   * the operation of dropPartitions needs to be safely rolled back.
-   *
-   * If the catalog supports the option to purge a table, this method must be overridden. The
-   * default implementation falls back to {@link #dropPartitions(InternalRow[])} dropPartitions} if
-   * the purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
-   *
-   * @param idents an array of partition identifiers
-   * @param purge whether a partition should be purged
-   * @return true if partitions were deleted, false if any partition not exists
+   * @throws UnsupportedOperationException if the option purge is not supported
    *
    * @since 3.1.0
    */
-  default boolean dropPartitions(InternalRow[] idents, boolean purge) {
-    if (purge) {
-      throw new UnsupportedOperationException("Purge option is not supported.");
-    }
-    return dropPartitions(idents);
-  }
+  boolean dropPartitions(InternalRow[] idents, boolean purge);
 }
