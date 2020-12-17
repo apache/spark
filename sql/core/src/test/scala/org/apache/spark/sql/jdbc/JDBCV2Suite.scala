@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -118,6 +118,29 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     }.get
     assert(scan.schema.names.sameElements(Seq("NAME")))
     checkAnswer(df, Row("mary"))
+  }
+
+  test("aggregate pushdown with alias") {
+    val df1 = spark.table("h2.test.employee")
+    var query1 = df1.select($"DEPT", $"SALARY".as("value"))
+      .groupBy($"DEPT")
+      .agg(sum($"value").as("total"))
+      .filter($"total" > 1000)
+    // query1.explain(true)
+    checkAnswer(query1, Seq(Row(1, 19000.00), Row(2, 22000.00)))
+    val decrease = udf { (x: Double, y: Double) => x - y}
+    var query2 = df1.select($"DEPT", decrease($"SALARY", $"BONUS").as("value"), $"SALARY", $"BONUS")
+      .groupBy($"DEPT")
+      .agg(sum($"value"), sum($"SALARY"), sum($"BONUS"))
+    // query2.explain(true)
+    checkAnswer(query2,
+      Seq(Row(1, 16800.00, 19000.00, 2200.00), Row(2, 19500.00, 22000.00, 2500.00)))
+
+    val cols = Seq("a", "b", "c", "d")
+    val df2 = sql("select * from h2.test.employee").toDF(cols: _*)
+    val df3 = df2.groupBy().sum("c")
+    // df3.explain(true)
+    checkAnswer(df3, Seq(Row(41000.00)))
   }
 
   test("scan with aggregate push-down") {

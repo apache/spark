@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.PushPredicateThroughNonJoin.{getAliasMap, replaceAlias}
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,10 +39,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
     case Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
         case ScanOperation(project, filters, relation: DataSourceV2Relation) =>
+          val aliasMap = getAliasMap(project)
           val scanBuilder = relation.table.asReadable.newScanBuilder(relation.options)
           val aggregates = resultExpressions.flatMap { expr =>
             expr.collect {
-              case agg: AggregateExpression => agg
+              case agg: AggregateExpression =>
+                replaceAlias(agg, aliasMap).asInstanceOf[AggregateExpression]
             }
           }.distinct
 
