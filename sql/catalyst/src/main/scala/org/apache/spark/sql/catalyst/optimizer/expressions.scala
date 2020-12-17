@@ -527,6 +527,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+
 /**
  * Push the foldable expression into (if / case) branches.
  */
@@ -547,7 +548,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 }
-
 
 
 /**
