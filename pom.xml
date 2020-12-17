@@ -255,11 +255,6 @@
     <CodeCacheSize>1g</CodeCacheSize>
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
-
-    <!-- Needed for scala-maven-plugin -->
-    <silencer-plugin.version>1.6.0</silencer-plugin.version>
-    <silencer-plugin.globalFilters>-P:silencer:globalFilters=.*deprecated.*</silencer-plugin.globalFilters>
-    <scalac.warn-to-fatal>-Xfatal-warnings</scalac.warn-to-fatal>
   </properties>
   <repositories>
     <repository>
@@ -2513,9 +2508,9 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-target:jvm-1.8</arg>
-              <arg>${scalac.warn-to-fatal}</arg>
+              <arg>-Xfatal-warnings</arg>
               <arg>-Ywarn-unused:imports</arg>
-              <arg>${silencer-plugin.globalFilters}</arg>
+              <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -2533,7 +2528,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>${silencer-plugin.version}</version>
+                <version>1.6.0</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -3248,10 +3243,6 @@
       <properties>
         <scala.version>2.13.4</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
-        <silencer-plugin.version>1.7.1</silencer-plugin.version>
-        <!-- SPARK-33560: Use a fake globalFilters because silencer plugin is not required since Scala 2.13.2 -->
-        <silencer-plugin.globalFilters>-P:silencer:globalFilters=.*fakeGlobalFilters.*</silencer-plugin.globalFilters>
-        <scalac.warn-to-fatal>-Wconf:cat=deprecation:wv,any:e</scalac.warn-to-fatal>
       </properties>
       <dependencyManagement>
         <dependencies>
@@ -3268,18 +3259,40 @@
             <plugin>
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
-              <configuration>
-                <args combine.children="append">
+              <configuration combine.self="override">
+                <scalaVersion>${scala.version}</scalaVersion>
+                <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
+                <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
+                <recompileMode>incremental</recompileMode>
+                <useZincServer>true</useZincServer>
+                <args>
+                  <arg>-unchecked</arg>
+                  <arg>-deprecation</arg>
+                  <arg>-feature</arg>
+                  <arg>-explaintypes</arg>
+                  <arg>-target:jvm-1.8</arg>
+                  <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                  <!-- TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed -->
+                  <arg>-Wunused:imports</arg>
                   <arg>-Wconf:cat=scaladoc:wv</arg>
                   <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
                   <arg>-Wconf:cat=other-nullary-override:wv</arg>
                   <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
                   <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
                   <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
-                  <!-- TODO(SPARK-33499): remove suppression of unused-imports on VertexPartitionBaseOps and VertexPartitionBase -->
-                  <arg>-Wconf:cat=unused-imports&amp;src=org/apache/spark/graphx/impl/VertexPartitionBaseOps.scala:s</arg>
-                  <arg>-Wconf:cat=unused-imports&amp;src=org/apache/spark/graphx/impl/VertexPartitionBase.scala:s</arg>
                 </args>
+                <jvmArgs>
+                  <jvmArg>-Xms1024m</jvmArg>
+                  <jvmArg>-Xmx1024m</jvmArg>
+                  <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+                </jvmArgs>
+                <javacArgs>
+                  <javacArg>-source</javacArg>
+                  <javacArg>${java.version}</javacArg>
+                  <javacArg>-target</javacArg>
+                  <javacArg>${java.version}</javacArg>
+                  <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
+                </javacArgs>
               </configuration>
             </plugin>
           </plugins>
