@@ -164,7 +164,7 @@ object EventLogFileReader {
  * FileNotFoundException could occur if the log file is renamed before getting the
  * status of log file.
  */
-class SingleFileEventLogFileReader(
+private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
   private lazy val status = fileSystem.getFileStatus(rootPath)
@@ -203,7 +203,7 @@ class SingleFileEventLogFileReader(
  * This reader lists the files only once; if caller would like to play with updated list,
  * it needs to create another reader instance.
  */
-class RollingEventLogFilesFileReader(
+private[history] class RollingEventLogFilesFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
   import RollingEventLogFilesWriter._
