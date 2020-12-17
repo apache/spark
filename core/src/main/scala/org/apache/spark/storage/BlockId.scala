@@ -81,7 +81,7 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) exten
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
-@Since("3.1.0")
+@Since("3.2.0")
 @DeveloperApi
 case class ShufflePushBlockId(shuffleId: Int, mapIndex: Int, reduceId: Int) extends BlockId {
   override def name: String = "shufflePush_" + shuffleId + "_" + mapIndex + "_" + reduceId

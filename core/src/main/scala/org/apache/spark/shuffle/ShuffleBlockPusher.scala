@@ -47,7 +47,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *
  * @param conf spark configuration
  */
-@Since("3.1.0")
+@Since("3.2.0")
 private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH)
   private[this] val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH)
@@ -147,7 +147,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
         logDebug(s"Deferring push request for $remoteAddress with ${request.blocks.size} blocks")
-        deferredPushRequests.getOrElseUpdate(remoteAddress, new Queue[PushRequest]()).enqueue(request)
+        deferredPushRequests.getOrElseUpdate(remoteAddress, new Queue[PushRequest]())
+          .enqueue(request)
       } else {
         sendRequest(request)
       }
@@ -176,8 +177,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * pushes.
    */
   private def sendRequest(request: PushRequest): Unit = {
-    bytesInFlight = bytesInFlight + request.size
-    reqsInFlight = reqsInFlight + 1
+    bytesInFlight +=  request.size
+    reqsInFlight += 1
     numBlocksInFlightPerAddress(request.address) = numBlocksInFlightPerAddress.getOrElseUpdate(
       request.address, 0) + request.blocks.length
 
@@ -276,13 +277,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       remainingBlocks: HashSet[String],
       pushResult: PushResult): Boolean = synchronized {
     remainingBlocks -= pushResult.blockId
-    bytesInFlight = bytesInFlight - bytesPushed
+    bytesInFlight -= bytesPushed
     numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
     if (remainingBlocks.isEmpty) {
-      reqsInFlight = reqsInFlight - 1
+      reqsInFlight -= 1
     }
-    if (pushResult.failure != null && pushResult.failure.getCause != null &&
-      pushResult.failure.getCause.isInstanceOf[ConnectException]) {
+    if (pushResult.failure != null && pushResult.failure.getCause.isInstanceOf[ConnectException]) {
       // Remove all the blocks for this address just once because removing from pushRequests
       // is expensive. If there is a ConnectException for the first block, all the subsequent
       // blocks to that address will fail, so should avoid removing multiple times.
@@ -363,6 +363,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
             // Convert the previous batch into a PushRequest
             requests += PushRequest(mergerLocs(currentMergerId), blocks.toSeq,
               createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
+            blocks = new ArrayBuffer[(BlockId, Long)]
           }
           // Start a new batch
           currentReqSize = 0
@@ -370,7 +371,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           // of currentReqOffset and when we are about to start a new batch
           currentReqOffset = -1
           currentMergerId = mergerId
-          blocks = new ArrayBuffer[(BlockId, Long)]
         }
         // Only push blocks under the size limit
         if (blockSize <= maxBlockSizeToPush) {
