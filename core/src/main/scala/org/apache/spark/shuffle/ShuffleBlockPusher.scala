@@ -292,10 +292,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         var removed = 0
         unreachableBlockMgrs.add(address)
         removed += pushRequests.dequeueAll(req => req.address == address).length
-        val droppedReq = deferredPushRequests.remove(address)
-        if (droppedReq.isDefined) {
-          removed += droppedReq.get.length
-        }
+        removed += deferredPushRequests.remove(address).map(_.length).getOrElse(0)
         logWarning(s"Received a ConnectException from $address. " +
           s"Dropping $removed push-requests and " +
           s"not pushing any more blocks to this address.")
