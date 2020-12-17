@@ -46,8 +46,10 @@ class InMemoryAtomicPartitionTable (
     }
   }
 
-  override def dropPartition(ident: InternalRow): Boolean = {
-    if (memoryTablePartitions.containsKey(ident)) {
+  override def dropPartition(ident: InternalRow, purge: Boolean): Boolean = {
+    if (purge) {
+      throw new UnsupportedOperationException("Purge option is not supported.")
+    } else if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
       true
     } else {
@@ -67,10 +69,10 @@ class InMemoryAtomicPartitionTable (
     }
   }
 
-  override def dropPartitions(idents: Array[InternalRow]): Boolean = {
+  override def dropPartitions(idents: Array[InternalRow], purge: Boolean): Boolean = {
     if (!idents.forall(partitionExists)) {
       return false;
     }
-    idents.forall(dropPartition)
+    idents.forall(dropPartition(_, purge))
   }
 }

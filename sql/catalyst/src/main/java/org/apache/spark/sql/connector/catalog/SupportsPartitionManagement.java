@@ -68,29 +68,15 @@ public interface SupportsPartitionManagement extends Table {
      * Drop a partition from table.
      *
      * @param ident a partition identifier
+     * @param purge whether a partition should be purged. If the purge parameter is set to true,
+     *              the information about the partition in the catalog as well as partition data
+     *              shall be deleted. If this is set to false, the catalog shall not delete
+     *              the data which belongs to the partition.
      * @return true if a partition was deleted, false if no partition exists for the identifier
-     */
-    boolean dropPartition(InternalRow ident);
-
-    /**
-     * Drop a partition from table.
-     *
-     * If the catalog supports the option to purge a partition, this method must be overridden. The
-     * default implementation falls back to {@link #dropPartition(InternalRow)} dropPartition} if
-     * the purge option is set to false. Otherwise, it throws {@link UnsupportedOperationException}.
-     *
-     * @param ident a partition identifier
-     * @param purge whether a partition should be purged
-     * @return true if a partition was deleted, false if no partition exists for the identifier
-     *
+     * @throws UnsupportedOperationException if the option purge is not supported
      * @since 3.1.0
      */
-    default boolean dropPartition(InternalRow ident, boolean purge) {
-      if (purge) {
-        throw new UnsupportedOperationException("Purge option is not supported.");
-      }
-      return dropPartition(ident);
-    }
+    boolean dropPartition(InternalRow ident, boolean purge);
 
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
