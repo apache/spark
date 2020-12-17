@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -56,19 +57,32 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  private def invalidateCache(r: ResolvedTable, recacheTable: Boolean = false)(): Unit = {
+  private def invalidateCache(
+      r: ResolvedTable,
+      recacheTable: Boolean = false)(): Option[(Option[String], StorageLevel)] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
-    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
-    if (recacheTable && cache.isDefined) {
-      // save the cache name and cache level for recreation
+    if (cache.isDefined) {
+      session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-
-      // recache with the same name and cache level.
-      val ds = Dataset.ofRows(session, v2Relation)
-      session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+      if (recacheTable) {
+        // recache with the same name and cache level.
+        val ds = Dataset.ofRows(session, v2Relation)
+        session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+      }
+      Some((cacheName, cacheLevel))
+    } else {
+      None
     }
+  }
+
+  private def cacheQuery(
+      relation: LogicalPlan,
+      tableName: Option[String],
+      storageLevel: StorageLevel): Unit = {
+    val ds = Dataset.ofRows(session, relation)
+    session.sharedState.cacheManager.cacheQuery(ds, tableName, storageLevel)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -267,12 +281,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
       if (isView) {
         throw new AnalysisException(
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
       }
-      RenameTableExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
+      RenameTableExec(
+        catalog, oldIdent, newIdent.asIdentifier, invalidateCache(r), cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
