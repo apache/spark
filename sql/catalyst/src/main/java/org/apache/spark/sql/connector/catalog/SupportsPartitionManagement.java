@@ -83,7 +83,7 @@ public interface SupportsPartitionManagement extends Table {
      * @param purge whether a partition should be purged
      * @return true if a partition was deleted, false if no partition exists for the identifier
      *
-     * @since 3.2.0
+     * @since 3.1.0
      */
     default boolean dropPartition(InternalRow ident, boolean purge) {
       if (purge) {
