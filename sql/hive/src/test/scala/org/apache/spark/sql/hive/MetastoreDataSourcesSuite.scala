@@ -701,7 +701,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("SPARK-6024 wide schema support") {
-    assert(conf.getConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD) == 4000)
+    assert(spark.sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 4000)
     withTable("wide_schema") {
       withTempDir { tempDir =>
         // We will need 80 splits for this schema if the threshold is 4000.
@@ -1338,7 +1338,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
-      assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
+      assert(e.contains("Cannot read table property 'spark.sql.sources.schema' as it's corrupted"))
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")

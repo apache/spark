@@ -54,6 +54,21 @@ object StaticSQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .createWithDefault("global_temp")
 
+  // This is used to control when we will split a schema's JSON string to multiple pieces
+  // in order to fit the JSON string in metastore's table property (by default, the value has
+  // a length restriction of 4000 characters, so do not use a value larger than 4000 as the default
+  // value of this property). We will split the JSON string of a schema to its length exceeds the
+  // threshold. Note that, this conf is only read in HiveExternalCatalog which is cross-session,
+  // that's why this conf has to be a static SQL conf.
+  val SCHEMA_STRING_LENGTH_THRESHOLD =
+    buildStaticConf("spark.sql.sources.schemaStringLengthThreshold")
+      .internal()
+      .doc("The maximum length allowed in a single cell when " +
+        "storing additional schema information in Hive's metastore.")
+      .version("1.3.1")
+      .intConf
+      .createWithDefault(4000)
+
   val FILESOURCE_TABLE_RELATION_CACHE_SIZE =
     buildStaticConf("spark.sql.filesourceTableRelationCacheSize")
       .internal()

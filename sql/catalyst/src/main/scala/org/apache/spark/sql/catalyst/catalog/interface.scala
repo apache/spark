@@ -472,8 +472,13 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
 
-  def splitLargeTableProp(key: String, value: String, addProp: (String, String) => Unit): Unit = {
+  def splitLargeTableProp(
+      key: String,
+      value: String,
+      addProp: (String, String) => Unit,
+      defaultThreshold: Int): Unit = {
     val threshold = SQLConf.get.getConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD)
+      .getOrElse(defaultThreshold)
     if (value.length <= threshold) {
       addProp(key, value)
     } else {
@@ -588,7 +593,8 @@ case class CatalogColumnStat(
       CatalogTable.splitLargeTableProp(
         s"$colName.${CatalogColumnStat.KEY_HISTOGRAM}",
         HistogramSerializer.serialize(h),
-        map.put)
+        map.put,
+        4000)
     }
     map.toMap
   }

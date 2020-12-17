@@ -890,7 +890,7 @@ object SQLConf {
         "JSON string, the histogram of column statistics.")
       .version("3.2.0")
       .intConf
-      .createWithDefault(4000)
+      .createOptional
 
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
@@ -3039,7 +3039,9 @@ object SQLConf {
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
           "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
       DeprecatedConfig(CONVERT_CTAS.key, "3.1",
-        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead.")
+        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
+      DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
+        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3085,9 +3087,7 @@ object SQLConf {
       RemovedConfig("spark.sql.optimizer.planChangeLog.rules", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
-        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead."),
-      RemovedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2.0", "4000",
-        s"Please use `${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}` instead.")
+        s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
