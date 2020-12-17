@@ -262,6 +262,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
     }
 
     val shuffleStages = collectShuffleStages(plan)
+    val s = ExplainUtils.getAQELogPrefix(shuffleStages)
 
     if (shuffleStages.length == 2) {
       // When multi table join, there will be too many complex combination to consider.
@@ -271,19 +272,29 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       //     Shuffle
       //   Sort
       //     Shuffle
-      val optimizePlan = optimizeSkewJoin(plan)
-      val numShuffles = ensureRequirements.apply(optimizePlan).collect {
+      val optimizedPlan = optimizeSkewJoin(plan)
+      if(optimizedPlan eq plan) {
+        return plan
+      }
+      val executedPlan = ensureRequirements.apply(optimizedPlan)
+      val numShuffles = executedPlan.collect {
         case e: ShuffleExchangeExec => e
       }.length
 
-      if (numShuffles > 0) {
-        logDebug("OptimizeSkewedJoin rule is not applied due" +
-          " to additional shuffles will be introduced.")
+      if (numShuffles > 0 && !conf.adaptiveForceIfShuffle) {
+        logInfo(s"OptimizeSkewedJoin: rule is not applied due" +
+          s" to additional shuffles will be introduced. numShuffles=$numShuffles; $s")
         plan
       } else {
-        optimizePlan
+        logInfo(s"OptimizeSkewedJoin: rule is applied." +
+          s" Additional shuffles may be introduced. numShuffles=$numShuffles; $s")
+        executedPlan
       }
     } else {
+      if (shuffleStages.length > 2) {
+        logInfo(s"OptimizeSkewedJoin: rule is not applied since" +
+          s" shuffleStages.length=${shuffleStages.length} <> 2; $s")
+      }
       plan
     }
   }
