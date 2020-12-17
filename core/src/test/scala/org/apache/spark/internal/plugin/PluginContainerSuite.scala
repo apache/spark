@@ -158,9 +158,9 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     }
 
     eventually(timeout(10.seconds), interval(100.millis)) {
-      assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
-      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 0)
-      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 0)
+      assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 2)
     }
   }
 
