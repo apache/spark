@@ -129,7 +129,7 @@ trait WindowExecBase extends UnaryExecNode {
         // by row. Therefore, we put these functions in different window frames.
         case f: FrameLessOffsetWindowFunction if f.ignoreNulls =>
           (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
-        case _ => (tpe, fr.frameType, fr.lower, fr.upper, null)
+        case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
       }
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
@@ -199,7 +199,7 @@ trait WindowExecBase extends UnaryExecNode {
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
                 offset,
-                expr != null)
+                expr.nonEmpty)
           case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
