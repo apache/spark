@@ -83,7 +83,7 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private val initialSessionOptions: Map[String, String])
+    @transient private[sql] val initialSessionOptions: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.

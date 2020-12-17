@@ -542,7 +542,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains("Table or view not found for 'ANALYZE TABLE ... FOR COLUMNS ...': " +
+      assert(errMsg1.contains("Table or view not found: " +
         s"$globalTempDB.gTempView"))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")

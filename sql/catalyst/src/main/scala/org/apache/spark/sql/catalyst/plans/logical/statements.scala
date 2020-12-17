@@ -301,15 +301,6 @@ case class AlterTableRenamePartitionStatement(
     to: TablePartitionSpec) extends ParsedStatement
 
 /**
- * ALTER TABLE ... SERDEPROPERTIES command, as parsed from SQL
- */
-case class AlterTableSerDePropertiesStatement(
-    tableName: Seq[String],
-    serdeClassName: Option[String],
-    serdeProperties: Option[Map[String, String]],
-    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.
@@ -353,13 +344,6 @@ case class CreateNamespaceStatement(
  * A USE statement, as parsed from SQL.
  */
 case class UseStatement(isNamespaceSet: Boolean, nameParts: Seq[String]) extends ParsedStatement
-
-/**
- * A TRUNCATE TABLE statement, as parsed from SQL
- */
-case class TruncateTableStatement(
-    tableName: Seq[String],
-    partitionSpec: Option[TablePartitionSpec]) extends ParsedStatement
 
 /**
  * A SHOW CURRENT NAMESPACE statement, as parsed from SQL

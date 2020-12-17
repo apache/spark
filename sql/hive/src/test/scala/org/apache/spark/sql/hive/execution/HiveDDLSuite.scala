@@ -888,12 +888,17 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
+          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
+          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
 
-        assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
+          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName RECOVER PARTITIONS",

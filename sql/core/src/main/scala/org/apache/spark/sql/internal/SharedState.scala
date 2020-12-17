@@ -67,11 +67,12 @@ private[sql] class SharedState(
       case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
         logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
           s"in SparkSession's options, it should be set statically for cross-session usages")
-      case (k, v) =>
-        logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
+      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+        logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
+      case (k, v) =>
+        logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
         hadoopConfClone.set(k, v)
-
     }
     (confClone, hadoopConfClone)
   }

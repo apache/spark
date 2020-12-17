@@ -17,18 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultUsing: String = "USING parquet"
-
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
 }
 
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
-  with SharedSparkSession
+  with CommandSuiteBase
