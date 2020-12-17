@@ -97,7 +97,7 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @param purge whether a partition should be purged
    * @return true if partitions were deleted, false if any partition not exists
    *
-   * @since 3.2.0
+   * @since 3.1.0
    */
   default boolean dropPartitions(InternalRow[] idents, boolean purge) {
     if (purge) {
