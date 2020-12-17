@@ -200,15 +200,15 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
   }
 
-  test("SPARK-33798: simplify EqualTo(If, Literal) always false") {
+  test("SPARK-33798: Push down EqualTo through If") {
     val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
     val b = UnresolvedAttribute("b")
     val ifExp = If(a, Literal(2), Literal(3))
 
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal(3)), EqualTo(ifExp, Literal(3)))
+    assertEquivalent(EqualTo(ifExp, Literal(3)), If(a, FalseLiteral, TrueLiteral))
     assertEquivalent(EqualTo(ifExp, Literal("4")), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal("3")), EqualTo(ifExp, Literal(3)))
+    assertEquivalent(EqualTo(ifExp, Literal("3")), If(a, FalseLiteral, TrueLiteral))
 
     // Do not simplify if it contains non foldable expressions.
     assertEquivalent(
@@ -220,41 +220,39 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // Should not handle Null values.
+    // Handle Null values.
     assertEquivalent(
       EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(1)),
-      EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(1)))
+      If(a, Literal(null, BooleanType), TrueLiteral))
     assertEquivalent(
       EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(2)),
-      EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(2)))
+      If(a, Literal(null, BooleanType), FalseLiteral))
     assertEquivalent(
       EqualTo(If(a, Literal(1), Literal(2)), Literal(null, IntegerType)),
-      EqualTo(If(a, Literal(1), Literal(2)), Literal(null, IntegerType)))
+      Literal(null, BooleanType))
     assertEquivalent(
       EqualTo(If(a, Literal(null, IntegerType), Literal(null, IntegerType)), Literal(1)),
       Literal(null, BooleanType))
   }
 
-  test("SPARK-33798: simplify EqualTo(CaseWhen, Literal) always false") {
+  test("SPARK-33798: Push down EqualTo through CaseWhen") {
     val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
     val b = UnresolvedAttribute("b")
     val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
     val caseWhen = CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3)))
 
     assertEquivalent(EqualTo(caseWhen, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(caseWhen, Literal(3)), EqualTo(caseWhen, Literal(3)))
+    assertEquivalent(EqualTo(caseWhen, Literal(3)),
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), Some(TrueLiteral)))
     assertEquivalent(EqualTo(caseWhen, Literal("4")), FalseLiteral)
-    assertEquivalent(EqualTo(caseWhen, Literal("3")), EqualTo(caseWhen, Literal(3)))
+    assertEquivalent(EqualTo(caseWhen, Literal("3")),
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), Some(TrueLiteral)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal("1")), (c, Literal("2"))), None), Literal("4")),
-      FalseLiteral)
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
 
     assertEquivalent(
       And(EqualTo(caseWhen, Literal(5)), EqualTo(caseWhen, Literal(6))),
-      FalseLiteral)
-
-    assertEquivalent(
-      EqualTo(CaseWhen(Seq(normalBranch, (a, Literal(1)), (c, Literal(1))), None), Literal(-1)),
       FalseLiteral)
 
     // Do not simplify if it contains non foldable expressions.
@@ -268,16 +266,16 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
 
-    // Should not handle Null values.
+    // Handle Null values.
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)),
-      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)))
+      CaseWhen(Seq((a, Literal(null, BooleanType))), Some(FalseLiteral)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), Literal(null, IntegerType)),
-      EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), Literal(null, IntegerType)))
+      Literal(null, BooleanType))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(1)),
-      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(1)))
+      CaseWhen(Seq((a, Literal(null, BooleanType))), Some(TrueLiteral)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(null, IntegerType))),
         Literal(1)),
