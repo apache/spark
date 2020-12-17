@@ -43,7 +43,7 @@ trait AliasHelper {
     AttributeMap(aliasMap)
   }
 
-  def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
+  protected def getAliasMap(exprs: Seq[NamedExpression]): AttributeMap[Alias] = {
     // Create a map of Aliases to their values from the child projection.
     // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> Alias(a + b, c)).
     AttributeMap(exprs.collect { case a: Alias => (a.toAttribute, a) })
@@ -52,7 +52,7 @@ trait AliasHelper {
   /**
    * Replace all attributes, that reference an alias, with the aliased expression
    */
-  def replaceAlias(
+  protected def replaceAlias(
       expr: Expression,
       aliasMap: AttributeMap[Alias]): Expression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
