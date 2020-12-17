@@ -88,7 +88,8 @@ class AdaptiveQueryExecSuite
     val exchanges = adaptivePlan.collect {
       case e: Exchange => e
     }
-    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
+    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node." +
+        "\n" + adaptivePlan)
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
   }
 
@@ -114,6 +115,11 @@ class AdaptiveQueryExecSuite
     collectWithSubqueries(plan) {
       case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
       case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
+    }
+  }
+  private def findCustomShuffleReaders(plan: SparkPlan): Seq[CustomShuffleReaderExec] = {
+    collect(plan) {
+      case r: CustomShuffleReaderExec => r
     }
   }
 
@@ -230,6 +236,9 @@ class AdaptiveQueryExecSuite
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        //        val testDf = df1.where('a > 5).join(df2.where('b > 5), Seq("id"), "inner")
+        //          .groupBy('id).count()
+        //        checkAnswer(testDf, Seq(Row(6, 1), Row(7, 1), Row(8, 1), Row(9, 1)))
         val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
           .groupBy('a).count()
         checkAnswer(testDf, Seq())
@@ -665,20 +674,83 @@ class AdaptiveQueryExecSuite
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
 
-        def checkSkewJoin(query: String, optimizeSkewJoin: Boolean): Unit = {
+        def checkSkewJoin(query: String, optimizeSkewJoin: Boolean): SparkPlan = {
           val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(query)
           val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
           assert(innerSmj.size == 1 && innerSmj.head.isSkewJoin == optimizeSkewJoin)
+          innerAdaptivePlan
         }
 
         checkSkewJoin(
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2", true)
         // Additional shuffle introduced, so disable the "OptimizeSkewedJoin" optimization
-        checkSkewJoin(
-          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1", false)
+        val adaptivePlan = checkSkewJoin(
+          "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1",
+          conf.adaptiveForceIfShuffle)
+        val readers = findCustomShuffleReaders(adaptivePlan)
+        if(conf.adaptiveForceIfShuffle) {
+          // new shuffle in the Agg gets coalesced
+          assert(readers.length == 3, s"$adaptivePlan")
+        } else {
+          assert(readers.length == 2, s"$adaptivePlan")
+        }
       }
     }
   }
+  test("skew in deeply nested join - test ShuffleAddedException") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100"
+    ) {
+      withTempView("skewData1", "skewData2", "skewData3") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 10, 1, 10)
+          .selectExpr("id as key3", "id as value3")
+          .createOrReplaceTempView("skewData3")
+
+        /*
+        SMJ1
+        :-Sort
+          :-Agg
+            :-SMJ2
+              :-Sort
+              :-Sort
+        :-Sort
+        Agg is on SMJ2 key, so no skew mitigation unless adaptiveForceIfShuffle is ON
+        in which case SMJ2.isSkewJoin = true & a new shuffle is added for Agg
+        */
+        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+          "select * from (SELECT key1, count(*) as c FROM skewData1 JOIN " +
+            "skewData2 ON key1 = key2 group by key1 ) A " +
+            "INNER JOIN skewData3 on c = value3")
+        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+        val csre = findCustomShuffleReaders(innerAdaptivePlan)
+        if(!conf.adaptiveForceIfShuffle) {
+          assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+            s"actual plan=$innerAdaptivePlan")
+          assert(!innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+          assert(csre.length == 4, s"actual plan=$innerAdaptivePlan")
+        } else {
+          assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+            s"actual plan=$innerAdaptivePlan")
+          assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+          assert(csre.length == 5, s"actual plan=$innerAdaptivePlan")
+        }
+        innerAdaptivePlan
+      }
+    }
+  }
+
 
   test("SPARK-29544: adaptive skew join with different join types") {
     withSQLConf(

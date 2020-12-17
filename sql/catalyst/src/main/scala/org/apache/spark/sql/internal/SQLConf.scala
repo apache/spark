@@ -423,6 +423,12 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("64MB")
 
+  val ADAPTIVE_FORCE_IF_SHUFFLE = buildConf("spark.sql.adaptive.force.if.shuffle")
+    .doc("Make OptimizeSkewJoin choose skew mitigation even if it causes an extra shuffle")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution, which re-optimizes the query plan in the " +
       "middle of query execution, based on accurate runtime statistics.")
@@ -3259,6 +3265,8 @@ class SQLConf extends Serializable with Logging {
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
+
+  def adaptiveForceIfShuffle: Boolean = getConf(ADAPTIVE_FORCE_IF_SHUFFLE)
 
   def fetchShuffleBlocksInBatch: Boolean = getConf(FETCH_SHUFFLE_BLOCKS_IN_BATCH)
 

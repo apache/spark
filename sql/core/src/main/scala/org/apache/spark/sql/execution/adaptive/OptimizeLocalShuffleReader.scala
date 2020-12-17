@@ -50,8 +50,11 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
         val localReader = createLocalReader(shuffleStage)
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
     }
-
-    val numShuffles = ensureRequirements.apply(optimizedPlan).collect {
+    if(optimizedPlan eq plan) {
+      return plan
+    }
+    val executedPlan = ensureRequirements.apply(optimizedPlan)
+    val numShuffles = executedPlan.collect {
       case e: ShuffleExchangeExec => e
     }.length
 

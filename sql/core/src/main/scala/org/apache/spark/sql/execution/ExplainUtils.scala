@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec, ShuffleQueryStageExec}
 
 object ExplainUtils extends AdaptiveSparkPlanHelper {
   /**
@@ -253,5 +253,20 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case p: QueryStageExec => remove(p, Seq(p.plan))
       case plan: QueryPlan[_] => remove(plan, plan.innerChildren)
     }
+  }
+  /**
+   *  DAGScheduler.shuffleIdToMapStage relates shuffleId->(Spark) Stage, not sure if it's
+   *  logged anywhere.  CustomShuffleReaderExec also logs shuffleId.  [[SparkPlan.id]] is printed
+   *  in the plan.
+   */
+  def getAQELogPrefix(shuffleStages: Seq[ShuffleQueryStageExec]): String = {
+    val v = "(ShuffleId,QueryStageId,shuffle origin:): " +
+      shuffleStages.map(s => {
+        // RDD with no partitions (e.g. SparkContext.emptyRDD) has not mapStats even
+        // after stage materialization
+        val shuffleId = if (s.mapStats.isDefined) s.mapStats.get.shuffleId else -1
+        s"($shuffleId,${s.id},${s.shuffle.shuffleOrigin})"
+      }).mkString(",")
+    v
   }
 }

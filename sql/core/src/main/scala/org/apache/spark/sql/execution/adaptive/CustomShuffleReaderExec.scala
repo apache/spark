@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -67,11 +68,32 @@ case class CustomShuffleReaderExec private(
         case _ =>
           throw new IllegalStateException("operating on canonicalization plan")
       }
+    } else if (partitionSpecs.length == 1) {
+      SinglePartition
+    } else if (partitionSpecs.nonEmpty &&
+      partitionSpecs.forall(_.isInstanceOf[CoalescedPartitionSpec]) &&
+      partitionSpecs.map(_.asInstanceOf[CoalescedPartitionSpec].startReducerIndex).toSet.size
+        == partitionSpecs.size) {
+      // if here, some partitions were coalesced and nothing was split/replicated
+      // as in skew mitigation
+      child match {
+        case a: ShuffleQueryStageExec =>
+          a.outputPartitioning match {
+            case hp: HashPartitioning => hp.copy(numPartitions = partitionSpecs.length)
+            // relies on the fact that coalesce only combines contiguous pre shuffle
+            //  partition indexes then
+            case rp: RangePartitioning => rp.copy(numPartitions = partitionSpecs.length)
+            case _ => UnknownPartitioning(partitionSpecs.length)
+          }
+        case _ => UnknownPartitioning(partitionSpecs.length)
+      }
     } else {
       UnknownPartitioning(partitionSpecs.length)
     }
   }
-
+  /**
+   * include id so that it is visible in the plan text
+   */
   override def stringArgs: Iterator[Any] = {
     val desc = if (isLocalReader) {
       "local"
@@ -84,7 +106,7 @@ case class CustomShuffleReaderExec private(
     } else {
       ""
     }
-    Iterator(desc)
+    Iterator(id, desc) // todo: or should this be QueryPlan.OP_ID_TAG?
   }
 
   def hasCoalescedPartition: Boolean =
@@ -189,9 +211,38 @@ case class CustomShuffleReaderExec private(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
+    logPartitionSpecs(shuffleStage.flatMap(_.mapStats))
     shuffleRDD.asInstanceOf[RDD[InternalRow]]
+
   }
 
+  /**
+   * Log map side metrics and new partition specs so that we know what got coalesced
+   * what got split/replicated due to skew
+   */
+  private def logPartitionSpecs(mos: Option[MapOutputStatistics]): Unit = {
+    val shuffleId = if (mos.isDefined) mos.get.shuffleId else -1
+    // include shuffleId to correlate to other logs
+    val n = s"(id=${id})"
+    logInfo(s"CustomShuffleReaderExec: shuffle(${shuffleId}) $n " +
+      metrics.map(kv => (s"${kv._1}=${kv._2.value}")).mkString(","))
+    if(shuffleId < 0) {
+      return // we don't MapOutputStatistics - probably due to 0-partition RDD
+    }
+    /* if AQE did nothing, then reduce side tasks would provide info about partition sizes but
+    if it rebalanced partitions there is no place what they were before rebalancing
+    todo: could we have 100K partitions? */
+    logInfo(s"CustomShuffleReaderExec (map): ${mos.get.bytesByPartitionId.mkString(",")}")
+    val specs = partitionSpecs.map {
+      case a : CoalescedPartitionSpec => s"CP(${a.startReducerIndex},${a.endReducerIndex})"
+      case a : PartialReducerPartitionSpec =>
+        s"PRP(${a.reducerIndex},${a.startMapIndex},${a.endMapIndex})"
+      case a : PartialMapperPartitionSpec =>
+        s"PMP(${a.mapIndex},${a.startReducerIndex},${a.endReducerIndex})"
+      case a => s"$a"
+    }.mkString("[", ",", "]")
+    logInfo(s"CustomShuffleReaderExec (reduce): $specs")
+  }
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     shuffleRDD.asInstanceOf[RDD[ColumnarBatch]]
   }
