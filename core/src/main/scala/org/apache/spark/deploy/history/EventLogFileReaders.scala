@@ -116,7 +116,7 @@ object EventLogFileReader {
 
   def apply(fs: FileSystem, status: FileStatus): Option[EventLogFileReader] = {
     if (isSingleEventLog(status)) {
-      Some(new SingleFileEventLogFileReader(fs, status.getPath))
+      Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
       Some(new RollingEventLogFilesFileReader(fs, status.getPath))
     } else {
@@ -166,8 +166,9 @@ object EventLogFileReader {
  */
 private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
-    path: Path) extends EventLogFileReader(fs, path) {
-  private lazy val status = fileSystem.getFileStatus(rootPath)
+    path: Path,
+    maybeStatus: Option[FileStatus] = None) extends EventLogFileReader(fs, path) {
+  private lazy val status = maybeStatus.getOrElse(fileSystem.getFileStatus(rootPath))
 
   override def lastIndex: Option[Long] = None
 
