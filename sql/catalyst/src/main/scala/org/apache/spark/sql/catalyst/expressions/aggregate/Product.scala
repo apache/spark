@@ -24,19 +24,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType, NumericType }
 
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the product calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (2), (3), (5) AS tab(col);
-       30
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (5), (7) AS tab(col);
-       35
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-       NULL
-  """,
-  group = "agg_funcs",
-  since = "3.2.0")
+/** Multiply numerical values within an aggregation group */
 case class Product(child: Expression, scale: Double = 1.0)
     extends DeclarativeAggregate with ImplicitCastInputTypes {
 
