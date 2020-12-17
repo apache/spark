@@ -31,7 +31,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
 
 /** The base class of reader which will read the information of event log file(s). */
-private[history] abstract class EventLogFileReader(
+abstract class EventLogFileReader(
     protected val fileSystem: FileSystem,
     val rootPath: Path) {
 
