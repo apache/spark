@@ -986,8 +986,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         val newProjectList = p.projectList.flatMap {
           case UnresolvedAlias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
-          case UnresolvedAlias(child: AllColumnsExcept, _) =>
-            p.child.output.filter(!child.children.contains(_))
           case Alias(child: AllColumnsExcept, _) =>
             p.child.output.filter(!child.children.contains(_))
           case MultiAlias(child: AllColumnsExcept, _) =>
