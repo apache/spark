@@ -193,40 +193,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[CacheTableCommand]].
-   *
-   * For example:
-   * {{{
-   *   CACHE [LAZY] TABLE multi_part_name
-   *   [OPTIONS tablePropertyList] [[AS] query]
-   * }}}
-   */
-  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
-    val query = Option(ctx.query).map(plan)
-    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
-    if (query.isDefined && tableName.length > 1) {
-      val catalogAndNamespace = tableName.init
-      throw new ParseException("It is not allowed to add catalog/namespace " +
-        s"prefix ${catalogAndNamespace.quoted} to " +
-        "the table name in CACHE TABLE AS SELECT", ctx)
-    }
-    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTableCommand(tableName, query, ctx.LAZY != null, options)
-  }
-
-
-  /**
-   * Create an [[UncacheTableCommand]] logical plan.
-   */
-  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    UncacheTableCommand(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
-      ctx.EXISTS != null)
-  }
-
-  /**
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
@@ -386,25 +352,25 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val mayebePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
+    val maybePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(mayebePaths)
-          case "jar" => AddJarCommand(mayebePaths)
+          case "file" => AddFileCommand(maybePaths)
+          case "jar" => AddJarCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
-            if (mayebePaths.length > 0) {
-              ListFilesCommand(mayebePaths.split("\\s+"))
+            if (maybePaths.length > 0) {
+              ListFilesCommand(maybePaths.split("\\s+"))
             } else {
               ListFilesCommand()
             }
           case "jars" | "jar" =>
-            if (mayebePaths.length > 0) {
-              ListJarsCommand(mayebePaths.split("\\s+"))
+            if (maybePaths.length > 0) {
+              ListJarsCommand(maybePaths.split("\\s+"))
             } else {
               ListJarsCommand()
             }
@@ -472,14 +438,16 @@ class SparkSqlAstBuilder extends AstBuilder {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
     val location = visitLocationSpecList(ctx.locationSpec())
-    // TODO: Do not skip serde check for CREATE TABLE LIKE.
     val serdeInfo = getSerdeInfo(
-      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx, skipCheck = true)
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    // TODO: remove this restriction as it seems unnecessary.
+    // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
+    // it's a bit weird to use the default file format, but it's also weird to get file format
+    // from the source table while the serde class is user-specified.
+    // Here we require both serde and format to be specified, to avoid confusion.
     serdeInfo match {
       case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
         if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
@@ -488,7 +456,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
     }
 
-    // TODO: also look at `HiveSerDe.getDefaultStorage`.
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(

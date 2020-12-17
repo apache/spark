@@ -308,7 +308,9 @@ class Dataset[T] private[sql](
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ => cell.toString
+          case _ =>
+            // Escapes meta-characters not to break the `showString` format
+            cell.toString.replaceAll("\n", "\\\\n").replaceAll("\t", "\\\\t")
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
@@ -1363,7 +1365,7 @@ class Dataset[T] private[sql](
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
-  // Note that, the metadata added here are only avaiable in the analyzer, as the analyzer rule
+  // Note that, the metadata added here are only available in the analyzer, as the analyzer rule
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
@@ -1665,10 +1667,10 @@ class Dataset[T] private[sql](
    * See [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup($"department", $"group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
@@ -1794,10 +1796,10 @@ class Dataset[T] private[sql](
    * (i.e. cannot construct expressions).
    *
    * {{{
-   *   // Compute the average for all numeric columns rolluped by department and group.
+   *   // Compute the average for all numeric columns rolled up by department and group.
    *   ds.rollup("department", "group").avg()
    *
-   *   // Compute the max age and average salary, rolluped by department and gender.
+   *   // Compute the max age and average salary, rolled up by department and gender.
    *   ds.rollup($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"

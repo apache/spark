@@ -29,7 +29,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -74,6 +74,29 @@ object SQLConf {
     ConfigBuilder(key).onCreate { entry =>
       staticConfKeys.add(entry.key)
       SQLConf.register(entry)
+    }
+  }
+
+  /**
+   * Merge all non-static configs to the SQLConf. For example, when the 1st [[SparkSession]] and
+   * the global [[SharedState]] have been initialized, all static configs have taken affect and
+   * should not be set to other values. Other later created sessions should respect all static
+   * configs and only be able to change non-static configs.
+   */
+  private[sql] def mergeNonStaticSQLConfigs(
+      sqlConf: SQLConf,
+      configs: Map[String, String]): Unit = {
+    for ((k, v) <- configs if !staticConfKeys.contains(k)) {
+      sqlConf.setConfString(k, v)
+    }
+  }
+
+  /**
+   * Extract entries from `SparkConf` and put them in the `SQLConf`
+   */
+  private[sql] def mergeSparkConf(sqlConf: SQLConf, sparkConf: SparkConf): Unit = {
+    sparkConf.getAll.foreach { case (k, v) =>
+      sqlConf.setConfString(k, v)
     }
   }
 
@@ -374,6 +397,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEAF_NODE_DEFAULT_PARALLELISM = buildConf("spark.sql.leafNodeDefaultParallelism")
+    .doc("The default parallelism of Spark SQL leaf nodes that produce data, such as the file " +
+      "scan node, the local data scan node, the range node, etc. The default value of this " +
+      "config is 'SparkContext#defaultParallelism'.")
+    .version("3.2.0")
+    .intConf
+    .checkValue(_ > 0, "The value of spark.sql.leafNodeDefaultParallelism must be positive.")
+    .createOptional
+
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
@@ -396,7 +428,7 @@ object SQLConf {
       "middle of query execution, based on accurate runtime statistics.")
     .version("1.6.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
@@ -914,13 +946,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_FORCE_CANCEL =
+    buildConf("spark.sql.thriftServer.interruptOnCancel")
+      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
+        "When false, all running tasks will remain until finished.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
       .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence.")
+        "than this configuration value, they take precedence. If you set this timeout and prefer" +
+        "to cancel the queries right away without waiting task to finish, consider enabling" +
+        s"${THRIFTSERVER_FORCE_CANCEL.key} together.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
@@ -1137,7 +1179,7 @@ object SQLConf {
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("This config determines the fallback behavior of several codegen generators " +
-      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
       "this config works only for tests.")
@@ -1360,6 +1402,17 @@ object SQLConf {
     .intConf
     .createWithDefault(2)
 
+  val STREAMING_MAINTENANCE_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.maintenanceInterval")
+      .internal()
+      .doc("The interval in milliseconds between triggering maintenance tasks in StateStore. " +
+        "The maintenance task executes background maintenance task in all the loaded store " +
+        "providers if they are still the active instances according to the coordinator. If not, " +
+        "inactive instances of store providers will be closed.")
+      .version("2.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -1562,7 +1615,7 @@ object SQLConf {
   val JSON_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
       .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
-        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "unnecessary columns from from_json, simplifying from_json + to_json, to_json + " +
         "named_struct(from_json.col1, from_json.col2, ....).")
       .version("3.1.0")
       .booleanConf
@@ -2050,7 +2103,7 @@ object SQLConf {
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
       .doc("When true (default), establishing the result type of an arithmetic operation " +
-        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, i.e. rounding the " +
         "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
         "is returned in those cases, as previously.")
       .version("2.3.1")
@@ -2954,6 +3007,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_CHAR_VARCHAR_AS_STRING =
+    buildConf("spark.sql.legacy.charVarcharAsString")
+      .internal()
+      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
+        " APIs that accept or parse data types as parameters, e.g." +
+        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
+        " string type as Spark 3.0 and earlier.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2986,7 +3050,9 @@ object SQLConf {
         s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
       DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
-          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
+      DeprecatedConfig(CONVERT_CTAS.key, "3.1",
+        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3184,6 +3250,8 @@ class SQLConf extends Serializable with Logging {
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
@@ -3601,6 +3669,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
+
+  def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   /** ********************** SQLConf functionality methods ************ */
 

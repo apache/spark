@@ -164,4 +164,15 @@ public class Expressions {
     return LogicalExpressions.hours(Expressions.column(column));
   }
 
+  /**
+   * Create a sort expression.
+   *
+   * @param expr an expression to produce values to sort
+   * @param direction direction of the sort
+   * @param nullOrder null order of the sort
+   * @return a SortOrder
+   */
+  public static SortOrder sort(Expression expr, SortDirection direction, NullOrdering nullOrder) {
+    return LogicalExpressions.sort(expr, direction, nullOrder);
+  }
 }

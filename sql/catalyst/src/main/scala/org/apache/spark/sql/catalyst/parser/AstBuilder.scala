@@ -95,17 +95,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    visitSparkDataType(ctx.dataType)
+    typedVisit[DataType](ctx.dataType)
   }
 
   override def visitSingleTableSchema(ctx: SingleTableSchemaContext): StructType = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      StructType(visitColTypeList(ctx.colTypeList)))
+    val schema = StructType(visitColTypeList(ctx.colTypeList))
     withOrigin(ctx)(schema)
-  }
-
-  def parseRawDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
-    typedVisit[DataType](ctx.dataType())
   }
 
   /* ********************************************************************************************
@@ -1550,7 +1545,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * Create a [[Cast]] expression.
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
-    Cast(expression(ctx.expression), visitSparkDataType(ctx.dataType))
+    val rawDataType = typedVisit[DataType](ctx.dataType())
+    val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
+    Cast(expression(ctx.expression), dataType)
   }
 
   /**
@@ -2229,12 +2226,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   /* ********************************************************************************************
    * DataType parsing
    * ******************************************************************************************** */
-  /**
-   * Create a Spark DataType.
-   */
-  private def visitSparkDataType(ctx: DataTypeContext): DataType = {
-    CharVarcharUtils.replaceCharVarcharWithString(typedVisit(ctx))
-  }
 
   /**
    * Resolve/create a primitive type.
@@ -2965,9 +2956,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   protected def getSerdeInfo(
       rowFormatCtx: Seq[RowFormatContext],
       createFileFormatCtx: Seq[CreateFileFormatContext],
-      ctx: ParserRuleContext,
-      skipCheck: Boolean = false): Option[SerdeInfo] = {
-    if (!skipCheck) validateRowFormatFileFormat(rowFormatCtx, createFileFormatCtx, ctx)
+      ctx: ParserRuleContext): Option[SerdeInfo] = {
+    validateRowFormatFileFormat(rowFormatCtx, createFileFormatCtx, ctx)
     val rowFormatSerdeInfo = rowFormatCtx.map(visitRowFormat)
     val fileFormatSerdeInfo = createFileFormatCtx.map(visitCreateFileFormat)
     (fileFormatSerdeInfo ++ rowFormatSerdeInfo).reduceLeftOption((l, r) => l.merge(r))
@@ -3164,11 +3154,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[DropViewStatement]] command.
+   * Create a [[DropView]] command.
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
-    DropViewStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier()),
+    DropView(
+      UnresolvedView(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        commandName = "DROP VIEW",
+        allowTemp = true,
+        relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
       ctx.EXISTS != null)
   }
 
@@ -3199,13 +3193,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[ShowTableStatement]] command.
+   * Create a [[ShowTableExtended]] command.
    */
-  override def visitShowTable(ctx: ShowTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowTableStatement(
-      Option(ctx.ns).map(visitMultipartIdentifier),
+  override def visitShowTableExtended(
+      ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
+    }
+    ShowTableExtended(
+      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       string(ctx.pattern),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+      partitionKeys)
   }
 
   /**
@@ -3400,7 +3399,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewSetPropertiesStatement]] or [[AlterTableSetPropertiesStatement]] commands.
+   * Parse [[AlterViewSetProperties]] or [[AlterTableSetPropertiesStatement]] commands.
    *
    * For example:
    * {{{
@@ -3414,14 +3413,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetPropertiesStatement(identifier, cleanedTableProperties)
+      AlterViewSetProperties(
+        UnresolvedView(
+          identifier,
+          commandName = "ALTER VIEW ... SET TBLPROPERTIES",
+          allowTemp = false,
+          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+        cleanedTableProperties)
     } else {
       AlterTableSetPropertiesStatement(identifier, cleanedTableProperties)
     }
   }
 
   /**
-   * Parse [[AlterViewUnsetPropertiesStatement]] or [[AlterTableUnsetPropertiesStatement]] commands.
+   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetPropertiesStatement]] commands.
    *
    * For example:
    * {{{
@@ -3437,7 +3442,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
+      AlterViewUnsetProperties(
+        UnresolvedView(
+          identifier,
+          commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
+          allowTemp = false,
+          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+        cleanedProperties,
+        ifExists)
     } else {
       AlterTableUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
     }
@@ -3548,7 +3560,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create a [[RepairTableStatement]].
+   * Create a [[RepairTable]].
    *
    * For example:
    * {{{
@@ -3556,7 +3568,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTableStatement(visitMultipartIdentifier(ctx.multipartIdentifier()))
+    RepairTable(
+      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "MSCK REPAIR TABLE"))
   }
 
   /**
@@ -3588,6 +3601,44 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "SHOW CREATE TABLE",
         allowTempView = false),
       ctx.SERDE != null)
+  }
+
+  /**
+   * Create a [[CacheTable]] or [[CacheTableAsSelect]].
+   *
+   * For example:
+   * {{{
+   *   CACHE [LAZY] TABLE multi_part_name
+   *   [OPTIONS tablePropertyList] [[AS] query]
+   * }}}
+   */
+  override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    val query = Option(ctx.query).map(plan)
+    val tableName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (query.isDefined && tableName.length > 1) {
+      val catalogAndNamespace = tableName.init
+      throw new ParseException("It is not allowed to add catalog/namespace " +
+        s"prefix ${catalogAndNamespace.quoted} to " +
+        "the table name in CACHE TABLE AS SELECT", ctx)
+    }
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val isLazy = ctx.LAZY != null
+    if (query.isDefined) {
+      CacheTableAsSelect(tableName.head, query.get, isLazy, options)
+    } else {
+      CacheTable(UnresolvedRelation(tableName), tableName, isLazy, options)
+    }
+  }
+
+  /**
+   * Create an [[UncacheTable]] logical plan.
+   */
+  override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
+    UncacheTable(
+      UnresolvedRelation(visitMultipartIdentifier(ctx.multipartIdentifier)),
+      ctx.EXISTS != null)
   }
 
   /**
@@ -3663,7 +3714,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRecoverPartitionsStatement]]
+   * Create an [[AlterTableRecoverPartitions]]
    *
    * For example:
    * {{{
@@ -3672,7 +3723,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitionsStatement(visitMultipartIdentifier(ctx.multipartIdentifier))
+    AlterTableRecoverPartitions(
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
   /**
@@ -3748,8 +3802,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
-      purge = ctx.PURGE != null,
-      retainData = false)
+      purge = ctx.PURGE != null)
   }
 
   /**
@@ -3828,7 +3881,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Alter the query of a view. This creates a [[AlterViewAsStatement]]
+   * Alter the query of a view. This creates a [[AlterViewAs]]
    *
    * For example:
    * {{{
@@ -3836,14 +3889,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
-    AlterViewAsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterViewAs(
+      UnresolvedView(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER VIEW ... AS"),
       originalText = source(ctx.query),
       query = plan(ctx.query))
   }
 
   /**
-   * Create a [[RenameTableStatement]] command.
+   * Create a [[RenameTable]] command.
    *
    * For example:
    * {{{
@@ -3852,10 +3907,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    RenameTableStatement(
-      visitMultipartIdentifier(ctx.from),
+    val isView = ctx.VIEW != null
+    val relationStr = if (isView) "VIEW" else "TABLE"
+    RenameTable(
+      UnresolvedTableOrView(
+        visitMultipartIdentifier(ctx.from),
+        s"ALTER $relationStr ... RENAME TO"),
       visitMultipartIdentifier(ctx.to),
-      ctx.VIEW != null)
+      isView)
   }
 
   /**

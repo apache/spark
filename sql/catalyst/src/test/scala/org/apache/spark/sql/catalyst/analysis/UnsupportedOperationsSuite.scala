@@ -887,7 +887,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  /** Assert that the logical plan is supported for continuous procsssing mode */
+  /** Assert that the logical plan is supported for continuous processing mode */
   def assertSupportedForContinuousProcessing(
     name: String,
     plan: LogicalPlan,

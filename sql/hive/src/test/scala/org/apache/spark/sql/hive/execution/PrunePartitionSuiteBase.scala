@@ -21,6 +21,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -28,48 +29,50 @@ abstract class PrunePartitionSuiteBase extends QueryTest with SQLTestUtils with 
   protected def format: String
 
   test("SPARK-28169: Convert scan predicate condition to CNF") {
-    withTempView("temp") {
-      withTable("t") {
-        sql(
-          s"""
-             |CREATE TABLE t(i INT, p STRING)
-             |USING $format
-             |PARTITIONED BY (p)""".stripMargin)
-
-        spark.range(0, 1000, 1).selectExpr("id as col")
-          .createOrReplaceTempView("temp")
-
-        for (part <- Seq(1, 2, 3, 4)) {
+    withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("temp") {
+        withTable("t") {
           sql(
             s"""
-               |INSERT OVERWRITE TABLE t PARTITION (p='$part')
-               |SELECT col FROM temp""".stripMargin)
-        }
+               |CREATE TABLE t(i INT, p STRING)
+               |USING $format
+               |PARTITIONED BY (p)""".stripMargin)
 
-        assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
-          "((`p` = '1') || (`p` = '2'))")
-        assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
-          "")
-        assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
-          "((`p` = '1') || (`p` = '3'))")
-        assertPrunedPartitions(
-          "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
-          "((`p` = '1') || ((`p` = '2') || (`p` = '3')))")
-        assertPrunedPartitions(
-          "SELECT * FROM t", 4,
-          "")
-        assertPrunedPartitions(
-          "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
-          "(`p` = '1')")
-        assertPrunedPartitions(
-          """
-            |SELECT i, COUNT(1) FROM (
-            |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
-            |) tmp GROUP BY i
-          """.stripMargin, 2, "((`p` = '1') || (`p` = '2'))")
+          spark.range(0, 1000, 1).selectExpr("id as col")
+            .createOrReplaceTempView("temp")
+
+          for (part <- Seq(1, 2, 3, 4)) {
+            sql(
+              s"""
+                 |INSERT OVERWRITE TABLE t PARTITION (p='$part')
+                 |SELECT col FROM temp""".stripMargin)
+          }
+
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE p = '1' OR (p = '2' AND i = 1)", 2,
+            "((`p` = '1') || (`p` = '2'))")
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (i = 1 OR p = '2')", 4,
+            "")
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '3' AND i = 3 )", 2,
+            "((`p` = '1') || (`p` = '3'))")
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE (p = '1' AND i = 2) OR (p = '2' OR p = '3')", 3,
+            "((`p` = '1') || ((`p` = '2') || (`p` = '3')))")
+          assertPrunedPartitions(
+            "SELECT * FROM t", 4,
+            "")
+          assertPrunedPartitions(
+            "SELECT * FROM t WHERE p = '1' AND i = 2", 1,
+            "(`p` = '1')")
+          assertPrunedPartitions(
+            """
+              |SELECT i, COUNT(1) FROM (
+              |SELECT * FROM t WHERE  p = '1' OR (p = '2' AND i = 1)
+              |) tmp GROUP BY i
+            """.stripMargin, 2, "((`p` = '1') || (`p` = '2'))")
+        }
       }
     }
   }

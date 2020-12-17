@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
+import java.lang.reflect.InvocationTargetException
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
@@ -48,7 +49,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -367,14 +368,14 @@ private[hive] class HiveClientImpl(
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
     Option(client.getDatabase(dbName)).map { d =>
-      val paras = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
+      val params = Option(d.getParameters).map(_.asScala.toMap).getOrElse(Map()) ++
         Map(PROP_OWNER -> shim.getDatabaseOwnerName(d))
 
       CatalogDatabase(
         name = d.getName,
         description = Option(d.getDescription).getOrElse(""),
         locationUri = CatalogUtils.stringToURI(d.getLocationUri),
-        properties = paras)
+        properties = params)
     }.getOrElse(throw new NoSuchDatabaseException(dbName))
   }
 
@@ -598,7 +599,17 @@ private[hive] class HiveClientImpl(
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withHiveState {
-    shim.createPartitions(client, db, table, parts, ignoreIfExists)
+    def replaceExistException(e: Throwable): Unit = e match {
+      case _: HiveException if e.getCause.isInstanceOf[AlreadyExistsException] =>
+        throw new PartitionsAlreadyExistException(db, table, parts.map(_.spec))
+      case _ => throw e
+    }
+    try {
+      shim.createPartitions(client, db, table, parts, ignoreIfExists)
+    } catch {
+      case e: InvocationTargetException => replaceExistException(e.getCause)
+      case e: Throwable => replaceExistException(e)
+    }
   }
 
   override def dropPartitions(
@@ -619,9 +630,7 @@ private[hive] class HiveClientImpl(
         // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
         val parts = client.getPartitions(hiveTable, s.asJava).asScala
         if (parts.isEmpty && !ignoreIfNotExists) {
-          throw new AnalysisException(
-            s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
-            s"database '$db'")
+          throw new NoSuchPartitionsException(db, table, Seq(s))
         }
         parts.map(_.getValues)
       }.distinct
@@ -985,7 +994,7 @@ private[hive] object HiveClientImpl extends Logging {
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     try {
-      CatalystSqlParser.parseRawDataType(hc.getType)
+      CatalystSqlParser.parseDataType(hc.getType)
     } catch {
       case e: ParseException =>
         throw new SparkException(

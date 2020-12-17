@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -102,18 +102,33 @@ trait CheckAnalysis extends PredicateHelper {
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
+        u.failAnalysis(
+          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
+            "because view support in v2 catalog has not been implemented yet. " +
+            s"$cmd expects a view.")
+
+      case u: UnresolvedView =>
+        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
         u.failAnalysis(
-          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case CacheTable(u: UnresolvedRelation, _, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case UncacheTable(u: UnresolvedRelation, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
@@ -574,12 +589,12 @@ trait CheckAnalysis extends PredicateHelper {
           case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
             checkAlterTablePartition(table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
+          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
             checkAlterTablePartition(table, parts)
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
-          case _ => // Fallbacks to the following checks
+          case _ => // Falls back to the following checks
         }
 
         operator match {

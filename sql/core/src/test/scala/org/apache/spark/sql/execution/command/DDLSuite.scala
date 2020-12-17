@@ -334,14 +334,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("alter table: add partition (datasource table)") {
-    testAddPartitions(isDatasourceTable = true)
-  }
-
-  test("alter table: drop partition (datasource table)") {
-    testDropPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: rename partition (datasource table)") {
     testRenamePartitions(isDatasourceTable = true)
   }
@@ -549,9 +541,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToPartitionedTable =>
         df.write.format("parquet").partitionBy("num")
           .save(pathToPartitionedTable.getCanonicalPath)
@@ -589,9 +581,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
-    Seq(Option("inexistentColumns"), None).foreach { partitionCols =>
+    Seq(Option("nonexistentColumns"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
         df.write.format("parquet").save(pathToNonPartitionedTable.getCanonicalPath)
         checkSchemaInCreatedDataSourceTable(
@@ -608,7 +600,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     import testImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
-    // Case 1: with partitioning columns but no schema: Option("inexistentColumns")
+    // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
     // Case 2: without schema and partitioning columns: None
     Seq(Option("num"), None).foreach { partitionCols =>
       withTempPath { pathToNonPartitionedTable =>
@@ -1363,12 +1355,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(
-      e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+    assert(e.getMessage.contains(
+      "dbx.tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead."))
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1622,116 +1613,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  protected def testAddPartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "5")
-    val part2 = Map("a" -> "2", "b" -> "6")
-    val part3 = Map("a" -> "3", "b" -> "7")
-    val part4 = Map("a" -> "4", "b" -> "8")
-    val part5 = Map("a" -> "9", "b" -> "9")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
-
-    // basic add partition
-    sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
-      "PARTITION (a='2', b='6') LOCATION 'paris' PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-    assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isDefined)
-
-    val tableLocation = catalog.getTableMetadata(tableIdent).storage.locationUri
-    assert(tableLocation.isDefined)
-    val partitionLocation = makeQualifiedPath(
-      new Path(tableLocation.get.toString, "paris").toString)
-
-    assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Option(partitionLocation))
-    assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isDefined)
-
-    // add partitions without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
-
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist ADD IF NOT EXISTS PARTITION (a='4', b='9')")
-    }
-
-    // partition to add already exists
-    intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 ADD PARTITION (a='4', b='8')")
-    }
-
-    // partition to add already exists when using IF NOT EXISTS
-    sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4))
-
-    // partition spec in ADD PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 ADD PARTITION (A='9', B='9')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4, part5))
-  }
-
-  protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "5")
-    val part2 = Map("a" -> "2", "b" -> "6")
-    val part3 = Map("a" -> "3", "b" -> "7")
-    val part4 = Map("a" -> "4", "b" -> "8")
-    val part5 = Map("a" -> "9", "b" -> "9")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    createTablePartition(catalog, part2, tableIdent)
-    createTablePartition(catalog, part3, tableIdent)
-    createTablePartition(catalog, part4, tableIdent)
-    createTablePartition(catalog, part5, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4, part5))
-
-    // basic drop partition
-    sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part5))
-
-    // drop partitions without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='2', b ='6')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
-    }
-
-    // partition to drop does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
-    }
-
-    // partition to drop does not exist when using IF EXISTS
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // partition spec in DROP PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part5))
-
-    // use int literal as partition value for int type partition column
-    sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
-    assert(catalog.listPartitions(tableIdent).isEmpty)
-  }
-
   protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
     if (!isUsingHiveMetastore) {
       assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
@@ -1911,7 +1792,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |OPTIONS (
              |  path '${tempDir.getCanonicalPath}'
              |)
-             |CLUSTERED BY (inexistentColumnA) SORTED BY (inexistentColumnB) INTO 2 BUCKETS
+             |CLUSTERED BY (nonexistentColumnA) SORTED BY (nonexistentColumnB) INTO 2 BUCKETS
            """.stripMargin)
         }
         assert(e.message == "Cannot specify bucketing information if the table schema is not " +

@@ -136,9 +136,9 @@
     <kafka.version>2.6.0</kafka.version>
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.10.1</parquet.version>
-    <orc.version>1.5.12</orc.version>
+    <orc.version>1.6.6</orc.version>
     <jetty.version>9.4.28.v20200408</jetty.version>
-    <javaxservlet.version>3.1.0</javaxservlet.version>
+    <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -155,7 +155,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
-    <commons.httpclient.version>4.5.6</commons.httpclient.version>
+    <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.12</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
@@ -169,10 +169,10 @@
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <snappy.version>1.1.8</snappy.version>
+    <fasterxml.jackson.version>2.11.4</fasterxml.jackson.version>
+    <snappy.version>1.1.8.2</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <commons-codec.version>1.10</commons-codec.version>
+    <commons-codec.version>1.15</commons-codec.version>
     <commons-compress.version>1.20</commons-compress.version>
     <commons-io.version>2.5</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->

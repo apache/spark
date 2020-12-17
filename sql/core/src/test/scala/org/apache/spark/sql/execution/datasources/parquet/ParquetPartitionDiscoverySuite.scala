@@ -1157,7 +1157,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
     withTempDir { tempDir =>
       val output = new File(tempDir, "output").toString
-      val checkpoint = new File(tempDir, "chkpoint").toString
+      val checkpoint = new File(tempDir, "checkpoint").toString
       try {
         val stream = MemoryStream[(String, Int)]
         val df = stream.toDS().toDF("time", "value")
@@ -1303,7 +1303,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
     withTempDir { tempDir =>
       val output = new File(tempDir, "output").toString
-      val checkpoint = new File(tempDir, "chkpoint").toString
+      val checkpoint = new File(tempDir, "checkpoint").toString
       try {
         val stream = MemoryStream[(String, Int)]
         val df = stream.toDS().toDF("time", "value")

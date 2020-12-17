@@ -209,12 +209,11 @@ class ResolveSessionCatalog(
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    // ALTER VIEW should always use v1 command if the resolved catalog is session catalog.
-    case AlterViewSetPropertiesStatement(SessionCatalogAndTable(_, tbl), props) =>
-      AlterTableSetPropertiesCommand(tbl.asTableIdentifier, props, isView = true)
+    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
+      AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
-      AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
+    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
       if (ns.length != 1) {
@@ -237,8 +236,7 @@ class ResolveSessionCatalog(
       }
       AlterDatabaseSetLocationCommand(ns.head, location)
 
-    // v1 RENAME TABLE supports temp view.
-    case RenameTableStatement(TempViewOrV1Table(oldName), newName, isView) =>
+    case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
@@ -353,9 +351,8 @@ class ResolveSessionCatalog(
       }
       DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = false, purge = purge)
 
-    // v1 DROP TABLE supports temp view.
-    case DropViewStatement(TempViewOrV1Table(name), ifExists) =>
-      DropTableCommand(name.asTableIdentifier, ifExists, isView = true, purge = false)
+    case DropView(r: ResolvedView, ifExists) =>
+      DropTableCommand(r.identifier.asTableIdentifier, ifExists, isView = true, purge = false)
 
     case c @ CreateNamespaceStatement(CatalogAndNamespace(catalog, ns), _, _)
         if isSessionCatalog(catalog) =>
@@ -384,14 +381,20 @@ class ResolveSessionCatalog(
       }
       ShowTablesCommand(Some(ns.head), pattern)
 
-    case ShowTableStatement(ns, pattern, partitionsSpec) =>
-      val db = ns match {
-        case Some(ns) if ns.length != 1 =>
-          throw new AnalysisException(
-            s"The database name is not valid: ${ns.quoted}")
-        case _ => ns.map(_.head)
+    case ShowTableExtended(
+        SessionCatalogAndNamespace(_, ns),
+        pattern,
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+      assert(ns.nonEmpty)
+      if (ns.length != 1) {
+        throw new AnalysisException(
+          s"The database name is not valid: ${ns.quoted}")
       }
-      ShowTablesCommand(db, Some(pattern), true, partitionsSpec)
+      ShowTablesCommand(
+        databaseName = Some(ns.head),
+        tableIdentifierPattern = Some(pattern),
+        isExtended = true,
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
@@ -404,11 +407,8 @@ class ResolveSessionCatalog(
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
-    case RepairTableStatement(tbl) =>
-      val v1TableName = parseV1Table(tbl, "MSCK REPAIR TABLE")
-      AlterTableRecoverPartitionsCommand(
-        v1TableName.asTableIdentifier,
-        "MSCK REPAIR TABLE")
+    case RepairTable(ResolvedV1TableIdentifier(ident)) =>
+      AlterTableRecoverPartitionsCommand(ident.asTableIdentifier, "MSCK REPAIR TABLE")
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -449,10 +449,9 @@ class ResolveSessionCatalog(
       }
       ShowColumnsCommand(db, v1TableName)
 
-    case AlterTableRecoverPartitionsStatement(tbl) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE RECOVER PARTITIONS")
+    case AlterTableRecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
       AlterTableRecoverPartitionsCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
     case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
@@ -469,13 +468,13 @@ class ResolveSessionCatalog(
         to)
 
     case AlterTableDropPartition(
-        ResolvedV1TableIdentifier(ident), specs, ifExists, purge, retainData) =>
+        ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,
         specs.asUnresolvedPartitionSpecs.map(_.spec),
         ifExists,
         purge,
-        retainData)
+        retainData = false)
 
     case AlterTableSerDePropertiesStatement(tbl, serdeClassName, serdeProperties, partitionSpec) =>
       val v1TableName = parseV1Table(tbl, "ALTER TABLE SerDe Properties")
@@ -485,10 +484,9 @@ class ResolveSessionCatalog(
         serdeProperties,
         partitionSpec)
 
-    case AlterViewAsStatement(name, originalText, query) =>
-      val viewName = parseTempViewOrV1Table(name, "ALTER VIEW QUERY")
+    case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(
-        viewName.asTableIdentifier,
+        ident.asTableIdentifier,
         originalText,
         query)
 
@@ -580,12 +578,6 @@ class ResolveSessionCatalog(
   private def parseV1Table(tableName: Seq[String], sql: String): Seq[String] = tableName match {
     case SessionCatalogAndTable(_, tbl) => tbl
     case _ => throw new AnalysisException(s"$sql is only supported with v1 tables.")
-  }
-
-  private def parseTempViewOrV1Table(
-      nameParts: Seq[String], sql: String): Seq[String] = nameParts match {
-    case TempViewOrV1Table(name) => name
-    case _ => throw new AnalysisException(s"$sql is only supported with temp views or v1 tables.")
   }
 
   private def getStorageFormatAndProvider(
@@ -684,14 +676,6 @@ class ResolveSessionCatalog(
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Seq[String])] = nameParts match {
       case SessionCatalogAndIdentifier(catalog, ident) =>
         Some(catalog -> ident.asMultipartIdentifier)
-      case _ => None
-    }
-  }
-
-  object TempViewOrV1Table {
-    def unapply(nameParts: Seq[String]): Option[Seq[String]] = nameParts match {
-      case _ if isTempView(nameParts) => Some(nameParts)
-      case SessionCatalogAndIdentifier(_, tbl) => Some(tbl.asMultipartIdentifier)
       case _ => None
     }
   }
