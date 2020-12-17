@@ -147,9 +147,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       val remoteAddress = request.address
       if (isRemoteAddressMaxedOut(remoteAddress, request)) {
         logDebug(s"Deferring push request for $remoteAddress with ${request.blocks.size} blocks")
-        val defReqQueue = deferredPushRequests.getOrElse(remoteAddress, new Queue[PushRequest]())
-        defReqQueue.enqueue(request)
-        deferredPushRequests(remoteAddress) = defReqQueue
+        deferredPushRequests.getOrElseUpdate(remoteAddress, new Queue[PushRequest]()).enqueue(request)
       } else {
         sendRequest(request)
       }
