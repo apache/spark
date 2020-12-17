@@ -534,8 +534,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case b @ BinaryComparison(i @ If(_, trueValue, falseValue), right)
-        if i.deterministic && trueValue.foldable && falseValue.foldable && right.foldable =>
+      case b @ BinaryComparison(i @ If(_, trueValue, falseValue), right) if i.deterministic &&
+          right.foldable && trueValue.foldable && falseValue.foldable =>
         i.copy(
           trueValue = b.makeCopy(Array(trueValue, right)),
           falseValue = b.makeCopy(Array(falseValue, right)))
