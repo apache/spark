@@ -105,7 +105,10 @@ object MimaExcludes {
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.weightCol"),
 
     // [SPARK-32879] Pass SparkSession.Builder options explicitly to SparkSession
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.this"),
+
+    // [SPARK-33790][CORE] Reduce the rpc call of getFileStatus in SingleFileEventLogFileReader
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.SingleFileEventLogFileReader.this")
   )
 
   // Exclude rules for 3.0.x
