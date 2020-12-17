@@ -1391,6 +1391,7 @@ object SQLConf {
 
   val STATE_STORE_PROVIDER_KEEP_ALIVE_TIME =
     buildConf("spark.sql.streaming.stateStore.keepAliveTime")
+      .internal()
       .doc("The time in milliseconds that a loaded store provider will be kept alive " +
         "as inactive instance in an executor. Spark runs a maintenance task and periodically " +
         "checks inactive instances. Once a loaded store provider is inactive over this " +
