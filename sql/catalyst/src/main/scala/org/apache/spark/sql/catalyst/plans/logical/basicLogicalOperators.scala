@@ -1017,7 +1017,16 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
+  val numPartitions = if (optNumPartitions.nonEmpty) {
+    optNumPartitions.get
+  } else {
+    if (partitionExpressions.forall(_.foldable)) {
+      1
+    } else {
+      SQLConf.get.numShufflePartitions
+    }
+  }
+
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {

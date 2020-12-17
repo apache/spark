@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class AlterTableAddPartitionSuite
-    extends v1.AlterTableAddPartitionSuiteBase
-    with CommandSuiteBase
+trait CommandSuiteBase extends TestHiveSingleton {
+  def version: String = "Hive V1"
+  def catalog: String = CatalogManager.SESSION_CATALOG_NAME
+  def defaultUsing: String = "USING HIVE"
+}

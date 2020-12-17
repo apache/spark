@@ -15,10 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution.command
+package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.test.SharedSparkSession
 
-class AlterTableAddPartitionSuite
-    extends v1.AlterTableAddPartitionSuiteBase
-    with CommandSuiteBase
+trait CommandSuiteBase extends SharedSparkSession {
+  def version: String = "V2"
+  def catalog: String = "test_catalog"
+  def defaultUsing: String = "USING _"
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
+    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+}
