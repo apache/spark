@@ -147,6 +147,10 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
     Partition to be dropped.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **PURGE**
+
+    The option turns on removing of partition data. It is applicable only for managed tables, and ignored for external tables. For V1 In-Memory catalog, Spark always removes data belongs to dropped partitions, but it takes this option into account for V1 Hive and V2 catalogs. If this option is not specified, Spark removes partitions only from a catalog otherwise when PURGE is set Spark also removes partition data.  
      
 ### SET AND UNSET
 
