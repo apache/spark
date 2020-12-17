@@ -88,7 +88,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
-    cacheQueryWithLogicalPlan(query.sparkSession, query.logicalPlan, tableName, storageLevel)
+    cacheQuery(query.sparkSession, query.logicalPlan, tableName, storageLevel)
   }
 
   /**
@@ -96,11 +96,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
    * recomputing the in-memory columnar representation of the underlying table is expensive.
    */
-  def cacheQueryWithLogicalPlan(
+  def cacheQuery(
       spark: SparkSession,
       planToCache: LogicalPlan,
-      tableName: Option[String] = None,
-      storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
+      tableName: Option[String]): Unit = {
+    cacheQuery(spark, planToCache, tableName, MEMORY_AND_DISK)
+  }
+
+  /**
+   * Caches the data produced by the given [[LogicalPlan]].
+   */
+  def cacheQuery(
+      spark: SparkSession,
+      planToCache: LogicalPlan,
+      tableName: Option[String],
+      storageLevel: StorageLevel): Unit = {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {

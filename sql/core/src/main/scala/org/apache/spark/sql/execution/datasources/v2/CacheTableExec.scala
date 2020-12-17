@@ -46,13 +46,13 @@ trait BaseCacheTableExec extends V2CommandExec {
     }
 
     if (storageLevelValue.nonEmpty) {
-      sparkSession.sharedState.cacheManager.cacheQueryWithLogicalPlan(
+      sparkSession.sharedState.cacheManager.cacheQuery(
         sparkSession,
         planToCache,
         Some(relationName),
         StorageLevel.fromString(storageLevelValue.get))
     } else {
-      sparkSession.sharedState.cacheManager.cacheQueryWithLogicalPlan(
+      sparkSession.sharedState.cacheManager.cacheQuery(
         sparkSession,
         planToCache,
         Some(relationName))
