@@ -31,7 +31,7 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
 
 /** The base class of reader which will read the information of event log file(s). */
-abstract class EventLogFileReader(
+private[history] abstract class EventLogFileReader(
     protected val fileSystem: FileSystem,
     val rootPath: Path) {
 
@@ -164,7 +164,7 @@ object EventLogFileReader {
  * FileNotFoundException could occur if the log file is renamed before getting the
  * status of log file.
  */
-class SingleFileEventLogFileReader(
+private[history] class SingleFileEventLogFileReader(
     fs: FileSystem,
     path: Path,
     maybeStatus: Option[FileStatus]) extends EventLogFileReader(fs, path) {
@@ -206,7 +206,7 @@ class SingleFileEventLogFileReader(
  * This reader lists the files only once; if caller would like to play with updated list,
  * it needs to create another reader instance.
  */
-class RollingEventLogFilesFileReader(
+private[history] class RollingEventLogFilesFileReader(
     fs: FileSystem,
     path: Path) extends EventLogFileReader(fs, path) {
   import RollingEventLogFilesWriter._
