@@ -34,7 +34,8 @@ private sealed trait StateStoreCoordinatorMessage extends Serializable
 private case class ReportActiveInstance(
     storeId: StateStoreProviderId,
     host: String,
-    executorId: String)
+    executorId: String,
+    otherProviderIds: Seq[StateStoreProviderId])
   extends StateStoreCoordinatorMessage
 
 private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
@@ -87,8 +88,10 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   private[sql] def reportActiveInstance(
       stateStoreProviderId: StateStoreProviderId,
       host: String,
-      executorId: String): Unit = {
-    rpcEndpointRef.send(ReportActiveInstance(stateStoreProviderId, host, executorId))
+      executorId: String,
+      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
+    rpcEndpointRef.askSync[Seq[StateStoreProviderId]](
+      ReportActiveInstance(stateStoreProviderId, host, executorId, otherProviderIds))
   }
 
   /** Verify whether the given executor has the active instance of a state store */
@@ -122,13 +125,20 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
-  override def receive: PartialFunction[Any, Unit] = {
-    case ReportActiveInstance(id, host, executorId) =>
-      logDebug(s"Reported state store $id is active at $executorId")
-      instances.put(id, ExecutorCacheTaskLocation(host, executorId))
-  }
-
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case ReportActiveInstance(id, host, executorId, otherProviderIds) =>
+      logDebug(s"Reported state store $id is active at $executorId")
+      val taskLocation = ExecutorCacheTaskLocation(host, executorId)
+      instances.put(id, taskLocation)
+
+      // Check if any loaded provider id is already loaded in other executor.
+      val providerIdsToUnload = otherProviderIds.filter { providerId =>
+        val providerLoc = instances.get(providerId)
+        // This provider is is already loaded in other executor. Marked it to unload.
+        providerLoc.map(_ != taskLocation).getOrElse(false)
+      }
+      context.reply(providerIdsToUnload)
+
     case VerifyIfInstanceActive(id, execId) =>
       val response = instances.get(id) match {
         case Some(location) => location.executorId == execId
