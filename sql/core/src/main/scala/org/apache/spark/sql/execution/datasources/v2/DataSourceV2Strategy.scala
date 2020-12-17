@@ -334,6 +334,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException(
         "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
 
+    case AlterTableSerDeProperties(_: ResolvedTable, _, _, _) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables.")
+
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
 

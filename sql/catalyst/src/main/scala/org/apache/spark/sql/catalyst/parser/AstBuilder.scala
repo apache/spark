@@ -3806,7 +3806,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableSerDePropertiesStatement]]
+   * Create an [[AlterTableSerDeProperties]]
    *
    * For example:
    * {{{
@@ -3816,8 +3816,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSerDePropertiesStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterTableSerDeProperties(
+      UnresolvedTable(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.

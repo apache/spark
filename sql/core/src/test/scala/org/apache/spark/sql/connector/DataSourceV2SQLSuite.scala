@@ -2120,7 +2120,8 @@ class DataSourceV2SQLSuite
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
       }
-      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
     }
   }
 
