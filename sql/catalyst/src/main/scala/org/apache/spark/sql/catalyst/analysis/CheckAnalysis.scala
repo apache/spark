@@ -444,7 +444,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 // output, so we should cast the attribute to the dataType of the view output
                 // attribute. Will throw an AnalysisException if the cast is not a up-cast.
                 if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-                  throw QueryCompilationErrors.cannotUpCastAsAttributeTruncateError(
+                  throw QueryCompilationErrors.cannotUpCastAsAttributeError(
                     originAttr, attr)
                 }
               case _ =>

@@ -31,8 +31,8 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("Please add an implementation for a column change here")
   }
 
-  def unexpectedPlanReturnError(other: LogicalPlan, methodName: String): Throwable = {
-    new IllegalStateException(s"[BUG] unexpected plan returned by `$methodName`: $other")
+  def unexpectedPlanReturnError(plan: LogicalPlan, methodName: String): Throwable = {
+    new IllegalStateException(s"[BUG] unexpected plan returned by `$methodName`: $plan")
   }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {

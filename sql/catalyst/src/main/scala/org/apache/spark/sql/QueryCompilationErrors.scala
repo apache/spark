@@ -354,11 +354,11 @@ object QueryCompilationErrors {
         s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
   }
 
-  def cannotUpCastAsAttributeTruncateError(
+  def cannotUpCastAsAttributeError(
       fromAttr: Attribute, toAttr: Attribute): Throwable = {
     new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
       s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
-      "as it may truncate\n")
+      "as it may truncate")
   }
 
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
