@@ -523,18 +523,31 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
-
-      case EqualTo(i @ If(_, trueValue: Literal, falseValue: Literal), right: Literal)
-          if i.deterministic =>
-        i.copy(trueValue = EqualTo(trueValue, right), falseValue = EqualTo(falseValue, right))
-
-      case EqualTo(c @ CaseWhen(branches, elseValue), right: Literal)
-          if c.deterministic && (branches.map(_._2) ++ elseValue).forall(_.isInstanceOf[Literal]) =>
-        c.copy(branches.map(b => b.copy(_2 = EqualTo(b._2, right))),
-          elseValue.map(EqualTo(_, right)))
     }
   }
 }
+
+/**
+ * Push the foldable expression into (if / case) branches.
+ */
+object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case b @ BinaryComparison(i @ If(_, trueValue, falseValue), right)
+        if i.deterministic && trueValue.foldable && falseValue.foldable && right.foldable =>
+        i.copy(
+          trueValue = b.makeCopy(Array(trueValue, right)),
+          falseValue = b.makeCopy(Array(falseValue, right)))
+
+      case b @ BinaryComparison(c @ CaseWhen(branches, elseValue), right) if c.deterministic &&
+          right.foldable && (branches.map(_._2) ++ elseValue).forall(_.foldable) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
+          elseValue.map(e => b.makeCopy(Array(e, right))))
+    }
+  }
+}
+
 
 
 /**
