@@ -139,9 +139,9 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
     sc = new SparkContext(conf)
     sc.parallelize(1 to 10, 2).count()
 
-    assert(TestSparkPlugin.executorPlugin.numOnTaskStart == 2)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded == 2)
-    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed == 0)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskStart.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskSucceeded.get() == 2)
+    assert(TestSparkPlugin.executorPlugin.numOnTaskFailed.get() == 0)
   }
 
   test("SPARK-33088: executor failed tasks trigger plugin calls") {
