@@ -1107,12 +1107,16 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
+          .map(resolveViews)
+          .map(EliminateSubqueryAliases(_))
+          .map(relation => c.copy(table = relation))
           .getOrElse(c)
 
       case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
+          .map(resolveViews)
+          .map(EliminateSubqueryAliases(_))
+          .map(relation => c.copy(table = relation))
           .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
