@@ -256,6 +256,7 @@
     <!-- Needed for consistent times -->
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss z</maven.build.timestamp.format>
 
+    <!-- Needed for scala-maven-plugin -->
     <silencer-plugin.version>1.6.0</silencer-plugin.version>
     <silencer-plugin.globalFilters>-P:silencer:globalFilters=.*deprecated.*</silencer-plugin.globalFilters>
     <scalac.warn-to-fatal>-Xfatal-warnings</scalac.warn-to-fatal>
@@ -3269,7 +3270,6 @@
               <artifactId>scala-maven-plugin</artifactId>
               <configuration>
                 <args combine.children="append">
-                  <arg>-Wconf:cat=unchecked:wv</arg>
                   <arg>-Wconf:cat=scaladoc:wv</arg>
                   <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
                   <arg>-Wconf:cat=other-nullary-override:wv</arg>
