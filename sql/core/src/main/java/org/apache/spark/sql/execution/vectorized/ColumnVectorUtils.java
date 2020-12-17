@@ -54,6 +54,8 @@ public class ColumnVectorUtils {
     } else {
       if (t == DataTypes.BooleanType) {
         col.putBooleans(0, capacity, row.getBoolean(fieldIdx));
+      } else if (t == DataTypes.BinaryType) {
+        col.putByteArray(0, row.getBinary(fieldIdx));
       } else if (t == DataTypes.ByteType) {
         col.putBytes(0, capacity, row.getByte(fieldIdx));
       } else if (t == DataTypes.ShortType) {
