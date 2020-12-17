@@ -73,7 +73,12 @@ private[sql] class JacksonGenerator(
 
   private val gen = {
     val generator = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
-    if (options.pretty) generator.useDefaultPrettyPrinter() else generator
+    val ppGenerator = if (options.pretty) generator.useDefaultPrettyPrinter() else generator
+    if (options.writeNonAsciiCharacterAsCodePoint) {
+      generator.setHighestNonEscapedChar(0x7F)
+    } else {
+      ppGenerator
+    }
   }
 
   private val lineSeparator: String = options.lineSeparatorInWrite

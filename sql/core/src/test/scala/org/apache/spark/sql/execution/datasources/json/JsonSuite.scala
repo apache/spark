@@ -2844,6 +2844,25 @@ abstract class JsonSuite
       assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
     }
   }
+
+  test("Write Non-ASCII character as codepoint") {
+    // scalastyle:off nonascii
+    withTempPath { path =>
+      val basePath = path.getCanonicalPath
+      Seq("a", "\n", "\u3042").toDF.write
+        .option("writeNonAsciiCharacterAsCodePoint", "true").json(s"$basePath")
+      val actualText = spark.read.text(s"$basePath")
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedText = "{\"value\":\"\\n\"}{\"value\":\"\\u3042\"}{\"value\":\"a\"}"
+      assert(actualText === expectedText)
+
+      val actualJson = spark.read.json(s"$basePath")
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedJson = "\na\u3042"
+      assert(actualJson === expectedJson)
+    }
+    // scalastyle:on nonascii
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
