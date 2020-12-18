@@ -31,6 +31,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
   private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
+  private final String SPARK_NETWORK_IO_SESSIONTIMEOUT_KEY;
   private final String SPARK_NETWORK_IO_BACKLOG_KEY;
   private final String SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY;
   private final String SPARK_NETWORK_IO_SERVERTHREADS_KEY;
@@ -54,6 +55,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_MODE_KEY = getConfKey("io.mode");
     SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY = getConfKey("io.preferDirectBufs");
     SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY = getConfKey("io.connectionTimeout");
+    SPARK_NETWORK_IO_SESSIONTIMEOUT_KEY = getConfKey("io.sessionTimeout");
     SPARK_NETWORK_IO_BACKLOG_KEY = getConfKey("io.backLog");
     SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY =  getConfKey("io.numConnectionsPerPeer");
     SPARK_NETWORK_IO_SERVERTHREADS_KEY = getConfKey("io.serverThreads");
@@ -100,6 +102,13 @@ public class TransportConf {
       conf.get("spark.network.timeout", "120s"));
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, defaultNetworkTimeoutS + "s")) * 1000;
+    return (int) defaultTimeoutMs;
+  }
+
+  /** Session timeout in milliseconds. Default {@link TransportConf#connectionTimeoutMs}. */
+  public int sessionTimeoutMs() {
+    long defaultTimeoutMs = JavaUtils.timeStringAsMs(
+      conf.get(SPARK_NETWORK_IO_SESSIONTIMEOUT_KEY, connectionTimeoutMs() + "ms"));
     return (int) defaultTimeoutMs;
   }
 

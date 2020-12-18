@@ -924,6 +924,27 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>value of <code>spark.network.timeout</code></td>
+  <td>
+    (Netty only) Timeout for a shuffle clients to establish the connection with shuffle server. If
+    time exceeds this setting, the current handshake will be aborted and retry within
+    <code>spark.shuffle.io.maxRetries</code> in shuffle transportation or
+    <code>spark.shuffle.registration.maxAttempts</code> in registration with external shuffle service.
+  </td>
+  <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.sessionTimeout</code></td>
+  <td>value of <code>spark.shuffle.io.connectionTimeout</code></td>
+  <td>
+    (Netty only) Timeout for the established connections between shuffle servers and clients
+    to be marked as idled. The connection will be closed for it is quiet or may be dead whether
+    there are still outstanding request or not.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -1920,7 +1941,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Default timeout for all network interactions. This config will be used in place of
     <code>spark.storage.blockManagerHeartbeatTimeoutMs</code>,
-    <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
+    <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.shuffle.io.sessionTimeout</code>,
+    <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
   </td>
   <td>1.3.0</td>
