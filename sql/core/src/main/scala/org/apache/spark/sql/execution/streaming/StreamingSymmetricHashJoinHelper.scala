@@ -245,7 +245,13 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       if (stateStoreLocs.isEmpty) {
         defaultPreferredLocations
       } else {
-        stateStoreLocs.foreach(executorMap(_) += 1)
+        stateStoreLocs.foreach { executorId =>
+          if (executorMap.contains(executorId)) {
+            executorMap(executorId) += 1
+          } else {
+            executorMap.put(executorId, 1)
+          }
+        }
         stateStoreLocs
       }
     }
