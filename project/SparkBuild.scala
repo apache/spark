@@ -968,7 +968,9 @@ object Unidoc {
       "-tag", "tparam:X",
       "-tag", "constructor:X",
       "-tag", "todo:X",
-      "-tag", "groupname:X"
+      "-tag", "groupname:X",
+      "--ignore-source-errors",
+      "-notree"
     ),
 
     // Use GitHub repository for Scaladoc source links
