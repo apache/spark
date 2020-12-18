@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.window
 
 import java.util
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
