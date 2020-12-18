@@ -91,7 +91,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-33593: OrcColumnarBatchReader - partition column types") {
+  test("SPARK-33593: partition column types") {
     withTempPath { dir =>
       Seq(1).toDF().repartition(1).write.orc(dir.getCanonicalPath)
 
