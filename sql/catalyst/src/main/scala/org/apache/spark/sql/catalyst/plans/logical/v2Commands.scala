@@ -410,6 +410,17 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
 
 /**
  * The logical plan of the DROP TABLE command.
+ *
+ * The `PURGE` option turns on removing of table data. It is applicable only for managed tables,
+ * and ignored for external tables. For V1 In-Memory catalog, Spark always removes data belongs to
+ * dropped tables, but it takes this option into account for V1 Hive external catalog. If this
+ * option is not specified, Spark removes tables only from a catalog otherwise when `PURGE` is
+ * set Spark also removes table data.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     DROP TABLE [IF EXISTS] table [PURGE];
+ * }}}
  */
 case class DropTable(
     child: LogicalPlan,
