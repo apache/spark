@@ -460,9 +460,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
+      val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
         .filter { entry => !isBlacklisted(entry.getPath) }
-        .filter { entry => !isProcessing(entry.getPath) }
+        .filter { entry =>
+          if (isProcessing(entry.getPath)) {
+            notStale.add(entry.getPath.toString())
+            false
+          } else {
+            true
+          }
+        }
         .flatMap { entry => EventLogFileReader(fs, entry) }
         .filter { reader =>
           try {
@@ -562,12 +570,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .last(newLastScanTime - 1)
         .asScala
         .toList
-      stale.filterNot(isProcessing).foreach { log =>
-        log.appId.foreach { appId =>
-          cleanAppData(appId, log.attemptId, log.logPath)
-          listing.delete(classOf[LogInfo], log.logPath)
+      stale.filterNot(isProcessing)
+        .filterNot(info => notStale.contains(info.logPath))
+        .foreach { log =>
+          log.appId.foreach { appId =>
+            cleanAppData(appId, log.attemptId, log.logPath)
+            listing.delete(classOf[LogInfo], log.logPath)
+          }
         }
-      }
 
       lastScanTime.set(newLastScanTime)
     } catch {
