@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.sql.Date
+
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -49,20 +51,18 @@ class PushFoldableIntoBranchesSuite
     comparePlans(actual, correctAnswer)
   }
 
-  private val normalBranch = (NonFoldableLiteral(true), Literal(10))
-
   test("SPARK-33798: Push down EqualTo through If") {
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
     assertEquivalent(EqualTo(ifExp, Literal(3)), If(a, FalseLiteral, TrueLiteral))
     assertEquivalent(EqualTo(ifExp, Literal("4")), FalseLiteral)
     assertEquivalent(EqualTo(ifExp, Literal("3")), If(a, FalseLiteral, TrueLiteral))
 
-    // Do not simplify if it contains non foldable expressions.
+    // Partially push down if it contains non foldable expressions.
     assertEquivalent(
       EqualTo(If(a, b, Literal(2)), Literal(2)),
-      EqualTo(If(a, b, Literal(2)), Literal(2)))
+      If(a, EqualTo(b, Literal(2)), TrueLiteral))
 
-    // Do not simplify if it contains non-deterministic expressions.
+    // Do not push down if it contains non-deterministic expressions.
     val nonDeterministic = If(LessThan(Rand(1), Literal(0.5)), Literal(1), Literal(1))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
@@ -90,6 +90,29 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(LessThanOrEqual(ifExp, Literal(4)), TrueLiteral)
   }
 
+  test("SPARK-33798: Push down other BinaryOperator through If") {
+    assertEquivalent(Add(ifExp, Literal(4)), If(a, Literal(6), Literal(7)))
+    assertEquivalent(Subtract(ifExp, Literal(4)), If(a, Literal(-2), Literal(-1)))
+    assertEquivalent(Multiply(ifExp, Literal(4)), If(a, Literal(8), Literal(12)))
+    assertEquivalent(Pmod(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
+    assertEquivalent(Remainder(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
+    assertEquivalent(Divide(If(a, Literal(2.0), Literal(3.0)), Literal(1.0)),
+      If(a, Literal(2.0), Literal(3.0)))
+    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral),
+      If(a, FalseLiteral, TrueLiteral))
+    assertEquivalent(Or(If(a, FalseLiteral, TrueLiteral), TrueLiteral), TrueLiteral)
+  }
+
+  test("SPARK-33798: Push down other BinaryExpression through If") {
+    assertEquivalent(BRound(If(a, Literal(1.23), Literal(1.24)), Literal(1)), Literal(1.2))
+    assertEquivalent(StartsWith(If(a, Literal("ab"), Literal("ac")), Literal("a")), TrueLiteral)
+    assertEquivalent(FindInSet(If(a, Literal("ab"), Literal("ac")), Literal("a")), Literal(0))
+    assertEquivalent(
+      AddMonths(If(a, Literal(Date.valueOf("2020-01-01")), Literal(Date.valueOf("2021-01-01"))),
+        Literal(1)),
+      If(a, Literal(Date.valueOf("2020-02-01")), Literal(Date.valueOf("2021-02-01"))))
+  }
+
   test("SPARK-33798: Push down EqualTo through CaseWhen") {
     assertEquivalent(EqualTo(caseWhen, Literal(4)), FalseLiteral)
     assertEquivalent(EqualTo(caseWhen, Literal(3)),
@@ -105,13 +128,12 @@ class PushFoldableIntoBranchesSuite
       And(EqualTo(caseWhen, Literal(5)), EqualTo(caseWhen, Literal(6))),
       FalseLiteral)
 
-    // Do not simplify if it contains non foldable expressions.
-    assertEquivalent(EqualTo(caseWhen, NonFoldableLiteral(true)),
-      EqualTo(caseWhen, NonFoldableLiteral(true)))
-    val nonFoldable = CaseWhen(Seq(normalBranch, (a, b)), None)
-    assertEquivalent(EqualTo(nonFoldable, Literal(1)), EqualTo(nonFoldable, Literal(1)))
+    // Partially push down if it contains non foldable expressions.
+    val nonFoldable = CaseWhen(Seq((NonFoldableLiteral(true), Literal(10)), (a, b)), None)
+    assertEquivalent(EqualTo(nonFoldable, Literal(1)),
+      CaseWhen(Seq((NonFoldableLiteral(true), FalseLiteral), (a, EqualTo(b, Literal(1)))), None))
 
-    // Do not simplify if it contains non-deterministic expressions.
+    // Do not push down if it contains non-deterministic expressions.
     val nonDeterministic = CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(b))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(-1)), EqualTo(nonDeterministic, Literal(-1)))
@@ -142,5 +164,54 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(GreaterThanOrEqual(caseWhen, Literal(4)), FalseLiteral)
     assertEquivalent(LessThan(caseWhen, Literal(4)), TrueLiteral)
     assertEquivalent(LessThanOrEqual(caseWhen, Literal(4)), TrueLiteral)
+  }
+
+  test("SPARK-33798: Push down other BinaryOperator through CaseWhen") {
+    assertEquivalent(Add(caseWhen, Literal(4)),
+      CaseWhen(Seq((a, Literal(5)), (c, Literal(6))), Some(Literal(7))))
+    assertEquivalent(Subtract(caseWhen, Literal(4)),
+      CaseWhen(Seq((a, Literal(-3)), (c, Literal(-2))), Some(Literal(-1))))
+    assertEquivalent(Multiply(caseWhen, Literal(4)),
+      CaseWhen(Seq((a, Literal(4)), (c, Literal(8))), Some(Literal(12))))
+    assertEquivalent(Pmod(caseWhen, Literal(4)),
+      CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3))))
+    assertEquivalent(Remainder(caseWhen, Literal(4)),
+      CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3))))
+    assertEquivalent(Divide(CaseWhen(Seq((a, Literal(1.0)), (c, Literal(2.0))), Some(Literal(3.0))),
+      Literal(1.0)),
+      CaseWhen(Seq((a, Literal(1.0)), (c, Literal(2.0))), Some(Literal(3.0))))
+    assertEquivalent(And(CaseWhen(Seq((a, FalseLiteral), (c, TrueLiteral)), Some(TrueLiteral)),
+      TrueLiteral),
+      CaseWhen(Seq((a, FalseLiteral), (c, TrueLiteral)), Some(TrueLiteral)))
+    assertEquivalent(Or(CaseWhen(Seq((a, FalseLiteral), (c, TrueLiteral)), Some(TrueLiteral)),
+      TrueLiteral), TrueLiteral)
+  }
+
+  test("SPARK-33798: Push down other BinaryExpression through CaseWhen") {
+    assertEquivalent(
+      BRound(CaseWhen(Seq((a, Literal(1.23)), (c, Literal(1.24))), Some(Literal(1.25))),
+        Literal(1)),
+      Literal(1.2))
+    assertEquivalent(
+      StartsWith(CaseWhen(Seq((a, Literal("ab")), (c, Literal("ac"))), Some(Literal("ad"))),
+        Literal("a")),
+      TrueLiteral)
+    assertEquivalent(
+      FindInSet(CaseWhen(Seq((a, Literal("ab")), (c, Literal("ac"))), Some(Literal("ad"))),
+        Literal("a")),
+      Literal(0))
+    assertEquivalent(
+      AddMonths(CaseWhen(Seq((a, Literal(Date.valueOf("2020-01-01"))),
+        (c, Literal(Date.valueOf("2021-01-01")))),
+        Some(Literal(Date.valueOf("2022-01-01")))),
+        Literal(1)),
+      CaseWhen(Seq((a, Literal(Date.valueOf("2020-02-01"))),
+        (c, Literal(Date.valueOf("2021-02-01")))),
+        Some(Literal(Date.valueOf("2022-02-01")))))
+  }
+
+  test("SPARK-33798: Push down BinaryExpression through If/CaseWhen backwards") {
+    assertEquivalent(EqualTo(Literal(4), ifExp), FalseLiteral)
+    assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
   }
 }

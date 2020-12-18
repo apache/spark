@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -534,17 +534,29 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case b @ BinaryComparison(i @ If(_, trueValue, falseValue), right) if i.deterministic &&
-          right.foldable && trueValue.foldable && falseValue.foldable =>
+      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right) if i.deterministic &&
+          right.foldable && (trueValue.foldable || falseValue.foldable) =>
         i.copy(
           trueValue = b.makeCopy(Array(trueValue, right)),
           falseValue = b.makeCopy(Array(falseValue, right)))
 
-      case b @ BinaryComparison(c @ CaseWhen(branches, elseValue), right) if c.deterministic &&
-          right.foldable && (branches.map(_._2) ++ elseValue).forall(_.foldable) =>
+      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue)) if i.deterministic &&
+          left.foldable && (trueValue.foldable || falseValue.foldable) =>
+        i.copy(
+          trueValue = b.makeCopy(Array(left, trueValue)),
+          falseValue = b.makeCopy(Array(left, falseValue)))
+
+      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right) if c.deterministic &&
+          right.foldable && (branches.map(_._2) ++ elseValue).exists(_.foldable) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
           elseValue.map(e => b.makeCopy(Array(e, right))))
+
+      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue)) if c.deterministic &&
+          left.foldable && (branches.map(_._2) ++ elseValue).exists(_.foldable) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.makeCopy(Array(left, e._2)))),
+          elseValue.map(e => b.makeCopy(Array(left, e))))
     }
   }
 }
