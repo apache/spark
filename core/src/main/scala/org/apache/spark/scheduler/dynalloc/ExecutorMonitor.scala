@@ -184,7 +184,7 @@ private[spark] class ExecutorMonitor(
   def excludedExecutorCount: Int = {
     if (conf.get(EXCLUDE_ON_FAILURE_ENABLED).getOrElse(false) &&
         !conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
-      executors.values().asScala.count(_.isExcluded)
+      executors.values().asScala.count(_.excluded)
     } else {
       0
     }
@@ -440,21 +440,21 @@ private[spark] class ExecutorMonitor(
   override def onExecutorExcluded(executorExcluded: SparkListenerExecutorExcluded): Unit = {
     if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
       val exec = executors.get(executorExcluded.executorId)
-      exec.isExcluded = true
+      exec.excluded = true
       decrementExecResourceProfileCount(exec.resourceProfileId)
     }
   }
 
   override def onExecutorUnexcluded(executorUnexcluded: SparkListenerExecutorUnexcluded): Unit = {
     val exec = executors.get(executorUnexcluded.executorId)
-    exec.isExcluded = false
+    exec.excluded = false
     increaseExecResourceProfileCount(exec.resourceProfileId)
   }
 
   override def onNodeExcluded(nodeExcluded: SparkListenerNodeExcluded): Unit = {
     if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
       executors.values().asScala.filter(_.host == nodeExcluded.hostId).foreach { exec =>
-        exec.isExcluded = true
+        exec.excluded = true
         decrementExecResourceProfileCount(exec.resourceProfileId)
       }
     }
@@ -462,7 +462,7 @@ private[spark] class ExecutorMonitor(
 
   override def onNodeUnexcluded(nodeUnexcluded: SparkListenerNodeUnexcluded): Unit = {
     executors.values().asScala.filter(_.host == nodeUnexcluded.hostId).foreach { exec =>
-      exec.isExcluded = false
+      exec.excluded = false
       increaseExecResourceProfileCount(exec.resourceProfileId)
     }
   }
@@ -564,7 +564,7 @@ private[spark] class ExecutorMonitor(
     var decommissioning: Boolean = false
     var hasActiveShuffle: Boolean = false
     // whether the executor is temporarily excluded by the `HealthTracker`
-    var isExcluded: Boolean = false
+    var excluded: Boolean = false
 
     private var idleStart: Long = -1
     private var runningTasks: Int = 0
