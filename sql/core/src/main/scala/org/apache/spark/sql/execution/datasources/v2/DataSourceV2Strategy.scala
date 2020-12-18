@@ -62,8 +62,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       recacheTable: Boolean = false)(): Option[(Option[String], StorageLevel)] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
-      session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
       if (recacheTable) {
