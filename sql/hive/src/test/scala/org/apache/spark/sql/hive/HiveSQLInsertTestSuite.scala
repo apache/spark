@@ -21,5 +21,23 @@ import org.apache.spark.sql.SQLInsertTestSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
+
+  private var originalPartitionMode = ""
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    originalPartitionMode = spark.conf.get("hive.exec.dynamic.partition.mode", "")
+    spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
+  }
+
+  override protected def afterAll(): Unit = {
+    if (originalPartitionMode == "") {
+      spark.conf.unset("hive.exec.dynamic.partition.mode")
+    } else {
+      spark.conf.set("hive.exec.dynamic.partition.mode", originalPartitionMode)
+    }
+    super.afterAll()
+  }
+
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
 }
