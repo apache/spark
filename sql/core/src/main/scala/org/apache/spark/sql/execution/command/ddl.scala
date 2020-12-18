@@ -29,7 +29,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{FILES, RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -374,7 +375,10 @@ case class AlterTableChangeColumnCommand(
   private def findColumnByName(
       schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
-      case field if resolver(field.name, name) => field
+      case field if resolver(field.name, name) =>
+        CharVarcharUtils.getRawType(field.metadata)
+          .map(dt => field.copy(dataType = dt))
+          .getOrElse(field)
     }.getOrElse(throw new AnalysisException(
       s"Can't find column `$name` given table data columns " +
         s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))

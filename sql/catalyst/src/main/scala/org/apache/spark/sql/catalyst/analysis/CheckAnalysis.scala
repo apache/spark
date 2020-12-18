@@ -525,7 +525,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
-                val field = findField("update", update.fieldNames)
+                val field = {
+                  val f = findField("update", update.fieldNames)
+                  CharVarcharUtils.getRawType(f.metadata)
+                    .map(dt => f.copy(dataType = dt))
+                    .getOrElse(f)
+                }
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>

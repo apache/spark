@@ -18,39 +18,62 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, StructField, VarcharType}
 
 trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
 
   def format: String
 
-  test("change column from char to string type") {
+  def checkColType(f: StructField, dt: DataType): Unit = {
+    assert(f.dataType == CharVarcharUtils.replaceCharVarcharWithString(dt))
+    assert(CharVarcharUtils.getRawType(f.metadata).contains(dt))
+  }
+
+  test("allow to change column for char(x) to char(y), x == y") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
-      sql("ALTER TABLE t CHANGE COLUMN c TYPE STRING")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE CHAR(4)")
+      checkColType(spark.table("t").schema(1), CharType(4))
     }
   }
 
-  test("change column from string to char type") {
+  test("not allow to change column for char(x) to char(y), x != y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)")
+      }
+      val v1 = e.getMessage contains "'CharType(4)' to 'c' with type 'CharType(5)'"
+      val v2 = e.getMessage contains "char(4) cannot be cast to char(5)"
+      assert( v1 || v2)
+    }
+  }
+
+  test("not allow to change column from string to char type") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c STRING) USING $format")
-      sql("ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)")
+      }
+      val v1 = e.getMessage contains "'StringType' to 'c' with type 'CharType(5)'"
+      val v2 = e.getMessage contains "string cannot be cast to char(5)"
+      assert( v1 || v2)
     }
   }
 
-  test("change column from char to char type") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
-      sql("ALTER TABLE t CHANGE COLUMN c TYPE CHAR(5)")
-    }
-  }
-
-  test("change column from int to char type") {
+  test("not allow to change column from int to char type") {
     withTable("t") {
       sql(s"CREATE TABLE t(i int, c CHAR(4)) USING $format")
-      sql("ALTER TABLE t CHANGE COLUMN i TYPE CHAR(5)")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t CHANGE COLUMN i TYPE CHAR(5)")
+      }
+      val v1 = e.getMessage contains "'IntegerType' to 'i' with type 'CharType(5)'"
+      val v2 = e.getMessage contains "int cannot be cast to char(5)"
+      assert(v1 || v2)
     }
   }
 }
@@ -69,5 +92,31 @@ class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestSuite
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
+  }
+
+  test("allow to change change column from char to string type") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE STRING")
+      assert(spark.table("t").schema(1).dataType === StringType)
+    }
+  }
+
+  test("allow to change column from char(x) to varchar(y) type x <= y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(4)")
+      checkColType(spark.table("t").schema(1), VarcharType(4))
+    }
+  }
+
+  test("not allow to change column from char(x) to varchar(y) type x > y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(3)")
+      }
+      assert(e.getMessage contains "char(4) cannot be cast to varchar(3)")
+    }
   }
 }
