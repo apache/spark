@@ -3746,13 +3746,24 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-33593: Parquet vector reader incorrect with binary partition value") {
+  test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
     Seq("false", "true").foreach(value => {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
         withTable("t") {
           sql(
             """CREATE TABLE t(name STRING, id BINARY, part BINARY)
               |USING PARQUET PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t(name STRING, id BINARY, part BINARY)
+              |USING ORC PARTITIONED BY (part)""".stripMargin)
           sql("INSERT INTO t PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
           checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t"),
             Row("a", "Spark SQL", "Spark SQL"))
