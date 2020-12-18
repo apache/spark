@@ -971,7 +971,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> csv_sdf = spark.readStream.table("sample_table")
+        >>> csv_sdf = spark.readStream.table(input_table_name)
         >>> csv_sdf.isStreaming
         True
         """
@@ -1532,7 +1532,7 @@ class DataStreamWriter(object):
         Examples
         --------
         >>> sq = sdf.writeStream.format('parquet').queryName('this_query').option(
-        ...      'checkpointLocation', '/tmp/checkpoint').toTable('output_table')
+        ...      'checkpointLocation', '/tmp/checkpoint').toTable(output_table_name)
         >>> sq.isActive
         True
         >>> sq.name
@@ -1541,7 +1541,7 @@ class DataStreamWriter(object):
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').toTable(
-        ...     'output_table', queryName='that_query', outputMode="append", format='parquet',
+        ...     output_table_name, queryName='that_query', outputMode="append", format='parquet',
         ...     checkpointLocation='/tmp/checkpoint')
         >>> sq.name
         'that_query'
@@ -1588,7 +1588,9 @@ def _test():
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 
-    spark.sql("CREATE TABLE sample_table_%d (value string) USING parquet" % randint(0, 10000000))
+    globs['input_table_name'] = "sample_input_table_%d" % randint(0, 100000000)
+    globs['output_table_name'] = "sample_output_table_%d" % randint(0, 100000000)
+    spark.sql("CREATE TABLE %s (value string) USING parquet" % globs['input_table_name'])
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,
