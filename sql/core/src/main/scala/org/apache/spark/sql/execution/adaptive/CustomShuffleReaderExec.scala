@@ -91,9 +91,6 @@ case class CustomShuffleReaderExec private(
       UnknownPartitioning(partitionSpecs.length)
     }
   }
-  /**
-   * include id so that it is visible in the plan text
-   */
   override def stringArgs: Iterator[Any] = {
     val desc = if (isLocalReader) {
       "local"
@@ -106,7 +103,7 @@ case class CustomShuffleReaderExec private(
     } else {
       ""
     }
-    Iterator(id, desc) // todo: or should this be QueryPlan.OP_ID_TAG?
+    Iterator(desc)
   }
 
   def hasCoalescedPartition: Boolean =
