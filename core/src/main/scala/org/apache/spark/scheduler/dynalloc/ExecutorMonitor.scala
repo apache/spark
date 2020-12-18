@@ -360,7 +360,7 @@ private[spark] class ExecutorMonitor(
     execResourceProfileCount.remove(rpId, 0)
   }
 
-  private def increaseExecResourceProfileCount(rpId: Int): Unit = {
+  private def incrementExecResourceProfileCount(rpId: Int): Unit = {
     val count = execResourceProfileCount.computeIfAbsent(rpId, _ => 0)
     execResourceProfileCount.replace(rpId, count, count + 1)
   }
@@ -448,7 +448,7 @@ private[spark] class ExecutorMonitor(
   override def onExecutorUnexcluded(executorUnexcluded: SparkListenerExecutorUnexcluded): Unit = {
     val exec = executors.get(executorUnexcluded.executorId)
     exec.excluded = false
-    increaseExecResourceProfileCount(exec.resourceProfileId)
+    incrementExecResourceProfileCount(exec.resourceProfileId)
   }
 
   override def onNodeExcluded(nodeExcluded: SparkListenerNodeExcluded): Unit = {
@@ -463,7 +463,7 @@ private[spark] class ExecutorMonitor(
   override def onNodeUnexcluded(nodeUnexcluded: SparkListenerNodeUnexcluded): Unit = {
     executors.values().asScala.filter(_.host == nodeUnexcluded.hostId).foreach { exec =>
       exec.excluded = false
-      increaseExecResourceProfileCount(exec.resourceProfileId)
+      incrementExecResourceProfileCount(exec.resourceProfileId)
     }
   }
 
@@ -518,7 +518,7 @@ private[spark] class ExecutorMonitor(
    */
   private def ensureExecutorIsTracked(id: String, host: String, resourceProfileId: Int): Tracker = {
     val execTracker = executors.computeIfAbsent(id, _ => {
-      increaseExecResourceProfileCount(resourceProfileId)
+      incrementExecResourceProfileCount(resourceProfileId)
       logDebug(s"Executor added with ResourceProfile id: $resourceProfileId " +
         s"count is now ${execResourceProfileCount.get(resourceProfileId)}")
       new Tracker(resourceProfileId, host)
@@ -530,7 +530,7 @@ private[spark] class ExecutorMonitor(
         s"it to $resourceProfileId")
       execTracker.resourceProfileId = resourceProfileId
       // fix up the counts for each resource profile id
-      increaseExecResourceProfileCount(resourceProfileId)
+      incrementExecResourceProfileCount(resourceProfileId)
       decrementExecResourceProfileCount(UNKNOWN_RESOURCE_PROFILE_ID)
     }
     execTracker
