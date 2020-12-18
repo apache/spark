@@ -3259,7 +3259,7 @@
             <plugin>
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
-              <configuration combine.self="override">
+              <configuration>
                 <scalaVersion>${scala.version}</scalaVersion>
                 <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
                 <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
@@ -3295,6 +3295,8 @@
                   <javacArg>${java.version}</javacArg>
                   <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
                 </javacArgs>
+                <compilerPlugins combine.self="override">
+                </compilerPlugins>
               </configuration>
             </plugin>
           </plugins>
