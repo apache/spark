@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -523,6 +523,48 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+    }
+  }
+}
+
+
+/**
+ * Push the foldable expression into (if / case) branches.
+ */
+object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
+
+  // To be conservative here: it's only a guaranteed win if all but at most only one branch
+  // end up being not foldable.
+  private def atMostOneUnfoldable(exprs: Seq[Expression]): Boolean = {
+    val (foldables, others) = exprs.partition(_.foldable)
+    foldables.nonEmpty && others.length < 2
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.makeCopy(Array(trueValue, right)),
+          falseValue = b.makeCopy(Array(falseValue, right)))
+
+      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.makeCopy(Array(left, trueValue)),
+          falseValue = b.makeCopy(Array(left, falseValue)))
+
+      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
+          elseValue.map(e => b.makeCopy(Array(e, right))))
+
+      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.makeCopy(Array(left, e._2)))),
+          elseValue.map(e => b.makeCopy(Array(left, e))))
     }
   }
 }
