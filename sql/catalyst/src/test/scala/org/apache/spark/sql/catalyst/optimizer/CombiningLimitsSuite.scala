@@ -43,9 +43,7 @@ class CombiningLimitsSuite extends PlanTest {
 
   val testRelation = LocalRelation.fromExternalRows(
     Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
-    Seq(
-      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3),
-      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3))
+    1.to(10).map(_ => Row(1, 2, 3))
   )
   val testRelation2 = LocalRelation.fromExternalRows(
     Seq(Symbol("x").int, Symbol("y").int, Symbol("z").int),
