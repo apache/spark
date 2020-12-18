@@ -96,6 +96,9 @@ public class ColumnVectorUtils {
         col.putInts(0, capacity, row.getInt(fieldIdx));
       } else if (t instanceof TimestampType) {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
+      } else {
+        throw new RuntimeException(String.format("DataType %s is not supported" +
+            " when use column vectorized reader.", t.sql()));
       }
     }
   }
