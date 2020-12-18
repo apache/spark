@@ -954,7 +954,7 @@ class DataStreamReader(OptionUtils):
             raise TypeError("path can be only a single string")
 
     def table(self, tableName):
-        r"""Define a Streaming DataFrame on a Table and returns the result as a :class:`DataFrame`.
+        """Define a Streaming DataFrame on a Table and returns the result as a :class:`DataFrame`.
 
         The DataSource corresponding to the table should support streaming mode.
 
@@ -1493,7 +1493,7 @@ class DataStreamWriter(object):
 
     def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
                 **options):
-        r"""
+        """
         Streams the contents of the :class:`DataFrame` to the output table.
 
         A new table will be created if the table not exists. The returned [[StreamingQuery]]
