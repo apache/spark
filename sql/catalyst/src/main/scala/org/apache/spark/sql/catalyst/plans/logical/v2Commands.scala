@@ -657,9 +657,15 @@ case class AlterTableAddPartition(
  * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
+ * The `PURGE` option turns on removing of partition data. It is applicable only for managed tables,
+ * and ignored for external tables. For V1 In-Memory catalog, Spark always removes data belongs to
+ * dropped partitions, but it takes this option into account for V1 Hive external catalog. If this
+ * option is not specified, Spark removes partitions only from a catalog otherwise when `PURGE` is
+ * set Spark also removes partition data.
+ *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
 case class AlterTableDropPartition(
