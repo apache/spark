@@ -1587,6 +1587,8 @@ def _test():
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 
+    spark.sql("CREATE TABLE sample_table (value string) USING parquet")
+
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
