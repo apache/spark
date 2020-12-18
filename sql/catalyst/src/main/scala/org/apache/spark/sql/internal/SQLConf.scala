@@ -3018,6 +3018,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val USE_HIVE_LEGACY_GROUPING_ID =
+    buildConf("spark.sql.use.hive.legacy.grouping.id")
+      .doc("Use hive 1.x compatible grouping id algorithm")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3350,6 +3356,8 @@ class SQLConf extends Serializable with Logging {
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+
+  def useHiveLegacyGroupingId: Boolean = getConf(USE_HIVE_LEGACY_GROUPING_ID)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

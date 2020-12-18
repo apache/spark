@@ -3745,6 +3745,47 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-33791 Support hive legacy grouping id algorithm") {
+
+    val sqlStmt = """select col1, col2, col3, GROUPING__ID, count(*) from
+                    |(VALUES ('aaa', '123', 'kkk'),
+                    | ('aaa', '234', 'kkk'),
+                    | ('aaa', '234', 'kkk'),
+                    | ('aaa', '123', 'kkk')
+                    |) AS t (col1, col2, col3)
+                    |group by col1, col2, col3 with cube
+                    |order by col1, col2, col3
+                    |""".stripMargin
+
+    checkAnswer(sql(sqlStmt), Row(null, null, null, 7, 4) ::
+      Row(null, null, "kkk", 6, 4) ::
+      Row(null, "123", null, 5, 2) ::
+      Row(null, "123", "kkk", 4, 2) ::
+      Row(null, "234", null, 5, 2) ::
+      Row(null, "234", "kkk", 4, 2) ::
+      Row("aaa", null, null, 3, 4) ::
+      Row("aaa", null, "kkk", 2, 4) ::
+      Row("aaa", "123", null, 1, 2) ::
+      Row("aaa", "123", "kkk", 0, 2) ::
+      Row("aaa", "234", null, 1, 2) ::
+      Row("aaa", "234", "kkk", 0, 2) :: Nil)
+
+    withSQLConf(SQLConf.USE_HIVE_LEGACY_GROUPING_ID.key -> "true") {
+      checkAnswer(sql(sqlStmt), Row(null, null, null, 0, 4) ::
+        Row(null, null, "kkk", 4, 4) ::
+        Row(null, "123", null, 2, 2) ::
+        Row(null, "123", "kkk", 6, 2) ::
+        Row(null, "234", null, 2, 2) ::
+        Row(null, "234", "kkk", 6, 2) ::
+        Row("aaa", null, null, 1, 4) ::
+        Row("aaa", null, "kkk", 5, 4) ::
+        Row("aaa", "123", null, 3, 2) ::
+        Row("aaa", "123", "kkk", 7, 2) ::
+        Row("aaa", "234", null, 3, 2) ::
+        Row("aaa", "234", "kkk", 7, 2) :: Nil)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
