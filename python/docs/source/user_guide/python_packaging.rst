@@ -66,7 +66,7 @@ PySpark allows to upload Python files (``.py``), zipped Python packages (``.zip`
 to the executors by:
 
 - Setting the configuration setting ``spark.submit.pyFiles``
-- Ssing ``--py-files`` option in Spark scripts
+- Setting ``--py-files`` option in Spark scripts
 - Directly calling :meth:`pyspark.SparkContext.addPyFile` in applications
 
 This is a straightforward method to ship additional custom Python code to the cluster. You can just add individual files or zip whole
@@ -95,7 +95,7 @@ both Python interpreter and all its relevant dependencies.
     conda pack -f -o pyspark_conda_env.tar.gz
 
 After that, you can ship it together with scripts or in the code by using the ``--archives`` option
-or ``spark.archives`` configuration (``spark.yarn.dist.archives`` in Yarn). It automatically unpacks the archive on executors.
+or ``spark.archives`` configuration (``spark.yarn.dist.archives`` in YARN). It automatically unpacks the archive on executors.
 
 In the case of a ``spark-submit`` script, you can use it as follows:
 
@@ -105,7 +105,7 @@ In the case of a ``spark-submit`` script, you can use it as follows:
     export PYSPARK_PYTHON=./environment/bin/python
     spark-submit --archives pyspark_conda_env.tar.gz#environment app.py
 
-Note that ``PYSPARK_DRIVER_PYTHON`` above is not required for cluster modes in Yarn or Kubernetes.
+Note that ``PYSPARK_DRIVER_PYTHON`` above is not required for cluster modes in YARN or Kubernetes.
 
 If you’re on a regular Python shell or notebook, you can try it as shown below:
 
@@ -117,7 +117,7 @@ If you’re on a regular Python shell or notebook, you can try it as shown below
 
     os.environ['PYSPARK_PYTHON'] = "./environment/bin/python"
     spark = SparkSession.builder.config(
-        "spark.archives",  # 'spark.yarn.dist.archives' in Yarn.
+        "spark.archives",  # 'spark.yarn.dist.archives' in YARN.
         "pyspark_conda_env.tar.gz#environment").getOrCreate()
     main(spark)
 
@@ -152,10 +152,10 @@ and the dependencies.
     venv-pack -o pyspark_venv.tar.gz
 
 You can directly pass/unpack the archive file and enable the environment on executors by leveraging
-the ``--archives`` option or ``spark.archives`` configuration (``spark.yarn.dist.archives`` in Yarn).
+the ``--archives`` option or ``spark.archives`` configuration (``spark.yarn.dist.archives`` in YARN).
 
 For ``spark-submit``, you can use it by running the command as follows. Also, notice that
-``PYSPARK_DRIVER_PYTHON`` is not necessary in Kubernetes or Yarn cluster modes.
+``PYSPARK_DRIVER_PYTHON`` is not necessary in Kubernetes or YARN cluster modes.
 
 .. code-block:: bash
 
@@ -173,7 +173,7 @@ For regular Python shells or notebooks:
 
     os.environ['PYSPARK_PYTHON'] = "./environment/bin/python"
     spark = SparkSession.builder.config(
-        "spark.archives",  # 'spark.yarn.dist.archives' in Yarn.
+        "spark.archives",  # 'spark.yarn.dist.archives' in YARN.
         "pyspark_venv.tar.gz#environment").getOrCreate()
     main(spark)
 
@@ -212,13 +212,13 @@ However, ``.pex`` file does not include a Python interpreter itself under the ho
 nodes in a cluster should have the same Python interpreter installed.
 
 In order to transfer and use the ``.pex`` file in a cluster, you should ship it via the
-``spark.files`` configuration (``spark.yarn.dist.files`` in Yarn) or ``--files`` option because they are regular files instead
+``spark.files`` configuration (``spark.yarn.dist.files`` in YARN) or ``--files`` option because they are regular files instead
 of directories or archive files.
 
 For application submission, you run the commands as shown below.
-Note that ``PYSPARK_DRIVER_PYTHON`` is not needed for cluster modes in Yarn or Kubernetes,
+Note that ``PYSPARK_DRIVER_PYTHON`` is not needed for cluster modes in YARN or Kubernetes,
 and you may also need to set ``PYSPARK_PYTHON`` environment variable on
-the AppMaster ``--conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=./myarchive.pex`` in Yarn cluster mode.
+the AppMaster ``--conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=./myarchive.pex`` in YARN cluster mode.
 
 .. code-block:: bash
 
@@ -236,7 +236,7 @@ For regular Python shells or notebooks:
 
     os.environ['PYSPARK_PYTHON'] = "./pyspark_pex_env.pex"
     spark = SparkSession.builder.config(
-        "spark.files",  # 'spark.yarn.dist.files' in Yarn.
+        "spark.files",  # 'spark.yarn.dist.files' in YARN.
         "pyspark_pex_env.pex").getOrCreate()
     main(spark)
 
