@@ -206,7 +206,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // 4. current row -> null, next selected row -> z, output: z;
     // 5. current row -> y, next selected row -> empty, output: null;
     // ... next selected row is empty, all following return null.
-    (_: Int, current: InternalRow) =>
+    (current: InternalRow) =>
       if (current.isNullAt(idx)) {
         if (nextSelectedRow == EmptyRow) {
           // Use default values since the offset row whose input value is not null does not exist.
@@ -238,7 +238,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // 7. current row -> z, next selected row -> y, output: y;
     // 8. current row -> z, next selected row -> z, output: z;
     val absOffset = Math.abs(offset)
-    (index: Int, current: InternalRow) =>
+    (current: InternalRow) =>
       if (nextSelectedRow == EmptyRow && skipNonNullCount == absOffset) {
         do {
           val r = WindowFunctionFrame.getNextOrNull(inputIterator)
@@ -246,7 +246,7 @@ class FrameLessOffsetWindowFunctionFrame(
             nextSelectedRow = r
           }
           inputIndex += 1
-        } while (index > inputIndex && nextSelectedRow == EmptyRow && inputIndex < input.length)
+        } while (nextSelectedRow == EmptyRow && inputIndex < input.length)
       }
       if (nextSelectedRow == EmptyRow) {
         // Use default values since the offset row whose input value is not null does not exist.
@@ -262,7 +262,7 @@ class FrameLessOffsetWindowFunctionFrame(
         }
       }
   } else {
-    (_: Int, current: InternalRow) =>
+    (current: InternalRow) =>
       if (inputIndex >= 0 && inputIndex < input.length) {
         val r = WindowFunctionFrame.getNextOrNull(inputIterator)
         projection(r)
@@ -274,7 +274,7 @@ class FrameLessOffsetWindowFunctionFrame(
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    doWrite(index, current)
+    doWrite(current)
   }
 }
 
