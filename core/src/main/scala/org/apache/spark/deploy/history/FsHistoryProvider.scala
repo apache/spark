@@ -460,6 +460,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
+      // Mark entries that are processing as not stale. Such entries do not have a chance to be
+      // updated with the new 'lastProcessed' time and thus any entity that completes processing
+      // right after this check and before the check for stale entities will be identified as stale
+      // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
         .filter { entry => !isBlacklisted(entry.getPath) }
