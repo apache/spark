@@ -49,7 +49,7 @@ trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
       }
       val v1 = e.getMessage contains "'CharType(4)' to 'c' with type 'CharType(5)'"
       val v2 = e.getMessage contains "char(4) cannot be cast to char(5)"
-      assert( v1 || v2)
+      assert(v1 || v2)
     }
   }
 
@@ -61,7 +61,7 @@ trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
       }
       val v1 = e.getMessage contains "'StringType' to 'c' with type 'CharType(5)'"
       val v2 = e.getMessage contains "string cannot be cast to char(5)"
-      assert( v1 || v2)
+      assert(v1 || v2)
     }
   }
 
