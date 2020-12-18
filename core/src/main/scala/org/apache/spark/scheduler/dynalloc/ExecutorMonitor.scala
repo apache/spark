@@ -52,6 +52,11 @@ private[spark] class ExecutorMonitor(
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
 
+  // We only track the `excluded` status of executor tacker when the exclusion feature is enabled
+  // but killing the excluded executors is disabled.
+  private val exclusionButNotKillEnabled = conf.get(EXCLUDE_ON_FAILURE_ENABLED).getOrElse(false) &&
+    !conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)
+
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
 
@@ -182,8 +187,7 @@ private[spark] class ExecutorMonitor(
   }
 
   def excludedExecutorCount: Int = {
-    if (conf.get(EXCLUDE_ON_FAILURE_ENABLED).getOrElse(false) &&
-        !conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
+    if (exclusionButNotKillEnabled) {
       executors.values().asScala.count(_.excluded)
     } else {
       0
@@ -438,21 +442,25 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onExecutorExcluded(executorExcluded: SparkListenerExecutorExcluded): Unit = {
-    if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
-      val exec = executors.get(executorExcluded.executorId)
-      exec.excluded = true
-      decrementExecResourceProfileCount(exec.resourceProfileId)
+    if (exclusionButNotKillEnabled) {
+      Option(executors.get(executorExcluded.executorId)).foreach { exec =>
+        exec.excluded = true
+        decrementExecResourceProfileCount(exec.resourceProfileId)
+      }
     }
   }
 
   override def onExecutorUnexcluded(executorUnexcluded: SparkListenerExecutorUnexcluded): Unit = {
-    val exec = executors.get(executorUnexcluded.executorId)
-    exec.excluded = false
-    incrementExecResourceProfileCount(exec.resourceProfileId)
+    if (exclusionButNotKillEnabled) {
+      Option(executors.get(executorUnexcluded.executorId)).foreach { exec =>
+        exec.excluded = false
+        incrementExecResourceProfileCount(exec.resourceProfileId)
+      }
+    }
   }
 
   override def onNodeExcluded(nodeExcluded: SparkListenerNodeExcluded): Unit = {
-    if (!conf.get(EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
+    if (exclusionButNotKillEnabled) {
       executors.values().asScala.filter(_.host == nodeExcluded.hostId).foreach { exec =>
         exec.excluded = true
         decrementExecResourceProfileCount(exec.resourceProfileId)
@@ -461,9 +469,11 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onNodeUnexcluded(nodeUnexcluded: SparkListenerNodeUnexcluded): Unit = {
-    executors.values().asScala.filter(_.host == nodeUnexcluded.hostId).foreach { exec =>
-      exec.excluded = false
-      incrementExecResourceProfileCount(exec.resourceProfileId)
+    if (exclusionButNotKillEnabled) {
+      executors.values().asScala.filter(_.host == nodeUnexcluded.hostId).foreach { exec =>
+        exec.excluded = false
+        incrementExecResourceProfileCount(exec.resourceProfileId)
+      }
     }
   }
 
