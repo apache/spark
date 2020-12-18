@@ -94,12 +94,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
-    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
+    val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
-      SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
-    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
+      SparkListenerExecutorUnblacklisted(executorUnexcludedTime, "exec1")
+    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeExcludedTime, "node1", 33)
+    val executorExcluded = SparkListenerExecutorExcluded(executorExcludedTime, "exec1", 22)
+    val executorUnexcluded =
+      SparkListenerExecutorUnexcluded(executorUnexcludedTime, "exec1")
+    val nodeExcluded = SparkListenerNodeExcluded(nodeExcludedTime, "node1", 33)
     val nodeUnblacklisted =
-      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
+      SparkListenerNodeUnblacklisted(nodeUnexcludedTime, "node1")
+    val nodeUnexcluded =
+      SparkListenerNodeUnexcluded(nodeUnexcludedTime, "node1")
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
@@ -147,8 +153,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
+    testEvent(executorExcluded, executorExcludedJsonString)
+    testEvent(executorUnexcluded, executorUnexcludedJsonString)
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
+    testEvent(nodeExcluded, nodeExcludedJsonString)
+    testEvent(nodeUnexcluded, nodeUnexcludedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
     testEvent(stageExecutorMetrics, stageExecutorMetricsJsonString)
@@ -496,9 +506,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
-    val exepectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
+    val expectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
       78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
-    assertEquals(exepectedExecutorMetrics,
+    assertEquals(expectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
 
@@ -598,10 +608,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val jobCompletionTime = 1421191296660L
   private val executorAddedTime = 1421458410000L
   private val executorRemovedTime = 1421458922000L
-  private val executorBlacklistedTime = 1421458932000L
-  private val executorUnblacklistedTime = 1421458942000L
-  private val nodeBlacklistedTime = 1421458952000L
-  private val nodeUnblacklistedTime = 1421458962000L
+  private val executorExcludedTime = 1421458932000L
+  private val executorUnexcludedTime = 1421458942000L
+  private val nodeExcludedTime = 1421458952000L
+  private val nodeUnexcludedTime = 1421458962000L
 
   private def testEvent(event: SparkListenerEvent, jsonString: String): Unit = {
     val actualJsonString = compact(render(JsonProtocol.sparkEventToJson(event)))
@@ -968,8 +978,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val stackTrace = {
     Array[StackTraceElement](
       new StackTraceElement("Apollo", "Venus", "Mercury", 42),
-      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420),
-      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200)
+      new StackTraceElement("Afollo", "Vemus", "Mercurry", 420), /* odd spellings intentional */
+      new StackTraceElement("Ayollo", "Vesus", "Blackberry", 4200) /* odd spellings intentional */
     )
   }
 
@@ -2415,35 +2425,69 @@ private[spark] object JsonProtocolSuite extends Assertions {
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorBlacklisted",
-      |  "time" : ${executorBlacklistedTime},
+      |  "time" : ${executorExcludedTime},
       |  "executorId" : "exec1",
       |  "taskFailures" : 22
       |}
+    """.stripMargin
+  private val executorExcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorExcluded",
+       |  "time" : ${executorExcludedTime},
+       |  "executorId" : "exec1",
+       |  "taskFailures" : 22
+       |}
     """.stripMargin
   private val executorUnblacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted",
-      |  "time" : ${executorUnblacklistedTime},
+      |  "time" : ${executorUnexcludedTime},
       |  "executorId" : "exec1"
       |}
+    """.stripMargin
+  private val executorUnexcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerExecutorUnexcluded",
+       |  "time" : ${executorUnexcludedTime},
+       |  "executorId" : "exec1"
+       |}
     """.stripMargin
   private val nodeBlacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
-      |  "time" : ${nodeBlacklistedTime},
+      |  "time" : ${nodeExcludedTime},
       |  "hostId" : "node1",
       |  "executorFailures" : 33
       |}
+    """.stripMargin
+  private val nodeExcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeExcluded",
+       |  "time" : ${nodeExcludedTime},
+       |  "hostId" : "node1",
+       |  "executorFailures" : 33
+       |}
     """.stripMargin
   private val nodeUnblacklistedJsonString =
     s"""
       |{
       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
-      |  "time" : ${nodeUnblacklistedTime},
+      |  "time" : ${nodeUnexcludedTime},
       |  "hostId" : "node1"
       |}
+    """.stripMargin
+  private val nodeUnexcludedJsonString =
+    s"""
+       |{
+       |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnexcluded",
+       |  "time" : ${nodeUnexcludedTime},
+       |  "hostId" : "node1"
+       |}
     """.stripMargin
   private val resourceProfileJsonString =
     """

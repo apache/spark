@@ -55,7 +55,6 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -628,7 +627,16 @@ private[spark] class BlockManager(
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      try {
+        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      } catch {
+        case e: IOException =>
+          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+            FallbackStorage.read(conf, blockId)
+          } else {
+            throw e
+          }
+      }
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -1104,7 +1112,7 @@ private[spark] class BlockManager(
       blockSize: Long): Option[ManagedBuffer] = {
     val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
     if (file.exists()) {
-      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+      val managedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
           // Encrypted blocks cannot be memory mapped; return a special object that does decryption
           // and provides InputStream / FileRegion implementations for reading the data.
@@ -1115,7 +1123,7 @@ private[spark] class BlockManager(
           val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
-      Some(mangedBuffer)
+      Some(managedBuffer)
     } else {
       None
     }
@@ -1581,7 +1589,12 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      cachedPeers
+      if (cachedPeers.isEmpty &&
+          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      } else {
+        cachedPeers
+      }
     }
   }
 

@@ -43,5 +43,7 @@
   cat("      /_/", "\n")
   cat("\n")
 
-  cat("\nSparkSession available as 'spark'.\n")
+  cat("\nSparkSession Web UI available at", SparkR::sparkR.uiWebUrl())
+  cat("\nSparkSession available as 'spark'(master = ", unlist(SparkR::sparkR.conf("spark.master")),
+    ", app id = ", unlist(SparkR::sparkR.conf("spark.app.id")), ").", "\n", sep = "")
 }

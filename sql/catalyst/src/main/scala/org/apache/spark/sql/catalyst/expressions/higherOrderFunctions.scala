@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -128,7 +128,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   def argumentTypes: Seq[AbstractDataType]
 
   /**
-   * All arguments have been resolved. This means that the types and nullabilty of (most of) the
+   * All arguments have been resolved. This means that the types and nullability of (most of) the
    * lambda function arguments is known, and that we can start binding the lambda functions.
    */
   lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)

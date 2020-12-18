@@ -657,15 +657,16 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         $"order",
         nth_value($"value", 2).over(window),
         nth_value($"value", 2, ignoreNulls = false).over(window),
-        nth_value($"value", 2, ignoreNulls = true).over(window)),
+        nth_value($"value", 2, ignoreNulls = true).over(window),
+        nth_value($"value", 3, ignoreNulls = false).over(window)),
       Seq(
-        Row("a", 0, null, null, null),
-        Row("a", 1, "x", "x", null),
-        Row("a", 2, "x", "x", "y"),
-        Row("a", 3, "x", "x", "y"),
-        Row("a", 4, "x", "x", "y"),
-        Row("b", 1, null, null, null),
-        Row("b", 2, null, null, null)))
+        Row("a", 0, null, null, null, null),
+        Row("a", 1, "x", "x", null, null),
+        Row("a", 2, "x", "x", "y", "y"),
+        Row("a", 3, "x", "x", "y", "y"),
+        Row("a", 4, "x", "x", "y", "y"),
+        Row("b", 1, null, null, null, null),
+        Row("b", 2, null, null, null, null)))
   }
 
   test("nth_value on descending ordered window") {

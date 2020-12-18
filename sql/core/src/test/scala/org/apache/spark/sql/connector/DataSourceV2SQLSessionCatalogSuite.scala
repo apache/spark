@@ -79,4 +79,12 @@ class DataSourceV2SQLSessionCatalogSuite
         Row("keyX", s"Table default.$t1 does not have property: keyX"))
     }
   }
+
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE without LOCATION") {
+    withTable("t") {
+      val prop = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY + "=true"
+      // The following should not throw AnalysisException.
+      sql(s"CREATE EXTERNAL TABLE t (i INT) USING $v2Format TBLPROPERTIES($prop)")
+    }
+  }
 }

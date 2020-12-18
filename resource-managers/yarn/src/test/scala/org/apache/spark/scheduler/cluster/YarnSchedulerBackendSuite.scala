@@ -44,9 +44,10 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
   }
 
   private class TestTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
-    val blacklistedNodes = new AtomicReference[Set[String]]()
-    def setNodeBlacklist(nodeBlacklist: Set[String]): Unit = blacklistedNodes.set(nodeBlacklist)
-    override def nodeBlacklist(): Set[String] = blacklistedNodes.get()
+    val excludedNodesList = new AtomicReference[Set[String]]()
+    def setNodeExcludeList(nodeExcludeList: Set[String]): Unit =
+      excludedNodesList.set(nodeExcludeList)
+    override def excludedNodes(): Set[String] = excludedNodesList.get()
   }
 
   private class TestYarnSchedulerBackend(scheduler: TaskSchedulerImpl, sc: SparkContext)
@@ -56,7 +57,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     }
   }
 
-  test("RequestExecutors reflects node blacklist and is serializable") {
+  test("RequestExecutors reflects node excludelist and is serializable") {
     sc = new SparkContext("local", "YarnSchedulerBackendSuite")
     // Subclassing the TaskSchedulerImpl here instead of using Mockito. For details see SPARK-26891.
     val sched = new TestTaskSchedulerImpl(sc)
@@ -65,7 +66,7 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
     val ser = new JavaSerializer(sc.conf).newInstance()
     val defaultResourceProf = ResourceProfile.getOrCreateDefaultProfile(sc.getConf)
     for {
-      blacklist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
+      excludelist <- IndexedSeq(Set[String](), Set("a", "b", "c"))
       numRequested <- 0 until 10
       hostToLocalCount <- IndexedSeq(
         Map(defaultResourceProf.id -> Map.empty[String, Int]),
@@ -73,14 +74,14 @@ class YarnSchedulerBackendSuite extends SparkFunSuite with MockitoSugar with Loc
       )
     } {
       yarnSchedulerBackendExtended.setHostToLocalTaskCount(hostToLocalCount)
-      sched.setNodeBlacklist(blacklist)
+      sched.setNodeExcludeList(excludelist)
       val request = Map(defaultResourceProf -> numRequested)
       val req = yarnSchedulerBackendExtended.prepareRequestExecutors(request)
       assert(req.resourceProfileToTotalExecs(defaultResourceProf) === numRequested)
-      assert(req.nodeBlacklist === blacklist)
+      assert(req.excludedNodes === excludelist)
       val hosts =
         req.hostToLocalTaskCount(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID).keySet
-      assert(hosts.intersect(blacklist).isEmpty)
+      assert(hosts.intersect(excludelist).isEmpty)
       // Serialize to make sure serialization doesn't throw an error
       ser.serialize(req)
     }

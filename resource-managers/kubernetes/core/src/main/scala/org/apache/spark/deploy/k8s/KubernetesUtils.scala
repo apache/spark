@@ -261,12 +261,19 @@ private[spark] object KubernetesUtils extends Logging {
       isLocalDependency(Utils.resolveURI(resource))
   }
 
-  def renameMainAppResource(resource: String, conf: SparkConf): String = {
+  def renameMainAppResource(
+      resource: String,
+      conf: Option[SparkConf] = None,
+      shouldUploadLocal: Boolean): String = {
     if (isLocalAndResolvable(resource)) {
-      SparkLauncher.NO_RESOURCE
+      if (shouldUploadLocal) {
+        uploadFileUri(resource, conf)
+      } else {
+        SparkLauncher.NO_RESOURCE
+      }
     } else {
       resource
-   }
+    }
   }
 
   def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {

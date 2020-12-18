@@ -35,7 +35,6 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
-import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -504,7 +503,8 @@ object ParquetFileFormat extends Logging {
   /**
    * Reads Spark SQL schema from a Parquet footer.  If a valid serialized Spark SQL schema string
    * can be found in the file metadata, returns the deserialized [[StructType]], otherwise, returns
-   * a [[StructType]] converted from the [[MessageType]] stored in this footer.
+   * a [[StructType]] converted from the [[org.apache.parquet.schema.MessageType]] stored in this
+   * footer.
    */
   def readSchemaFromFooter(
       footer: Footer, converter: ParquetToSparkSchemaConverter): StructType = {

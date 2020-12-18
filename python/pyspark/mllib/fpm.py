@@ -32,6 +32,10 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     A FP-Growth model for mining frequent itemsets
     using the Parallel FP-Growth algorithm.
 
+    .. versionadded:: 1.4.0
+
+    Examples
+    --------
     >>> data = [["a", "b", "c"], ["a", "b", "d", "e"], ["a", "c", "e"], ["a", "c", "f"]]
     >>> rdd = sc.parallelize(data, 2)
     >>> model = FPGrowth.train(rdd, 0.6, 2)
@@ -42,8 +46,6 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> sameModel = FPGrowthModel.load(sc, model_path)
     >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
     True
-
-    .. versionadded:: 1.4.0
     """
 
     @since("1.4.0")
@@ -72,20 +74,23 @@ class FPGrowth(object):
     """
 
     @classmethod
-    @since("1.4.0")
     def train(cls, data, minSupport=0.3, numPartitions=-1):
         """
         Computes an FP-Growth model that contains frequent itemsets.
 
-        :param data:
-          The input data set, each element contains a transaction.
-        :param minSupport:
-          The minimal support level.
-          (default: 0.3)
-        :param numPartitions:
-          The number of partitions used by parallel FP-growth. A value
-          of -1 will use the same number as input data.
-          (default: -1)
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The input data set, each element contains a transaction.
+        minSupport : float, optional
+            The minimal support level.
+            (default: 0.3)
+        numPartitions : int, optional
+            The number of partitions used by parallel FP-growth. A value
+            of -1 will use the same number as input data.
+            (default: -1)
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
@@ -103,6 +108,10 @@ class PrefixSpanModel(JavaModelWrapper):
     """
     Model fitted by PrefixSpan
 
+    .. versionadded:: 1.6.0
+
+    Examples
+    --------
     >>> data = [
     ...    [["a", "b"], ["c"]],
     ...    [["a"], ["c", "b"], ["a", "b"]],
@@ -112,8 +121,6 @@ class PrefixSpanModel(JavaModelWrapper):
     >>> model = PrefixSpan.train(rdd)
     >>> sorted(model.freqSequences().collect())
     [FreqSequence(sequence=[['a']], freq=3), FreqSequence(sequence=[['a'], ['a']], freq=1), ...
-
-    .. versionadded:: 1.6.0
     """
 
     @since("1.6.0")
@@ -125,38 +132,45 @@ class PrefixSpanModel(JavaModelWrapper):
 class PrefixSpan(object):
     """
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
-    The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan:
-    Mining Sequential Patterns Efficiently by Prefix-Projected Pattern Growth
-    ([[https://doi.org/10.1109/ICDE.2001.914830]]).
+    The PrefixSpan algorithm is described in Jian Pei et al (2001) [1]_
 
     .. versionadded:: 1.6.0
+
+    .. [1] Jian Pei et al.,
+        "PrefixSpan,: mining sequential patterns efficiently by prefix-projected pattern growth,"
+        Proceedings 17th International Conference on Data Engineering, Heidelberg,
+        Germany, 2001, pp. 215-224,
+        doi: https://doi.org/10.1109/ICDE.2001.914830
     """
 
     @classmethod
-    @since("1.6.0")
     def train(cls, data, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000):
         """
         Finds the complete set of frequent sequential patterns in the
         input sequences of itemsets.
 
-        :param data:
-          The input data set, each element contains a sequence of
-          itemsets.
-        :param minSupport:
-          The minimal support level of the sequential pattern, any
-          pattern that appears more than (minSupport *
-          size-of-the-dataset) times will be output.
-          (default: 0.1)
-        :param maxPatternLength:
-          The maximal length of the sequential pattern, any pattern
-          that appears less than maxPatternLength will be output.
-          (default: 10)
-        :param maxLocalProjDBSize:
-          The maximum number of items (including delimiters used in the
-          internal storage format) allowed in a projected database before
-          local processing. If a projected database exceeds this size,
-          another iteration of distributed prefix growth is run.
-          (default: 32000000)
+        .. versionadded:: 1.6.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The input data set, each element contains a sequence of
+            itemsets.
+        minSupport : float, optional
+            The minimal support level of the sequential pattern, any
+            pattern that appears more than (minSupport *
+            size-of-the-dataset) times will be output.
+            (default: 0.1)
+        maxPatternLength : int, optional
+            The maximal length of the sequential pattern, any pattern
+            that appears less than maxPatternLength will be output.
+            (default: 10)
+        maxLocalProjDBSize : int, optional
+            The maximum number of items (including delimiters used in the
+            internal storage format) allowed in a projected database before
+            local processing. If a projected database exceeds this size,
+            another iteration of distributed prefix growth is run.
+            (default: 32000000)
         """
         model = callMLlibFunc("trainPrefixSpanModel",
                               data, minSupport, maxPatternLength, maxLocalProjDBSize)

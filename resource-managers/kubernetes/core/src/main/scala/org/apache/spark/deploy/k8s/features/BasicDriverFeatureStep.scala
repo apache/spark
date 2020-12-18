@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import javax.ws.rs.core.UriBuilder
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -27,6 +29,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -66,7 +69,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((overheadFactor * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
+    .getOrElse(math.max((overheadFactor * driverMemoryMiB).toInt,
+      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -157,11 +161,25 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
-    Seq(JARS, FILES).foreach { key =>
-      val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+    Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
+      val uris = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
+      val value = {
+        if (key == ARCHIVES) {
+          uris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
+        } else {
+          uris
+        }
+      }
       val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
-        additionalProps.put(key.key, resolved.mkString(","))
+        val resolvedValue = if (key == ARCHIVES) {
+          uris.zip(resolved).map { case (uri, r) =>
+            UriBuilder.fromUri(r).fragment(new java.net.URI(uri).getFragment).build().toString
+          }
+        } else {
+          resolved
+        }
+        additionalProps.put(key.key, resolvedValue.mkString(","))
       }
     }
     additionalProps.toMap

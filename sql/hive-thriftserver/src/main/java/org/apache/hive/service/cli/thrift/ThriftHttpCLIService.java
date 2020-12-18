@@ -137,7 +137,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       httpServer.setHandler(context);
       context.addServlet(new ServletHolder(thriftHttpServlet), httpPath);
 
-      // TODO: check defaults: maxTimeout, keepalive, maxBodySize, bodyRecieveDuration, etc.
+      // TODO: check defaults: maxTimeout, keepalive, maxBodySize, bodyReceiveDuration, etc.
       // Finally, start the server
       httpServer.start();
       // In case HIVE_SERVER2_THRIFT_HTTP_PORT or hive.server2.thrift.http.port is configured with

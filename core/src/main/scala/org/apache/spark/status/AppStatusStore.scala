@@ -22,8 +22,7 @@ import java.util.{List => JList}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{JobExecutionStatus, SparkConf, SparkException}
-import org.apache.spark.resource.ResourceProfileManager
+import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils

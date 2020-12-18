@@ -26,11 +26,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -231,7 +233,12 @@ case class ConcatWs(children: Seq[Expression])
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.",
+  usage = """
+    _FUNC_(n, input1, input2, ...) - Returns the `n`-th input, e.g., returns `input2` when `n` is 2.
+    The function returns NULL if the index exceeds the length of the array
+    and `spark.sql.ansi.enabled` is set to false. If `spark.sql.ansi.enabled` is set to true,
+    it throws ArrayIndexOutOfBoundsException for invalid indices.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
@@ -239,7 +246,11 @@ case class ConcatWs(children: Seq[Expression])
   """,
   since = "2.0.0")
 // scalastyle:on line.size.limit
-case class Elt(children: Seq[Expression]) extends Expression {
+case class Elt(
+    children: Seq[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends Expression {
+
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   private lazy val indexExpr = children.head
   private lazy val inputExprs = children.tail.toArray
@@ -275,7 +286,12 @@ case class Elt(children: Seq[Expression]) extends Expression {
     } else {
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
-        null
+        if (failOnError) {
+          throw new ArrayIndexOutOfBoundsException(
+            s"Invalid index: $index, numElements: ${inputExprs.length}")
+        } else {
+          null
+        }
       } else {
         inputExprs(index - 1).eval(input)
       }
@@ -323,6 +339,17 @@ case class Elt(children: Seq[Expression]) extends Expression {
          """.stripMargin
       }.mkString)
 
+    val indexOutOfBoundBranch = if (failOnError) {
+      s"""
+         |if (!$indexMatched) {
+         |  throw new ArrayIndexOutOfBoundsException(
+         |    "Invalid index: " + ${index.value} + ", numElements: " + ${inputExprs.length});
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     ev.copy(
       code"""
          |${index.code}
@@ -332,6 +359,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
          |do {
          |  $codes
          |} while (false);
+         |$indexOutOfBoundBranch
          |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
@@ -1330,8 +1358,9 @@ object ParseUrl {
        1
   """,
   since = "2.0.0")
-case class ParseUrl(children: Seq[Expression])
+case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression with ExpectsInputTypes with CodegenFallback {
+  def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
@@ -1377,7 +1406,9 @@ case class ParseUrl(children: Seq[Expression])
     try {
       new URI(url.toString)
     } catch {
-      case e: URISyntaxException => null
+      case e: URISyntaxException if failOnError =>
+        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+      case _: URISyntaxException => null
     }
   }
 
@@ -2052,6 +2083,65 @@ case class UnBase64(child: Expression)
   }
 }
 
+object Decode {
+  def createExpr(params: Seq[Expression]): Expression = {
+    params.length match {
+      case 0 | 1 =>
+        throw new AnalysisException("Invalid number of arguments for function decode. " +
+          s"Expected: 2; Found: ${params.length}")
+      case 2 => StringDecode(params.head, params.last)
+      case _ =>
+        val input = params.head
+        val other = params.tail
+        val itr = other.iterator
+        var default: Expression = Literal.create(null, StringType)
+        val branches = ArrayBuffer.empty[(Expression, Expression)]
+        while (itr.hasNext) {
+          val search = itr.next
+          if (itr.hasNext) {
+            val condition = EqualTo(input, search)
+            branches += ((condition, itr.next))
+          } else {
+            default = search
+          }
+        }
+        CaseWhen(branches.seq.toSeq, default)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+            |_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+            |
+            |_FUNC_(expr, search, result [, search, result ] ... [, default]) - Decode compares expr
+            |  to each search value one by one. If expr is equal to a search, returns the corresponding result.
+            |  If no match is found, then Oracle returns default. If default is omitted, returns null.
+          """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
+      > SELECT _FUNC_(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       San Francisco
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       Non domestic
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+       NULL
+  """,
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
+
+  def this(params: Seq[Expression]) = {
+    this(params, Decode.createExpr(params))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(params)
+  override def exprsReplaced: Seq[Expression] = params
+}
+
 /**
  * Decodes the first argument into a String using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
@@ -2067,7 +2157,7 @@ case class UnBase64(child: Expression)
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Decode(bin: Expression, charset: Expression)
+case class StringDecode(bin: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = bin

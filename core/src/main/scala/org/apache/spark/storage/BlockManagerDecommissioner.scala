@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.io.IOException
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -28,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo}
+import org.apache.spark.shuffle.ShuffleBlockInfo
 import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
 import org.apache.spark.util.ThreadUtils
 
@@ -40,6 +39,7 @@ private[storage] class BlockManagerDecommissioner(
     conf: SparkConf,
     bm: BlockManager) extends Logging {
 
+  private val fallbackStorage = FallbackStorage.getFallbackStorage(conf)
   private val maxReplicationFailuresForDecommission =
     conf.get(config.STORAGE_DECOMMISSION_MAX_REPLICATION_FAILURE_PER_BLOCK)
 
@@ -115,6 +115,8 @@ private[storage] class BlockManagerDecommissioner(
                       // driver a no longer referenced RDD with shuffle files.
                       if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
                         logWarning(s"Skipping block ${shuffleBlockInfo}, block deleted.")
+                      } else if (fallbackStorage.isDefined) {
+                        fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
                       } else {
                         throw e
                       }
@@ -208,7 +210,7 @@ private[storage] class BlockManagerDecommissioner(
   private val shuffleBlockMigrationRefreshRunnable = new Runnable {
     val sleepInterval = conf.get(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL)
 
-    override def run() {
+    override def run(): Unit = {
       assert(conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
       while (!stopped && !stoppedShuffle && !Thread.interrupted()) {
         try {
@@ -248,6 +250,7 @@ private[storage] class BlockManagerDecommissioner(
     logInfo("Offloading shuffle blocks")
     val localShuffles = bm.migratableResolver.getStoredShuffles().toSet
     val newShufflesToMigrate = (localShuffles.diff(migratingShuffles)).toSeq
+      .sortBy(b => (b.shuffleId, b.mapId))
     shufflesToMigrate.addAll(newShufflesToMigrate.map(x => (x, 0)).asJava)
     migratingShuffles ++= newShufflesToMigrate
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +

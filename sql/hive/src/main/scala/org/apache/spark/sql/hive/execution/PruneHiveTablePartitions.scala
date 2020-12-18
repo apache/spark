@@ -34,14 +34,12 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
  * the hive table relation will be updated based on pruned partitions.
  *
  * This rule is executed in optimization phase, so the statistics can be updated before physical
- * planning, which is useful for some spark strategy, eg.
+ * planning, which is useful for some spark strategy, e.g.
  * [[org.apache.spark.sql.execution.SparkStrategies.JoinSelection]].
  *
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
-private[sql] class PruneHiveTablePartitions
-
-private[sql] object PruneHiveTablePartitions
+private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
 
   /**
@@ -64,11 +62,11 @@ private[sql] object PruneHiveTablePartitions
       relation: HiveTableRelation,
       partitionFilters: ExpressionSet): Seq[CatalogTablePartition] = {
     if (conf.metastorePartitionPruning) {
-      SparkSession.active.sessionState.catalog.listPartitionsByFilter(
+      session.sessionState.catalog.listPartitionsByFilter(
         relation.tableMeta.identifier, partitionFilters.toSeq)
     } else {
       ExternalCatalogUtils.prunePartitionsByFilter(relation.tableMeta,
-        SparkSession.active.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
+        session.sessionState.catalog.listPartitions(relation.tableMeta.identifier),
         partitionFilters.toSeq, conf.sessionLocalTimeZone)
     }
   }

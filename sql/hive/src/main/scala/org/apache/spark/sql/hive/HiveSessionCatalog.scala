@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
 
@@ -44,7 +43,6 @@ private[sql] class HiveSessionCatalog(
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf,
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader)
@@ -52,7 +50,6 @@ private[sql] class HiveSessionCatalog(
       externalCatalogBuilder,
       globalTempViewManagerBuilder,
       functionRegistry,
-      conf,
       hadoopConf,
       parser,
       functionResourceLoader) {

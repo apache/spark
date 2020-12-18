@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -365,7 +362,7 @@ case class Join(
         left.constraints
       case RightOuter =>
         right.constraints
-      case FullOuter =>
+      case _ =>
         ExpressionSet()
     }
   }
@@ -440,6 +437,7 @@ case class InsertIntoDir(
  */
 case class View(
     desc: CatalogTable,
+    isTempView: Boolean,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
 
@@ -453,6 +451,38 @@ case class View(
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+  }
+
+  override def doCanonicalize(): LogicalPlan = {
+    def sameOutput(
+      outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
+      outerProject.length == innerProject.length &&
+        outerProject.zip(innerProject).forall {
+          case(outer, inner) => outer.name == inner.name && outer.dataType == inner.dataType
+        }
+    }
+
+    val eliminated = EliminateView(this) match {
+      case Project(viewProjectList, child @ Project(queryProjectList, _))
+        if sameOutput(viewProjectList, queryProjectList) =>
+        child
+      case other => other
+    }
+    eliminated.canonicalized
+  }
+}
+
+object View {
+  def effectiveSQLConf(configs: Map[String, String], isTempView: Boolean): SQLConf = {
+    val activeConf = SQLConf.get
+    // For temporary view, we always use captured sql configs
+    if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
+
+    val sqlConf = new SQLConf()
+    for ((k, v) <- configs) {
+      sqlConf.settings.put(k, v)
+    }
+    sqlConf
   }
 }
 
@@ -586,7 +616,13 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    if (groupingExpressions.isEmpty) {
+      Some(1L)
+    } else {
+      child.maxRows
+    }
+  }
 
   override lazy val validConstraints: ExpressionSet = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
@@ -623,7 +659,7 @@ object Expand {
     val numAttributes = attrMap.size
     assert(numAttributes <= GroupingID.dataType.defaultSize * 8)
     val mask = if (numAttributes != 64) (1L << numAttributes) - 1 else 0xFFFFFFFFFFFFFFFFL
-    // Calculate the attrbute masks of selected grouping set. For example, if we have GroupBy
+    // Calculate the attribute masks of selected grouping set. For example, if we have GroupBy
     // attributes (a, b, c, d), grouping set (a, c) will produce the following sequence:
     // (15, 7, 13), whose binary form is (1111, 0111, 1101)
     val masks = (mask +: groupingSetAttrs.map(attrMap).map(index =>
@@ -880,6 +916,12 @@ case class SubqueryAlias(
     val qualifierList = identifier.qualifier :+ alias
     child.output.map(_.withQualifier(qualifierList))
   }
+
+  override def metadataOutput: Seq[Attribute] = {
+    val qualifierList = identifier.qualifier :+ alias
+    child.metadataOutput.map(_.withQualifier(qualifierList))
+  }
+
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 }
 
@@ -975,7 +1017,16 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
+  val numPartitions = if (optNumPartitions.nonEmpty) {
+    optNumPartitions.get
+  } else {
+    if (partitionExpressions.forall(_.foldable)) {
+      1
+    } else {
+      SQLConf.get.numShufflePartitions
+    }
+  }
+
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {

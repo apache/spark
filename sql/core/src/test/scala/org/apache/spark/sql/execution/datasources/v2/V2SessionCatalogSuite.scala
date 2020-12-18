@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, NamespaceChange, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -46,7 +46,7 @@ abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeA
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
 
   def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.conf)
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }

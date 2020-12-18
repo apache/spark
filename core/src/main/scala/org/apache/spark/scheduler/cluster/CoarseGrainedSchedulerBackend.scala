@@ -209,13 +209,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           attributes, resources, resourceProfileId) =>
         if (executorDataMap.contains(executorId)) {
           context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
-        } else if (scheduler.nodeBlacklist.contains(hostname) ||
-            isBlacklisted(executorId, hostname)) {
-          // If the cluster manager gives us an executor on a blacklisted node (because it
-          // already started allocating those resources before we informed it of our blacklist,
-          // or if it ignored our blacklist), then we reject that executor immediately.
-          logInfo(s"Rejecting $executorId as it has been blacklisted.")
-          context.sendFailure(new IllegalStateException(s"Executor is blacklisted: $executorId"))
+        } else if (scheduler.excludedNodes.contains(hostname) ||
+            isExecutorExcluded(executorId, hostname)) {
+          // If the cluster manager gives us an executor on an excluded node (because it
+          // already started allocating those resources before we informed it of our exclusion,
+          // or if it ignored our exclusion), then we reject that executor immediately.
+          logInfo(s"Rejecting $executorId as it has been excluded.")
+          context.sendFailure(
+            new IllegalStateException(s"Executor is excluded due to failures: $executorId"))
         } else {
           // If the executor's rpc env is not listening for incoming connections, `hostPort`
           // will be null, and the client connection should be used to contact the executor.
@@ -852,7 +853,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   final override def killExecutorsOnHost(host: String): Boolean = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
     // A potential race exists if a new executor attempts to register on a host
-    // that is on the blacklist and is no no longer valid. To avoid this race,
+    // that is on the exclude list and is no no longer valid. To avoid this race,
     // all executor registration and killing happens in the event loop. This way, either
     // an executor will fail to register, or will be killed when all executors on a host
     // are killed.
@@ -884,13 +885,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def currentDelegationTokens: Array[Byte] = delegationTokens.get()
 
   /**
-   * Checks whether the executor is blacklisted. This is called when the executor tries to
-   * register with the scheduler, and will deny registration if this method returns true.
+   * Checks whether the executor is excluded due to failure(s). This is called when the executor
+   * tries to register with the scheduler, and will deny registration if this method returns true.
    *
-   * This is in addition to the blacklist kept by the task scheduler, so custom implementations
+   * This is in addition to the exclude list kept by the task scheduler, so custom implementations
    * don't need to check there.
    */
-  protected def isBlacklisted(executorId: String, hostname: String): Boolean = false
+  protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = false
 
   // SPARK-27112: We need to ensure that there is ordering of lock acquisition
   // between TaskSchedulerImpl and CoarseGrainedSchedulerBackend objects in order to fix

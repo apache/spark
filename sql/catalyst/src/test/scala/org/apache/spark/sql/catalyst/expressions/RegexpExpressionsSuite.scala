@@ -48,6 +48,56 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
   }
 
+  test("LIKE ALL") {
+    checkEvaluation(Literal.create(null, StringType).likeAll("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", StringType).likeAll("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", StringType).likeAll("%foo%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll("%feo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAll(Literal.create(null, StringType), "%feo%"), false)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll("tee", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAll("%oo%", "%yoo%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll("%foo%", Literal.create(null, StringType)), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll(Literal.create(null, StringType), "%foo%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll("%yoo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAll(Literal.create(null, StringType), "%yoo%"), null)
+  }
+
+  test("LIKE ANY") {
+    checkEvaluation(Literal.create(null, StringType).likeAny("%foo%", "%oo"), null)
+    checkEvaluation(Literal.create("foo", StringType).likeAny("%foo%", "%oo"), true)
+    checkEvaluation(Literal.create("foo", StringType).likeAny("%foo%", "%bar%"), true)
+    checkEvaluation(Literal.create("foo", StringType).likeAny("%fee%", "%bar%"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny("%foo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny(Literal.create(null, StringType), "%foo%"), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny("%feo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .likeAny(Literal.create(null, StringType), "%feo%"), null)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAny("tee", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAny("%oo%", "%yoo%"), true)
+    checkEvaluation(Literal.create("foo", StringType).notLikeAny("%foo%", "%oo"), false)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny("%foo%", Literal.create(null, StringType)), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny(Literal.create(null, StringType), "%foo%"), null)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny("%yoo%", Literal.create(null, StringType)), true)
+    checkEvaluation(Literal.create("foo", StringType)
+      .notLikeAny(Literal.create(null, StringType), "%yoo%"), true)
+  }
+
   test("LIKE Pattern") {
 
     // null handling

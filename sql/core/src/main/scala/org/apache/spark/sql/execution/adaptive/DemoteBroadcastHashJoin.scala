@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, LogicalPlan, NO_BROADCAST_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This optimization rule detects a join child that has a high ratio of empty partitions and

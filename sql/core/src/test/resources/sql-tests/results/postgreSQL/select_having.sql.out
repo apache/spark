@@ -143,7 +143,7 @@ SELECT a FROM test_having HAVING min(a) < max(a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'spark_catalog.default.test_having.`a`' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.`a`) AS `min(a#x)`, max(spark_catalog.default.test_having.`a`) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.`a`' in first() (or first_value) if you don't care which value you get.;
+grouping expressions sequence is empty, and 'spark_catalog.default.test_having.`a`' is not an aggregate function. Wrap '(min(spark_catalog.default.test_having.`a`) AS `min(a#x)`, max(spark_catalog.default.test_having.`a`) AS `max(a#x)`)' in windowing function(s) or wrap 'spark_catalog.default.test_having.`a`' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -174,9 +174,10 @@ struct<one:int>
 -- !query
 SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2
 -- !query schema
-struct<one:int>
+struct<>
 -- !query output
-1
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query

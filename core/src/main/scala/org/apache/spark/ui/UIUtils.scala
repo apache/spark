@@ -639,7 +639,8 @@ private[spark] object UIUtils extends Logging {
   */
   def makeHref(proxy: Boolean, id: String, origHref: String): String = {
     if (proxy) {
-      s"/proxy/$id"
+      val proxyPrefix = sys.props.getOrElse("spark.ui.proxyBase", "")
+      proxyPrefix + "/proxy/" + id
     } else {
       origHref
     }

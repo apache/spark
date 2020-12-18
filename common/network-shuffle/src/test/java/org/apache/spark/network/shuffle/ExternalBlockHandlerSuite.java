@@ -77,7 +77,7 @@ public class ExternalBlockHandlerSuite {
     ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
     handler.receive(client, registerMessage, callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
-    verify(mergedShuffleManager, times(1)).registerExecutor("app0", localDirs);
+    verify(mergedShuffleManager, times(1)).registerExecutor("app0", config);
 
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));

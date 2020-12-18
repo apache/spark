@@ -255,7 +255,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
   /*
    * This is a dummy input stream that wraps another input stream but ends prematurely when
-   * reading at the specified position, throwing an EOFExeption.
+   * reading at the specified position, throwing an EOFException.
    */
   private class EarlyEOFInputStream(in: InputStream, failAtPos: Int) extends InputStream {
     private val countDown = new AtomicInteger(failAtPos)

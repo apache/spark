@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.Logging
@@ -27,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -1165,7 +1164,11 @@ class Column(val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(alias: String): Column = withExpr {
-    Alias(normalizedExpr(), alias)()
+    // SPARK-33536: an alias is no longer a column reference. Therefore,
+    // we should not inherit the column reference related metadata in an alias
+    // so that it is not caught as a column reference in DetectAmbiguousSelfJoin.
+    Alias(expr, alias)(
+      nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
   }
 
   /**
@@ -1182,7 +1185,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: DataType): Column = withExpr { Cast(expr, to) }
+  def cast(to: DataType): Column = withExpr {
+    Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+  }
 
   /**
    * Casts the column to a different data type, using the canonical string representation
@@ -1227,7 +1232,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Set.empty) }
+  def desc_nulls_first: Column = withExpr { SortOrder(expr, Descending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on the descending order of the column,
@@ -1243,7 +1248,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Set.empty) }
+  def desc_nulls_last: Column = withExpr { SortOrder(expr, Descending, NullsLast, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column.
@@ -1274,7 +1279,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Set.empty) }
+  def asc_nulls_first: Column = withExpr { SortOrder(expr, Ascending, NullsFirst, Seq.empty) }
 
   /**
    * Returns a sort expression based on ascending order of the column,
@@ -1290,7 +1295,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 2.1.0
    */
-  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Set.empty) }
+  def asc_nulls_last: Column = withExpr { SortOrder(expr, Ascending, NullsLast, Seq.empty) }
 
   /**
    * Prints the expression to the console for debugging purposes.
