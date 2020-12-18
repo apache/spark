@@ -76,12 +76,15 @@ private[spark] object Minikube extends Logging {
   }
 
   def getKubernetesClient: DefaultKubernetesClient = {
+    // only the three-part version number is matched (the optional suffix like "-beta.0" is dropped)
     val versionArrayOpt = "\\d+\\.\\d+\\.\\d+".r
       .findFirstIn(minikubeVersionString.split(VERSION_PREFIX)(1))
       .map(_.split('.').map(_.toInt))
 
     assert(versionArrayOpt.isDefined && versionArrayOpt.get.size == 3,
-      "Unexpected minikube version format: a three-part version number is expected")
+      s"Unexpected version format detected in `$minikubeVersionString`." +
+      "For minikube version a three-part version number is expected (the optional non-numeric " +
+      "suffix is intentionally dropped)")
 
     val kubernetesConf = versionArrayOpt.get match {
       case Array(x, y, z) =>
