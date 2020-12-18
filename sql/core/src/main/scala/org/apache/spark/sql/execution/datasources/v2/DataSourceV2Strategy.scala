@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession, Strategy}
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -53,13 +52,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
+  private def cache(relation: DataSourceV2Relation, cacheInfo: CacheInfo): Unit = {
+    session.sharedState.cacheManager.cacheQuery(
+      session,
+      relation,
+      cacheInfo.tableName,
+      cacheInfo.storageLevel)
+  }
+
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
+  // Invalidates the cache associated with the given table. If there exists a cache with the given
+  // table, the cache's info (table name and storage level) is returned.
   private def invalidateCache(
       r: ResolvedTable,
-      recacheTable: Boolean = false)(): Option[(Option[String], StorageLevel)] = {
+      recacheTable: Boolean = false)(): Option[CacheInfo] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
@@ -68,21 +77,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
       if (recacheTable) {
         // recache with the same name and cache level.
-        val ds = Dataset.ofRows(session, v2Relation)
-        session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+        session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
       }
-      Some((cacheName, cacheLevel))
+      Some(CacheInfo(cacheName, cacheLevel))
     } else {
       None
     }
-  }
-
-  private def cacheQuery(
-      relation: LogicalPlan,
-      tableName: Option[String],
-      storageLevel: StorageLevel): Unit = {
-    val ds = Dataset.ofRows(session, relation)
-    session.sharedState.cacheManager.cacheQuery(ds, tableName, storageLevel)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -287,7 +287,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
       }
       RenameTableExec(
-        catalog, oldIdent, newIdent.asIdentifier, invalidateCache(r), cacheQuery) :: Nil
+        catalog, oldIdent, newIdent.asIdentifier, invalidateCache(r), cache) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
