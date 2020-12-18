@@ -190,8 +190,8 @@ class DataStreamWriter:
         self,
         tableName: str,
         format: Optional[str] = ...,
-            outputMode: Optional[str] = ...,
-            partitionBy: Optional[Union[str, List[str]]] = ...,
-            queryName: Optional[str] = ...,
-            **options: OptionalPrimitiveType
+        outputMode: Optional[str] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
+        queryName: Optional[str] = ...,
+        **options: OptionalPrimitiveType
     ) -> StreamingQuery: ...
