@@ -1566,6 +1566,7 @@ def _test():
     import doctest
     import os
     import tempfile
+    from random import randint
     from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
 
@@ -1587,7 +1588,7 @@ def _test():
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 
-    spark.sql("CREATE TABLE sample_table (value string) USING parquet")
+    spark.sql("CREATE TABLE sample_table_%d (value string) USING parquet" % randint(0, 10000000))
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,
