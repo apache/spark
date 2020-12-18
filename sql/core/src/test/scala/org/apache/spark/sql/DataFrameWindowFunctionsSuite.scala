@@ -709,7 +709,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("a", 3, "z"),
       ("a", 4, nullStr),
       ("b", 1, nullStr),
-      ("b", 2, nullStr)).
+      ("b", 2, nullStr),
+      ("c", 1, nullStr)).
       toDF("key", "order", "value")
     val window = Window.orderBy($"order")
     checkAnswer(
@@ -719,23 +720,26 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         $"order",
         lead($"value", 1).over(window),
         lead($"value", 2).over(window),
+        lead($"value", 0, null, true).over(window),
         lead($"value", 1, null, true).over(window),
         lead($"value", 2, null, true).over(window),
         lead($"value", 3, null, true).over(window),
         lag($"value", 1).over(window),
         lag($"value", 2).over(window),
+        lag($"value", 0, null, true).over(window),
         lag($"value", 1, null, true).over(window),
         lag($"value", 2, null, true).over(window),
         lag($"value", 3, null, true).over(window))
         .orderBy($"order"),
       Seq(
-        Row("a", null, 0, "x", null, "x", "y", "z", null, null, null, null, null),
-        Row("a", "x", 1, null, "y", "y", "z", null, null, null, null, null, null),
-        Row("b", null, 1, "y", null, "y", "z", null, "x", null, "x", null, null),
-        Row("a", "y", 2, null, "z", "z", null, null, null, "x", "x", null, null),
-        Row("b", null, 2, "z", null, "z", null, null, "y", null, "y", "x", null),
-        Row("a", "z", 3, null, null, null, null, null, null, "y", "y", "x", null),
-        Row("a", null, 4, null, null, null, null, null, "z", null, "z", "y", "x")))
+        Row("a", null, 0, "x", null, null, "x", "y", "z", null, null, null, null, null, null),
+        Row("a", "x", 1, null, null, "x", "y", "z", null, null, null, "x", null, null, null),
+        Row("b", null, 1, null, "y", null, "y", "z", null, "x", null, null, "x", null, null),
+        Row("c", null, 1, "y", null, null, "y", "z", null, null, "x", null, "x", null, null),
+        Row("a", "y", 2, null, "z", "y", "z", null, null, null, null, "y", "x", null, null),
+        Row("b", null, 2, "z", null, null, "z", null, null, "y", null, null, "y", "x", null),
+        Row("a", "z", 3, null, null, "z", null, null, null, null, "y", "z", "y", "x", null),
+        Row("a", null, 4, null, null, null, null, null, null, "z", null, null, "z", "y", "x")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {

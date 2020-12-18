@@ -161,9 +161,6 @@ class FrameLessOffsetWindowFunctionFrame(
   /** The index of input expression in the row. */
   private lazy val idx = inputAttrs.zipWithIndex.find(_._1 == inputExpression).map(_._2).head
 
-  /** Cache some UnsafeRow that will be used many times. */
-  private val rowBuffer = new ArrayBuffer[UnsafeRow]
-
   /** Holder the UnsafeRow where the input operator by function is not null. */
   private var nextSelectedRow = EmptyRow
 
@@ -190,14 +187,14 @@ class FrameLessOffsetWindowFunctionFrame(
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
-    if (!ignoreNulls || offset < 0) {
+    if (ignoreNulls) {
+      findNextRowWithNonNullInput
+    } else {
       while (inputIndex < offset) {
         if (inputIterator.hasNext) inputIterator.next()
         inputIndex += 1
       }
       inputIndex = offset
-    } else {
-      findNextRowWithNonNullInput
     }
   }
 
@@ -211,7 +208,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // 4. current row -> null, next selected row -> z, output: z;
     // 5. current row -> y, next selected row -> empty, output: null;
     // ... next selected row is empty, all following return null.
-    (index: Int, current: InternalRow) =>
+    (_: Int, current: InternalRow) =>
       if (current.isNullAt(idx)) {
         if (nextSelectedRow == EmptyRow) {
           // Use default values since the offset row whose input value is not null does not exist.
@@ -232,38 +229,39 @@ class FrameLessOffsetWindowFunctionFrame(
       }
   } else if (ignoreNulls && offset < 0) {
     // For illustration, here is one example: the input data contains six rows,
-    // and the input values of each row are: null, x, null, y, null, z, null.
+    // and the input values of each row are: null, x, null, null, y, null, z, null.
     // We use Lag(input, 1) with IGNORE NULLS and the process is as follows:
-    // 1. current row -> null, row buffer: [], output: null;
-    // 2. current row -> x, row buffer: [], output: null;
-    // 3. current row -> null, row buffer: [x], output: x;
-    // 4. current row -> y, row buffer: [x], output: x;
-    // 5. current row -> null, row buffer: [y], output: y;
-    // 6. current row -> z, row buffer: [y], output: y;
-    // 7. current row -> null, row buffer: [z], output: z;
-    val maxSize = Math.abs(offset)
+    // 1. current row -> null, next selected row -> empty, output: null;
+    // 2. current row -> x, next selected row -> empty, output: null;
+    // 3. current row -> null, next selected row -> x, output: x;
+    // 4. current row -> null, next selected row -> x, output: x;
+    // 5. current row -> y, next selected row -> x, output: x;
+    // 6. current row -> null, next selected row -> y, output: y;
+    // 7. current row -> z, next selected row -> y, output: y;
+    // 8. current row -> z, next selected row -> z, output: z;
+    val absOffset = Math.abs(offset)
     (index: Int, current: InternalRow) =>
-      if (inputIndex >= 0 && inputIndex < input.length) {
-        while (inputIndex < index) {
+      if (nextSelectedRow == EmptyRow && skipNonNullCount == absOffset) {
+        do {
           val r = WindowFunctionFrame.getNextOrNull(inputIterator)
           if (!r.isNullAt(idx)) {
-            if (rowBuffer.size == maxSize) {
-              rowBuffer.remove(0)
-            }
-            rowBuffer += r
+            nextSelectedRow = r
           }
           inputIndex += 1
-        }
-        if (rowBuffer.size == maxSize) {
-          projection(rowBuffer.head)
-        } else {
-          // Use default values since the offset row whose input value is not null does not exist.
-          fillDefaultValue(current)
-        }
-      } else {
-        // Use default values since the offset row does not exist.
+        } while (index > inputIndex && nextSelectedRow == EmptyRow && inputIndex < input.length)
+      }
+      if (nextSelectedRow == EmptyRow) {
+        // Use default values since the offset row whose input value is not null does not exist.
         fillDefaultValue(current)
-        inputIndex += 1
+      } else {
+        projection(nextSelectedRow)
+      }
+      if (!current.isNullAt(idx)) {
+        if (skipNonNullCount < absOffset) {
+          skipNonNullCount += 1
+        } else {
+          nextSelectedRow = EmptyRow
+        }
       }
   } else {
     (_: Int, current: InternalRow) =>
