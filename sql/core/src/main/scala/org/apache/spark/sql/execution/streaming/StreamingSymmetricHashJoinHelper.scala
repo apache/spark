@@ -245,6 +245,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       if (stateStoreLocs.isEmpty) {
         defaultPreferredLocations
       } else {
+        stateStoreLocs.foreach(executorMap(_) += 1)
         stateStoreLocs
       }
     }

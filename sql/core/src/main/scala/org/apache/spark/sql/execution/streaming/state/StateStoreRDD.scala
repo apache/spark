@@ -73,6 +73,13 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     if (stateStoreLocs.isEmpty) {
       defaultPreferredLocations
     } else {
+      stateStoreLocs.foreach { executorId =>
+        if (executorMap.contains(executorId)) {
+          executorMap(executorId) += 1
+        } else {
+          executorMap.put(executorId, 1)
+        }
+      }
       stateStoreLocs
     }
   }

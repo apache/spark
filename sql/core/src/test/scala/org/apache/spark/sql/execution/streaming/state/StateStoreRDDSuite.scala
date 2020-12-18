@@ -211,6 +211,54 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     }
   }
 
+  test("preferred locations using StateStoreCoordinator: counting locs") {
+    quietly {
+      val queryRunId = UUID.randomUUID
+      val opId = 0
+      val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+
+      withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+        implicit val sqlContext = spark.sqlContext
+        val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+        val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
+        val storeProviderId2 = StateStoreProviderId(StateStoreId(path, opId, 1), queryRunId)
+        val storeProviderId3 = StateStoreProviderId(StateStoreId(path, opId, 2), queryRunId)
+        val storeProviderId4 = StateStoreProviderId(StateStoreId(path, opId, 3), queryRunId)
+        coordinatorRef.reportActiveInstance(storeProviderId1, "host1", "exec1")
+        coordinatorRef.reportActiveInstance(storeProviderId2, "host1", "exec1")
+        coordinatorRef.reportActiveInstance(storeProviderId3, "host1", "exec1")
+        coordinatorRef.reportActiveInstance(storeProviderId4, "host1", "exec2")
+
+        require(
+          coordinatorRef.getLocation(storeProviderId1) ===
+            Some(ExecutorCacheTaskLocation("host1", "exec1").toString))
+
+        val rdd = makeRDD(spark.sparkContext, Seq("a", "b", "a"), 5).mapPartitionsWithStateStore(
+          sqlContext, operatorStateInfo(path, queryRunId = queryRunId),
+          keySchema, valueSchema, None)(increment)
+        require(rdd.partitions.length === 5)
+
+        for (i <- 0 to 2) {
+          assert(
+            rdd.preferredLocations(rdd.partitions(i)) ===
+              Seq(ExecutorCacheTaskLocation("host1", "exec1").toString))
+        }
+
+        assert(
+          rdd.preferredLocations(rdd.partitions(3)) ===
+            Seq(ExecutorCacheTaskLocation("host1", "exec2").toString))
+
+        // host1_exec1 has 3 stores, host1_exec2 has 1 store. The 5th partition doesn't have active
+        // instance reported, so it chooses the executor with less stores.
+        assert(
+          rdd.preferredLocations(rdd.partitions(4)) ===
+            Seq(ExecutorCacheTaskLocation("host1", "exec2").toString))
+
+        rdd.collect()
+      }
+    }
+  }
+
   test("distributed test") {
     quietly {
 
@@ -236,8 +284,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     }
   }
 
-  private def makeRDD(sc: SparkContext, seq: Seq[String]): RDD[String] = {
-    sc.makeRDD(seq, 2).groupBy(x => x).flatMap(_._2)
+  private def makeRDD(sc: SparkContext, seq: Seq[String], numSlices: Int = 2): RDD[String] = {
+    sc.makeRDD(seq, numSlices).groupBy(x => x).flatMap(_._2)
   }
 
   private def operatorStateInfo(
