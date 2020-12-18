@@ -37,6 +37,25 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     assert(prod === factorials(16))
   }
 
+  test("type flexibility") {
+    import org.apache.spark.sql.types.{ ShortType, IntegerType, FloatType, DoubleType }
+    val bytes16 = spark.createDataset((1 to 16).map { _.toByte })(Encoders.scalaByte)
+                       .toDF("x")
+
+    val variants = Map("int16" -> ShortType, "int32" -> IntegerType,
+                       "float32" -> FloatType, "float64" -> DoubleType)
+
+    val prods = variants.foldLeft(bytes16) { case (df, (id, typ)) =>
+      df.withColumn(id, df.col("x").cast(typ))
+    }.agg(lit(1) as "dummy",
+          variants.keys.toSeq.map { id => product(col(id)) as id } : _*)
+
+    variants.keys.foreach { typ =>
+      val prod = prods.select(typ).as[Double](Encoders.scalaDouble).head
+      assert(prod === factorials(16))
+    }
+  }
+
   test("windowed factorials") {
     import org.apache.spark.sql.expressions.Window
 

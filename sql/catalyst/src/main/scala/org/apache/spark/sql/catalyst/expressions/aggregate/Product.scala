@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType, NumericType }
+import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType }
 
 
 /** Multiply numerical values within an aggregation group */
@@ -34,7 +34,7 @@ case class Product(child: Expression, scale: Double = 1.0)
 
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function product")
