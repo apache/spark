@@ -76,6 +76,26 @@ trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
       assert(v1 || v2)
     }
   }
+
+  test("allow to change column for varchar(x) to varchar(y), x == y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c VARCHAR(4)) USING $format")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(4)")
+      checkColType(spark.table("t").schema(1), VarcharType(4))
+    }
+  }
+
+  test("not allow to change column for varchar(x) to varchar(y), x > y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c VARCHAR(4)) USING $format")
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(3)")
+      }
+      val v1 = e.getMessage contains "'VarcharType(4)' to 'c' with type 'VarcharType(3)'"
+      val v2 = e.getMessage contains "varchar(4) cannot be cast to varchar(3)"
+      assert(v1 || v2)
+    }
+  }
 }
 
 class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestSuite with SharedSparkSession {
@@ -107,6 +127,22 @@ class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestSuite
       sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
       sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(4)")
       checkColType(spark.table("t").schema(1), VarcharType(4))
+    }
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(4)) USING $format")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(5)")
+      checkColType(spark.table("t").schema(1), VarcharType(5))
+    }
+  }
+
+  test("allow to change column from varchar(x) to varchar(y) type x <= y") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c VARCHAR(4)) USING $format")
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(4)")
+      checkColType(spark.table("t").schema(1), VarcharType(4))
+      sql("ALTER TABLE t CHANGE COLUMN c TYPE VARCHAR(5)")
+      checkColType(spark.table("t").schema(1), VarcharType(5))
+
     }
   }
 

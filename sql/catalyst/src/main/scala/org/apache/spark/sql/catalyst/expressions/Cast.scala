@@ -139,6 +139,7 @@ object Cast {
 
     case (CharType(l1), CharType(l2)) => l1 == l2
     case (CharType(l1), VarcharType(l2)) => l1 <= l2
+    case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.
