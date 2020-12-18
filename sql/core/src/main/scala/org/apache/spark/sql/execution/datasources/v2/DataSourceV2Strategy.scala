@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession, Strategy}
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -66,8 +66,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
 
       // recache with the same name and cache level.
-      val ds = Dataset.ofRows(session, v2Relation)
-      session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+      session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
     }
   }
 
