@@ -102,7 +102,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
@@ -111,12 +111,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             s"$cmd expects a view.")
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
         u.failAnalysis(
-          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
@@ -125,7 +125,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        failAnalysis(s"Table or view not found for `CACHE TABLE`: ${u.multipartIdentifier.quoted}")
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case UncacheTable(u: UnresolvedRelation, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
@@ -586,7 +589,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
             checkAlterTablePartition(table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
+          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
             checkAlterTablePartition(table, parts)
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)

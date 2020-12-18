@@ -334,10 +334,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("alter table: drop partition (datasource table)") {
-    testDropPartitions(isDatasourceTable = true)
-  }
-
   test("alter table: rename partition (datasource table)") {
     testRenamePartitions(isDatasourceTable = true)
   }
@@ -1615,59 +1611,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
     }
-  }
-
-  protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "5")
-    val part2 = Map("a" -> "2", "b" -> "6")
-    val part3 = Map("a" -> "3", "b" -> "7")
-    val part4 = Map("a" -> "4", "b" -> "8")
-    val part5 = Map("a" -> "9", "b" -> "9")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    createTablePartition(catalog, part2, tableIdent)
-    createTablePartition(catalog, part3, tableIdent)
-    createTablePartition(catalog, part4, tableIdent)
-    createTablePartition(catalog, part5, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4, part5))
-
-    // basic drop partition
-    sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part5))
-
-    // drop partitions without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='2', b ='6')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
-    }
-
-    // partition to drop does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
-    }
-
-    // partition to drop does not exist when using IF EXISTS
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // partition spec in DROP PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part5))
-
-    // use int literal as partition value for int type partition column
-    sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
-    assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
   protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {

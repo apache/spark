@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT,
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
+import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.k8sTestTag
@@ -135,7 +136,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .create(minioStatefulSet))
   }
 
- private def deleteMinioStorage(): Unit = {
+  private def deleteMinioStorage(): Unit = {
     kubernetesTestComponents
       .kubernetesClient
       .apps()
@@ -167,7 +168,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     tryDepsTest {
       val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
       Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tar.gz")
-      sparkAppConf.set("spark.archives", s"$HOST_PATH/$fileName.tar.gz#test_tar_gz")
+      sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tar.gz#test_tar_gz")
       val examplesJar = Utils.getTestFileAbsolutePath(getExamplesJarName(), sparkHomeDir)
       runSparkRemoteCheckAndVerifyCompletion(appResource = examplesJar,
         appArgs = Array(s"test_tar_gz/$fileName"),
@@ -175,40 +176,81 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
+  test(
+    "SPARK-33748: Launcher python client respecting PYSPARK_PYTHON", k8sTestTag, MinikubeTag) {
+    val fileName = Utils.createTempFile(
+      """
+        |#!/usr/bin/env bash
+        |export IS_CUSTOM_PYTHON=1
+        |python3 "$@"
+      """.stripMargin, HOST_PATH)
+    Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tgz")
+    sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tgz#test_env")
+    val pySparkFiles = Utils.getTestFileAbsolutePath("python_executable_check.py", sparkHomeDir)
+    testPython(pySparkFiles,
+      Seq(
+        s"PYSPARK_PYTHON: ./test_env/$fileName",
+        s"PYSPARK_DRIVER_PYTHON: ./test_env/$fileName",
+        "Custom Python used on executor: True",
+        "Custom Python used on driver: True"),
+      env = Map("PYSPARK_PYTHON" -> s"./test_env/$fileName"))
+  }
+
+  test(
+    "SPARK-33748: Launcher python client respecting " +
+      s"${PYSPARK_PYTHON.key} and ${PYSPARK_DRIVER_PYTHON.key}", k8sTestTag, MinikubeTag) {
+    val fileName = Utils.createTempFile(
+      """
+        |#!/usr/bin/env bash
+        |export IS_CUSTOM_PYTHON=1
+        |python3 "$@"
+      """.stripMargin, HOST_PATH)
+    Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tgz")
+    sparkAppConf.set(ARCHIVES.key, s"$HOST_PATH/$fileName.tgz#test_env")
+    sparkAppConf.set(PYSPARK_PYTHON.key, s"./test_env/$fileName")
+    sparkAppConf.set(PYSPARK_DRIVER_PYTHON.key, "python3")
+    val pySparkFiles = Utils.getTestFileAbsolutePath("python_executable_check.py", sparkHomeDir)
+    testPython(pySparkFiles,
+      Seq(
+        s"PYSPARK_PYTHON: ./test_env/$fileName",
+        "PYSPARK_DRIVER_PYTHON: python3",
+        "Custom Python used on executor: True",
+        "Custom Python used on driver: False"))
+  }
+
   test("Launcher python client dependencies using a zip file", k8sTestTag, MinikubeTag) {
+    val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
     val inDepsFile = Utils.getTestFileAbsolutePath("py_container_checks.py", sparkHomeDir)
     val outDepsFile = s"${inDepsFile.substring(0, inDepsFile.lastIndexOf("."))}.zip"
     Utils.createZipFile(inDepsFile, outDepsFile)
-    testPythonDeps(outDepsFile)
+    testPython(
+      pySparkFiles,
+      Seq(
+        "Python runtime version check is: True",
+        "Python environment version check is: True",
+        "Python runtime version check for executor is: True"),
+      Some(outDepsFile))
   }
 
-  private def testPythonDeps(depsFile: String): Unit = {
-    tryDepsTest({
-      val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
+  private def testPython(
+      pySparkFiles: String,
+      expectedDriverLogs: Seq[String],
+      depsFile: Option[String] = None,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
+    tryDepsTest {
       setPythonSparkConfProperties(sparkAppConf)
       runSparkApplicationAndVerifyCompletion(
         appResource = pySparkFiles,
         mainClass = "",
-        expectedDriverLogOnCompletion = Seq(
-          "Python runtime version check is: True",
-          "Python environment version check is: True",
-          "Python runtime version check for executor is: True"),
+        expectedDriverLogOnCompletion = expectedDriverLogs,
         appArgs = Array("python3"),
         driverPodChecker = doBasicDriverPyPodCheck,
         executorPodChecker = doBasicExecutorPyPodCheck,
         appLocator = appLocator,
         isJVM = false,
-        pyFiles = Option(depsFile)) })
-  }
-
-  private def extractS3Key(data: String, key: String): String = {
-    data.split("\n")
-      .filter(_.contains(key))
-      .head
-      .split(":")
-      .last
-      .trim
-      .replaceAll("[,|\"]", "")
+        pyFiles = depsFile,
+        env = env)
+    }
   }
 
   private def createS3Bucket(accessKey: String, secretKey: String, endPoint: String): Unit = {
@@ -269,7 +311,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
 
   private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
     sparkAppConf.set("spark.kubernetes.container.image", pyImage)
-      .set("spark.kubernetes.pyspark.pythonVersion", "3")
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {

@@ -56,9 +56,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  private def invalidateCache(r: ResolvedTable)(): Unit = {
+  private def invalidateCache(r: ResolvedTable, recacheTable: Boolean = false)(): Unit = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
+    if (recacheTable && cache.isDefined) {
+      // save the cache name and cache level for recreation
+      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
+
+      // recache with the same name and cache level.
+      session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
+    }
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -137,7 +146,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r)) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r, recacheTable = true)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -316,9 +325,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+
+    case AlterTableRecoverPartitions(_: ResolvedTable) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
+
+    case AlterTableSerDeProperties(_: ResolvedTable, _, _, _) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables.")
 
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw new AnalysisException("LOAD DATA is not supported for v2 tables.")
@@ -349,6 +366,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r: CacheTableAsSelect =>
       CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
+
+    case r: UncacheTable =>
+      UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
 
     case _ => Nil
   }

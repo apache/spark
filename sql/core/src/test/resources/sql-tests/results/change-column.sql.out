@@ -50,7 +50,7 @@ ALTER TABLE test_change RENAME COLUMN a TO a1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-RENAME COLUMN is only supported with v2 tables.;
+RENAME COLUMN is only supported with v2 tables.
 
 
 -- !query
@@ -69,7 +69,7 @@ ALTER TABLE test_change CHANGE a TYPE STRING
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType';
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'a' with type 'IntegerType' to 'a' with type 'StringType'
 
 
 -- !query
@@ -88,7 +88,7 @@ ALTER TABLE test_change CHANGE a AFTER b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.;
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
 
 
 -- !query
@@ -97,7 +97,7 @@ ALTER TABLE test_change CHANGE b FIRST
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.;
+ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.
 
 
 -- !query
@@ -176,7 +176,7 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Can't find column `invalid_col` given table data columns [`a`, `b`, `c`];
+Can't find column `invalid_col` given table data columns [`a`, `b`, `c`]
 
 
 -- !query

@@ -18,15 +18,9 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultUsing: String = "USING parquet"
-
   test("show everything in the default database") {
     val table = "dateTable"
     withTable(table) {
@@ -69,7 +63,7 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   }
 }
 
-class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSession {
+class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
   // The test is placed here because it fails with `USING HIVE`:
   // org.apache.spark.sql.AnalysisException:
   //   Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING

@@ -731,7 +731,7 @@ class DataSourceV2SQLSuite
     val ex = intercept[AnalysisException] {
       sql("DROP TABLE testcat.db.notbl")
     }
-    assert(ex.getMessage.contains("Table or view not found for 'DROP TABLE': testcat.db.notbl"))
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
@@ -1749,6 +1749,25 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33653: REFRESH TABLE should recache the target table itself") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+
+      // if the table is not cached, refreshing it should not recache it
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+
+      sql(s"CACHE TABLE $tblName")
+
+      // after caching & refreshing the table should be recached
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1996,7 +2015,7 @@ class DataSourceV2SQLSuite
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
     assert(e.getMessage.contains(
-      "Table or view not found for 'ALTER VIEW ... RENAME TO': testcat.ns.tbl"))
+      "Table or view not found: testcat.ns.tbl"))
   }
 
   test("ANALYZE TABLE") {
@@ -2101,16 +2120,9 @@ class DataSourceV2SQLSuite
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
       }
-      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
     }
-  }
-
-  test("ALTER VIEW AS QUERY") {
-    val v = "testcat.ns1.ns2.v"
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER VIEW $v AS SELECT 1")
-    }
-    assert(e.message.contains("ALTER VIEW QUERY is only supported with temp views or v1 tables"))
   }
 
   test("CREATE VIEW") {
@@ -2618,6 +2630,11 @@ class DataSourceV2SQLSuite
       "testcat",
       "v",
       "ALTER VIEW ... UNSET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v AS SELECT 1",
+      "testcat",
+      "v",
+      "ALTER VIEW ... AS")
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
