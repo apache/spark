@@ -19,20 +19,19 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.ResolvedView
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
 
 /**
  * Object for grouping all error messages of the query compilation.
- * Currently it includes all AnalysisExcpetions created and thrown directly in
- * org.apache.spark.sql.catalyst.analysis.Analyzer.
+ * Currently it includes all [[AnalysisException]]s.
  */
 object QueryCompilationErrors {
 
@@ -185,6 +184,11 @@ object QueryCompilationErrors {
       "did not appear in any aggregate function.")
   }
 
+  def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
+    new AnalysisException("Cannot write into temp view " +
+      s"$quoted as it's not a data source v2 relation.")
+  }
+
   def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
       t.origin.line, t.origin.startPosition)
@@ -194,6 +198,11 @@ object QueryCompilationErrors {
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
       t.origin.line, t.origin.startPosition)
+  }
+
+  def readNonStreamingTempViewError(quoted: String): Throwable = {
+    new AnalysisException(s"$quoted is not a temp view of streaming " +
+      "logical plan, please use batch API such as `DataFrameReader.table` to read it.")
   }
 
   def viewDepthExceedsMaxResolutionDepthError(
@@ -223,6 +232,11 @@ object QueryCompilationErrors {
     val viewStr = if (v.isTemp) "temp view" else "view"
     new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.",
       t.origin.line, t.origin.startPosition)
+  }
+
+  def permanentViewNotSupportedByStreamingReadingAPIError(quoted: String): Throwable = {
+    new AnalysisException(s"$quoted is a permanent view, which is not supported by " +
+      "streaming reading API such as `DataStreamReader.table` yet.")
   }
 
   def starNotAllowedWhenGroupByOrdinalPositionUsedError(): Throwable = {
@@ -326,4 +340,165 @@ object QueryCompilationErrors {
       "of rows, therefore they are currently not supported.", t.origin.line, t.origin.startPosition)
   }
 
+  def viewOutputNumberMismatchQueryColumnNamesError(
+      output: Seq[Attribute], queryColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
+        "number of columns with the query column names " +
+        s"${queryColumnNames.mkString("[", ",", "]")}")
+  }
+
+  def attributeNotFoundError(colName: String, child: LogicalPlan): Throwable = {
+    new AnalysisException(
+      s"Attribute with name '$colName' is not found in " +
+        s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
+  }
+
+  def cannotUpCastAsAttributeError(
+      fromAttr: Attribute, toAttr: Attribute): Throwable = {
+    new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
+      s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
+      "as it may truncate")
+  }
+
+  def functionUndefinedError(name: FunctionIdentifier): Throwable = {
+    new AnalysisException(s"undefined function $name")
+  }
+
+  def invalidFunctionArgumentNumberError(
+      validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
+    val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+      s"Invalid arguments for function $name"
+    } else {
+      val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+        validParametersCount.head.toString
+      } else {
+        validParametersCount.init.mkString("one of ", ", ", " and ") +
+          validParametersCount.last
+      }
+      s"Invalid number of arguments for function $name. " +
+        s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
+    }
+    new AnalysisException(invalidArgumentsMsg)
+  }
+
+  def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
+    new AnalysisException(s"Function $name accepts only one argument")
+  }
+
+  def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
+    new AnalysisException("ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+  }
+
+  def joinStrategyHintParameterNotSupportedError(unsupported: Any): Throwable = {
+    new AnalysisException("Join strategy hint parameter " +
+      s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
+  }
+
+  def invalidHintParameterError(
+      hintName: String, invalidParams: Seq[Any]): Throwable = {
+    new AnalysisException(s"$hintName Hint parameter should include columns, but " +
+      s"${invalidParams.mkString(", ")} found")
+  }
+
+  def invalidCoalesceHintParameterError(hintName: String): Throwable = {
+    new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
+  }
+
+  def attributeNameSyntaxError(name: String): Throwable = {
+    new AnalysisException(s"syntax error in attribute name: $name")
+  }
+
+  def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
+    new AnalysisException(s"Can only star expand struct data types. Attribute: `$attributes`")
+  }
+
+  def cannotResolveStarExpandGivenInputColumnsError(
+      targetString: String, columns: String): Throwable = {
+    new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$columns'")
+  }
+
+  def addColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
+    new AnalysisException("ADD COLUMN with v1 tables cannot specify NOT NULL.")
+  }
+
+  def replaceColumnsOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("REPLACE COLUMNS is only supported with v2 tables.")
+  }
+
+  def alterQualifiedColumnOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("ALTER COLUMN with qualified column is only supported with v2 tables.")
+  }
+
+  def alterColumnWithV1TableCannotSpecifyNotNullError(): Throwable = {
+    new AnalysisException("ALTER COLUMN with v1 tables cannot specify NOT NULL.")
+  }
+
+  def alterOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("ALTER COLUMN ... FIRST | ALTER is only supported with v2 tables.")
+  }
+
+  def alterColumnCannotFindColumnInV1TableError(colName: String, v1Table: V1Table): Throwable = {
+    new AnalysisException(
+      s"ALTER COLUMN cannot find column $colName in v1 table. " +
+        s"Available: ${v1Table.schema.fieldNames.mkString(", ")}")
+  }
+
+  def renameColumnOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("RENAME COLUMN is only supported with v2 tables.")
+  }
+
+  def dropColumnOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("DROP COLUMN is only supported with v2 tables.")
+  }
+
+  def invalidDatabaseNameError(quoted: String): Throwable = {
+    new AnalysisException(s"The database name is not valid: $quoted")
+  }
+
+  def replaceTableOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("REPLACE TABLE is only supported with v2 tables.")
+  }
+
+  def replaceTableAsSelectOnlySupportedWithV2TableError(): Throwable = {
+    new AnalysisException("REPLACE TABLE AS SELECT is only supported with v2 tables.")
+  }
+
+  def cannotDropViewWithDropTableError(): Throwable = {
+    new AnalysisException("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+  }
+
+  def showColumnsWithConflictDatabasesError(
+      db: Seq[String], v1TableName: TableIdentifier): Throwable = {
+    new AnalysisException("SHOW COLUMNS with conflicting databases: " +
+        s"'${db.head}' != '${v1TableName.database.get}'")
+  }
+
+  def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
+    new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
+      "SHOW VIEWS, only SessionCatalog supports this command.")
+  }
+
+  def unsupportedFunctionNameError(quoted: String): Throwable = {
+    new AnalysisException(s"Unsupported function name '$quoted'")
+  }
+
+  def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
+    new AnalysisException(s"$sql is only supported with v1 tables.")
+  }
+
+  def cannotCreateTableWithBothProviderAndSerdeError(
+      provider: Option[String], maybeSerdeInfo: Option[SerdeInfo]): Throwable = {
+    new AnalysisException(
+      s"Cannot create table with both USING $provider and ${maybeSerdeInfo.get.describe}")
+  }
+
+  def invalidFileFormatForStoredAsError(serdeInfo: SerdeInfo): Throwable = {
+    new AnalysisException(
+      s"STORED AS with file format '${serdeInfo.storedAs.get}' is invalid.")
+  }
+
+  def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
+    new AnalysisException(s"$command does not support nested column: $quoted")
+  }
 }
