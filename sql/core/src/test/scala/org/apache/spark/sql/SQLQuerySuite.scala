@@ -3752,8 +3752,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         withTable("t") {
           sql(
             """CREATE TABLE t(name STRING, id BINARY, part BINARY)
-              | USING PARQUET PARTITIONED BY (part)""".stripMargin)
-          sql(s"INSERT INTO t PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+              |USING PARQUET PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
           checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t"),
             Row("a", "Spark SQL", "Spark SQL"))
         }

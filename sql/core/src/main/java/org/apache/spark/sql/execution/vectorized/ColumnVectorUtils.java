@@ -98,7 +98,7 @@ public class ColumnVectorUtils {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
-            " when use column vectorized reader.", t.sql()));
+            " in column vectorized reader.", t.sql()));
       }
     }
   }
