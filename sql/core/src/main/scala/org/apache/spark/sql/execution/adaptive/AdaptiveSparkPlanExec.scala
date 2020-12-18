@@ -348,7 +348,6 @@ case class AdaptiveSparkPlanExec(
     }
     val newShuffle = newShuffles.head
     val parentOfNewShuffle = optimizedPlan.find(_.containsChild(newShuffle)).get
-    // todo: is this the right tag to use?  Maybe AdaptiveSparkPlanExec.TEMP_LOGICAL_PLAN_TAG?
     val t = parentOfNewShuffle.getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
     // find corresponding node in the original plan
     val origPlanParent = originalPlan

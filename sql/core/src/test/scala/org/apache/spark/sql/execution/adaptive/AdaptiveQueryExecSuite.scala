@@ -236,9 +236,6 @@ class AdaptiveQueryExecSuite
       val df1 = spark.range(10).withColumn("a", 'id)
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        //        val testDf = df1.where('a > 5).join(df2.where('b > 5), Seq("id"), "inner")
-        //          .groupBy('id).count()
-        //        checkAnswer(testDf, Seq(Row(6, 1), Row(7, 1), Row(8, 1), Row(9, 1)))
         val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
           .groupBy('a).count()
         checkAnswer(testDf, Seq())
@@ -746,7 +743,6 @@ class AdaptiveQueryExecSuite
           assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
           assert(csre.length == 5, s"actual plan=$innerAdaptivePlan")
         }
-        innerAdaptivePlan
       }
     }
   }

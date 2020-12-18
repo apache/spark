@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -24,9 +23,6 @@ import org.apache.spark.sql.internal.SQLConf
  * By default SQLConf.ADAPTIVE_FORCE_IF_SHUFFLE = false.
  * New tests should be added in AdaptiveQueryExecSuite so that they get
  * tested with the option both on and off.
- *
- *
- * 3. test where new shuffle doesn't get a CSRE - coalesceShufflePartitionsEnabled?
  */
 class AdaptivePreferShuffleSuite extends AdaptiveQueryExecSuite {
   var initVal = false

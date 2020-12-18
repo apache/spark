@@ -425,7 +425,7 @@ object SQLConf {
 
   val ADAPTIVE_FORCE_IF_SHUFFLE = buildConf("spark.sql.adaptive.force.if.shuffle")
     .doc("Make OptimizeSkewJoin choose skew mitigation even if it causes an extra shuffle")
-    .version("3.0.0")
+    .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
 
