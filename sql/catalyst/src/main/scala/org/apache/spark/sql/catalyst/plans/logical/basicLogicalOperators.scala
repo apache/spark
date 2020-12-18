@@ -987,7 +987,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 abstract class RepartitionOperation extends UnaryNode {
   def shuffle: Boolean
   def numPartitions: Int
-  override def maxRows: Option[Long] = child.maxRows
+  override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 

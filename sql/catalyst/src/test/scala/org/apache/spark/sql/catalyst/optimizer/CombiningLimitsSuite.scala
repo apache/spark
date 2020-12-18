@@ -145,11 +145,16 @@ class CombiningLimitsSuite extends PlanTest {
       Range(1, 100, 1, None).select().limit(200),
       Range(1, 100, 1, None).select()
     )
+    checkPlan(
+      Range(-1, Long.MaxValue, 1, None).select().limit(1),
+      Range(-1, Long.MaxValue, 1, None).select().limit(1)
+    )
 
     // test Sample
-    val sampleQuery = testRelation.select().sample(upperBound = 0.2).limit(10).analyze
-    val sampleOptimized = Optimize.execute(sampleQuery)
-    assert(sampleOptimized.collect { case l @ Limit(_, _) => l }.isEmpty)
+    checkPlan(
+      testRelation.select().sample(upperBound = 0.2, seed = 1).limit(10),
+      testRelation.select().sample(upperBound = 0.2, seed = 1)
+    )
 
     // test Deduplicate
     checkPlan(
