@@ -124,9 +124,7 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), Some(TrueLiteral)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None), Literal(4)),
-      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), nullBoolean))
-    assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, nullInt), (c, nullInt)), None), Literal(4)), nullBoolean)
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
 
     assertEquivalent(
       And(EqualTo(caseWhen, Literal(5)), EqualTo(caseWhen, Literal(6))),
@@ -134,7 +132,7 @@ class PushFoldableIntoBranchesSuite
 
     // Push down at most one branch is not foldable expressions.
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, Literal(1))), None), Literal(1)),
-      CaseWhen(Seq((a, EqualTo(b, Literal(1))), (c, TrueLiteral)), nullBoolean))
+      CaseWhen(Seq((a, EqualTo(b, Literal(1))), (c, TrueLiteral)), None))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)),
       EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)),
@@ -225,7 +223,5 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(EqualTo(Literal(4), ifExp), FalseLiteral)
     assertEquivalent(EqualTo(Literal(4), If(a, nullInt, nullInt)), nullBoolean)
     assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
-    assertEquivalent(EqualTo(Literal(4), CaseWhen(Seq((a, nullInt), (c, nullInt)), None)),
-      nullBoolean)
   }
 }

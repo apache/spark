@@ -79,16 +79,6 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         Literal(9)))
   }
 
-  test("remove unnecessary if when the outputs are boolean type") {
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
-      IsNotNull(UnresolvedAttribute("a")))
-
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
-      IsNull(UnresolvedAttribute("a")))
-  }
-
   test("remove unreachable branches") {
     // i.e. removing branches whose conditions are always false
     assertEquivalent(
@@ -208,5 +198,21 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       checkEvaluation(If(Factorial(5) > 100L, b, nullLiteral),
         If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
     }
+  }
+
+  test("remove unnecessary if when the outputs are boolean type") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
+      IsNotNull(UnresolvedAttribute("a")))
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
+      IsNull(UnresolvedAttribute("a")))
+
+    assertEquivalent(
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral))
+    assertEquivalent(
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral))
   }
 }

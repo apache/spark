@@ -560,15 +560,13 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
-          elseValue.orElse(Some(Literal.create(null, right.dataType)))
-            .map(e => b.makeCopy(Array(e, right))))
+          elseValue.map(e => b.makeCopy(Array(e, right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.makeCopy(Array(left, e._2)))),
-          elseValue.orElse(Some(Literal.create(null, left.dataType)))
-            .map(e => b.makeCopy(Array(left, e))))
+          elseValue.map(e => b.makeCopy(Array(left, e))))
     }
   }
 }
