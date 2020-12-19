@@ -94,6 +94,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
         replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
       }
       val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+        .orElse(if (newBranches.forall(_._2 == FalseLiteral)) Some(FalseLiteral) else None)
       CaseWhen(newBranches, newElseValue)
     case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
       If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))

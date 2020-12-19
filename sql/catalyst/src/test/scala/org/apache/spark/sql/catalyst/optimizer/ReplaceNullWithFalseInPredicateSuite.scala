@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, EqualTo, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -38,6 +38,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         ConstantFolding,
         BooleanSimplification,
         SimplifyConditionals,
+        PushFoldableIntoBranches,
         ReplaceNullWithFalseInPredicate) :: Nil
   }
 
@@ -222,10 +223,17 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         Literal(null, IntegerType),
         Literal(3)),
       FalseLiteral)
-    testFilter(originalCond = condition, expectedCond = condition)
-    testJoin(originalCond = condition, expectedCond = condition)
-    testDelete(originalCond = condition, expectedCond = condition)
-    testUpdate(originalCond = condition, expectedCond = condition)
+    val expectedCond = If(
+      UnresolvedAttribute("i") > Literal(10),
+      If(
+        UnresolvedAttribute("i") === Literal(15),
+        FalseLiteral,
+        TrueLiteral),
+      FalseLiteral)
+    testFilter(originalCond = condition, expectedCond = expectedCond)
+    testJoin(originalCond = condition, expectedCond = expectedCond)
+    testDelete(originalCond = condition, expectedCond = expectedCond)
+    testUpdate(originalCond = condition, expectedCond = expectedCond)
   }
 
   test("inability to replace null in non-boolean values of CaseWhen") {
@@ -238,10 +246,18 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       FalseLiteral)
     val branches = Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue)
     val condition = CaseWhen(branches)
-    testFilter(originalCond = condition, expectedCond = condition)
-    testJoin(originalCond = condition, expectedCond = condition)
-    testDelete(originalCond = condition, expectedCond = condition)
-    testUpdate(originalCond = condition, expectedCond = condition)
+
+    val expectedCond = CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) -> If(
+      CaseWhen(
+        Seq((UnresolvedAttribute("i") > Literal(20)) -> TrueLiteral),
+        FalseLiteral),
+      TrueLiteral,
+      FalseLiteral)))
+
+    testFilter(originalCond = condition, expectedCond = expectedCond)
+    testJoin(originalCond = condition, expectedCond = expectedCond)
+    testDelete(originalCond = condition, expectedCond = expectedCond)
+    testUpdate(originalCond = condition, expectedCond = expectedCond)
   }
 
   test("inability to replace null in non-boolean branches of If inside another If") {
@@ -252,10 +268,17 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         Literal(3)),
       TrueLiteral,
       FalseLiteral)
-    testFilter(originalCond = condition, expectedCond = condition)
-    testJoin(originalCond = condition, expectedCond = condition)
-    testDelete(originalCond = condition, expectedCond = condition)
-    testUpdate(originalCond = condition, expectedCond = condition)
+    val expectedCond = If(
+      If(
+        UnresolvedAttribute("i") === Literal(15),
+        FalseLiteral,
+        TrueLiteral),
+      TrueLiteral,
+      FalseLiteral)
+    testFilter(originalCond = condition, expectedCond = expectedCond)
+    testJoin(originalCond = condition, expectedCond = expectedCond)
+    testDelete(originalCond = condition, expectedCond = expectedCond)
+    testUpdate(originalCond = condition, expectedCond = expectedCond)
   }
 
   test("replace null in If used as a join condition") {
@@ -373,6 +396,40 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       arguments = Seq[NamedExpression](lv('e)))
     val column = ArrayTransform('a, lambdaFunc)
     testProjection(originalExpr = column, expectedExpr = column)
+  }
+
+  test("replace None of elseValue inside CaseWhen if all branches are FalseLiteral") {
+    val allFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
+      (UnresolvedAttribute("i") > Literal(40)) -> FalseLiteral)
+    val allFalseCond = CaseWhen(allFalseBranches)
+
+    val nonAllFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
+      (UnresolvedAttribute("i") > Literal(40)) -> TrueLiteral)
+    val nonAllFalseCond = CaseWhen(nonAllFalseBranches)
+
+    testFilter(allFalseCond, FalseLiteral)
+    testJoin(allFalseCond, FalseLiteral)
+    testDelete(allFalseCond, FalseLiteral)
+    testUpdate(allFalseCond, FalseLiteral)
+
+    testFilter(nonAllFalseCond, nonAllFalseCond)
+    testJoin(nonAllFalseCond, nonAllFalseCond)
+    testDelete(nonAllFalseCond, nonAllFalseCond)
+    testUpdate(nonAllFalseCond, nonAllFalseCond)
+  }
+
+  test("replace None of elseValue inside CaseWhen with PushFoldableIntoBranches") {
+    val allFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> Literal("a"),
+      (UnresolvedAttribute("i") > Literal(40)) -> Literal("b"))
+    val allFalseCond = EqualTo(CaseWhen(allFalseBranches), "c")
+
+    testFilter(allFalseCond, FalseLiteral)
+    testJoin(allFalseCond, FalseLiteral)
+    testDelete(allFalseCond, FalseLiteral)
+    testUpdate(allFalseCond, FalseLiteral)
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
