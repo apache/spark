@@ -79,6 +79,16 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         Literal(9)))
   }
 
+  test("remove unnecessary if when the outputs are boolean type") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
+      IsNotNull(UnresolvedAttribute("a")))
+
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
+      IsNull(UnresolvedAttribute("a")))
+  }
+
   test("remove unreachable branches") {
     // i.e. removing branches whose conditions are always false
     assertEquivalent(

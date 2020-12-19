@@ -475,6 +475,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, TrueLiteral, FalseLiteral) if cond.deterministic => cond
+      case If(cond, FalseLiteral, TrueLiteral) if cond.deterministic => Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
@@ -558,13 +560,15 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
-          elseValue.map(e => b.makeCopy(Array(e, right))))
+          elseValue.orElse(Some(Literal.create(null, right.dataType)))
+            .map(e => b.makeCopy(Array(e, right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.makeCopy(Array(left, e._2)))),
-          elseValue.map(e => b.makeCopy(Array(left, e))))
+          elseValue.orElse(Some(Literal.create(null, left.dataType)))
+            .map(e => b.makeCopy(Array(left, e))))
     }
   }
 }
