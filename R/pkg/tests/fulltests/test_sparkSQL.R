@@ -2884,6 +2884,15 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(nrow(result), 153)
   expect_equal(ncol(result), 2)
   detach(airquality)
+
+  # ensure long inferred names are handled without error (SPARK-26199)
+  #   test implicitly assumes eval(formals(deparse)$width.cutoff) = 60
+  #   (which has always been true as of 2020-11-15)
+  newDF <- mutate(
+    df,
+    df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
+  )
+  expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
 test_that("read/write ORC files", {
@@ -3273,6 +3282,12 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
+
+  # attach method uses deparse(); ensure no errors from a very long input
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df # nolint
+  attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
+  expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
+  detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
 })
 
 test_that("with() on a DataFrame", {

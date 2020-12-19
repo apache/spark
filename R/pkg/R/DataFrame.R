@@ -2277,16 +2277,17 @@ setMethod("mutate",
 
             # For named arguments, use the names for arguments as the column names
             # For unnamed arguments, use the argument symbols as the column names
-            args <- sapply(substitute(list(...))[-1], deparse)
             ns <- names(cols)
-            if (!is.null(ns)) {
-              lapply(seq_along(args), function(i) {
-                if (ns[[i]] != "") {
-                  args[[i]] <<- ns[[i]]
-                }
+            if (is.null(ns)) ns <- rep("", length(cols))
+            named_idx <- nzchar(ns)
+            if (!all(named_idx)) {
+              # SPARK-31517: deparse uses width.cutoff on wide input and the
+              #   output is length>1, so need to collapse it to scalar
+              colsub <- substitute(list(...))[-1L]
+              ns[!named_idx] <- sapply(which(!named_idx), function(ii) {
+                paste(gsub("^\\s*|\\s*$", "", deparse(colsub[[ii]])), collapse = " ")
               })
             }
-            ns <- args
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
@@ -3444,7 +3445,8 @@ setMethod("as.data.frame",
 #' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
-          function(what, pos = 2L, name = deparse(substitute(what), backtick = FALSE),
+          function(what, pos = 2L,
+                   name = paste(deparse(substitute(what), backtick = FALSE), collapse = " "),
                    warn.conflicts = TRUE) {
             args <- as.list(environment()) # capture all parameters - this must be the first line
             newEnv <- assignNewEnv(args$what)

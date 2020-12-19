@@ -43,7 +43,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
         table.name,
