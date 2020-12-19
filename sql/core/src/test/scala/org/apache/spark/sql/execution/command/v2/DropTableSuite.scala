@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.execution.command
 
 class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
@@ -29,5 +30,18 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       // The default TableCatalog.dropTable implementation doesn't support the purge option.
       assert(errMsg.contains("Purge option is not supported"))
     }
+  }
+
+  test("table qualified with the session catalog name") {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    def catalog(name: String): CatalogPlugin = {
+      spark.sessionState.catalogManager.catalog(name)
+    }
+
+    val ident = Identifier.of(Array("default"), "tbl")
+    sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
+    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
+    sql("DROP TABLE spark_catalog.default.tbl")
+    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
   }
 }

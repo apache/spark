@@ -710,14 +710,6 @@ class DataSourceV2SQLSuite
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
-  test("DropTable: table qualified with the session catalog name") {
-    val ident = Identifier.of(Array("default"), "tbl")
-    sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
-    sql("DROP TABLE spark_catalog.default.tbl")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
-  }
-
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {
