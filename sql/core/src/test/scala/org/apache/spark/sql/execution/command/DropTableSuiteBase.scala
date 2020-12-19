@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DROP TABLE"
@@ -36,10 +36,26 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("basic") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
+
       createTable(s"$catalog.ns.tbl")
       checkTables("ns", "tbl")
+
       sql(s"DROP TABLE $catalog.ns.tbl")
       checkTables("ns") // no tables
+    }
+  }
+
+  test("if exists") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"DROP TABLE $catalog.ns.notbl")
+      }.getMessage
+      assert(errMsg.contains("Table or view not found"))
+
+      sql(s"DROP TABLE IF EXISTS $catalog.ns.notbl")
+      checkTables("ns")
     }
   }
 }

@@ -718,14 +718,6 @@ class DataSourceV2SQLSuite
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
   }
 
-  test("DropTable: if exists") {
-    val ex = intercept[AnalysisException] {
-      sql("DROP TABLE testcat.db.notbl")
-    }
-    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
-    sql("DROP TABLE IF EXISTS testcat.db.notbl")
-  }
-
   test("DropTable: purge option") {
     withTable("testcat.ns.t") {
       sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
