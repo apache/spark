@@ -19,4 +19,15 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
 
-class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase
+class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
+  test("purge option") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createTable(t)
+      val errMsg = intercept[UnsupportedOperationException] {
+        sql(s"DROP TABLE $catalog.ns.tbl PURGE")
+      }.getMessage
+      // The default TableCatalog.dropTable implementation doesn't support the purge option.
+      assert(errMsg.contains("Purge option is not supported"))
+    }
+  }
+}

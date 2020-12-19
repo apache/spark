@@ -718,17 +718,6 @@ class DataSourceV2SQLSuite
     assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
   }
 
-  test("DropTable: purge option") {
-    withTable("testcat.ns.t") {
-      sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
-      val ex = intercept[UnsupportedOperationException] {
-        sql ("DROP TABLE testcat.ns.t PURGE")
-      }
-      // The default TableCatalog.dropTable implementation doesn't support the purge option.
-      assert(ex.getMessage.contains("Purge option is not supported"))
-    }
-  }
-
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
     withTable("testcat.ns.t") {
       withTempView("t") {

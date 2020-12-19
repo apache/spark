@@ -19,7 +19,19 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
 
-trait DropTableSuiteBase extends command.DropTableSuiteBase
+trait DropTableSuiteBase extends command.DropTableSuiteBase {
+  test("purge option") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+
+      createTable(s"$catalog.ns.tbl")
+      checkTables("ns", "tbl")
+
+      sql(s"DROP TABLE $catalog.ns.tbl PURGE")
+      checkTables("ns") // no tables
+    }
+  }
+}
 
 class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase
 
