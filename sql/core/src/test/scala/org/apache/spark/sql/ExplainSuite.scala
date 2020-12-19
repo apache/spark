@@ -277,7 +277,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("explain formatted - check presence of subquery in case of AQE") {
+  test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
     withTable("df1") {
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
         withTable("df1") {
