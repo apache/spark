@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 
-class PushFoldableIntoBranchesSuite
+class PushCastAndFoldableIntoBranchesSuite
   extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
