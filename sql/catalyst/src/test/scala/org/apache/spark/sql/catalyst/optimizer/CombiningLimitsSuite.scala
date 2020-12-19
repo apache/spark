@@ -130,7 +130,7 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if LocalRelation max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.select().limit(10),
       testRelation.select(),
       10
@@ -138,12 +138,12 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if Range max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       Range(0, 100, 1, None).select().limit(200),
       Range(0, 100, 1, None).select(),
       100
     )
-    checkPlan(
+    checkPlanAndMaxRow(
       Range(-1, Long.MaxValue, 1, None).select().limit(1),
       Range(-1, Long.MaxValue, 1, None).select().limit(1),
       1
@@ -151,7 +151,7 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if Sample max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.select().sample(upperBound = 0.2, seed = 1).limit(10),
       testRelation.select().sample(upperBound = 0.2, seed = 1),
       10
@@ -159,7 +159,7 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if Deduplicate max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.deduplicate(Symbol("a")).limit(10),
       testRelation.deduplicate(Symbol("a")),
       10
@@ -167,12 +167,12 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if Repartition max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.repartition(2).limit(10),
       testRelation.repartition(2),
       10
     )
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.distribute(Symbol("a"))(2).limit(10),
       testRelation.distribute(Symbol("a"))(2),
       10
@@ -180,40 +180,47 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   test("SPARK-33497: Eliminate Limit if Join max rows not larger than Limit") {
-    checkPlan(
-      testRelation.join(testRelation2, joinType = Inner).limit(20),
-      testRelation.join(testRelation2, joinType = Inner),
-      20
-    )
-    checkPlan(
-      testRelation.join(testRelation2, joinType = FullOuter).limit(10),
-      testRelation.join(testRelation2, joinType = FullOuter).limit(10),
-      10
-    )
-    checkPlan(
-      testRelation.join(testRelation2, joinType = LeftSemi).limit(5),
-      testRelation.join(testRelation2.select(), joinType = LeftSemi).limit(5),
-      5
-    )
-    checkPlan(
-      testRelation.join(testRelation2, joinType = LeftAnti).limit(10),
-      testRelation.join(testRelation2.select(), joinType = LeftAnti),
-      10
-    )
-    checkPlan(
-      testRelation.join(testRelation3, joinType = LeftOuter).limit(100),
-      testRelation.join(testRelation3, joinType = LeftOuter).limit(100),
-      100
-    )
-    checkPlan(
-      testRelation.join(testRelation4, joinType = RightOuter).limit(100),
-      testRelation.join(testRelation4, joinType = RightOuter).limit(100),
-      100
-    )
+    Seq(Inner, FullOuter, LeftOuter, RightOuter).foreach { joinType =>
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation2, joinType).limit(20),
+        testRelation.join(testRelation2, joinType),
+        20
+      )
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation2, joinType).limit(10),
+        testRelation.join(testRelation2, joinType).limit(10),
+        10
+      )
+      // without maxRow
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation3, joinType).limit(100),
+        testRelation.join(testRelation3, joinType).limit(100),
+        100
+      )
+      // maxRow is not valid long
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation4, joinType).limit(100),
+        testRelation.join(testRelation4, joinType).limit(100),
+        100
+      )
+    }
+
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation2, joinType).limit(5),
+        testRelation.join(testRelation2.select(), joinType).limit(5),
+        5
+      )
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation2, joinType).limit(10),
+        testRelation.join(testRelation2.select(), joinType),
+        10
+      )
+    }
   }
 
   test("SPARK-33497: Eliminate Limit if Window max rows not larger than Limit") {
-    checkPlan(
+    checkPlanAndMaxRow(
       testRelation.window(
         Seq(count(1).as("c")), Seq(Symbol("a")), Seq(Symbol("b").asc)).limit(20),
       testRelation.window(
@@ -222,7 +229,7 @@ class CombiningLimitsSuite extends PlanTest {
     )
   }
 
-  private def checkPlan(
+  private def checkPlanAndMaxRow(
       optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRow: Long): Unit = {
     comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
     assert(expected.maxRows.get == expectedMaxRow)
