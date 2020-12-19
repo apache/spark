@@ -277,6 +277,28 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
+  test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
+    withTable("df1") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withTable("df1") {
+          spark.range(1, 100)
+            .write
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df1) as v"
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
+
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
+        }
+      }
+    }
+  }
+
   test("Support ExplainMode in Dataset.explain") {
     val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
