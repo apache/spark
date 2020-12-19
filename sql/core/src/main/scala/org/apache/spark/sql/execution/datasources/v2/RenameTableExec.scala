@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Physical plan node for renaming a table.
@@ -28,8 +29,8 @@ case class RenameTableExec(
     catalog: TableCatalog,
     oldIdent: Identifier,
     newIdent: Identifier,
-    invalidateCache: () => Option[CacheInfo],
-    cacheTable: (DataSourceV2Relation, CacheInfo) => Unit)
+    invalidateCache: () => Option[StorageLevel],
+    cacheTable: (DataSourceV2Relation, String, StorageLevel) => Unit)
   extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
@@ -37,15 +38,15 @@ case class RenameTableExec(
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
-    val optOldCacheInfo = invalidateCache()
+    val optOldStorageLevel = invalidateCache()
     catalog.invalidateTable(oldIdent)
 
     catalog.renameTable(oldIdent, newIdent)
 
-    optOldCacheInfo.foreach { cacheInfo =>
+    optOldStorageLevel.foreach { oldStorageLevel =>
       val tbl = catalog.loadTable(newIdent)
       val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(newIdent))
-      cacheTable(newRelation, CacheInfo(Some(newIdent.quoted), cacheInfo.storageLevel))
+      cacheTable(newRelation, newIdent.quoted, oldStorageLevel)
     }
     Seq.empty
   }

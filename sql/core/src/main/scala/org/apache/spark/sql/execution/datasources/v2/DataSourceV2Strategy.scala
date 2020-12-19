@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -52,34 +53,37 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
-  private def cache(relation: DataSourceV2Relation, cacheInfo: CacheInfo): Unit = {
+  private def cache(
+      relation: DataSourceV2Relation,
+      tableName: String,
+      storageLevel: StorageLevel): Unit = {
     session.sharedState.cacheManager.cacheQuery(
       session,
       relation,
-      cacheInfo.tableName,
-      cacheInfo.storageLevel)
+      Some(tableName),
+      storageLevel)
   }
 
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  // Invalidates the cache associated with the given table. If there exists a cache with the given
-  // table, the cache's info (table name and storage level) is returned.
+  // Invalidates the cache associated with the given table. If the invalidated cache matches the
+  // given table, the cache's storage level is returned.
   private def invalidateCache(
       r: ResolvedTable,
-      recacheTable: Boolean = false)(): Option[CacheInfo] = {
+      recacheTable: Boolean = false)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
-      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
       if (recacheTable) {
+        val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
         // recache with the same name and cache level.
         session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
       }
-      Some(CacheInfo(cacheName, cacheLevel))
+      Some(cacheLevel)
     } else {
       None
     }

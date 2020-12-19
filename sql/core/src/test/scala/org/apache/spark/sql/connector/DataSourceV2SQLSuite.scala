@@ -868,8 +868,9 @@ class DataSourceV2SQLSuite
     withTable("testcat.ns.old", "testcat.ns.new") {
       def getStorageLevel(tableName: String): StorageLevel = {
         val table = spark.table(tableName)
-        val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
-        cachedData.cachedRepresentation.cacheBuilder.storageLevel
+        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
+        assert(optCachedData.isDefined)
+        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
       }
       sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
       sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
