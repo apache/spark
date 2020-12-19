@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -860,6 +861,24 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
         checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-33829: Renaming a table should recreate a cache while retaining the old cache info") {
+    withTable("testcat.ns.old", "testcat.ns.new") {
+      def getStorageLevel(tableName: String): StorageLevel = {
+        val table = spark.table(tableName)
+        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
+        assert(optCachedData.isDefined)
+        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
+      }
+      sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
+      sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
+      val oldStorageLevel = getStorageLevel("testcat.ns.old")
+
+      sql("ALTER TABLE testcat.ns.old RENAME TO ns.new")
+      val newStorageLevel = getStorageLevel("testcat.ns.new")
+      assert(oldStorageLevel === newStorageLevel)
     }
   }
 
