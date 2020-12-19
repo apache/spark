@@ -23,7 +23,7 @@ import java.util.Locale
 import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
-import scala.collection.mutable.Stack
+import scala.collection.mutable.ListBuffer
 
 import sbt._
 import sbt.Classpaths.publishTask
@@ -1109,14 +1109,14 @@ object TestSettings {
         // Because File.mkdirs() can fail if multiple callers are trying to create the same
         // parent directory, this code tries to create parents one at a time, and avoids
         // failures when the directories have been created by somebody else.
-        val stack = new Stack[File]()
+        val stack = new ListBuffer[File]()
         while (!dir.isDirectory()) {
-          stack.push(dir)
+          stack.prepend(dir)
           dir = dir.getParentFile()
         }
 
         while (stack.nonEmpty) {
-          val d = stack.pop()
+          val d = stack.remove(0)
           require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
         }
       }
