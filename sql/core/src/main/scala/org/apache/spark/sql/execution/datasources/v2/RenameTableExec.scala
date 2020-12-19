@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.storage.StorageLevel
 
@@ -31,7 +32,7 @@ case class RenameTableExec(
     oldIdent: Identifier,
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
-    cacheTable: (SparkSession, DataSourceV2Relation, Option[String], StorageLevel) => Unit)
+    cacheTable: (SparkSession, LogicalPlan, Option[String], StorageLevel) => Unit)
   extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
