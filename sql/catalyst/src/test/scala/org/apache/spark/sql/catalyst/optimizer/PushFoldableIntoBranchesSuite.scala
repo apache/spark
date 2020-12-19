@@ -44,8 +44,6 @@ class PushFoldableIntoBranchesSuite
   private val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
   private val ifExp = If(a, Literal(2), Literal(3))
   private val caseWhen = CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), Some(Literal(3)))
-  private val nullInt = Literal(null, IntegerType)
-  private val nullBoolean = Literal(null, BooleanType)
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
@@ -75,17 +73,17 @@ class PushFoldableIntoBranchesSuite
 
     // Handle Null values.
     assertEquivalent(
-      EqualTo(If(a, nullInt, Literal(1)), Literal(1)),
-      If(a, nullBoolean, TrueLiteral))
+      EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(1)),
+      If(a, Literal(null, BooleanType), TrueLiteral))
     assertEquivalent(
-      EqualTo(If(a, nullInt, Literal(1)), Literal(2)),
-      If(a, nullBoolean, FalseLiteral))
+      EqualTo(If(a, Literal(null, IntegerType), Literal(1)), Literal(2)),
+      If(a, Literal(null, BooleanType), FalseLiteral))
     assertEquivalent(
-      EqualTo(If(a, Literal(1), Literal(2)), nullInt),
-      nullBoolean)
+      EqualTo(If(a, Literal(1), Literal(2)), Literal(null, IntegerType)),
+      Literal(null, BooleanType))
     assertEquivalent(
-      EqualTo(If(a, nullInt, nullInt), Literal(1)),
-      nullBoolean)
+      EqualTo(If(a, Literal(null, IntegerType), Literal(null, IntegerType)), Literal(1)),
+      Literal(null, BooleanType))
   }
 
   test("Push down other BinaryComparison through If") {
@@ -149,22 +147,22 @@ class PushFoldableIntoBranchesSuite
 
     // Handle Null values.
     assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, nullInt)), Some(Literal(1))), Literal(2)),
-      CaseWhen(Seq((a, nullBoolean)), Some(FalseLiteral)))
+      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(2)),
+      CaseWhen(Seq((a, Literal(null, BooleanType))), Some(FalseLiteral)))
     assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), nullInt),
-      nullBoolean)
+      EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(2))), Literal(null, IntegerType)),
+      Literal(null, BooleanType))
     assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, nullInt)), Some(Literal(1))), Literal(1)),
-      CaseWhen(Seq((a, nullBoolean)), Some(TrueLiteral)))
+      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(1))), Literal(1)),
+      CaseWhen(Seq((a, Literal(null, BooleanType))), Some(TrueLiteral)))
     assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, nullInt)), Some(nullInt)),
+      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(null, IntegerType))),
         Literal(1)),
-      nullBoolean)
+      Literal(null, BooleanType))
     assertEquivalent(
-      EqualTo(CaseWhen(Seq((a, nullInt)), Some(nullInt)),
-        nullInt),
-      nullBoolean)
+      EqualTo(CaseWhen(Seq((a, Literal(null, IntegerType))), Some(Literal(null, IntegerType))),
+        Literal(null, IntegerType)),
+      Literal(null, BooleanType))
   }
 
   test("Push down other BinaryComparison through CaseWhen") {
@@ -221,7 +219,6 @@ class PushFoldableIntoBranchesSuite
 
   test("Push down BinaryExpression through If/CaseWhen backwards") {
     assertEquivalent(EqualTo(Literal(4), ifExp), FalseLiteral)
-    assertEquivalent(EqualTo(Literal(4), If(a, nullInt, nullInt)), nullBoolean)
     assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
   }
 }
