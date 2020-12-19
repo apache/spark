@@ -246,8 +246,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       Array(reqBuffer)
     } else {
       val inMemoryBuffer = reqBuffer.nioByteBuffer()
-      val blockOffsets = new Array[Long](blockSizes.size)
-      var offset = 0L
+      val blockOffsets = new Array[Int](blockSizes.size)
+      var offset = 0
       for (index <- blockSizes.indices) {
         blockOffsets(index) = offset
         offset += blockSizes(index)
