@@ -499,7 +499,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
    * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */
@@ -520,7 +521,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
    * The batchId can be used to deduplicate and transactionally write the output
    * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic in the query).
+   * to be exactly the same for the same batchId (assuming all operations are deterministic
+   * in the query).
    *
    * @since 2.4.0
    */
