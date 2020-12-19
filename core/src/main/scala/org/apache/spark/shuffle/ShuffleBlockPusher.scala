@@ -255,8 +255,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       blockOffsets.zip(blockSizes).map {
         case (offset, size) =>
           new NioManagedBuffer(inMemoryBuffer.duplicate()
-            .position(offset.toInt)
-            .limit((offset + size).toInt).asInstanceOf[ByteBuffer].slice())
+            .position(offset)
+            .limit(offset + size.toInt).asInstanceOf[ByteBuffer].slice())
       }.toArray
     }
   }
