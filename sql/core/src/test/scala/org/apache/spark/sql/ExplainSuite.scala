@@ -228,6 +228,28 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
+  test("explain codegen - check presence of subquery") {
+    withTable("df1", "df2") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        withTable("df1") {
+          spark.range(1, 100)
+            .write
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          val sqlText = "EXPLAIN CODEGEN SELECT (SELECT min(id) FROM df1)"
+          val expectedText = "Found 3 WholeStageCodegen subtrees."
+
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(normalizedOutput.contains(expectedText))
+          }
+        }
+      }
+    }
+  }
+
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
