@@ -45,16 +45,29 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("if exists") {
+  test("try to drop a nonexistent table") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      checkTables("ns") // no tables
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"DROP TABLE $catalog.ns.tbl")
+      }.getMessage
+      assert(errMsg.contains("Table or view not found"))
+    }
+  }
+
+  test("with IF EXISTS") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
 
-      val errMsg = intercept[AnalysisException] {
-        sql(s"DROP TABLE $catalog.ns.notbl")
-      }.getMessage
-      assert(errMsg.contains("Table or view not found"))
+      createTable(s"$catalog.ns.tbl")
+      checkTables("ns", "tbl")
+      sql(s"DROP TABLE IF EXISTS $catalog.ns.tbl")
+      checkTables("ns")
 
-      sql(s"DROP TABLE IF EXISTS $catalog.ns.notbl")
+      // It must not throw any exceptions
+      sql(s"DROP TABLE IF EXISTS $catalog.ns.tbl")
       checkTables("ns")
     }
   }
