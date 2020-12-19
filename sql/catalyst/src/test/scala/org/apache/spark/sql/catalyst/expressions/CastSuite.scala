@@ -688,6 +688,19 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("up-cast: w/ char varchar") {
+    assert(Cast.canUpCast(CharType(5), StringType))
+    assert(Cast.canUpCast(VarcharType(5), StringType))
+
+    assert(!Cast.canUpCast(CharType(5), VarcharType(3)))
+    assert(Cast.canUpCast(CharType(5), VarcharType(5)))
+    assert(Cast.canUpCast(CharType(5), VarcharType(10)))
+
+    assert(Cast.canUpCast(VarcharType(5), VarcharType(10)))
+    assert(Cast.canUpCast(VarcharType(5), VarcharType(5)))
+    assert(!Cast.canUpCast(VarcharType(5), VarcharType(1)))
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 

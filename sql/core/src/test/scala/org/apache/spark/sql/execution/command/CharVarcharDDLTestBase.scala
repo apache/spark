@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{CharType, DataType, StringType, StructField, VarcharType}
+import org.apache.spark.sql.types._
 
-trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
+trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
 
   def format: String
 
@@ -98,14 +99,14 @@ trait CharVarcharDDLTestSuite extends QueryTest with SQLTestUtils {
   }
 }
 
-class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestSuite with SharedSparkSession {
+class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with SharedSparkSession {
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
   }
 }
 
-class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestSuite
+class DSV2CharVarcharDDLTestSuite extends CharVarcharDDLTestBase
   with SharedSparkSession {
   override def format: String = "foo"
   protected override def sparkConf = {

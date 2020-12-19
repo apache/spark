@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
@@ -42,7 +43,7 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
   }
 }
 
-class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestSuite with TestHiveSingleton {
+class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {
 
   // The default Hive serde doesn't support nested null values.
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
