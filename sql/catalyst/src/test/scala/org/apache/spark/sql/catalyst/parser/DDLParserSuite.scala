@@ -694,32 +694,6 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("drop table") {
-    parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
-      DropTable(
-        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl"), "DROP TABLE"),
-        ifExists = false,
-        purge = false))
-    parseCompare(s"DROP TABLE db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = true))
-    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = true))
-  }
-
   test("drop view") {
     val cmd = "DROP VIEW"
     val hint = Some("Please use DROP TABLE instead.")
