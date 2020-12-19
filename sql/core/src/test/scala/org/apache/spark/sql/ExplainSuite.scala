@@ -228,7 +228,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
-  test("explain codegen - check presence of subquery") {
+  test("SPARK-33853: explain codegen - check presence of subquery") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
