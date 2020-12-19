@@ -940,7 +940,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Netty only) Timeout for the established connections between shuffle servers and clients
     to be marked as idled. The connection will be closed for it is quiet or may be dead whether
-    there are still outstanding request or not.
+    there are still outstanding requests or not.
   </td>
   <td>3.2.0</td>
 </tr>
