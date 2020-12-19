@@ -80,4 +80,29 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     }
   }
+
+  test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
+    withNamespaceAndTable("ns", "t") { t =>
+      withTempView("t") {
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
+        sql(s"USE $catalog.ns")
+        try {
+          // Check the temporary view 't' exists.
+          checkAnswer(
+            sql("SHOW TABLES FROM spark_catalog.default LIKE 't'")
+              .select("tableName", "isTemporary"),
+            Row("t", true))
+          sql("DROP TABLE t")
+          // Verify that the temporary view 't' is resolved first and dropped.
+          checkAnswer(
+            sql("SHOW TABLES FROM spark_catalog.default LIKE 't'")
+              .select("tableName", "isTemporary"),
+            Seq.empty)
+        } finally {
+          sql(s"USE spark_catalog")
+        }
+      }
+    }
+  }
 }

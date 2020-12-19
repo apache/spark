@@ -710,28 +710,6 @@ class DataSourceV2SQLSuite
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
-  test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {
-    withTable("testcat.ns.t") {
-      withTempView("t") {
-        sql("CREATE TABLE testcat.ns.t (id bigint) USING foo")
-        sql("CREATE TEMPORARY VIEW t AS SELECT 2")
-        sql("USE testcat.ns")
-
-        // Check the temporary view 't' exists.
-        runShowTablesSql(
-          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
-          Seq(Row("", "t", true)),
-          expectV2Catalog = false)
-        sql("DROP TABLE t")
-        // Verify that the temporary view 't' is resolved first and dropped.
-        runShowTablesSql(
-          "SHOW TABLES FROM spark_catalog.default LIKE 't'",
-          Nil,
-          expectV2Catalog = false)
-      }
-    }
-  }
-
   test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
     Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
       val view = "view"
