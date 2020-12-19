@@ -407,6 +407,101 @@ Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery subq
 Output [2]: [key#x, val#x]
 Arguments: isFinalPlan=false
 
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet default.explain_temp2 (4)
+
+
+(4) Scan parquet default.explain_temp2
+Output [2]: [key#x, val#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp2]
+PushedFilters: [IsNotNull(key), IsNotNull(val), EqualTo(val,2)]
+ReadSchema: struct<key:int,val:int>
+
+(5) Filter
+Input [2]: [key#x, val#x]
+Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery subquery#x, [id=#x])) AND (val#x = 2))
+
+(6) Project
+Output [1]: [key#x]
+Input [2]: [key#x, val#x]
+
+(7) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_max(key#x)]
+Aggregate Attributes [1]: [max#x]
+Results [1]: [max#x]
+
+(8) Exchange
+Input [1]: [max#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(9) HashAggregate
+Input [1]: [max#x]
+Keys: []
+Functions [1]: [max(key#x)]
+Aggregate Attributes [1]: [max(key#x)#x]
+Results [1]: [max(key#x)#x AS max(key)#x]
+
+(10) AdaptiveSparkPlan
+Output [1]: [max(key)#x]
+Arguments: isFinalPlan=false
+
+Subquery:2 Hosting operator id = 5 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet default.explain_temp3 (11)
+
+
+(11) Scan parquet default.explain_temp3
+Output [2]: [key#x, val#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp3]
+PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
+ReadSchema: struct<key:int,val:int>
+
+(12) Filter
+Input [2]: [key#x, val#x]
+Condition : (isnotnull(val#x) AND (val#x > 0))
+
+(13) Project
+Output [1]: [key#x]
+Input [2]: [key#x, val#x]
+
+(14) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_max(key#x)]
+Aggregate Attributes [1]: [max#x]
+Results [1]: [max#x]
+
+(15) Exchange
+Input [1]: [max#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(16) HashAggregate
+Input [1]: [max#x]
+Keys: []
+Functions [1]: [max(key#x)]
+Aggregate Attributes [1]: [max(key#x)#x]
+Results [1]: [max(key#x)#x AS max(key)#x]
+
+(17) AdaptiveSparkPlan
+Output [1]: [max(key)#x]
+Arguments: isFinalPlan=false
 
 -- !query
 EXPLAIN FORMATTED
@@ -442,6 +537,101 @@ Condition : ((key#x = Subquery subquery#x, [id=#x]) OR (cast(key#x as double) = 
 Output [2]: [key#x, val#x]
 Arguments: isFinalPlan=false
 
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (10)
++- HashAggregate (9)
+   +- Exchange (8)
+      +- HashAggregate (7)
+         +- Project (6)
+            +- Filter (5)
+               +- Scan parquet default.explain_temp2 (4)
+
+
+(4) Scan parquet default.explain_temp2
+Output [2]: [key#x, val#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp2]
+PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
+ReadSchema: struct<key:int,val:int>
+
+(5) Filter
+Input [2]: [key#x, val#x]
+Condition : (isnotnull(val#x) AND (val#x > 0))
+
+(6) Project
+Output [1]: [key#x]
+Input [2]: [key#x, val#x]
+
+(7) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_max(key#x)]
+Aggregate Attributes [1]: [max#x]
+Results [1]: [max#x]
+
+(8) Exchange
+Input [1]: [max#x]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(9) HashAggregate
+Input [1]: [max#x]
+Keys: []
+Functions [1]: [max(key#x)]
+Aggregate Attributes [1]: [max(key#x)#x]
+Results [1]: [max(key#x)#x AS max(key)#x]
+
+(10) AdaptiveSparkPlan
+Output [1]: [max(key)#x]
+Arguments: isFinalPlan=false
+
+Subquery:2 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (17)
++- HashAggregate (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Project (13)
+            +- Filter (12)
+               +- Scan parquet default.explain_temp3 (11)
+
+
+(11) Scan parquet default.explain_temp3
+Output [2]: [key#x, val#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp3]
+PushedFilters: [IsNotNull(val), GreaterThan(val,0)]
+ReadSchema: struct<key:int,val:int>
+
+(12) Filter
+Input [2]: [key#x, val#x]
+Condition : (isnotnull(val#x) AND (val#x > 0))
+
+(13) Project
+Output [1]: [key#x]
+Input [2]: [key#x, val#x]
+
+(14) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_avg(cast(key#x as bigint))]
+Aggregate Attributes [2]: [sum#x, count#xL]
+Results [2]: [sum#x, count#xL]
+
+(15) Exchange
+Input [2]: [sum#x, count#xL]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(16) HashAggregate
+Input [2]: [sum#x, count#xL]
+Keys: []
+Functions [1]: [avg(cast(key#x as bigint))]
+Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
+Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+
+(17) AdaptiveSparkPlan
+Output [1]: [avg(key)#x]
+Arguments: isFinalPlan=false
 
 -- !query
 EXPLAIN FORMATTED
@@ -470,6 +660,79 @@ Input: []
 Output [1]: [(scalarsubquery() + scalarsubquery())#x]
 Arguments: isFinalPlan=false
 
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (8)
++- HashAggregate (7)
+   +- Exchange (6)
+      +- HashAggregate (5)
+         +- Scan parquet default.explain_temp1 (4)
+
+
+(4) Scan parquet default.explain_temp1
+Output [1]: [key#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp1]
+ReadSchema: struct<key:int>
+
+(5) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_avg(cast(key#x as bigint))]
+Aggregate Attributes [2]: [sum#x, count#xL]
+Results [2]: [sum#x, count#xL]
+
+(6) Exchange
+Input [2]: [sum#x, count#xL]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(7) HashAggregate
+Input [2]: [sum#x, count#xL]
+Keys: []
+Functions [1]: [avg(cast(key#x as bigint))]
+Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
+Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+
+(8) AdaptiveSparkPlan
+Output [1]: [avg(key)#x]
+Arguments: isFinalPlan=false
+
+Subquery:2 Hosting operator id = 2 Hosting Expression = Subquery subquery#x, [id=#x]
+AdaptiveSparkPlan (13)
++- HashAggregate (12)
+   +- Exchange (11)
+      +- HashAggregate (10)
+         +- Scan parquet default.explain_temp1 (9)
+
+
+(9) Scan parquet default.explain_temp1
+Output [1]: [key#x]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/explain_temp1]
+ReadSchema: struct<key:int>
+
+(10) HashAggregate
+Input [1]: [key#x]
+Keys: []
+Functions [1]: [partial_avg(cast(key#x as bigint))]
+Aggregate Attributes [2]: [sum#x, count#xL]
+Results [2]: [sum#x, count#xL]
+
+(11) Exchange
+Input [2]: [sum#x, count#xL]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
+
+(12) HashAggregate
+Input [2]: [sum#x, count#xL]
+Keys: []
+Functions [1]: [avg(cast(key#x as bigint))]
+Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
+Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+
+(13) AdaptiveSparkPlan
+Output [1]: [avg(key)#x]
+Arguments: isFinalPlan=false
 
 -- !query
 EXPLAIN FORMATTED
