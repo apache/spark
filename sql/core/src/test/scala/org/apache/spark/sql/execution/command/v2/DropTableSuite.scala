@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.connector.InMemoryTableSessionCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 
 class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
   test("purge option") {
@@ -33,15 +35,18 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
   }
 
   test("table qualified with the session catalog name") {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    def catalog(name: String): CatalogPlugin = {
-      spark.sessionState.catalogManager.catalog(name)
-    }
+    withSQLConf(
+      V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[InMemoryTableSessionCatalog].getName) {
 
-    val ident = Identifier.of(Array("default"), "tbl")
-    sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === true)
-    sql("DROP TABLE spark_catalog.default.tbl")
-    assert(catalog("spark_catalog").asTableCatalog.tableExists(ident) === false)
+      sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
+      checkAnswer(
+        sql("SHOW TABLES IN spark_catalog.default").select("tableName"),
+        Row("tbl"))
+
+      sql("DROP TABLE spark_catalog.default.tbl")
+      checkAnswer(
+        sql("SHOW TABLES IN spark_catalog.default").select("tableName"),
+        Seq.empty)
+    }
   }
 }
