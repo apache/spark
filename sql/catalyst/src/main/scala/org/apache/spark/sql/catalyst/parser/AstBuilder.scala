@@ -883,9 +883,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             if (groupingAnalytics != null) {
               val selectedGroupByExprs = groupingAnalytics.groupingSet.asScala
                 .map(_.expression.asScala.map(e => expression(e)).toSeq)
-              if (groupingAnalytics.GROUPING != null) {
-                GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
-              } else if (groupingAnalytics.CUBE != null) {
+              if (groupingAnalytics.CUBE != null) {
                 // CUBE(A, B, (A, B), ()) is not supported.
                 if (selectedGroupByExprs.exists(_.isEmpty)) {
                   throw new ParseException("Empty set in CUBE grouping sets is not supported.",
@@ -899,6 +897,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                     groupingAnalytics)
                 }
                 Rollup(selectedGroupByExprs)
+              } else {
+                GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
               }
             } else {
               expression(groupByExpr.expression)
