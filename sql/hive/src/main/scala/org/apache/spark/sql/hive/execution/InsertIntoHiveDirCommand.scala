@@ -63,11 +63,14 @@ case class InsertIntoHiveDirCommand(
       s"when inserting into ${storage.locationUri.get}",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
+    val parsedAttrs = outputColumns.zipWithIndex.map { case (e, index) =>
+      e.toAttribute.withName(s"${e.prettyName}_$index") }
+
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
-      schema = outputColumns.toStructType
+      schema = parsedAttrs.toStructType
     ))
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
