@@ -710,15 +710,6 @@ class DataSourceV2SQLSuite
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
-  test("DropTable: basic") {
-    val tableName = "testcat.ns1.ns2.tbl"
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
-    assert(catalog("testcat").asTableCatalog.tableExists(ident) === true)
-    sql(s"DROP TABLE $tableName")
-    assert(catalog("testcat").asTableCatalog.tableExists(ident) === false)
-  }
-
   test("DropTable: table qualified with the session catalog name") {
     val ident = Identifier.of(Array("default"), "tbl")
     sql("CREATE TABLE tbl USING json AS SELECT 1 AS i")
