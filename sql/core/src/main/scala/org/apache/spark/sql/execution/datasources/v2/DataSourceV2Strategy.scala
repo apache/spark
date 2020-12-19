@@ -53,17 +53,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     }
   }
 
-  private def cache(
-      relation: DataSourceV2Relation,
-      tableName: String,
-      storageLevel: StorageLevel): Unit = {
-    session.sharedState.cacheManager.cacheQuery(
-      session,
-      relation,
-      Some(tableName),
-      storageLevel)
-  }
-
   private def refreshCache(r: DataSourceV2Relation)(): Unit = {
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
@@ -291,7 +280,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
       }
       RenameTableExec(
-        catalog, oldIdent, newIdent.asIdentifier, invalidateCache(r), cache) :: Nil
+        catalog,
+        oldIdent,
+        newIdent.asIdentifier,
+        invalidateCache(r),
+        session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil

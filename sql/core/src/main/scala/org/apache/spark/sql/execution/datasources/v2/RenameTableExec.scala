@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -30,7 +31,7 @@ case class RenameTableExec(
     oldIdent: Identifier,
     newIdent: Identifier,
     invalidateCache: () => Option[StorageLevel],
-    cacheTable: (DataSourceV2Relation, String, StorageLevel) => Unit)
+    cacheTable: (SparkSession, DataSourceV2Relation, Option[String], StorageLevel) => Unit)
   extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
@@ -46,7 +47,7 @@ case class RenameTableExec(
     optOldStorageLevel.foreach { oldStorageLevel =>
       val tbl = catalog.loadTable(newIdent)
       val newRelation = DataSourceV2Relation.create(tbl, Some(catalog), Some(newIdent))
-      cacheTable(newRelation, newIdent.quoted, oldStorageLevel)
+      cacheTable(sqlContext.sparkSession, newRelation, Some(newIdent.quoted), oldStorageLevel)
     }
     Seq.empty
   }
