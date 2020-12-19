@@ -732,23 +732,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33305: DROP TABLE should also invalidate cache") {
-    val t = "testcat.ns.t"
-    val view = "view"
-    withTable(t) {
-      withTempView(view) {
-        sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
-        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
-        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
-        checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
-
-        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
-        sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
-      }
-    }
-  }
-
   test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
     Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
       val view = "view"
