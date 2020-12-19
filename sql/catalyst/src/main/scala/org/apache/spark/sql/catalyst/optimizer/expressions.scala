@@ -529,9 +529,9 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
- * Push the foldable expression into (if / case) branches.
+ * Push the cast and foldable expression into (if / case) branches.
  */
-object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
+object PushCastAndFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
   // To be conservative here: it's only a guaranteed win if all but at most only one branch
   // end up being not foldable.
@@ -542,6 +542,18 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
+      case Cast(i @ If(_, trueValue, falseValue), dataType, timeZoneId)
+          if atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = Cast(trueValue, dataType, timeZoneId),
+          falseValue = Cast(falseValue, dataType, timeZoneId))
+
+      case Cast(c @ CaseWhen(branches, elseValue), dataType, timeZoneId)
+          if atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = Cast(e._2, dataType, timeZoneId))),
+          elseValue.map(e => Cast(e, dataType, timeZoneId)))
+
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
           if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(

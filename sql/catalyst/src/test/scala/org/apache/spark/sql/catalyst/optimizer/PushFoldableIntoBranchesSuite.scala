@@ -27,15 +27,18 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 
 class PushFoldableIntoBranchesSuite
   extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
-      BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
+    val batches = Batch("PushCastAndFoldableIntoBranches", FixedPoint(50),
+      BooleanSimplification,
+      ConstantFolding,
+      SimplifyConditionals,
+      PushCastAndFoldableIntoBranches) :: Nil
   }
 
   private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
@@ -221,5 +224,37 @@ class PushFoldableIntoBranchesSuite
   test("Push down BinaryExpression through If/CaseWhen backwards") {
     assertEquivalent(EqualTo(Literal(4), ifExp), FalseLiteral)
     assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
+  }
+
+  test("Push down cast through If") {
+    assertEquivalent(If(a, Literal(2), Literal(3)).cast(StringType),
+      If(a, Literal("2"), Literal("3")))
+    assertEquivalent(If(a, b, Literal(3)).cast(StringType),
+      If(a, b.cast(StringType), Literal("3")))
+    assertEquivalent(If(a, b, b + 1).cast(StringType),
+      If(a, b, b + 1).cast(StringType))
+  }
+
+  test("Push down cast through CaseWhen") {
+    assertEquivalent(
+      CaseWhen(Seq((a, Literal(1))), Some(Literal(3))).cast(StringType),
+      CaseWhen(Seq((a, Literal("1"))), Some(Literal("3"))))
+    assertEquivalent(
+      CaseWhen(Seq((a, Literal(1))), Some(b)).cast(StringType),
+      CaseWhen(Seq((a, Literal("1"))), Some(b.cast(StringType))))
+    assertEquivalent(
+      CaseWhen(Seq((a, b)), Some(b + 1)).cast(StringType),
+      CaseWhen(Seq((a, b)), Some(b + 1)).cast(StringType))
+  }
+
+  test("Push down cast with binary expression through If/CaseWhen") {
+    assertEquivalent(EqualTo(If(a, Literal(2), Literal(3)).cast(StringType), Literal("4")),
+      FalseLiteral)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal(1))), Some(Literal(3))).cast(StringType), Literal("4")),
+      FalseLiteral)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None).cast(StringType), Literal("4")),
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
   }
 }
