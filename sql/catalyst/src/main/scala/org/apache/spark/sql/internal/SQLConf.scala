@@ -905,6 +905,16 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
+  val HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD =
+    buildConf("spark.sql.hive.tablePropertyLengthThreshold")
+      .internal()
+      .doc("The maximum length allowed in a single cell when storing Spark-specific information " +
+        "in Hive's metastore as table properties. Currently it covers 2 things: the schema's " +
+        "JSON string, the histogram of column statistics.")
+      .version("3.2.0")
+      .intConf
+      .createOptional
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -3052,7 +3062,9 @@ object SQLConf {
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
           "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
       DeprecatedConfig(CONVERT_CTAS.key, "3.1",
-        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead.")
+        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
+      DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
+        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)

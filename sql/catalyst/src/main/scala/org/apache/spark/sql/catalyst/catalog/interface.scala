@@ -472,6 +472,51 @@ object CatalogTable {
 
   val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
   val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
+
+  def splitLargeTableProp(
+      key: String,
+      value: String,
+      addProp: (String, String) => Unit,
+      defaultThreshold: Int): Unit = {
+    val threshold = SQLConf.get.getConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD)
+      .getOrElse(defaultThreshold)
+    if (value.length <= threshold) {
+      addProp(key, value)
+    } else {
+      val parts = value.grouped(threshold).toSeq
+      addProp(s"$key.numParts", parts.length.toString)
+      parts.zipWithIndex.foreach { case (part, index) =>
+        addProp(s"$key.part.$index", part)
+      }
+    }
+  }
+
+  def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
+    props.get(key).orElse {
+      if (props.filterKeys(_.startsWith(key)).isEmpty) {
+        None
+      } else {
+        val numParts = props.get(s"$key.numParts")
+        val errorMessage = s"Cannot read table property '$key' as it's corrupted."
+        if (numParts.isEmpty) {
+          throw new AnalysisException(errorMessage)
+        } else {
+          val parts = (0 until numParts.get.toInt).map { index =>
+            props.getOrElse(s"$key.part.$index", {
+              throw new AnalysisException(
+                s"$errorMessage Missing part $index, ${numParts.get} parts are expected.")
+            })
+          }
+          Some(parts.mkString)
+        }
+      }
+    }
+  }
+
+  def isLargeTableProp(originalKey: String, propKey: String): Boolean = {
+    propKey == originalKey || propKey == s"$originalKey.numParts" ||
+      propKey.startsWith(s"$originalKey.part.")
+  }
 }
 
 /**
@@ -546,7 +591,11 @@ case class CatalogColumnStat(
     min.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
     max.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
     histogram.foreach { h =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_HISTOGRAM}", HistogramSerializer.serialize(h))
+      CatalogTable.splitLargeTableProp(
+        s"$colName.${CatalogColumnStat.KEY_HISTOGRAM}",
+        HistogramSerializer.serialize(h),
+        map.put,
+        4000)
     }
     map.toMap
   }
@@ -650,7 +699,8 @@ object CatalogColumnStat extends Logging {
         nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
         avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
-        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
+        histogram = CatalogTable.readLargeTableProp(map, s"$colName.$KEY_HISTOGRAM")
+          .map(HistogramSerializer.deserialize),
         version = map(s"${colName}.${KEY_VERSION}").toInt
       ))
     } catch {
