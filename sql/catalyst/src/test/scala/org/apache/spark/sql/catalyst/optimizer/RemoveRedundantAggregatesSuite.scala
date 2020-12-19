@@ -96,6 +96,20 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("Remove redundant aggregate with non-deterministic lower") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val query = relation
+      .groupBy('a)('a, rand(0) as 'c)
+      .groupBy('a, 'c)('a, 'c)
+      .analyze
+    val expected = relation
+      .groupBy('a, 'c)('a, rand(0) as 'c)
+      .analyze
+    val optimized = Optimize.execute(query)
+    comparePlans(optimized, expected)
+  }
+
+
   test("Keep non-redundant aggregate - upper has agg expression") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation
@@ -117,14 +131,4 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, query)
   }
 
-  test("Keep redundant aggregate with non-deterministic lower") {
-    // This case could be simplified
-    val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a)('a, rand(0) as 'c)
-      .groupBy('a, 'c)('a, 'c)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
-  }
 }

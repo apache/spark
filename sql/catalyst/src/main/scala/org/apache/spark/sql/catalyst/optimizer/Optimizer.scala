@@ -495,25 +495,25 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     case upper @ Aggregate(_, _, lower: Aggregate) if lowerIsRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
-      upper.copy(
+      val newAggregate = upper.copy(
         child = lower.child,
         groupingExpressions = upper.groupingExpressions.map(replaceAlias(_, aliasMap)),
         aggregateExpressions = upper.aggregateExpressions.map(
           replaceAliasButKeepName(_, aliasMap))
       )
+
+      // We might have introduces non-deterministic grouping expression
+      PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val isDeterministic = !CollapseProject.haveCommonNonDeterministicOutput(
-      upper.aggregateExpressions, lower.aggregateExpressions)
-
     val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
       lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
 
     val upperHasNoAggregateExpressions = upper.aggregateExpressions
       .forall(_.find(isAggregate).isEmpty)
 
-    isDeterministic && upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
+    upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
   }
 
   private def isAggregate(expr: Expression): Boolean = {
