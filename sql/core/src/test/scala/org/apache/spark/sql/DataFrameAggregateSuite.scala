@@ -456,25 +456,51 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("zero moments") {
-    val input = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
-        var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
 
-    checkAnswer(
-      input.agg(
-        expr("stddev(a)"),
-        expr("stddev_samp(a)"),
-        expr("stddev_pop(a)"),
-        expr("variance(a)"),
-        expr("var_samp(a)"),
-        expr("var_pop(a)"),
-        expr("skewness(a)"),
-        expr("kurtosis(a)")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
+    }
+  }
+
+  test("SPARK-13860: zero moments LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev($"a"), stddev_samp($"a"), stddev_pop($"a"), variance($"a"),
+          var_samp($"a"), var_pop($"a"), skewness($"a"), kurtosis($"a")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
+
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(null, null, 0.0, null, null, 0.0,
+          null, null))
+    }
   }
 
   test("null moments") {
@@ -975,7 +1001,9 @@ class DataFrameAggregateSuite extends QueryTest
 
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString,
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         withTempView("t1", "t2") {
           sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
           sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
@@ -1042,6 +1070,14 @@ class DataFrameAggregateSuite extends QueryTest
       s"SELECT $agg(DISTINCT v) FROM (SELECT v FROM VALUES 1, 2, 3 t(v) ORDER BY v)"
     checkAnswer(sql(queryTemplate("FIRST")), Row(1))
     checkAnswer(sql(queryTemplate("LAST")), Row(3))
+  }
+
+  test("SPARK-32906: struct field names should not change after normalizing floats") {
+    val df = Seq(Tuple1(Tuple2(-0.0d, Double.NaN)), Tuple1(Tuple2(0.0d, Double.NaN))).toDF("k")
+    val aggs = df.distinct().queryExecution.sparkPlan.collect { case a: HashAggregateExec => a }
+    assert(aggs.length == 2)
+    assert(aggs.head.output.map(_.dataType.simpleString).head ===
+      aggs.last.output.map(_.dataType.simpleString).head)
   }
 }
 

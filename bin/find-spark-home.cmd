@@ -55,6 +55,6 @@ if "x%SPARK_HOME%"=="x" (
     set SPARK_HOME=%~dp0..
   ) else (
     rem We are pip installed, use the Python script to resolve a reasonable SPARK_HOME
-    for /f "delims=" %%i in ('%PYTHON_RUNNER% %FIND_SPARK_HOME_PYTHON_SCRIPT%') do set SPARK_HOME=%%i
+    for /f "delims=" %%i in ('%PYTHON_RUNNER% "%FIND_SPARK_HOME_PYTHON_SCRIPT%"') do set SPARK_HOME=%%i
   )
 )

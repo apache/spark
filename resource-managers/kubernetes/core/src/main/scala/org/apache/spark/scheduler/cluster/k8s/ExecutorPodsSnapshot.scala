@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
+import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -37,12 +38,17 @@ private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorP
 }
 
 object ExecutorPodsSnapshot extends Logging {
+  private var shouldCheckAllContainers: Boolean = _
 
   def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
   }
 
   def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
+
+  def setShouldCheckAllContainers(watchAllContainers: Boolean): Unit = {
+    shouldCheckAllContainers = watchAllContainers
+  }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
@@ -59,7 +65,15 @@ object ExecutorPodsSnapshot extends Logging {
         case "pending" =>
           PodPending(pod)
         case "running" =>
-          PodRunning(pod)
+          if (shouldCheckAllContainers &&
+            "Never" == pod.getSpec.getRestartPolicy &&
+            pod.getStatus.getContainerStatuses.stream
+              .map[ContainerStateTerminated](cs => cs.getState.getTerminated)
+              .anyMatch(t => t != null && t.getExitCode != 0)) {
+            PodFailed(pod)
+          } else {
+            PodRunning(pod)
+          }
         case "failed" =>
           PodFailed(pod)
         case "succeeded" =>
@@ -79,7 +93,8 @@ object ExecutorPodsSnapshot extends Logging {
       (
         pod.getStatus == null ||
         pod.getStatus.getPhase == null ||
-        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+          (pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating" &&
+           pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "running")
       ))
   }
 }

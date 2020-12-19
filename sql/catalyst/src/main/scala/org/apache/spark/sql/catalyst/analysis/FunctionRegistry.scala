@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 
@@ -115,7 +116,7 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
-        throw new AnalysisException(s"undefined function $name")
+        throw QueryCompilationErrors.functionUndefinedError(name)
       }
     }
     func(children)
@@ -356,6 +357,7 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
+    expression[RLike]("regexp_like", true),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
     expression[Overlay]("overlay"),
@@ -391,6 +393,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimeZone]("current_timezone"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -426,9 +429,14 @@ object FunctionRegistry {
     expression[MakeInterval]("make_interval"),
     expression[DatePart]("date_part"),
     expression[Extract]("extract"),
+    expression[DateFromUnixDate]("date_from_unix_date"),
+    expression[UnixDate]("unix_date"),
     expression[SecondsToTimestamp]("timestamp_seconds"),
     expression[MillisToTimestamp]("timestamp_millis"),
     expression[MicrosToTimestamp]("timestamp_micros"),
+    expression[UnixSeconds]("unix_seconds"),
+    expression[UnixMillis]("unix_millis"),
+    expression[UnixMicros]("unix_micros"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -479,6 +487,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
+    expression[RaiseError]("raise_error"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
@@ -510,6 +519,7 @@ object FunctionRegistry {
     expression[Lag]("lag"),
     expression[RowNumber]("row_number"),
     expression[CumeDist]("cume_dist"),
+    expression[NthValue]("nth_value"),
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
@@ -614,19 +624,8 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
-            s"Invalid arguments for function $name"
-          } else {
-            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-              validParametersCount.head.toString
-            } else {
-              validParametersCount.init.mkString("one of ", ", ", " and ") +
-                validParametersCount.last
-            }
-            s"Invalid number of arguments for function $name. " +
-              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
-          }
-          throw new AnalysisException(invalidArgumentsMsg)
+          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+            validParametersCount, name, params)
         }
         try {
           val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
@@ -654,14 +653,14 @@ object FunctionRegistry {
       dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
       if (args.size != 1) {
-        throw new AnalysisException(s"Function $name accepts only one argument")
+        throw QueryCompilationErrors.functionAcceptsOnlyOneArgumentError(name)
       }
       Cast(args.head, dataType)
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
     val expressionInfo =
-      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "", "")
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "", "2.0.1", "")
     (name, (expressionInfo, builder))
   }
 

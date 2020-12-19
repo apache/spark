@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
@@ -68,8 +67,9 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * metadata.  For example, when reading a partitioned table from a file system, partition columns
  * will be inferred from the directory layout even if they are not specified.
  *
- * @param paths A list of file system paths that hold data.  These will be globbed before and
- *              qualified. This option only works when reading from a [[FileFormat]].
+ * @param paths A list of file system paths that hold data. These will be globbed before if
+ *              the "__globPaths__" option is true, and will be qualified. This option only works
+ *              when reading from a [[FileFormat]].
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by. This list is
@@ -116,6 +116,15 @@ case class DataSource(
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
+
+  /**
+   * Whether or not paths should be globbed before being used to access files.
+   */
+  def globPaths: Boolean = {
+    options.get(DataSource.GLOB_PATHS_KEY)
+      .map(_ == "true")
+      .getOrElse(true)
+  }
 
   bucketSpec.map { bucket =>
     SchemaUtils.checkColumnNameDuplication(
@@ -202,7 +211,7 @@ case class DataSource(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
 
-    // We just print a waring message if the data schema and partition schema have the duplicate
+    // We just print a warning message if the data schema and partition schema have the duplicate
     // columns. This is because we allow users to do so in the previous Spark releases and
     // we have the existing tests for the cases (e.g., `ParquetHadoopFsRelationSuite`).
     // See SPARK-18108 and SPARK-21144 for related discussions.
@@ -235,7 +244,7 @@ case class DataSource(
         // For glob pattern, we do not check it because the glob pattern might only make sense
         // once the streaming job starts and some upstream source starts dropping data.
         val hdfsPath = new Path(path)
-        if (!SparkHadoopUtil.get.isGlobPath(hdfsPath)) {
+        if (!globPaths || !SparkHadoopUtil.get.isGlobPath(hdfsPath)) {
           val fs = hdfsPath.getFileSystem(newHadoopConfiguration())
           if (!fs.exists(hdfsPath)) {
             throw new AnalysisException(s"Path does not exist: $path")
@@ -578,7 +587,7 @@ case class DataSource(
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, newHadoopConfiguration(),
-      checkEmptyGlobPath, checkFilesExist)
+      checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths)
   }
 }
 
@@ -742,6 +751,11 @@ object DataSource extends Logging {
   }
 
   /**
+   * The key in the "options" map for deciding whether or not to glob paths before use.
+   */
+  val GLOB_PATHS_KEY = "__globPaths__"
+
+  /**
    * Checks and returns files in all the paths.
    */
   private[sql] def checkAndGlobPathIfNecessary(
@@ -749,7 +763,8 @@ object DataSource extends Logging {
       hadoopConf: Configuration,
       checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean,
-      numThreads: Integer = 40): Seq[Path] = {
+      numThreads: Integer = 40,
+      enableGlobbing: Boolean): Seq[Path] = {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
@@ -764,7 +779,11 @@ object DataSource extends Logging {
       try {
         ThreadUtils.parmap(globPaths, "globPath", numThreads) { globPath =>
           val fs = globPath.getFileSystem(hadoopConf)
-          val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
+          val globResult = if (enableGlobbing) {
+            SparkHadoopUtil.get.globPath(fs, globPath)
+          } else {
+            qualifiedPaths
+          }
 
           if (checkEmptyGlobPath && globResult.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $globPath")

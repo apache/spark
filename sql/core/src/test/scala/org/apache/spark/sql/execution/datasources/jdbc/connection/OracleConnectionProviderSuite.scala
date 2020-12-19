@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 class OracleConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val driver = registerDriver(OracleConnectionProvider.driverClass)
-    val provider = new OracleConnectionProvider(driver,
-      options("jdbc:oracle:thin:@//localhost/xe"))
+    val provider = new OracleConnectionProvider()
+    val driver = registerDriver(provider.driverClass)
 
-    testSecureConnectionProvider(provider)
+    testSecureConnectionProvider(provider, driver, options("jdbc:oracle:thin:@//localhost/xe"))
   }
 }

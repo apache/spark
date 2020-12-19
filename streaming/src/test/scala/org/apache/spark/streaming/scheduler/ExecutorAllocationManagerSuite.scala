@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.mockito.MockitoSugar
@@ -98,15 +98,15 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       /** Verify that a particular executor was scaled down. */
       def verifyScaledDownExec(expectedExec: Option[String]): Unit = {
         if (expectedExec.nonEmpty) {
-          val decomInfo = ExecutorDecommissionInfo("spark scale down", false)
+          val decomInfo = ExecutorDecommissionInfo("spark scale down", None)
           if (decommissioning) {
             verify(allocationClient, times(1)).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true))
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
             verify(allocationClient, never).killExecutor(meq(expectedExec.get))
           } else {
             verify(allocationClient, times(1)).killExecutor(meq(expectedExec.get))
             verify(allocationClient, never).decommissionExecutor(
-              meq(expectedExec.get), meq(decomInfo), meq(true))
+              meq(expectedExec.get), meq(decomInfo), meq(true), any())
           }
         } else {
           if (decommissioning) {

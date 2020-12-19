@@ -55,7 +55,7 @@ class MultivariateGaussian @Since("2.0.0") (
    */
   @transient private lazy val tuple = {
     val (rootSigmaInv, u) = calculateCovarianceConstants
-    val rootSigmaInvMat = Matrices.fromBreeze(rootSigmaInv).toDense
+    val rootSigmaInvMat = Matrices.fromBreeze(rootSigmaInv)
     val rootSigmaInvMulMu = rootSigmaInvMat.multiply(mean)
     (rootSigmaInvMat, u, rootSigmaInvMulMu)
   }
@@ -79,36 +79,6 @@ class MultivariateGaussian @Since("2.0.0") (
     val v = rootSigmaInvMulMu.copy
     BLAS.gemv(-1.0, rootSigmaInvMat, x, 1.0, v)
     u - 0.5 * BLAS.dot(v, v)
-  }
-
-  private[ml] def pdf(X: Matrix): DenseVector = {
-    val mat = DenseMatrix.zeros(X.numRows, X.numCols)
-    pdf(X, mat)
-  }
-
-  private[ml] def pdf(X: Matrix, mat: DenseMatrix): DenseVector = {
-    require(!mat.isTransposed)
-
-    BLAS.gemm(1.0, X, rootSigmaInvMat.transpose, 0.0, mat)
-    val m = mat.numRows
-    val n = mat.numCols
-
-    val pdfVec = mat.multiply(rootSigmaInvMulMu)
-
-    val blas = BLAS.getBLAS(n)
-    val squared1 = blas.ddot(n, rootSigmaInvMulMu.values, 1, rootSigmaInvMulMu.values, 1)
-
-    val localU = u
-    var i = 0
-    while (i < m) {
-      val squared2 = blas.ddot(n, mat.values, i, m, mat.values, i, m)
-      val dot = pdfVec(i)
-      val squaredSum = squared1 + squared2 - dot - dot
-      pdfVec.values(i) = math.exp(localU - 0.5 * squaredSum)
-      i += 1
-    }
-
-    pdfVec
   }
 
   /**

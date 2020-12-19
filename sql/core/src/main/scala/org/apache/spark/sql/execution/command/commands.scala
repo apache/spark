@@ -78,7 +78,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = sideEffectResult.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
@@ -119,7 +119,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = sideEffectResult.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 

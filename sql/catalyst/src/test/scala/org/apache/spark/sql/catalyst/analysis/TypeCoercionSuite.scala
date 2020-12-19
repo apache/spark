@@ -260,7 +260,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
     // Tests that its not possible to setup implicit casts between two map types when
     // source map's key type is integer and the target map's key type are either Binary,
-    // Boolean, Date, Timestamp, Array, Struct, CaleandarIntervalType or NullType
+    // Boolean, Date, Timestamp, Array, Struct, CalendarIntervalType or NullType
     nonCastableTargetTypes.foreach { targetType =>
       shouldNotCast(sourceType, targetType)
     }
@@ -1103,7 +1103,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for Concat") {
-    val rule = TypeCoercion.ConcatCoercion(conf)
+    val rule = TypeCoercion.ConcatCoercion
 
     ruleTest(rule,
       Concat(Seq(Literal("ab"), Literal("cde"))),
@@ -1157,7 +1157,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("type coercion for Elt") {
-    val rule = TypeCoercion.EltCoercion(conf)
+    val rule = TypeCoercion.EltCoercion
 
     ruleTest(rule,
       Elt(Seq(Literal(1), Literal("ab"), Literal("cde"))),
@@ -1284,7 +1284,7 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
-  private val timeZoneResolver = ResolveTimeZone(new SQLConf)
+  private val timeZoneResolver = ResolveTimeZone
 
   private def widenSetOperationTypes(plan: LogicalPlan): LogicalPlan = {
     timeZoneResolver(TypeCoercion.WidenSetOperationTypes(plan))
@@ -1419,12 +1419,13 @@ class TypeCoercionSuite extends AnalysisTest {
   test("SPARK-32638: corrects references when adding aliases in WidenSetOperationTypes") {
     val t1 = LocalRelation(AttributeReference("v", DecimalType(10, 0))())
     val t2 = LocalRelation(AttributeReference("v", DecimalType(11, 0))())
-    val p1 = t1.select(t1.output.head)
-    val p2 = t2.select(t2.output.head)
+    val p1 = t1.select(t1.output.head).as("p1")
+    val p2 = t2.select(t2.output.head).as("p2")
     val union = p1.union(p2)
-    val wp1 = widenSetOperationTypes(union.select(p1.output.head))
+    val wp1 = widenSetOperationTypes(union.select(p1.output.head, $"p2.v"))
     assert(wp1.isInstanceOf[Project])
-    assert(wp1.missingInput.isEmpty)
+    // The attribute `p1.output.head` should be replaced in the root `Project`.
+    assert(wp1.expressions.forall(_.find(_ == p1.output.head).isEmpty))
     val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
     assert(wp2.isInstanceOf[Aggregate])
     assert(wp2.missingInput.isEmpty)
@@ -1436,7 +1437,7 @@ class TypeCoercionSuite extends AnalysisTest {
    */
   test("make sure rules do not fire early") {
     // InConversion
-    val inConversion = TypeCoercion.InConversion(conf)
+    val inConversion = TypeCoercion.InConversion
     ruleTest(inConversion,
       In(UnresolvedAttribute("a"), Seq(Literal(1))),
       In(UnresolvedAttribute("a"), Seq(Literal(1)))
@@ -1480,7 +1481,7 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("binary comparison with string promotion") {
-    val rule = TypeCoercion.PromoteStrings(conf)
+    val rule = TypeCoercion.PromoteStrings
     ruleTest(rule,
       GreaterThan(Literal("123"), Literal(1)),
       GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))

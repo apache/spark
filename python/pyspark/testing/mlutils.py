@@ -17,10 +17,14 @@
 
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Transformer, UnaryTransformer
+from pyspark.ml.evaluation import Evaluator
 from pyspark.ml.param import Param, Params, TypeConverters
+from pyspark.ml.param.shared import HasMaxIter, HasRegParam
+from pyspark.ml.classification import Classifier, ClassificationModel
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
-from pyspark.ml.wrapper import _java2py
+from pyspark.ml.wrapper import _java2py  # type: ignore
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase
@@ -28,7 +32,8 @@ from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase
 
 def check_params(test_self, py_stage, check_params_exist=True):
     """
-    Checks common requirements for Params.params:
+    Checks common requirements for :py:class:`PySpark.ml.Params.params`:
+
       - set of params exist in Java and Python and are ordered by names
       - param parent has the same UID as the object's UID
       - default param value from Java matches value in Python
@@ -116,7 +121,8 @@ class MockTransformer(Transformer, HasFake):
 
 class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
 
-    shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
+    shift = Param(Params._dummy(),  # type: ignore
+                  "shift", "The amount by which to shift " +
                   "data in a DataFrame",
                   typeConverter=TypeConverters.toFloat)
 
@@ -159,3 +165,86 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class _DummyLogisticRegressionParams(HasMaxIter, HasRegParam):
+    def setMaxIter(self, value):
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value):
+        return self._set(regParam=value)
+
+
+# This is a dummy LogisticRegression used in test for python backend estimator/model
+class DummyLogisticRegression(Classifier, _DummyLogisticRegressionParams,
+                              DefaultParamsReadable, DefaultParamsWritable):
+    @keyword_only
+    def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, rawPredictionCol="rawPrediction"):
+        super(DummyLogisticRegression, self).__init__()
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, rawPredictionCol="rawPrediction"):
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+        return self
+
+    def _fit(self, dataset):
+        # Do nothing but create a dummy model
+        return self._copyValues(DummyLogisticRegressionModel())
+
+
+class DummyLogisticRegressionModel(ClassificationModel, _DummyLogisticRegressionParams,
+                                   DefaultParamsReadable, DefaultParamsWritable):
+
+    def __init__(self):
+        super(DummyLogisticRegressionModel, self).__init__()
+
+    def _transform(self, dataset):
+        # A dummy transform impl which always predict label 1
+        from pyspark.sql.functions import array, lit
+        from pyspark.ml.functions import array_to_vector
+        rawPredCol = self.getRawPredictionCol()
+        if rawPredCol:
+            dataset = dataset.withColumn(
+                rawPredCol, array_to_vector(array(lit(-100.0), lit(100.0))))
+        predCol = self.getPredictionCol()
+        if predCol:
+            dataset = dataset.withColumn(predCol, lit(1.0))
+
+        return dataset
+
+    @property
+    def numClasses(self):
+        # a dummy implementation for test.
+        return 2
+
+    @property
+    def intercept(self):
+        # a dummy implementation for test.
+        return 0.0
+
+    # This class only used in test. The following methods/properties are not used in tests.
+
+    @property
+    def coefficients(self):
+        raise NotImplementedError()
+
+    def predictRaw(self, value):
+        raise NotImplementedError()
+
+    def numFeatures(self):
+        raise NotImplementedError()
+
+    def predict(self, value):
+        raise NotImplementedError()
+
+
+class DummyEvaluator(Evaluator, DefaultParamsReadable, DefaultParamsWritable):
+
+    def _evaluate(self, dataset):
+        # a dummy implementation for test.
+        return 1.0

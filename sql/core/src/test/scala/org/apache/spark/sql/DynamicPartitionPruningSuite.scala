@@ -345,6 +345,7 @@ abstract class DynamicPartitionPruningSuiteBase
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
         assert(scan1.metrics("numPartitions").value === numPartitions)
+        assert(scan1.metrics("pruningTime").value === -1)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -358,6 +359,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
         assert(scan2.metrics("numPartitions").value === 1)
+        assert(scan2.metrics("pruningTime").value === -1)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table
@@ -370,6 +372,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(scan3.metrics("numFiles").value == partFilesNum)
         assert(scan3.metrics("filesSize").value == partFilesSize)
         assert(scan3.metrics("numPartitions").value === 1)
+        assert(scan3.metrics("pruningTime").value !== -1)
       }
     }
   }
@@ -1339,6 +1342,23 @@ abstract class DynamicPartitionPruningSuiteBase
           }
         }
       }
+    }
+  }
+
+  test("SPARK-32817: DPP throws error when the broadcast side is empty") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      val df = sql(
+        """
+          |SELECT * FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country = 'XYZ'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df, Nil)
     }
   }
 }

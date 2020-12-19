@@ -20,12 +20,10 @@ package org.apache.spark.repl
 import java.io._
 import java.nio.file.Files
 
-import scala.tools.nsc.interpreter.SimpleReader
-
 import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -84,31 +82,6 @@ class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
     val isContain = output.contains(message)
     assert(!isContain,
       "Interpreter output contained '" + message + "':\n" + output)
-  }
-
-  test("propagation of local properties") {
-    // A mock ILoop that doesn't install the SIGINT handler.
-    class ILoop(out: PrintWriter) extends SparkILoop(None, out) {
-      settings = new scala.tools.nsc.Settings
-      settings.usejavacp.value = true
-      org.apache.spark.repl.Main.interp = this
-      in = SimpleReader()
-    }
-
-    val out = new StringWriter()
-    Main.interp = new ILoop(new PrintWriter(out))
-    Main.sparkContext = new SparkContext("local", "repl-test")
-    Main.interp.createInterpreter()
-
-    Main.sparkContext.setLocalProperty("someKey", "someValue")
-
-    // Make sure the value we set in the caller to interpret is propagated in the thread that
-    // interprets the command.
-    Main.interp.interpret("org.apache.spark.repl.Main.sparkContext.getLocalProperty(\"someKey\")")
-    assert(out.toString.contains("someValue"))
-
-    Main.sparkContext.stop()
-    System.clearProperty("spark.driver.port")
   }
 
   test("SPARK-15236: use Hive catalog") {

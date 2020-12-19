@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, verify, when}
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
@@ -497,19 +497,19 @@ class StandaloneDynamicAllocationSuite
     }
   }
 
-  test("executor registration on a blacklisted host must fail") {
+  test("executor registration on a excluded host must fail") {
     // The context isn't really used by the test, but it helps with creating a test scheduler,
     // since CoarseGrainedSchedulerBackend makes a lot of calls to the context instance.
-    sc = new SparkContext(appConf.set(config.BLACKLIST_ENABLED.key, "true"))
+    sc = new SparkContext(appConf.set(config.EXCLUDE_ON_FAILURE_ENABLED.key, "true"))
 
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty,
+    val message = RegisterExecutor("one", endpointRef, "excluded-host", 10, Map.empty,
       Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
-    when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
+    when(taskScheduler.excludedNodes()).thenReturn(Set("excluded-host"))
     when(taskScheduler.resourceOffers(any(), any[Boolean])).thenReturn(Nil)
     when(taskScheduler.sc).thenReturn(sc)
 

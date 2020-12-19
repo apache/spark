@@ -152,6 +152,13 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(converter(chr) === expected)
   }
 
+  test("SPARK-33390: Make Literal support char array") {
+    val ac = Array('a', 'c')
+    val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
+    val expected = UTF8String.fromString(String.valueOf(ac))
+    assert(converter(ac) === expected)
+  }
+
   test("converting java.time.Instant to TimestampType") {
     Seq(
       "0101-02-16T10:11:32Z",

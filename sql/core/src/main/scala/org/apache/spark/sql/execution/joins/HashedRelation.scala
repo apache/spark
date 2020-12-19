@@ -426,9 +426,9 @@ private[joins] class UnsafeHashedRelation(
       readBuffer(valuesBuffer, 0, valuesSize)
 
       val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
-      val putSuceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
+      val putSucceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
         valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
-      if (!putSuceeded) {
+      if (!putSucceeded) {
         binaryMap.free()
         throw new IOException("Could not allocate memory to grow BytesToBytesMap")
       }
@@ -1091,7 +1091,7 @@ case object EmptyHashedRelation extends HashedRelation {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    Iterator.empty
   }
 
   override def close(): Unit = {}
