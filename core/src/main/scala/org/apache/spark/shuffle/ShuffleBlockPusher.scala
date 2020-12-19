@@ -241,7 +241,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    */
   private def sliceReqBufferIntoBlockBuffers(
       reqBuffer: ManagedBuffer,
-      blockSizes: Seq[Long]): Array[ManagedBuffer] = {
+      blockSizes: Seq[Int]): Array[ManagedBuffer] = {
     if (blockSizes.size == 1) {
       Array(reqBuffer)
     } else {
@@ -256,7 +256,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         case (offset, size) =>
           new NioManagedBuffer(inMemoryBuffer.duplicate()
             .position(offset)
-            .limit(offset + size.toInt).asInstanceOf[ByteBuffer].slice())
+            .limit(offset + size).asInstanceOf[ByteBuffer].slice())
       }.toArray
     }
   }
@@ -333,12 +333,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       mergerLocs: Seq[BlockManagerId],
       transportConf: TransportConf): Seq[PushRequest] = {
     var offset = 0L
-    var currentReqSize = 0L
+    var currentReqSize = 0
     var currentReqOffset = 0L
     var currentMergerId = 0
     val numMergers = mergerLocs.length
     val requests = new ArrayBuffer[PushRequest]
-    var blocks = new ArrayBuffer[(BlockId, Long)]
+    var blocks = new ArrayBuffer[(BlockId, Int)]
     for (reduceId <- 0 until numPartitions) {
       val blockSize = partitionLengths(reduceId)
       logDebug(
@@ -357,13 +357,13 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           && blocks.size < maxBlocksInFlightPerAddress
           && mergerId == currentMergerId && blockSize <= maxBlockSizeToPush) {
           // Add current block to current batch
-          currentReqSize += blockSize
+          currentReqSize += blockSize.toInt
         } else {
           if (blocks.nonEmpty) {
             // Convert the previous batch into a PushRequest
             requests += PushRequest(mergerLocs(currentMergerId), blocks.toSeq,
               createRequestBuffer(transportConf, dataFile, currentReqOffset, currentReqSize))
-            blocks = new ArrayBuffer[(BlockId, Long)]
+            blocks = new ArrayBuffer[(BlockId, Int)]
           }
           // Start a new batch
           currentReqSize = 0
@@ -374,13 +374,14 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         }
         // Only push blocks under the size limit
         if (blockSize <= maxBlockSizeToPush) {
-          blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSize))
+          val blockSizeInt = blockSize.toInt
+          blocks += ((ShufflePushBlockId(shuffleId, partitionId, reduceId), blockSizeInt))
           // Only update currentReqOffset if the current block is the first in the request
           if (currentReqOffset == -1) {
             currentReqOffset = offset
           }
           if (currentReqSize == 0) {
-            currentReqSize += blockSize
+            currentReqSize += blockSizeInt
           }
         }
       }
@@ -415,7 +416,7 @@ private[spark] object ShuffleBlockPusher {
    */
   private[spark] case class PushRequest(
     address: BlockManagerId,
-    blocks: Seq[(BlockId, Long)],
+    blocks: Seq[(BlockId, Int)],
     reqBuffer: ManagedBuffer) {
     val size = blocks.map(_._2).sum
   }
