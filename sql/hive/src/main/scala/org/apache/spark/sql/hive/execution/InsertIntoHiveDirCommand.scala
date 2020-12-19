@@ -64,7 +64,11 @@ case class InsertIntoHiveDirCommand(
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val parsedAttrs = outputColumns.zipWithIndex.map { case (e, index) =>
-      e.withName(s"${e.prettyName}_$index")
+      if (e.name.contains(",") || e.name.contains("(")) {
+        e.withName(s"${e.prettyName}_$index")
+      } else {
+        e
+      }
     }
 
     val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
