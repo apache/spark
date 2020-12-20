@@ -592,7 +592,7 @@ class StreamingTests(ReusedSQLTestCase):
         self.assertTrue(q.isActive)
         time.sleep(3)
         q.stop()
-        result = self.spark.sql("SELECT value FROM %s" % output_table_name)
+        result = self.spark.sql("SELECT value FROM %s" % output_table_name).collect()
         self.assertTrue(len(result) > 0)
 
 
