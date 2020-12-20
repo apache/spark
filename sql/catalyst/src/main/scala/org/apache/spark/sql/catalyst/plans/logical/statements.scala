@@ -293,14 +293,6 @@ case class AlterTableSetLocationStatement(
     location: String) extends ParsedStatement
 
 /**
- * ALTER TABLE ... RENAME PARTITION command, as parsed from SQL.
- */
-case class AlterTableRenamePartitionStatement(
-    tableName: Seq[String],
-    from: TablePartitionSpec,
-    to: TablePartitionSpec) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

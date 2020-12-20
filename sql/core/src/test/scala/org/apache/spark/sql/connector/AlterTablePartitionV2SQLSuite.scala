@@ -39,7 +39,8 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
       }
-      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables."))
     }
   }
 }

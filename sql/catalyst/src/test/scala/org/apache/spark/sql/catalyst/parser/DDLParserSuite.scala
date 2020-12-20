@@ -2106,8 +2106,8 @@ class DDLParserSuite extends AnalysisTest {
         |RENAME TO PARTITION (dt='2008-09-09', country='uk')
       """.stripMargin
     val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableRenamePartitionStatement(
-      Seq("table_name"),
+    val expected1 = AlterTableRenamePartition(
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME TO PARTITION"),
       Map("dt" -> "2008-08-08", "country" -> "us"),
       Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed1, expected1)
@@ -2118,8 +2118,8 @@ class DDLParserSuite extends AnalysisTest {
         |RENAME TO PARTITION (ds='2018-06-10')
       """.stripMargin
     val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableRenamePartitionStatement(
-      Seq("a", "b", "c"),
+    val expected2 = AlterTableRenamePartition(
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO PARTITION"),
       Map("ds" -> "2017-06-10"),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed2, expected2)

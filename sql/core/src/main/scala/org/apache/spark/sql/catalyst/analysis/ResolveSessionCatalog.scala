@@ -445,10 +445,9 @@ class ResolveSessionCatalog(
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableRenamePartitionStatement(tbl, from, to) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE RENAME PARTITION")
+    case AlterTableRenamePartition(ResolvedV1TableIdentifier(ident), from, to) =>
       AlterTableRenamePartitionCommand(
-        v1TableName.asTableIdentifier,
+        ident.asTableIdentifier,
         from,
         to)
 
