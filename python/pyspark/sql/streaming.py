@@ -1017,7 +1017,7 @@ class DataStreamWriter(object):
         * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
         * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
-           every time these is some updates
+           every time these are some updates
         * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
@@ -1446,7 +1446,7 @@ class DataStreamWriter(object):
             * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
             * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
-              sink every time these is some updates
+              sink every time these are some updates
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
@@ -1518,7 +1518,7 @@ class DataStreamWriter(object):
             * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
             * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
-              sink every time these is some updates
+              sink every time these are some updates
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
