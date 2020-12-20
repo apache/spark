@@ -43,9 +43,10 @@ object BLASBenchmark extends BenchmarkBase {
     val f2jBLAS = new F2jBLAS
     val nativeBLAS = NetlibBLAS.getInstance
     val vectorBLAS = Try(
-        Utils.classForName("org.apache.spark.ml.linalg.VectorizedBLAS")
-             .newInstance()
-             .asInstanceOf[NetlibBLAS]).getOrElse(new F2jBLAS)
+      Utils.classForName("dev.ludovic.blas.VectorizedBLAS")
+            .newInstance()
+            .asInstanceOf[NetlibBLAS])
+        .getOrElse(new F2jBLAS)
 
     // scalastyle:off println
     println("nativeBLAS = " + nativeBLAS.getClass.getName)
