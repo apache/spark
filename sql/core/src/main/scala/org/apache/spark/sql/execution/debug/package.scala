@@ -109,13 +109,11 @@ package object debug {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
 
     def findSubtrees(plan: SparkPlan): Unit = {
-      plan transform {
+      plan foreach {
         case s: WholeStageCodegenExec =>
           codegenSubtrees += s
-          s
         case s =>
           s.subqueries.foreach(findSubtrees)
-          s
       }
     }
 

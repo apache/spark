@@ -231,11 +231,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
   test("SPARK-33853: explain codegen - check presence of subquery") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       withTable("df1") {
-        spark.range(1, 100)
-          .write
-          .format("parquet")
-          .mode("overwrite")
-          .saveAsTable("df1")
+        val df1 = spark.range(1, 100)
+        df1.createTempView("df1")
 
         val sqlText = "EXPLAIN CODEGEN SELECT (SELECT min(id) FROM df1)"
         val expectedText = "Found 3 WholeStageCodegen subtrees."
