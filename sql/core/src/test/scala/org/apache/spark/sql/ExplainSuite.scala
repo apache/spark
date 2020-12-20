@@ -277,7 +277,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      withTable("df") {
+      withTempView("df") {
         val df = spark.range(1, 100)
         df.createTempView("df")
 
