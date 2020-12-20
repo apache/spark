@@ -411,11 +411,8 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
 /**
  * The logical plan of the DROP TABLE command.
  *
- * The `PURGE` option turns on removing of table data. It is applicable only for managed tables,
- * and ignored for external tables. For V1 In-Memory catalog, Spark always removes data belongs to
- * dropped tables, but it takes this option into account for V1 Hive external catalog. If this
- * option is not specified, Spark removes tables only from a catalog otherwise when `PURGE` is
- * set Spark also removes table data.
+ * If the `PURGE` option is set, the table catalog must remove table data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
  *
  * The syntax of this command is:
  * {{{
@@ -668,11 +665,8 @@ case class AlterTableAddPartition(
  * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
- * The `PURGE` option turns on removing of partition data. It is applicable only for managed tables,
- * and ignored for external tables. For V1 In-Memory catalog, Spark always removes data belongs to
- * dropped partitions, but it takes this option into account for V1 Hive external catalog. If this
- * option is not specified, Spark removes partitions only from a catalog otherwise when `PURGE` is
- * set Spark also removes partition data.
+ * If the `PURGE` option is set, the table catalog must remove partition data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
  *
  * The syntax of this command is:
  * {{{
