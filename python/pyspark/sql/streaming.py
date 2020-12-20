@@ -954,16 +954,19 @@ class DataStreamReader(OptionUtils):
             raise TypeError("path can be only a single string")
 
     def table(self, tableName):
-        """Define a Streaming DataFrame on a Table and returns the result as a :class:`DataFrame`.
+        """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+        support streaming mode.
 
-        The DataSource corresponding to the table should support streaming mode.
+        .. versionadded:: 3.2.0
 
         Parameters
         ----------
         tableName : str
             string, for the name of the table.
 
-        .. versionadded:: 3.2.0
+        Returns
+        --------
+        :class:`DataFrame`
 
         Notes
         -----
@@ -971,8 +974,8 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> csv_sdf = spark.readStream.table(input_table_name)
-        >>> csv_sdf.isStreaming
+        >>> csv_sdf = spark.readStream.table('input_table') # doctest: +SKIP
+        >>> csv_sdf.isStreaming # doctest: +SKIP
         True
         """
         if isinstance(tableName, str):
@@ -1494,10 +1497,11 @@ class DataStreamWriter(object):
     def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
                 **options):
         """
-        Streams the contents of the :class:`DataFrame` to the output table.
+        Starts the execution of the streaming query, which will continually output results to the given
+        table as new data arrives.
 
-        A new table will be created if the table not exists. The returned [[StreamingQuery]]
-        object can be used to interact with the stream.
+        A new table will be created if the table not exists. The returned
+        :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.2.0
 
@@ -1532,24 +1536,24 @@ class DataStreamWriter(object):
         Examples
         --------
         >>> sq = sdf.writeStream.format('parquet').queryName('this_query').option(
-        ...      'checkpointLocation', '/tmp/checkpoint').toTable(output_table_name)
-        >>> sq.isActive
+        ...      'checkpointLocation', '/tmp/checkpoint').toTable('output_table') # doctest: +SKIP
+        >>> sq.isActive # doctest: +SKIP
         True
-        >>> sq.name
+        >>> sq.name # doctest: +SKIP
         'this_query'
-        >>> sq.stop()
-        >>> sq.isActive
+        >>> sq.stop() # doctest: +SKIP
+        >>> sq.isActive # doctest: +SKIP
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').toTable(
-        ...     output_table_name, queryName='that_query', outputMode="append", format='parquet',
-        ...     checkpointLocation='/tmp/checkpoint')
-        >>> sq.name
+        ...     'output_table', queryName='that_query', outputMode="append", format='parquet',
+        ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
+        >>> sq.name # doctest: +SKIP
         'that_query'
-        >>> sq.isActive
+        >>> sq.isActive # doctest: +SKIP
         True
-        >>> sq.stop()
+        >>> sq.stop() # doctest: +SKIP
         """
-        # FIXME: address SPARK-33659 here as well
+        # TODO(SPARK-33659): document the current behavior for DataStreamWriter.toTable API
         self.options(**options)
         if outputMode is not None:
             self.outputMode(outputMode)
@@ -1587,10 +1591,6 @@ def _test():
     globs['sdf_schema'] = StructType([StructField("data", StringType(), True)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
-
-    globs['input_table_name'] = "sample_input_table_%d" % randint(0, 100000000)
-    globs['output_table_name'] = "sample_output_table_%d" % randint(0, 100000000)
-    spark.sql("CREATE TABLE %s (value string) USING parquet" % globs['input_table_name'])
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,
