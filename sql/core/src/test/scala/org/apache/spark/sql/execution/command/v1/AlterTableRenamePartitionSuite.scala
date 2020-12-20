@@ -23,10 +23,48 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
-  private def createSinglePartTable(t: String): Unit = {
+  protected def createSinglePartTable(t: String): Unit = {
     sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
     sql(s"INSERT INTO $t PARTITION (id = 1) SELECT 'abc'")
   }
+
+  test("rename without explicitly specifying database") {
+    val t = "tbl"
+    withTable(t) {
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+
+      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      checkPartitions(t, Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+    }
+  }
+
+  test("table to alter does not exist") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val errMsg = intercept[NoSuchTableException] {
+        sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("Table or view 'no_tbl' not found"))
+    }
+  }
+
+  test("partition to rename does not exist") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+      val errMsg = intercept[NoSuchPartitionException] {
+        sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
+      }.getMessage
+      assert(errMsg.contains("Partition not found in table"))
+    }
+  }
+}
+
+class AlterTableRenamePartitionSuite
+  extends AlterTableRenamePartitionSuiteBase
+  with CommandSuiteBase {
 
   test("single part partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -97,39 +135,6 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
     }
   }
 
-  test("rename without explicitly specifying database") {
-    val t = "tbl"
-    withTable(t) {
-      createSinglePartTable(t)
-      checkPartitions(t, Map("id" -> "1"))
-
-      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      checkPartitions(t, Map("id" -> "2"))
-      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
-    }
-  }
-
-  test("table to alter does not exist") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      val errMsg = intercept[NoSuchTableException] {
-        sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("Table or view 'no_tbl' not found"))
-    }
-  }
-
-  test("partition to rename does not exist") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createSinglePartTable(t)
-      checkPartitions(t, Map("id" -> "1"))
-      val errMsg = intercept[NoSuchPartitionException] {
-        sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition not found in table"))
-    }
-  }
-
   test("partition spec in RENAME PARTITION should be case insensitive") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
@@ -151,7 +156,3 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
     }
   }
 }
-
-class AlterTableRenamePartitionSuite
-  extends AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase
