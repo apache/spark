@@ -39,6 +39,51 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
     }
   }
 
+  test("multi part partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createWideTable(t)
+      checkPartitions(t,
+        Map(
+          "year" -> "2016",
+          "month" -> "3",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"),
+        Map(
+          "year" -> "2016",
+          "month" -> "4",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"))
+
+      sql(s"""
+        |ALTER TABLE $t
+        |PARTITION (
+        |  year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1
+        |) RENAME TO PARTITION (
+        |  year = 2016, month = 3, hour = 10, minute = 10, sec = 123, extra = 1
+        |)""".stripMargin)
+      checkPartitions(t,
+        Map(
+          "year" -> "2016",
+          "month" -> "3",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "123",
+          "extra" -> "1"),
+        Map(
+          "year" -> "2016",
+          "month" -> "4",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"))
+      checkAnswer(sql(s"SELECT month, sec, price FROM $t"), Row(3, 123, 3))
+    }
+  }
+
   test("with location") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
