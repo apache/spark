@@ -96,7 +96,9 @@ abstract class AbstractCommandBuilder {
       childEnv.get("JAVA_HOME"),
       System.getenv("JAVA_HOME"),
       System.getProperty("java.home"));
-    cmd.add(join(File.separator, firstJavaHome, "bin", "java"));
+    if (firstJavaHome != null) {
+        cmd.add(join(File.separator, firstJavaHome, "bin", "java"));
+    }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
