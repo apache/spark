@@ -574,7 +574,7 @@ class StreamingTests(ReusedSQLTestCase):
     def test_streaming_read_from_table(self):
         input_table_name = "sample_input_table_%d" % randint(0, 100000000)
         self.spark.sql("CREATE TABLE %s (value string) USING parquet" % input_table_name)
-        self.spark.sql("INSERT INTO %s VALUES ('aaa', 'bbb', 'ccc')" % input_table_name)
+        self.spark.sql("INSERT INTO %s VALUES ('aaa'), ('bbb'), ('ccc')" % input_table_name)
         df = self.spark.readStream.table(input_table_name)
         self.assertTrue(df.isStreaming)
         q = df.writeStream.format('memory').queryName('this_query').start()
@@ -585,8 +585,10 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_streaming_write_to_table(self):
         output_table_name = "sample_output_table_%d" % randint(0, 100000000)
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
         df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-        q = df.writeStream.toTable(output_table_name, format='parquet')
+        q = df.writeStream.toTable(output_table_name, format='parquet', checkpointLocation=tmpPath)
         self.assertTrue(q.isActive)
         time.sleep(3)
         q.stop()
