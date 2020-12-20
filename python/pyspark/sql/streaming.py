@@ -1497,8 +1497,8 @@ class DataStreamWriter(object):
     def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
                 **options):
         """
-        Starts the execution of the streaming query, which will continually output results to the given
-        table as new data arrives.
+        Starts the execution of the streaming query, which will continually output results to the
+        given table as new data arrives.
 
         A new table will be created if the table not exists. The returned
         :class:`StreamingQuery` object can be used to interact with the stream.
