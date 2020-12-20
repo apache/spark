@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
        1
   """,
   since = "1.0.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
@@ -131,7 +131,7 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
        ["2"]
   """,
   since = "2.0.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 case class IfNull(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -152,7 +152,7 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
        NULL
   """,
   since = "2.0.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -173,7 +173,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
        ["2"]
   """,
   since = "2.0.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
@@ -194,7 +194,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
        1
   """,
   since = "2.0.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 // scalastyle:on line.size.limit
 case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
   extends RuntimeReplaceable {
@@ -263,7 +263,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
        123.0
   """,
   since = "1.5.0",
-  group = "conditional_funcs")
+  group = "condition_funcs")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 

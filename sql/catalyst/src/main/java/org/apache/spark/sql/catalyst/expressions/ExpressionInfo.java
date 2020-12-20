@@ -41,8 +41,8 @@ public class ExpressionInfo {
 
     private static final Set<String> validGroups =
         new HashSet<>(Arrays.asList("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs",
-            "comparison_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs",
-            "datetime_funcs", "generator_funcs", "grouping_funcs", "json_funcs", "logical_funcs",
+            "collection_funcs", "comparison_funcs", "condition_funcs", "conversion_funcs",
+            "csv_funcs", "datetime_funcs", "generator_funcs", "json_funcs", "logical_funcs",
             "map_funcs", "math_funcs", "misc_funcs", "regex_funcs", "string_funcs", "struct_funcs",
             "window_funcs", "xml_funcs"));
 

@@ -249,7 +249,7 @@ case class SparkVersion() extends LeafExpression with CodegenFallback {
        array<int>
   """,
   since = "3.0.0",
-  group = "conversion_funcs")
+  group = "misc_funcs")
 case class TypeOf(child: Expression) extends UnaryExpression {
   override def nullable: Boolean = false
   override def foldable: Boolean = true

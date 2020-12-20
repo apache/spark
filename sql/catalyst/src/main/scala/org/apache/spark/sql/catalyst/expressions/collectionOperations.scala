@@ -91,7 +91,7 @@ trait BinaryArrayExpressionWithImplicitCast extends BinaryExpression
        -1
   """,
   since = "1.5.0",
-  group = "array_funcs")
+  group = "collection_funcs")
 case class Size(child: Expression, legacySizeOfNull: Boolean)
   extends UnaryExpression with ExpectsInputTypes {
 
@@ -1019,7 +1019,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
   """,
-  group = "array_funcs",
+  group = "collection_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
@@ -2099,7 +2099,7 @@ case class ElementAt(
   note = """
     Concat logic for arrays is available since 2.4.0.
   """,
-  group = "array_funcs",
+  group = "collection_funcs",
   since = "1.5.0")
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 

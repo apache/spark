@@ -246,7 +246,7 @@ case class ConcatWs(children: Seq[Expression])
        scala
   """,
   since = "2.0.0",
-  group = "conditional_funcs")
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Elt(
     children: Seq[Expression],
@@ -2163,7 +2163,8 @@ object Decode {
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
   """,
-  since = "3.2.0")
+  since = "3.2.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
 

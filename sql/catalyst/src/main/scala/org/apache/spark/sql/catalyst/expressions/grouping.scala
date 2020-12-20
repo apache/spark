@@ -57,7 +57,7 @@ trait GroupingSet extends Expression with CodegenFallback {
         NULL	5	1
   """,
   since = "2.0.0",
-  group = "grouping_funcs")
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
@@ -77,7 +77,7 @@ case class Cube(groupByExprs: Seq[Expression]) extends GroupingSet {}
         Bob	NULL	1
   """,
   since = "2.0.0",
-  group = "grouping_funcs")
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
 
@@ -99,7 +99,7 @@ case class Rollup(groupByExprs: Seq[Expression]) extends GroupingSet {}
         NULL	1	7
   """,
   since = "2.0.0",
-  group = "grouping_funcs")
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Grouping(child: Expression) extends Expression with Unevaluable {
   @transient
@@ -137,7 +137,7 @@ case class Grouping(child: Expression) extends Expression with Unevaluable {
     columns).
   """,
   since = "2.0.0",
-  group = "grouping_funcs")
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Unevaluable {
   @transient
