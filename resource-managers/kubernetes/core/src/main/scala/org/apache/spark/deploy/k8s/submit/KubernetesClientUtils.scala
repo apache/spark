@@ -106,22 +106,23 @@ private[spark] object KubernetesClientUtils extends Logging {
     if (confDir.isDefined) {
       val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
       val orderedConfFiles = orderFilesBySize(confFiles)
-      var i: Long = 0
+      var truncatedMapSize: Long = 0
       val truncatedMap = mutable.HashMap[String, String]()
+      var source: Source = Source.fromString("") // init with empty source.
       for (file <- orderedConfFiles) {
-        var source: Source = Source.fromString("") // init with empty source.
         try {
           source = Source.fromFile(file)(Codec.UTF8)
           val (fileName, fileContent) = file.getName -> source.mkString
-          if (fileContent.length > 0) {
-            i = i + (fileName.length + fileContent.length)
-            if (i < maxSize) {
-              truncatedMap.put(fileName, fileContent)
-            }
+          truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
+          if (truncatedMapSize < maxSize) {
+            truncatedMap.put(fileName, fileContent)
+          } else {
+            logWarning(s"Skipped a conf file $fileName, due to size constraint." +
+              s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
           }
         } catch {
           case e: MalformedInputException =>
-            i = i - (file.getName.length + file.length)
+            truncatedMapSize = truncatedMapSize - (file.getName.length + file.length)
             logWarning(
               s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
             None

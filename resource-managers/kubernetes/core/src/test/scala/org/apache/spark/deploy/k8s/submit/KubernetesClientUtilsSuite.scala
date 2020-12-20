@@ -51,7 +51,7 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
       Map("binary-file.conf" -> Array[Byte](0x00.toByte, 0xA1.toByte))
     val sparkConf = testSetup(input)
     val output = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
-    val expectedOutput = Map("test.txt" -> "test123", "sample.conf" -> "conf")
+    val expectedOutput = Map("test.txt" -> "test123", "sample.conf" -> "conf", "_test" -> "")
     assert(output === expectedOutput)
   }
 
