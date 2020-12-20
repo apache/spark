@@ -151,6 +151,52 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     assert(union.stats === expectedStats)
   }
 
+  test("col stats estimation for decimal data type with different precision and scale") {
+    val sz = Some(BigInt(1024))
+    val attrDecimal = AttributeReference("cdecimal", DecimalType(5, 4))()
+    val attrDecimal1 = AttributeReference("cdecimal1", DecimalType.SYSTEM_DEFAULT)()
+    val attrDecimal2 = AttributeReference("cdecimal2", DecimalType(8, 3))()
+    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+      Seq(
+        attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5))),
+        attrDecimal1 -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5))),
+        attrDecimal2 -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.5)))))
+    val columnInfo1: AttributeMap[ColumnStat] = AttributeMap(
+      Seq(
+        AttributeReference("cdecimal3", DecimalType(5, 4))() -> ColumnStat(
+          min = Some(Decimal(14.5)),
+          max = Some(Decimal(19.9))),
+        AttributeReference("cdecimal4", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(
+          min = Some(Decimal(14.5)),
+          max = Some(Decimal(19.9))),
+        AttributeReference("cdecimal5", DecimalType(8, 3))() -> ColumnStat(
+          min = Some(Decimal(14.5)),
+          max = Some(Decimal(19.9)))))
+    val child1 = StatsTestPlan(
+      outputList = columnInfo.keys.toSeq.sortWith(_.exprId.id < _.exprId.id),
+      rowCount = 2,
+      attributeStats = columnInfo,
+      size = sz)
+
+    val child2 = StatsTestPlan(
+      outputList = columnInfo1.keys.toSeq.sortWith(_.exprId.id < _.exprId.id),
+      rowCount = 2,
+      attributeStats = columnInfo1,
+      size = sz)
+
+    val union = Union(Seq(child1, child2))
+
+    val expectedStats = logical.Statistics(
+      sizeInBytes = 2 * 1024,
+      rowCount = Some(4),
+      attributeStats = AttributeMap(
+        Seq(
+          attrDecimal -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.9))),
+          attrDecimal1 -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.9))),
+          attrDecimal2 -> ColumnStat(min = Some(Decimal(13.5)), max = Some(Decimal(19.9))))))
+    assert(union.stats === expectedStats)
+  }
+
   test("col stats estimation when min max stats not present for one child") {
     val sz = Some(BigInt(1024))
 
