@@ -35,7 +35,7 @@ private[spark] object BLAS extends Serializable {
   private[ml] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
       _javaBLAS = Try(
-        Utils.classForName("org.apache.spark.ml.linalg.VectorizedBLAS")
+        Utils.classForName("dev.ludovic.blas.VectorizedBLAS")
              .newInstance()
              .asInstanceOf[NetlibBLAS]).getOrElse(new F2jBLAS)
     }
