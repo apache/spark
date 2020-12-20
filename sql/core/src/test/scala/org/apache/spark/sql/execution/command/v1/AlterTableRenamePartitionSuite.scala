@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchTableException}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
   private def createSinglePartTable(t: String): Unit = {
     sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-    sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+    sql(s"INSERT INTO $t PARTITION (id = 1) SELECT 'abc'")
   }
 
   test("single part partition") {
@@ -35,6 +35,7 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
 
       sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       checkPartitions(t, Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
     }
   }
 
@@ -44,8 +45,9 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       createSinglePartTable(t)
       checkPartitions(t, Map("id" -> "1"))
 
-      sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       checkPartitions(t, Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
     }
   }
 
@@ -86,6 +88,7 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
         checkPartitions(t, Map("id" -> "2"))
+        checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
       }
     }
   }
