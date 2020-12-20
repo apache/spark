@@ -230,7 +230,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 
   test("SPARK-33853: explain codegen - check presence of subquery") {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
-      withTable("df") {
+      withTempView("df") {
         val df1 = spark.range(1, 100)
         df1.createTempView("df")
 
