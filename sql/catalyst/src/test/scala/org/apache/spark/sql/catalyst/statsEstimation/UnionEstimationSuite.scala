@@ -54,7 +54,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val attrLong = AttributeReference("clong", LongType)()
     val attrByte = AttributeReference("cbyte", ByteType)()
     val attrFloat = AttributeReference("cfloat", FloatType)()
-    val attrDecimal = AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)()
+    val attrDecimal = AttributeReference("cdecimal", DecimalType(5, 4))()
     val attrDate = AttributeReference("cdate", DateType)()
     val attrTimestamp = AttributeReference("ctimestamp", TimestampType)()
 
@@ -112,7 +112,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
         AttributeReference("cfloat1", FloatType)() -> ColumnStat(
           min = Some(2.2f),
           max = Some(6.1f)),
-        AttributeReference("cdecimal1", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(
+        AttributeReference("cdecimal1", DecimalType(5, 4))() -> ColumnStat(
           min = Some(Decimal(14.5)),
           max = Some(Decimal(19.9))),
         AttributeReference("cdate1", DateType)() -> ColumnStat(min = Some(3), max = Some(6)),

@@ -44,10 +44,8 @@ object UnionEstimation {
       FloatType.ordering.lt(a.asInstanceOf[Float], b.asInstanceOf[Float])
     case DoubleType => (a: Any, b: Any) =>
       DoubleType.ordering.lt(a.asInstanceOf[Double], b.asInstanceOf[Double])
-    case DecimalType.SYSTEM_DEFAULT => (a: Any, b: Any) =>
-      DecimalType.SYSTEM_DEFAULT.ordering.lt(
-        a.asInstanceOf[DecimalType.SYSTEM_DEFAULT.InternalType],
-        b.asInstanceOf[DecimalType.SYSTEM_DEFAULT.InternalType])
+    case DecimalType() => (a: Any, b: Any) =>
+      dt.asInstanceOf[DecimalType].ordering.lt(a.asInstanceOf[Decimal], b.asInstanceOf[Decimal])
     case DateType => (a: Any, b: Any) =>
       DateType.ordering.lt(a.asInstanceOf[DateType.InternalType],
         b.asInstanceOf[DateType.InternalType])
@@ -60,7 +58,7 @@ object UnionEstimation {
 
   private def isTypeSupported(dt: DataType): Boolean = dt match {
     case ByteType | IntegerType | ShortType | FloatType | LongType |
-         DoubleType | DateType | DecimalType.SYSTEM_DEFAULT | TimestampType => true
+         DoubleType | DateType | DecimalType() | TimestampType => true
     case _ => false
   }
 
