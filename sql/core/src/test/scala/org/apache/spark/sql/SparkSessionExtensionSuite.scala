@@ -88,6 +88,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-33621: inject data source rewrite rule") {
+    withSession(Seq(_.injectDataSourceRewriteRule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.dataSourceRewriteRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
@@ -160,13 +166,13 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       // inject rule that will run during AQE query stage optimization and will verify that the
       // custom tags were written in the preparation phase
       extensions.injectColumnar(session =>
-        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
+        MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
       session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
       assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
+        MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
       val data = Seq((100L), (200L), (300L)).toDF("vals").repartition(1)
       val df = data.selectExpr("vals + 1")
@@ -199,12 +205,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
 
     val extensions = create { extensions =>
       extensions.injectColumnar(session =>
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
       session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
       // perform a join to inject a broadcast exchange
       val left = Seq((1, 50L), (2, 100L), (3, 150L)).toDF("l1", "l2")
@@ -238,12 +244,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       .config(COLUMN_BATCH_SIZE.key, 2)
       .withExtensions { extensions =>
         extensions.injectColumnar(session =>
-          MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
+          MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())) }
       .getOrCreate()
 
     try {
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
 
       val input = Seq((100L), (200L), (300L))
@@ -271,7 +277,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
       assert(session.sessionState.functionRegistry
         .lookupFunction(MyExtensions.myFunction._1).isDefined)
       assert(session.sessionState.columnarRules.contains(
-        MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
+        MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
       stop(session)
     }
@@ -571,8 +577,8 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
     override val exprId: ExprId = NamedExpression.newExprId,
     override val qualifier: Seq[String] = Seq.empty,
     override val explicitMetadata: Option[Metadata] = None,
-    override val deniedMetadataKeys: Seq[String] = Seq.empty)
-  extends Alias(child, name)(exprId, qualifier, explicitMetadata, deniedMetadataKeys)
+    override val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
+  extends Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
@@ -709,7 +715,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
       new ColumnarAlias(replaceWithColumnarExpression(a.child),
-        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.deniedMetadataKeys)
+        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
     case att: AttributeReference =>
       new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
         att.metadata)(att.exprId, att.qualifier)
@@ -818,7 +824,7 @@ case class MyPostRule() extends Rule[SparkPlan] {
   }
 }
 
-case class MyColumarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
+case class MyColumnarRule(pre: Rule[SparkPlan], post: Rule[SparkPlan]) extends ColumnarRule {
   override def preColumnarTransitions: Rule[SparkPlan] = pre
   override def postColumnarTransitions: Rule[SparkPlan] = post
 }
@@ -832,7 +838,7 @@ class MyExtensions extends (SparkSessionExtensions => Unit) {
     e.injectOptimizerRule(MyRule)
     e.injectParser(MyParser)
     e.injectFunction(MyExtensions.myFunction)
-    e.injectColumnar(session => MyColumarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
+    e.injectColumnar(session => MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
   }
 }
 

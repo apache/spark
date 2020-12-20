@@ -284,7 +284,7 @@ case class FileSourceScanExec(
       //
       // Sort ordering would be over the prefix subset of `sort columns` being read
       // from the table.
-      // eg.
+      // e.g.
       // Assume (col0, col2, col3) are the columns read from the table
       // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
       // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
@@ -379,12 +379,12 @@ case class FileSourceScanExec(
       case (key, _) if (key.equals("Location")) =>
         val location = relation.location
         val numPaths = location.rootPaths.length
-        val abbreviatedLoaction = if (numPaths <= 1) {
+        val abbreviatedLocation = if (numPaths <= 1) {
           location.rootPaths.mkString("[", ", ", "]")
         } else {
           "[" + location.rootPaths.head + s", ... ${numPaths - 1} entries]"
         }
-        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLoaction)}"
+        s"$key: ${location.getClass.getSimpleName} ${redact(abbreviatedLocation)}"
       case (key, value) => s"$key: ${redact(value)}"
     }
 

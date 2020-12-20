@@ -805,7 +805,7 @@ class DataFrameSuite extends QueryTest
     assert(df2.drop("`a.b`").columns.size == 2)
   }
 
-  test("drop(name: String) search and drop all top level columns that matchs the name") {
+  test("drop(name: String) search and drop all top level columns that matches the name") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((3, 4)).toDF("a", "b")
     checkAnswer(df1.crossJoin(df2), Row(1, 2, 3, 4))
@@ -1233,6 +1233,44 @@ class DataFrameSuite extends QueryTest
                          " _1  | 2   \n" +
                          " _2  | 2   \n"
     assert(df.showString(10, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-33690: showString: escape meta-characters") {
+    val df1 = Seq("aaa\nbbb\tccc").toDF("value")
+    assert(df1.showString(1, truncate = 0) ===
+      """+-------------+
+        ||value        |
+        |+-------------+
+        ||aaa\nbbb\tccc|
+        |+-------------+
+        |""".stripMargin)
+
+    val df2 = Seq(Seq("aaa\nbbb\tccc")).toDF("value")
+    assert(df2.showString(1, truncate = 0) ===
+      """+---------------+
+        ||value          |
+        |+---------------+
+        ||[aaa\nbbb\tccc]|
+        |+---------------+
+        |""".stripMargin)
+
+    val df3 = Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc")).toDF("value")
+    assert(df3.showString(1, truncate = 0) ===
+      """+--------------------------------+
+        ||value                           |
+        |+--------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc}|
+        |+--------------------------------+
+        |""".stripMargin)
+
+    val df4 = Seq("aaa\nbbb\tccc").toDF("value").selectExpr("named_struct('v', value)")
+    assert(df4.showString(1, truncate = 0) ===
+      """+----------------------+
+        ||named_struct(v, value)|
+        |+----------------------+
+        ||{aaa\nbbb\tccc}       |
+        |+----------------------+
+        |""".stripMargin)
   }
 
   test("SPARK-7319 showString") {

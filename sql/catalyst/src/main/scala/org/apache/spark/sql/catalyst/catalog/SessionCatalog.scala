@@ -610,8 +610,16 @@ class SessionCatalog(
   /**
    * Return a local temporary view exactly as it was stored.
    */
+  def getRawTempView(name: String): Option[LogicalPlan] = synchronized {
+    tempViews.get(formatTableName(name))
+  }
+
+  /**
+   * Generate a [[View]] operator from the view description if the view stores sql text,
+   * otherwise, it is same to `getRawTempView`
+   */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
-    tempViews.get(formatTableName(name)).map(getTempViewPlan)
+    getRawTempView(name).map(getTempViewPlan)
   }
 
   def getTempViewNames(): Seq[String] = synchronized {
@@ -621,8 +629,16 @@ class SessionCatalog(
   /**
    * Return a global temporary view exactly as it was stored.
    */
+  def getRawGlobalTempView(name: String): Option[LogicalPlan] = {
+    globalTempViewManager.get(formatTableName(name))
+  }
+
+  /**
+   * Generate a [[View]] operator from the view description if the view stores sql text,
+   * otherwise, it is same to `getRawGlobalTempView`
+   */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
-    globalTempViewManager.get(formatTableName(name)).map(getTempViewPlan)
+    getRawGlobalTempView(name).map(getTempViewPlan)
   }
 
   /**
@@ -659,7 +675,7 @@ class SessionCatalog(
   def getTempViewOrPermanentTableMetadata(name: TableIdentifier): CatalogTable = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
-      getTempView(table).map {
+      tempViews.get(table).map {
         case TemporaryViewRelation(metadata) => metadata
         case plan =>
           CatalogTable(
@@ -669,7 +685,6 @@ class SessionCatalog(
             schema = plan.output.toStructType)
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      val a = globalTempViewManager.get(table)
       globalTempViewManager.get(table).map {
         case TemporaryViewRelation(metadata) => metadata
         case plan =>
@@ -810,19 +825,32 @@ class SessionCatalog(
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
-      val child = View.fromCatalogTable(metadata, isTempView = false, parser)
-      SubqueryAlias(multiParts, child)
+      SubqueryAlias(multiParts, fromCatalogTable(metadata, isTempView = false))
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
     }
   }
 
-  def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
+  private def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case viewInfo: TemporaryViewRelation =>
-        View.fromCatalogTable(viewInfo.tableMeta, isTempView = true, parser)
+        fromCatalogTable(viewInfo.tableMeta, isTempView = true)
       case v => v
     }
+  }
+
+  private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
+    val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+    val viewConfigs = metadata.viewSQLConfigs
+    val viewPlan =
+      SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView = isTempView)) {
+        parser.parsePlan(viewText)
+      }
+    View(
+      desc = metadata,
+      isTempView = isTempView,
+      output = metadata.schema.toAttributes,
+      child = viewPlan)
   }
 
   def lookupTempView(table: String): Option[SubqueryAlias] = {
@@ -1484,16 +1512,36 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
     if (name.database.isEmpty && functionRegistry.functionExists(name)) {
-      // This function has been already loaded into the function registry.
-      return functionRegistry.lookupFunction(name, children)
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      // Lookup the function as a temporary or a built-in function (i.e. without database) and
+      // 1. if we are not resolving view, we don't care about the function type and just return it.
+      // 2. if we are resolving view, only return a temp function if it's referred by this view.
+      if (!isResolvingView ||
+          !isTemporaryFunction(name) ||
+          referredTempFunctionNames.contains(name.funcName)) {
+        // This function has been already loaded into the function registry.
+        return functionRegistry.lookupFunction(name, children)
+      }
+    }
+
+    // Get the database from AnalysisContext if it's defined, otherwise, use current database
+    val currentDatabase = AnalysisContext.get.catalogAndNamespace match {
+      case Seq() => getCurrentDatabase
+      case Seq(_, db) => db
+      case Seq(catalog, namespace @ _*) =>
+        throw new AnalysisException(
+          s"V2 catalog does not support functions yet. " +
+            s"catalog: ${catalog}, namespace: '${namespace.quoted}'")
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val database = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val database = formatDatabaseName(name.database.getOrElse(currentDatabase))
     val qualifiedName = name.copy(database = Some(database))
 
     if (functionRegistry.functionExists(qualifiedName)) {

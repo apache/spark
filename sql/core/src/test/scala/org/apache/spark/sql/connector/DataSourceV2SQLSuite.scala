@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -285,7 +286,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("CreateTable/RepalceTable: invalid schema if has interval type") {
+  test("CreateTable/ReplaceTable: invalid schema if has interval type") {
     Seq("CREATE", "REPLACE").foreach { action =>
       val e1 = intercept[AnalysisException](
         sql(s"$action TABLE table_name (id int, value interval) USING $v2Format"))
@@ -731,7 +732,7 @@ class DataSourceV2SQLSuite
     val ex = intercept[AnalysisException] {
       sql("DROP TABLE testcat.db.notbl")
     }
-    assert(ex.getMessage.contains("Table or view not found for 'DROP TABLE': testcat.db.notbl"))
+    assert(ex.getMessage.contains("Table or view not found: testcat.db.notbl"))
     sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
@@ -778,6 +779,7 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
         checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
         sql(s"DROP TABLE $t")
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
       }
@@ -859,6 +861,24 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
         checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-33829: Renaming a table should recreate a cache while retaining the old cache info") {
+    withTable("testcat.ns.old", "testcat.ns.new") {
+      def getStorageLevel(tableName: String): StorageLevel = {
+        val table = spark.table(tableName)
+        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
+        assert(optCachedData.isDefined)
+        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
+      }
+      sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
+      sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
+      val oldStorageLevel = getStorageLevel("testcat.ns.old")
+
+      sql("ALTER TABLE testcat.ns.old RENAME TO ns.new")
+      val newStorageLevel = getStorageLevel("testcat.ns.new")
+      assert(oldStorageLevel === newStorageLevel)
     }
   }
 
@@ -1360,9 +1380,9 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namspace")
+    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namespace")
 
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES")
@@ -1373,11 +1393,11 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: v2 catalog doesn't support namespace") {
     spark.conf.set(
-      "spark.sql.catalog.testcat_no_namspace",
+      "spark.sql.catalog.testcat_no_namespace",
       classOf[BasicInMemoryTableCatalog].getName)
 
     val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namspace")
+      sql("SHOW NAMESPACES in testcat_no_namespace")
     }
 
     assert(exception.getMessage.contains("does not support namespaces"))
@@ -1748,6 +1768,25 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-33653: REFRESH TABLE should recache the target table itself") {
+    val tblName = "testcat.ns.t"
+    withTable(tblName) {
+      sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+
+      // if the table is not cached, refreshing it should not recache it
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isEmpty)
+
+      sql(s"CACHE TABLE $tblName")
+
+      // after caching & refreshing the table should be recached
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+      sql(s"REFRESH TABLE $tblName")
+      assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(tblName)).isDefined)
+    }
+  }
+
   test("REPLACE TABLE: v1 table") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE OR REPLACE TABLE tbl (a int) USING ${classOf[SimpleScanSource].getName}")
@@ -1975,10 +2014,16 @@ class DataSourceV2SQLSuite
 
   test("AlterTable: rename table basic test") {
     withTable("testcat.ns1.new") {
-      sql(s"CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
+      sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
 
-      sql(s"ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
+      val e = intercept[AnalysisException] {
+        sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
+      }
+      assert(e.getMessage.contains(
+        "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
     }
@@ -1988,7 +2033,8 @@ class DataSourceV2SQLSuite
     val e = intercept[AnalysisException] {
       sql(s"ALTER VIEW testcat.ns.tbl RENAME TO ns.view")
     }
-    assert(e.getMessage.contains("Renaming view is not supported in v2 catalogs"))
+    assert(e.getMessage.contains(
+      "Table or view not found: testcat.ns.tbl"))
   }
 
   test("ANALYZE TABLE") {
@@ -2004,7 +2050,7 @@ class DataSourceV2SQLSuite
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      testV1Command("MSCK REPAIR TABLE", t)
+      testNotSupportedV2Command("MSCK REPAIR TABLE", t)
     }
   }
 
@@ -2093,16 +2139,9 @@ class DataSourceV2SQLSuite
       val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')")
       }
-      assert(e.message.contains("ALTER TABLE SerDe Properties is only supported with v1 tables"))
+      assert(e.message.contains(
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] is not supported for v2 tables"))
     }
-  }
-
-  test("ALTER VIEW AS QUERY") {
-    val v = "testcat.ns1.ns2.v"
-    val e = intercept[AnalysisException] {
-      sql(s"ALTER VIEW $v AS SELECT 1")
-    }
-    assert(e.message.contains("ALTER VIEW QUERY is only supported with temp views or v1 tables"))
   }
 
   test("CREATE VIEW") {
@@ -2261,7 +2300,7 @@ class DataSourceV2SQLSuite
 
     val e = intercept[AnalysisException] {
       // Since the following multi-part name starts with `globalTempDB`, it is resolved to
-      // the session catalog, not the `gloabl_temp` v2 catalog.
+      // the session catalog, not the `global_temp` v2 catalog.
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
     assert(e.message.contains(
@@ -2587,29 +2626,41 @@ class DataSourceV2SQLSuite
     }
   }
 
-  private def testNotSupportedV2Command(
-      sqlCommand: String,
-      sqlParams: String,
-      sqlCommandInMessage: Option[String] = None): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
+  test("View commands are not supported in v2 catalogs") {
+    def validateViewCommand(
+        sql: String,
+        catalogName: String,
+        viewName: String,
+        cmdName: String): Unit = {
+      assertAnalysisError(
+        sql,
+        s"Cannot specify catalog `$catalogName` for view $viewName because view support " +
+          s"in v2 catalog has not been implemented yet. $cmdName expects a view.")
     }
-    val cmdStr = sqlCommandInMessage.getOrElse(sqlCommand)
-    assert(e.message.contains(s"$cmdStr is not supported for v2 tables"))
+
+    validateViewCommand("DROP VIEW testcat.v", "testcat", "v", "DROP VIEW")
+    validateViewCommand(
+      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... SET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
+      "testcat",
+      "v",
+      "ALTER VIEW ... UNSET TBLPROPERTIES")
+    validateViewCommand(
+      "ALTER VIEW testcat.v AS SELECT 1",
+      "testcat",
+      "v",
+      "ALTER VIEW ... AS")
   }
 
-  private def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
+  private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
     }
-    assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
-  }
-
-  private def testV1CommandSupportingTempView(sqlCommand: String, sqlParams: String): Unit = {
-    val e = intercept[AnalysisException] {
-      sql(s"$sqlCommand $sqlParams")
-    }
-    assert(e.message.contains(s"$sqlCommand is only supported with temp views or v1 tables"))
+    assert(e.message.contains(s"$sqlCommand is not supported for v2 tables"))
   }
 
   private def assertAnalysisError(sqlStatement: String, expectedError: String): Unit = {

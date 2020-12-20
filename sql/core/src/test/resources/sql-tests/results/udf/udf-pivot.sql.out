@@ -202,7 +202,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.
 
 
 -- !query
@@ -217,7 +217,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.
 
 
 -- !query
@@ -262,7 +262,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
+It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
 
 -- !query
@@ -313,7 +313,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>;
+Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
 
 
 -- !query
@@ -339,7 +339,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literal expressions required for pivot values, found 'course#x';
+Literal expressions required for pivot values, found 'course#x'
 
 
 -- !query
@@ -424,7 +424,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'm#x'. Pivot columns must be comparable.;
+Invalid pivot column 'm#x'. Pivot columns must be comparable.
 
 
 -- !query
@@ -441,7 +441,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.;
+Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
 
 
 -- !query

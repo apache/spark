@@ -333,10 +333,6 @@ a.anchorjs-link:hover { text-decoration: none; }
   overflow-y: scroll;
 }
 
-.left-menu {
-  width: 399px;
-}
-
 .left-menu h3 {
   margin-left: 10px;
   line-height: 30px;

@@ -17,21 +17,10 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSparkSession {
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
-  override def defaultUsing: String = "USING _"
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
-
+class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
   test("a table does not support partitioning") {
     val table = s"non_part_$catalog.tab1"
     withTable(table) {

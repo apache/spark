@@ -80,8 +80,10 @@ def _invoke_binary_math_function(name, col1, col2):
     )
 
 
-def _options_to_str(options):
-    return {key: to_str(value) for (key, value) in options.items()}
+def _options_to_str(options=None):
+    if options:
+        return {key: to_str(value) for (key, value) in options.items()}
+    return {}
 
 
 def lit(col):
@@ -3454,7 +3456,7 @@ def json_tuple(col, *fields):
     return Column(jc)
 
 
-def from_json(col, schema, options={}):
+def from_json(col, schema, options=None):
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
     as keys type, :class:`StructType` or :class:`ArrayType` with
@@ -3510,7 +3512,7 @@ def from_json(col, schema, options={}):
     return Column(jc)
 
 
-def to_json(col, options={}):
+def to_json(col, options=None):
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
     into a JSON string. Throws an exception, in the case of an unsupported type.
@@ -3557,7 +3559,7 @@ def to_json(col, options={}):
     return Column(jc)
 
 
-def schema_of_json(json, options={}):
+def schema_of_json(json, options=None):
     """
     Parses a JSON string and infers its schema in DDL format.
 
@@ -3594,7 +3596,7 @@ def schema_of_json(json, options={}):
     return Column(jc)
 
 
-def schema_of_csv(csv, options={}):
+def schema_of_csv(csv, options=None):
     """
     Parses a CSV string and infers its schema in DDL format.
 
@@ -3627,7 +3629,7 @@ def schema_of_csv(csv, options={}):
     return Column(jc)
 
 
-def to_csv(col, options={}):
+def to_csv(col, options=None):
     """
     Converts a column containing a :class:`StructType` into a CSV string.
     Throws an exception, in the case of an unsupported type.
@@ -4038,7 +4040,7 @@ def sequence(start, stop, step=None):
             _to_java_column(start), _to_java_column(stop), _to_java_column(step)))
 
 
-def from_csv(col, schema, options={}):
+def from_csv(col, schema, options=None):
     """
     Parses a column containing a CSV string to a row with the specified schema.
     Returns `null`, in the case of an unparseable string.

@@ -261,16 +261,38 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             "PartitionFilters: \\[isnotnull\\(k#xL\\), dynamicpruningexpression\\(k#xL " +
               "IN subquery#x\\)\\]"
           val expected_pattern3 =
-            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
-              "/df2/.*, ... 99 entries\\]"
+            "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
+              "/df2/\\S*, ... 99 entries\\]"
           val expected_pattern4 =
-            "Location: InMemoryFileIndex \\[.*org.apache.spark.sql.ExplainSuite" +
-              "/df1/.*, ... 999 entries\\]"
+            "Location: InMemoryFileIndex \\[\\S*org.apache.spark.sql.ExplainSuite" +
+              "/df1/\\S*, ... 999 entries\\]"
           withNormalizedExplain(sqlText) { normalizedOutput =>
             assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
             assert(expected_pattern2.r.findAllMatchIn(normalizedOutput).length == 1)
             assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
+    withTable("df1") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withTable("df1") {
+          spark.range(1, 100)
+            .write
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable("df1")
+
+          val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df1) as v"
+          val expected_pattern1 =
+            "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
+
+          withNormalizedExplain(sqlText) { normalizedOutput =>
+            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }
       }
@@ -367,7 +389,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         val basePath = dir.getCanonicalPath + "/" + fmt
         val pushFilterMaps = Map (
           "parquet" ->
-            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
             "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
           "csv" ->
