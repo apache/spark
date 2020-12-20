@@ -24,6 +24,7 @@ class AlterTableRenamePartitionSuite
   extends command.AlterTableRenamePartitionSuiteBase
   with CommandSuiteBase {
 
+  // TODO(SPARK-33859): Support V2 ALTER TABLE .. RENAME PARTITION
   test("single part partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
