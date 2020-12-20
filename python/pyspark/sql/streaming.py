@@ -1570,7 +1570,6 @@ def _test():
     import doctest
     import os
     import tempfile
-    from random import randint
     from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
 
