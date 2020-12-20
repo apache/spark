@@ -503,7 +503,11 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       )
 
       // We might have introduces non-deterministic grouping expression
-      PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
+      if (newAggregate.groupingExpressions.exists(!_.deterministic)) {
+        PullOutNondeterministic.applyLocally.applyOrElse(newAggregate, identity[LogicalPlan])
+      } else {
+        newAggregate
+      }
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {

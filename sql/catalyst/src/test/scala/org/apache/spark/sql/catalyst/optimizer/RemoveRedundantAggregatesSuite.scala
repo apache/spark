@@ -109,7 +109,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-
   test("Keep non-redundant aggregate - upper has agg expression") {
     val relation = LocalRelation('a.int, 'b.int)
     val query = relation
