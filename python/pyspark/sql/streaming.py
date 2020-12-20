@@ -957,7 +957,7 @@ class DataStreamReader(OptionUtils):
         """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
         support streaming mode.
 
-        .. versionadded:: 3.2.0
+        .. versionadded:: 3.1.0
 
         Parameters
         ----------
@@ -1503,7 +1503,7 @@ class DataStreamWriter(object):
         A new table will be created if the table not exists. The returned
         :class:`StreamingQuery` object can be used to interact with the stream.
 
-        .. versionadded:: 3.2.0
+        .. versionadded:: 3.1.0
 
         Parameters
         ----------
