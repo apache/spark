@@ -23,13 +23,13 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
-
 import org.apache.spark.{SparkException, SparkFiles}
+
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException, PartitionAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -1655,6 +1655,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
       Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
+
+    // target partition already exists
+    val errMsg = intercept[PartitionAlreadyExistsException] {
+      sql("ALTER TABLE tab1 PARTITION (a='1', b='p') RENAME TO PARTITION (a='20', b='c')")
+    }.getMessage
+    assert(errMsg.contains("Partition already exists"))
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
