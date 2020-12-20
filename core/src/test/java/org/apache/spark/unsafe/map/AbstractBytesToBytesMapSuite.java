@@ -560,6 +560,8 @@ public abstract class AbstractBytesToBytesMapSuite {
         iter2.next();
       }
       assertFalse(iter2.hasNext());
+      // calls hasNext twice deliberately, make sure it's idempotent
+      assertFalse(iter2.hasNext());
     } finally {
       map.free();
       for (File spillFile : spillFilesCreated) {
