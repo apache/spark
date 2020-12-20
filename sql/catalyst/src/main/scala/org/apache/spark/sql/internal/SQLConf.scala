@@ -1323,6 +1323,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PUSH_DOWN_AGGREGATES_ENABLED = buildConf("spark.sql.execution.pushDownAggregates")
+    .internal()
+    .doc("Whether to push down aggregates through manually inserted exchanges.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()

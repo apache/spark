@@ -347,6 +347,7 @@ object QueryExecution {
       // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
+      PushDownAggregates,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(),
