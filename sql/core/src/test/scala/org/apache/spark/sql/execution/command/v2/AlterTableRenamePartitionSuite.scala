@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.command
 
-class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
+class AlterTableRenamePartitionSuite
+  extends command.AlterTableRenamePartitionSuiteBase
+  with CommandSuiteBase {
+
+  test("single part partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
     }
   }
 }
