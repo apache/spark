@@ -233,7 +233,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-        withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
             .partitionBy("k")
@@ -273,27 +272,21 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
         }
-      }
     }
   }
 
   test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
-    withTable("df1") {
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-        withTable("df1") {
-          spark.range(1, 100)
-            .write
-            .format("parquet")
-            .mode("overwrite")
-            .saveAsTable("df1")
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(1, 100)
+        df.createTempView("df")
 
-          val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df1) as v"
-          val expected_pattern1 =
-            "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
+        val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df) as v"
+        val expected_pattern =
+          "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
 
-          withNormalizedExplain(sqlText) { normalizedOutput =>
-            assert(expected_pattern1.r.findAllMatchIn(normalizedOutput).length == 1)
-          }
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }
