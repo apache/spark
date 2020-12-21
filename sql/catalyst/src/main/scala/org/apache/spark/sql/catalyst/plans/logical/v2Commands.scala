@@ -410,6 +410,14 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
 
 /**
  * The logical plan of the DROP TABLE command.
+ *
+ * If the `PURGE` option is set, the table catalog must remove table data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     DROP TABLE [IF EXISTS] table [PURGE];
+ * }}}
  */
 case class DropTable(
     child: LogicalPlan,
@@ -657,9 +665,12 @@ case class AlterTableAddPartition(
  * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
+ * If the `PURGE` option is set, the table catalog must remove partition data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
 case class AlterTableDropPartition(
