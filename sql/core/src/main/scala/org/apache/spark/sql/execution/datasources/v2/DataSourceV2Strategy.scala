@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -56,18 +57,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  private def invalidateCache(r: ResolvedTable, recacheTable: Boolean = false)(): Unit = {
+  private def invalidateCache(
+      r: ResolvedTable,
+      recacheTable: Boolean = false)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
-    if (recacheTable && cache.isDefined) {
-      // save the cache name and cache level for recreation
-      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+    if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
 
-      // recache with the same name and cache level.
-      val ds = Dataset.ofRows(session, v2Relation)
-      session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+      if (recacheTable) {
+        val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+        // recache with the same name and cache level.
+        val ds = Dataset.ofRows(session, v2Relation)
+        session.sharedState.cacheManager.cacheQuery(ds, cacheName, cacheLevel)
+      }
+      Some(cacheLevel)
+    } else {
+      None
     }
   }
 
@@ -268,7 +275,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterTableExec(catalog, ident, changes) :: Nil
 
     case RenameTable(catalog, oldIdent, newIdent) =>
-      RenameTableExec(catalog, oldIdent, newIdent) :: Nil
+      val tbl = ResolvedTable(catalog, oldIdent, catalog.loadTable(oldIdent))
+      RenameTableExec(
+        catalog,
+        oldIdent,
+        newIdent,
+        invalidateCache(tbl),
+        session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil

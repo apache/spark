@@ -109,15 +109,11 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     val exp1 = intercept[NoSuchTableException] {
       sql(s"ALTER TABLE h2.test.not_existing_table RENAME TO test.dst_table")
     }
-    assert(exp1.getMessage.contains(
-      "Failed table renaming from test.not_existing_table to test.dst_table"))
-    assert(exp1.cause.get.getMessage.contains("Table \"not_existing_table\" not found"))
-    val exp2 = intercept[NoSuchNamespaceException] {
+    assert(exp1.getMessage.contains("Table test.not_existing_table not found"))
+    val exp2 = intercept[NoSuchTableException] {
       sql(s"ALTER TABLE h2.bad_test.not_existing_table RENAME TO test.dst_table")
     }
-    assert(exp2.getMessage.contains(
-      "Failed table renaming from bad_test.not_existing_table to test.dst_table"))
-    assert(exp2.cause.get.getMessage.contains("Schema \"bad_test\" not found"))
+    assert(exp2.getMessage.contains("Table bad_test.not_existing_table not found"))
     // Rename to an existing table
     withTable("h2.test.dst_table") {
       withConnection { conn =>
