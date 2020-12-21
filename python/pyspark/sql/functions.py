@@ -210,10 +210,11 @@ def sumDistinct(col):
     return _invoke_function_over_column("sumDistinct", col)
 
 
-@since(3.2)
 def product(col, scale=1.0):
     """
     Aggregate function: returns the product of the values in a group.
+
+    .. versionadded:: 3.2.0
 
     Parameters
     ----------
