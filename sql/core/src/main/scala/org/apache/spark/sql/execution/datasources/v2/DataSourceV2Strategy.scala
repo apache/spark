@@ -342,6 +342,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
 
+    case AlterTableRenamePartition(_: ResolvedTable, _: ResolvedPartitionSpec, _) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables.")
+
     case AlterTableRecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(
         "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")

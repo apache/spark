@@ -334,10 +334,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     testChangeColumn(isDatasourceTable = true)
   }
 
-  test("drop table - data source table") {
-    testDropTable(isDatasourceTable = true)
-  }
-
   test("the qualified path of a database is stored in the catalog") {
     val catalog = spark.sessionState.catalog
 
@@ -1326,23 +1322,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
-  }
-
-  protected def testDropTable(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    assert(catalog.listTables("dbx") == Seq(tableIdent))
-    sql("DROP TABLE dbx.tab1")
-    assert(catalog.listTables("dbx") == Nil)
-    sql("DROP TABLE IF EXISTS dbx.tab1")
-    intercept[AnalysisException] {
-      sql("DROP TABLE dbx.tab1")
-    }
   }
 
   test("drop view") {
