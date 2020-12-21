@@ -551,7 +551,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   case _ =>
                     // update is okay
                 }
-                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+
+                // We don't need to handle nested types here which shall fail before
+                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+                  case (CharType(l1), CharType(l2)) => l1 == l2
+                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
+                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                  case _ => Cast.canUpCast(from, to)
+                }
+
+                if (!canAlterColumnType(field.dataType, update.newDataType)) {
                   alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
