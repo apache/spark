@@ -39,7 +39,7 @@ import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 object Cast {
 
   /**
-   * Returns true iff we can cast `from` type to `to` type.
+   * Returns true if we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (fromType, toType) if fromType == toType => true
