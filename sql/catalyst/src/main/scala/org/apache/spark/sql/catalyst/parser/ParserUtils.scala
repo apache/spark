@@ -71,6 +71,17 @@ object ParserUtils {
     stream.getText(interval)
   }
 
+  /**
+   * Get all the text which between the given start and end tokens.
+   * When we need to extract everything between two tokens including all spaces we should use
+   * this method instead of defined a named Antlr4 rule for .*?,
+   * which somehow parse "a b" -> "ab" in some cases
+   */
+  def interval(start: Token, end: Token): String = {
+    val interval = Interval.of(start.getStopIndex + 1, end.getStartIndex - 1)
+    start.getInputStream.getText(interval)
+  }
+
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 
@@ -116,7 +127,7 @@ object ParserUtils {
     }
   }
 
-  /** Unescape baskslash-escaped string enclosed by quotes. */
+  /** Unescape backslash-escaped string enclosed by quotes. */
   def unescapeSQLString(b: String): String = {
     var enclosure: Character = null
     val sb = new StringBuilder(b.length())

@@ -22,8 +22,9 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -33,7 +34,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
     SparkSession.getActiveSession.foreach(_.stop())
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearDefaultSession()
   }
@@ -64,7 +65,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("get active or default session") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(SparkSession.active == session)
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     assert(SparkSession.active == session)
     SparkSession.clearDefaultSession()
     intercept[IllegalStateException](SparkSession.active)
@@ -82,7 +83,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("use session from active thread session and propagate config options") {
     val defaultSession = SparkSession.builder().master("local").getOrCreate()
     val activeSession = defaultSession.newSession()
-    SparkSession.setActiveSessionInternal(activeSession)
+    SparkSession.setActiveSession(activeSession)
     val session = SparkSession.builder().config("spark-config2", "a").getOrCreate()
 
     assert(activeSession != defaultSession)
@@ -90,7 +91,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session.conf.get("spark-config2") == "a")
     assert(session.sessionState.conf == SQLConf.get)
     assert(SQLConf.get.getConfString("spark-config2") == "a")
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
 
     assert(SparkSession.builder().getOrCreate() == defaultSession)
   }
@@ -105,7 +106,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("create a new session if the active thread session has been stopped") {
     val activeSession = SparkSession.builder().master("local").getOrCreate()
-    SparkSession.setActiveSessionInternal(activeSession)
+    SparkSession.setActiveSession(activeSession)
     activeSession.stop()
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
@@ -181,7 +182,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .getOrCreate()
     val postFirstCreation = context.listenerBus.listeners.size()
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
 
     SparkSession
@@ -190,7 +191,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .getOrCreate()
     val postSecondCreation = context.listenerBus.listeners.size()
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     assert(postFirstCreation == postSecondCreation)
   }
@@ -211,7 +212,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(session1.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532")
 
     // do not propagate static sql configs to the existing default session
-    SparkSession.clearActiveSessionInternal()
+    SparkSession.clearActiveSession()
     val session2 = SparkSession
       .builder()
       .config(WAREHOUSE_PATH.key, "SPARK-31532-db")
@@ -282,25 +283,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("SPARK-33139: Test SparkSession.setActiveSession/clearActiveSession") {
-    Seq(true, false).foreach { allowModifyActiveSession =>
-      val session = SparkSession.builder()
-        .master("local")
-        .config(StaticSQLConf.LEGACY_ALLOW_MODIFY_ACTIVE_SESSION.key, allowModifyActiveSession)
-        .getOrCreate()
-
-      val newSession = session.newSession()
-      if (!allowModifyActiveSession) {
-        intercept[UnsupportedOperationException](SparkSession.setActiveSession(newSession))
-        intercept[UnsupportedOperationException](SparkSession.clearActiveSession())
-      } else {
-        SparkSession.setActiveSession(newSession)
-        SparkSession.clearActiveSession()
-      }
-      session.stop()
-    }
-  }
-
   test("SPARK-32991: Use conf in shared state as the original configuration for RESET") {
     val wh = "spark.sql.warehouse.dir"
     val td = "spark.sql.globalTempDatabase"
@@ -324,21 +306,18 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     // newly specified values
     val sharedWH = spark.sharedState.conf.get(wh)
     val sharedTD = spark.sharedState.conf.get(td)
-    val sharedCustom = spark.sharedState.conf.get(custom)
     assert(sharedWH === "./data2",
       "The warehouse dir in shared state should be determined by the 1st created spark session")
     assert(sharedTD === "alice",
       "Static sql configs in shared state should be determined by the 1st created spark session")
-    assert(sharedCustom === "kyao",
-      "Dynamic sql configs in shared state should be determined by the 1st created spark session")
+    assert(spark.sharedState.conf.getOption(custom).isEmpty,
+      "Dynamic sql configs is session specific")
 
     assert(spark.conf.get(wh) === sharedWH,
       "The warehouse dir in session conf and shared state conf should be consistent")
     assert(spark.conf.get(td) === sharedTD,
       "Static sql configs in session conf and shared state conf should be consistent")
-    assert(spark.conf.get(custom) === sharedCustom,
-      "Dynamic sql configs in session conf and shared state conf should be consistent before" +
-        " setting to new ones")
+    assert(spark.conf.get(custom) === "kyao", "Dynamic sql configs is session specific")
 
     spark.sql("RESET")
 
@@ -346,12 +325,65 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       "The warehouse dir in shared state should be respect after RESET")
     assert(spark.conf.get(td) === sharedTD,
       "Static sql configs in shared state should be respect after RESET")
-    assert(spark.conf.get(custom) === sharedCustom,
-      "Dynamic sql configs in shared state should be respect after RESET")
+    assert(spark.conf.get(custom) === "kyao",
+      "Dynamic sql configs in session initial map should be respect after RESET")
 
-    val spark2 = SparkSession.builder().getOrCreate()
+    val spark2 = SparkSession.builder()
+      .config(wh, "./data3")
+      .config(custom, "kyaoo").getOrCreate()
     assert(spark2.conf.get(wh) === sharedWH)
     assert(spark2.conf.get(td) === sharedTD)
-    assert(spark2.conf.get(custom) === sharedCustom)
+    assert(spark2.conf.get(custom) === "kyaoo")
+  }
+
+  test("SPARK-32991: RESET should work properly with multi threads") {
+    val wh = "spark.sql.warehouse.dir"
+    val td = "spark.sql.globalTempDatabase"
+    val custom = "spark.sql.custom"
+    val spark = ThreadUtils.runInNewThread("new session 0", false) {
+      SparkSession.builder()
+        .master("local")
+        .config(wh, "./data0")
+        .config(td, "bob")
+        .config(custom, "c0")
+        .getOrCreate()
+    }
+
+    spark.sql(s"SET $custom=c1")
+    assert(spark.conf.get(custom) === "c1")
+    spark.sql("RESET")
+    assert(spark.conf.get(wh) === "./data0",
+      "The warehouse dir in shared state should be respect after RESET")
+    assert(spark.conf.get(td) === "bob",
+      "Static sql configs in shared state should be respect after RESET")
+    assert(spark.conf.get(custom) === "c0",
+      "Dynamic sql configs in shared state should be respect after RESET")
+
+    val spark1 = ThreadUtils.runInNewThread("new session 1", false) {
+      SparkSession.builder().getOrCreate()
+    }
+
+    assert(spark === spark1)
+
+    // TODO: SPARK-33718: After clear sessions, the SharedState will be unreachable, then all
+    // the new static will take effect.
+    SparkSession.clearDefaultSession()
+    val spark2 = ThreadUtils.runInNewThread("new session 2", false) {
+      SparkSession.builder()
+        .master("local")
+        .config(wh, "./data1")
+        .config(td, "alice")
+        .config(custom, "c2")
+        .getOrCreate()
+    }
+
+    assert(spark2 !== spark)
+    spark2.sql(s"SET $custom=c1")
+    assert(spark2.conf.get(custom) === "c1")
+    spark2.sql("RESET")
+    assert(spark2.conf.get(wh) === "./data1")
+    assert(spark2.conf.get(td) === "alice")
+    assert(spark2.conf.get(custom) === "c2")
+
   }
 }

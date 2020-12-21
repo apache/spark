@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
 import java.sql.Timestamp
-
-import com.google.common.io.Files
-import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.internal.config._
 import org.apache.spark.sql._
@@ -42,7 +38,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
           testData.createOrReplaceTempView("testData")
 
           // create the table for test
-          sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+          sql(s"CREATE TABLE table_with_partition(key int,value string) USING hive " +
               s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
           sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
               "SELECT key,value FROM testData")
@@ -85,7 +81,8 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
   test("SPARK-21739: Cast expression should initialize timezoneId") {
     withTable("table_with_timestamp_partition") {
-      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED BY (ts TIMESTAMP)")
+      sql("CREATE TABLE table_with_timestamp_partition(value int) USING hive " +
+        "PARTITIONED BY (ts TIMESTAMP)")
       sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
         "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
 

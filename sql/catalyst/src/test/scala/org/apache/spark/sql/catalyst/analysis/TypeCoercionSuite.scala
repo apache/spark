@@ -260,7 +260,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
     // Tests that its not possible to setup implicit casts between two map types when
     // source map's key type is integer and the target map's key type are either Binary,
-    // Boolean, Date, Timestamp, Array, Struct, CaleandarIntervalType or NullType
+    // Boolean, Date, Timestamp, Array, Struct, CalendarIntervalType or NullType
     nonCastableTargetTypes.foreach { targetType =>
       shouldNotCast(sourceType, targetType)
     }

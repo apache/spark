@@ -981,7 +981,7 @@ case class MapObjects private(
             (genValue: String) => s"$builder.add($genValue);",
             s"$builder;"
           )
-        case None =>
+        case _ =>
           // array
           (
             s"""

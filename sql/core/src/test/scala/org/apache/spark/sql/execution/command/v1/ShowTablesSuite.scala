@@ -17,17 +17,13 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.command.{ShowTablesSuite => CommonShowTablesSuite}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
-class ShowTablesSuite extends CommonShowTablesSuite {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
+trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
-  override def defaultUsing: String = "USING parquet"
   override def showSchema: StructType = {
     new StructType()
       .add("database", StringType, nullable = false)
@@ -48,14 +44,6 @@ class ShowTablesSuite extends CommonShowTablesSuite {
       df2.createOrReplaceTempView("source2")
       f
     }
-  }
-
-  // `SHOW TABLES` returns empty result in V2 catalog instead of throwing the exception.
-  test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchDatabaseException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.contains("Database 'unknown' not found"))
   }
 
   // `SHOW TABLES` from v2 catalog returns empty result.
@@ -90,6 +78,42 @@ class ShowTablesSuite extends CommonShowTablesSuite {
       assert(df.schema === schema)
       assert(resultWithoutInfo === expected)
       result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
+    }
+  }
+
+  test("case sensitivity of partition spec") {
+    withNamespaceAndTable("ns", "part_table") { t =>
+      sql(s"""
+        |CREATE TABLE $t (price int, qty int, year int, month int)
+        |$defaultUsing
+        |partitioned by (year, month)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+      Seq(
+        true -> "PARTITION(year = 2015, month = 1)",
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+          val information = df.select("information").first().getString(0)
+          assert(information.contains("Partition Values: [year=2015, month=1]"))
+        }
+      }
+    }
+  }
+}
+
+class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
+  test("SPARK-33670: show partitions from a datasource table") {
+    import testImplicits._
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      sql(s"USE $catalog.ns")
+      val t = "part_datasrc"
+      withTable(t) {
+        val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+        df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
+        assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+      }
     }
   }
 }

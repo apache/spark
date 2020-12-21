@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType, UserDefinedType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 import org.apache.spark.util.Utils
 
 /**
@@ -1145,7 +1145,7 @@ case class ScalaUDF(
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
 
-    val funcInvokation = if (isPrimitive(dataType)
+    val funcInvocation = if (isPrimitive(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
         && !nullable) {
       s"$resultTerm = ($boxedType)$getFuncResult"
@@ -1156,7 +1156,7 @@ case class ScalaUDF(
       s"""
          |$boxedType $resultTerm = null;
          |try {
-         |  $funcInvokation;
+         |  $funcInvocation;
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}

@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
@@ -82,7 +83,7 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private val initialSessionOptions: Map[String, String])
+    @transient private[sql] val initialSessionOptions: Map[String, String])
   extends Serializable with Closeable with Logging { self =>
 
   // The call site where this SparkSession was constructed.
@@ -347,9 +348,10 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(replaced)
     val toRow = encoder.createSerializer()
     val catalystRows = rowRDD.map(toRow)
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
@@ -365,7 +367,8 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
-    createDataFrame(rowRDD.rdd, schema)
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    createDataFrame(rowRDD.rdd, replaced)
   }
 
   /**
@@ -378,7 +381,8 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala.toSeq))
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
   }
 
   /**
@@ -519,7 +523,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
-    range(start, end, step = 1, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step = 1, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -529,7 +533,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    range(start, end, step, numPartitions = sparkContext.defaultParallelism)
+    range(start, end, step, numPartitions = leafNodeDefaultParallelism)
   }
 
   /**
@@ -764,10 +768,14 @@ class SparkSession private(
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
     val old = SparkSession.activeThreadSession.get()
-    SparkSession.setActiveSessionInternal(this)
+    SparkSession.setActiveSession(this)
     try block finally {
-      SparkSession.setActiveSessionInternal(old)
+      SparkSession.setActiveSession(old)
     }
+  }
+
+  private[sql] def leafNodeDefaultParallelism: Int = {
+    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
   }
 }
 
@@ -945,7 +953,7 @@ object SparkSession extends Logging {
 
         session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
-        setActiveSessionInternal(session)
+        setActiveSession(session)
         registerContextListener(sparkContext)
       }
 
@@ -983,16 +991,7 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
-  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def setActiveSession(session: SparkSession): Unit = {
-    if (SQLConf.get.legacyAllowModifyActiveSession) {
-      setActiveSessionInternal(session)
-    } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
-    }
-  }
-
-  private[sql] def setActiveSessionInternal(session: SparkSession): Unit = {
     activeThreadSession.set(session)
   }
 
@@ -1002,16 +1001,7 @@ object SparkSession extends Logging {
    *
    * @since 2.0.0
    */
-  @deprecated("This method is deprecated and will be removed in future versions.", "3.1.0")
   def clearActiveSession(): Unit = {
-    if (SQLConf.get.legacyAllowModifyActiveSession) {
-      clearActiveSessionInternal()
-    } else {
-      throw new UnsupportedOperationException("Not allowed to modify active Spark session.")
-    }
-  }
-
-  private[spark] def clearActiveSessionInternal(): Unit = {
     activeThreadSession.remove()
   }
 
@@ -1185,7 +1175,7 @@ object SparkSession extends Logging {
            |
          """.stripMargin)
       session.get.stop()
-      SparkSession.clearActiveSessionInternal()
+      SparkSession.clearActiveSession()
       SparkSession.clearDefaultSession()
     }
   }

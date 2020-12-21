@@ -23,7 +23,6 @@ import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -40,10 +39,9 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -195,7 +193,7 @@ private[hive] class TestHiveSparkSession(
   }
 
   SparkSession.setDefaultSession(this)
-  SparkSession.setActiveSessionInternal(this)
+  SparkSession.setActiveSession(this)
 
   { // set the metastore temporary configuration
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
@@ -328,20 +326,22 @@ private[hive] class TestHiveSparkSession(
   }
 
   if (loadTestTables) {
+    def createTableSQL(tblName: String): String = {
+      s"CREATE TABLE $tblName (key INT, value STRING) STORED AS textfile"
+    }
     // The test tables that are defined in the Hive QTestUtil.
     // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
     // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
     @transient
     val hiveQTestUtilTables: Seq[TestTable] = Seq(
       TestTable("src",
-        "CREATE TABLE src (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
       TestTable("src1",
-        "CREATE TABLE src1 (key INT, value STRING) STORED AS TEXTFILE".cmd,
+        createTableSQL("src1").cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
       TestTable("srcpart", () => {
-        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart")} PARTITIONED BY (ds STRING, hr STRING)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
@@ -350,8 +350,7 @@ private[hive] class TestHiveSparkSession(
         }
       }),
       TestTable("srcpart1", () => {
-        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)"
-          .cmd.apply()
+        s"${createTableSQL("srcpart1")} PARTITIONED BY (ds STRING, hr INT)".cmd.apply()
         for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
           s"""
              |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
@@ -597,7 +596,7 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _, _) => tbl :: Nil
+      case CacheTable(_, tbl, _, _) => tbl.asTableIdentifier :: Nil
       case _ => Nil
     }
 

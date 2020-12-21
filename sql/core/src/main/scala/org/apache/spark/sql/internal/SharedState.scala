@@ -31,13 +31,11 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.ui.{StreamingQueryStatusListener, StreamingQueryTab}
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.Utils
@@ -69,11 +67,12 @@ private[sql] class SharedState(
       case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
         logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
           s"in SparkSession's options, it should be set statically for cross-session usages")
-      case (k, v) =>
-        logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
+      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+        logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
+      case (k, v) =>
+        logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
         hadoopConfClone.set(k, v)
-
     }
     (confClone, hadoopConfClone)
   }
@@ -113,9 +112,9 @@ private[sql] class SharedState(
   lazy val streamingQueryStatusListener: Option[StreamingQueryStatusListener] = {
     sparkContext.ui.flatMap { ui =>
       if (conf.get(STREAMING_UI_ENABLED)) {
-        val statusListener = new StreamingQueryStatusListener(conf)
-        new StreamingQueryTab(statusListener, ui)
-        Some(statusListener)
+        val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+        new StreamingQueryTab(new StreamingQueryStatusStore(kvStore), ui)
+        Some(new StreamingQueryStatusListener(conf, kvStore))
       } else {
         None
       }
@@ -230,14 +229,21 @@ object SharedState extends Logging {
       sparkConf: SparkConf,
       hadoopConf: Configuration,
       initialConfigs: scala.collection.Map[String, String] = Map.empty): Unit = {
+
+    def containsInSparkConf(key: String): Boolean = {
+      sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
+        (key.startsWith("hive") && sparkConf.contains("spark." + key))
+    }
+
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    val configFile = Utils.getContextOrSparkClassLoader.getResourceAsStream("hive-site.xml")
     if (configFile != null) {
       logInfo(s"loading hive config file: $configFile")
       val hadoopConfTemp = new Configuration()
+      hadoopConfTemp.clear()
       hadoopConfTemp.addResource(configFile)
-      hadoopConfTemp.asScala.foreach { entry =>
-        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
+      for (entry <- hadoopConfTemp.asScala if !containsInSparkConf(entry.getKey)) {
+        hadoopConf.set(entry.getKey, entry.getValue)
       }
     }
     val sparkWarehouseOption =

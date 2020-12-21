@@ -840,8 +840,8 @@ object TypeCoercion {
       plan resolveOperators { case p =>
         p transformExpressionsUp {
           // Skip nodes if unresolved or not enough children
-          case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
-          case c @ Elt(children) =>
+          case c @ Elt(children, _) if !c.childrenResolved || children.size < 2 => c
+          case c @ Elt(children, _) =>
             val index = children.head
             val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
             val newInputs = if (conf.eltOutputAsString ||

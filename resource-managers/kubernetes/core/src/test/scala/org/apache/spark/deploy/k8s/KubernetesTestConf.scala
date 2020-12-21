@@ -21,7 +21,6 @@ import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
 
 /**

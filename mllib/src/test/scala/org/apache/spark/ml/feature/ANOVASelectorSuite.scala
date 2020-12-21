@@ -133,35 +133,35 @@ class ANOVASelectorSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new ANOVASelector())
   }
 
-  test("Test ANOVAFValue calssification selector: numTopFeatures") {
+  test("Test ANOVAFValue classification selector: numTopFeatures") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("numTopFeatures").setNumTopFeatures(1)
     val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
-  test("Test ANOVAFValue calssification selector: percentile") {
+  test("Test ANOVAFValue classification selector: percentile") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("percentile").setPercentile(0.17)
     val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
-  test("Test ANOVAFValue calssification selector: fpr") {
+  test("Test ANOVAFValue classification selector: fpr") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fpr").setFpr(1.0E-12)
     val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
-  test("Test ANOVAFValue calssification selector: fdr") {
+  test("Test ANOVAFValue classification selector: fdr") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fdr").setFdr(6.0E-12)
     val model = testSelector(selector, dataset)
     MLTestingUtils.checkCopyAndUids(selector, model)
   }
 
-  test("Test ANOVAFValue calssification selector: fwe") {
+  test("Test ANOVAFValue classification selector: fwe") {
     val selector = new ANOVASelector()
       .setOutputCol("filtered").setSelectorType("fwe").setFwe(6.0E-12)
     val model = testSelector(selector, dataset)

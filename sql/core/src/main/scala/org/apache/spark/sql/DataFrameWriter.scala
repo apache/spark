@@ -470,7 +470,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, NonSessionCatalogAndIdentifier, SessionCatalogAndIdentifier}
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     assertNotBucketed("insertInto")
 
@@ -537,6 +536,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       InsertIntoStatement(
         table = UnresolvedRelation(tableIdent),
         partitionSpec = Map.empty[String, Option[String]],
+        Nil,
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,
         ifPartitionNotExists = false)
@@ -659,6 +659,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           extraOptions.get("path"),
           extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
+          None,
           orCreate = true)      // Create the table if it doesn't exist
 
       case (other, _) =>
@@ -676,7 +677,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           extraOptions.get("path"),
           extraOptions.get(TableCatalog.PROP_COMMENT),
           extraOptions.toMap,
-          ifNotExists = other == SaveMode.Ignore)
+          None,
+          ifNotExists = other == SaveMode.Ignore,
+          external = false)
     }
 
     runCommand(df.sparkSession, "saveAsTable") {

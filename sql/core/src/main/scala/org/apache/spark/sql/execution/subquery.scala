@@ -80,8 +80,7 @@ case class ScalarSubquery(
   @volatile private var updated: Boolean = false
 
   def updateResult(): Unit = {
-    // Only return the first two rows as an array to avoid Driver OOM.
-    val rows = plan.executeTake(2)
+    val rows = plan.executeCollect()
     if (rows.length > 1) {
       sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
     }
@@ -172,13 +171,14 @@ case class InSubqueryExec(
 /**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */
-object PlanSubqueries extends Rule[SparkPlan] {
+case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, subquery.plan)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
-          SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
+          SubqueryExec.createForScalarSubquery(
+            s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
         val expr = if (values.length == 1) {
@@ -190,7 +190,7 @@ object PlanSubqueries extends Rule[SparkPlan] {
             }
           )
         }
-        val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, query)
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
     }
   }

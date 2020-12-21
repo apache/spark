@@ -19,7 +19,9 @@ import os
 import shutil
 import tempfile
 import time
+from random import randint
 
+from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -568,6 +570,30 @@ class StreamingTests(ReusedSQLTestCase):
         finally:
             if q:
                 q.stop()
+
+    def test_streaming_read_from_table(self):
+        input_table_name = "sample_input_table_%d" % randint(0, 100000000)
+        self.spark.sql("CREATE TABLE %s (value string) USING parquet" % input_table_name)
+        self.spark.sql("INSERT INTO %s VALUES ('aaa'), ('bbb'), ('ccc')" % input_table_name)
+        df = self.spark.readStream.table(input_table_name)
+        self.assertTrue(df.isStreaming)
+        q = df.writeStream.format('memory').queryName('this_query').start()
+        q.processAllAvailable()
+        q.stop()
+        result = self.spark.sql("SELECT * FROM this_query ORDER BY value").collect()
+        self.assertEqual([Row(value='aaa'), Row(value='bbb'), Row(value='ccc')], result)
+
+    def test_streaming_write_to_table(self):
+        output_table_name = "sample_output_table_%d" % randint(0, 100000000)
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        q = df.writeStream.toTable(output_table_name, format='parquet', checkpointLocation=tmpPath)
+        self.assertTrue(q.isActive)
+        time.sleep(3)
+        q.stop()
+        result = self.spark.sql("SELECT value FROM %s" % output_table_name).collect()
+        self.assertTrue(len(result) > 0)
 
 
 if __name__ == "__main__":

@@ -216,6 +216,8 @@ Statistics
     ChiSqTestResult
     MultivariateGaussian
     KernelDensity
+    ChiSqTestResult
+    KolmogorovSmirnovTestResult
 
 
 Tree
@@ -250,4 +252,3 @@ Utilities
     Loader
     MLUtils
     Saveable
-

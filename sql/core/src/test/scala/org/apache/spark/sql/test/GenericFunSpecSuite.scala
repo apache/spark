@@ -19,8 +19,6 @@ package org.apache.spark.sql.test
 
 import org.scalatest.funspec.AnyFunSpec
 
-import org.apache.spark.sql.Dataset
-
 /**
  * The purpose of this suite is to make sure that generic FunSpec-based scala
  * tests work with a shared spark session

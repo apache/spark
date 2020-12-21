@@ -39,11 +39,12 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 // Note: The definition of these commands are based on the ones described in
@@ -88,8 +89,8 @@ case class CreateDatabaseCommand(
  * A command for users to remove a database from the system.
  *
  * 'ifExists':
- * - true, if database_name does't exist, no action
- * - false (default), if database_name does't exist, a warning message will be issued
+ * - true, if database_name doesn't exist, no action
+ * - false (default), if database_name doesn't exist, a warning message will be issued
  * 'cascade':
  * - true, the dependent objects are automatically dropped before dropping database.
  * - false (default), it is in the Restrict mode. The database cannot be dropped if

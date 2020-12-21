@@ -161,7 +161,7 @@ trait ProgressReporter extends Logging {
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
-      Double.NaN
+      Double.PositiveInfinity
     }
     logDebug(s"Execution stats: $executionStats")
 

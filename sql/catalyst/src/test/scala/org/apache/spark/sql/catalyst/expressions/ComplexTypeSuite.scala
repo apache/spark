@@ -62,6 +62,46 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
   }
 
+  test("SPARK-33386: GetArrayItem ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val array = Literal.create(Seq("a", "b"), ArrayType(StringType))
+
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetArrayItem(array, Literal(5)),
+            "Invalid index: 5, numElements: 2"
+          )
+
+          checkExceptionInExpression[Exception](
+            GetArrayItem(array, Literal(-1)),
+            "Invalid index: -1, numElements: 2"
+          )
+        } else {
+          checkEvaluation(GetArrayItem(array, Literal(5)), null)
+          checkEvaluation(GetArrayItem(array, Literal(-1)), null)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33460: GetMapValue NoSuchElementException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
+
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetMapValue(map, Literal(5)),
+            "Key 5 does not exist."
+          )
+        } else {
+          checkEvaluation(GetMapValue(map, Literal(5)), null)
+        }
+      }
+    }
+  }
+
   test("SPARK-26637 handles GetArrayItem nullability correctly when input array size is constant") {
     // CreateArray case
     val a = AttributeReference("a", IntegerType, nullable = false)()
@@ -385,14 +425,14 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkErrorMessage(
       childDataType: DataType,
       fieldDataType: DataType,
-      errorMesage: String): Unit = {
+      errorMessage: String): Unit = {
       val e = intercept[org.apache.spark.sql.AnalysisException] {
         ExtractValue(
           Literal.create(null, childDataType),
           Literal.create(null, fieldDataType),
           _ == _)
       }
-      assert(e.getMessage().contains(errorMesage))
+      assert(e.getMessage().contains(errorMessage))
     }
 
     checkErrorMessage(structType, IntegerType, "Field name should be String Literal")
