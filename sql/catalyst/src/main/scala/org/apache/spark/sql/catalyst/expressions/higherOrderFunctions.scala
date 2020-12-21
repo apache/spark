@@ -240,7 +240,7 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
        [1,3,5]
   """,
   since = "2.4.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
@@ -311,7 +311,7 @@ case class ArrayTransform(
        ["a","b","c","d",null]
   """,
   since = "2.4.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ArraySort(
     argument: Expression,
@@ -406,7 +406,7 @@ object ArraySort {
        {1:0,3:-1}
   """,
   since = "3.0.0",
-  group = "map_funcs")
+  group = "lambda_funcs")
 case class MapFilter(
     argument: Expression,
     function: Expression)
@@ -461,7 +461,7 @@ case class MapFilter(
        [0,2,3]
   """,
   since = "2.4.0",
-  group = "array_funcs",
+  group = "lambda_funcs",
   note = """
     The inner function may use the index argument since 3.0.0.
   """)
@@ -530,7 +530,7 @@ case class ArrayFilter(
        false
   """,
   since = "2.4.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 case class ArrayExists(
     argument: Expression,
     function: Expression,
@@ -615,7 +615,7 @@ object ArrayExists {
        NULL
   """,
   since = "3.0.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
@@ -686,7 +686,7 @@ case class ArrayForAll(
        60
   """,
   since = "2.4.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 case class ArrayAggregate(
     argument: Expression,
     zero: Expression,
@@ -774,7 +774,7 @@ case class ArrayAggregate(
        {2:1,4:2,6:3}
   """,
   since = "3.0.0",
-  group = "map_funcs")
+  group = "lambda_funcs")
 case class TransformKeys(
     argument: Expression,
     function: Expression)
@@ -827,7 +827,7 @@ case class TransformKeys(
        {1:2,2:4,3:6}
   """,
   since = "3.0.0",
-  group = "map_funcs")
+  group = "lambda_funcs")
 case class TransformValues(
     argument: Expression,
     function: Expression)
@@ -879,7 +879,7 @@ case class TransformValues(
        {1:"ax",2:"by"}
   """,
   since = "3.0.0",
-  group = "map_funcs")
+  group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
@@ -1058,7 +1058,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
        ["ad","be","cf"]
   """,
   since = "2.4.0",
-  group = "array_funcs")
+  group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {

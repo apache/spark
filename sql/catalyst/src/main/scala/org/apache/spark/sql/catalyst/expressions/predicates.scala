@@ -256,7 +256,7 @@ trait PredicateHelper extends AliasHelper with Logging {
        NULL
   """,
   since = "1.0.0",
-  group = "logical_funcs")
+  group = "predicate_funcs")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -360,7 +360,7 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
        true
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -597,7 +597,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
        false
   """,
   since = "1.0.0",
-  group = "logical_funcs")
+  group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -680,7 +680,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
        NULL
   """,
   since = "1.0.0",
-  group = "logical_funcs")
+  group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -815,7 +815,7 @@ object Equality {
        NULL
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -860,7 +860,7 @@ case class EqualTo(left: Expression, right: Expression)
        true
   """,
   since = "1.1.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -919,7 +919,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
        NULL
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -951,7 +951,7 @@ case class LessThan(left: Expression, right: Expression)
        NULL
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -983,7 +983,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
        NULL
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -1015,7 +1015,7 @@ case class GreaterThan(left: Expression, right: Expression)
        NULL
   """,
   since = "1.0.0",
-  group = "comparison_funcs")
+  group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
        a
   """,
   since = "1.0.0",
-  group = "condition_funcs")
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends ComplexTypeMergingExpression {
@@ -120,7 +120,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
        NULL
   """,
   since = "1.0.1",
-  group = "condition_funcs")
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],

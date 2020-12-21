@@ -761,7 +761,7 @@ case class Pmod(
        2
   """,
   since = "1.5.0",
-  group = "comparison_funcs")
+  group = "math_funcs")
 case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -836,7 +836,7 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
        10
   """,
   since = "1.5.0",
-  group = "comparison_funcs")
+  group = "math_funcs")
 case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)

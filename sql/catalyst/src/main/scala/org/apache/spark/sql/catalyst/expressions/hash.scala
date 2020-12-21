@@ -54,7 +54,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
        8cde774d6f7333752ed72cacddb05126
   """,
   since = "1.5.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class Md5(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -91,7 +91,7 @@ case class Md5(child: Expression)
        529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
   """,
   since = "1.5.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
@@ -166,7 +166,7 @@ case class Sha2(left: Expression, right: Expression)
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
   """,
   since = "1.5.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class Sha1(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -196,7 +196,7 @@ case class Sha1(child: Expression)
        1557323817
   """,
   since = "1.5.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class Crc32(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -585,7 +585,7 @@ abstract class InterpretedHashFunction {
        -1321691492
   """,
   since = "2.0.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
 
@@ -625,7 +625,7 @@ object Murmur3HashFunction extends InterpretedHashFunction {
        5602566077635097486
   """,
   since = "3.0.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
@@ -660,7 +660,7 @@ object XxHash64Function extends InterpretedHashFunction {
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
   since = "2.2.0",
-  group = "misc_funcs")
+  group = "hash_funcs")
 case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override val seed = 0
 
