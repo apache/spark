@@ -200,7 +200,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
   }
 
-  test("remove unnecessary if when the outputs are boolean type") {
+  test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
     assertEquivalent(
       If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
       IsNotNull(UnresolvedAttribute("a")))
