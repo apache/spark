@@ -418,11 +418,11 @@ class DStream(object):
     def _validate_window_param(self, window, slide):
         duration = self._jdstream.dstream().slideDuration().milliseconds()
         if int(window * 1000) % duration != 0:
-            raise ValueError("windowDuration must be multiple of the parent " \
+            raise ValueError("windowDuration must be multiple of the parent "
                              "dstream's slide (batch) duration (%d ms)"
                              % duration)
         if slide and int(slide * 1000) % duration != 0:
-            raise ValueError("slideDuration must be multiple of the parent " \
+            raise ValueError("slideDuration must be multiple of the parent "
                              "dstream's slide (batch) duration (%d ms)"
                              % duration)
 
