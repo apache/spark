@@ -34,7 +34,7 @@ class PushFoldableIntoBranchesSuite
   extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("PushFoldableIntoBranchesSuite", FixedPoint(50),
+    val batches = Batch("PushFoldableIntoBranches", FixedPoint(50),
       BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
   }
 
