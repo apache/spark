@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.plans.logical.AlterTableRenamePartitionStatement
+import org.apache.spark.sql.catalyst.plans.logical.AlterTableRenamePartition
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSparkSession {
@@ -29,9 +29,9 @@ class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSpark
       |RENAME TO PARTITION (ds='2018-06-10')
       """.stripMargin
     val parsed = parsePlan(sql)
-    val expected = AlterTableRenamePartitionStatement(
-      Seq("a", "b", "c"),
-      Map("ds" -> "2017-06-10"),
+    val expected = AlterTableRenamePartition(
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO PARTITION"),
+      UnresolvedPartitionSpec(Map("ds" -> "2017-06-10")),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed, expected)
   }
@@ -42,9 +42,9 @@ class AlterTableRenamePartitionParserSuite extends AnalysisTest with SharedSpark
       |RENAME TO PARTITION (dt='2008-09-09', country='uk')
       """.stripMargin
     val parsed = parsePlan(sql)
-    val expected = AlterTableRenamePartitionStatement(
-      Seq("table_name"),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
+    val expected = AlterTableRenamePartition(
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME TO PARTITION"),
+      UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
       Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed, expected)
   }
