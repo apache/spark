@@ -97,6 +97,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     assert(StructType.fromDDL(nestedStruct.toDDL) == nestedStruct)
   }
 
+  private val structWithEmptyString = new StructType()
+    .add(StructField("a b", StringType).withComment("comment"))
+
+  test("SPARK-33846: empty string in a column's name should be respected by toDDL") {
+    val ddl = "`a b` STRING COMMENT 'comment'"
+
+    assert(structWithEmptyString.toDDL == ddl)
+  }
+
+  test("SPARK-33846: empty string in a column's name should be respected by fromDDL") {
+    val ddl = "`a b` STRING COMMENT 'comment'"
+
+    assert(StructType.fromDDL(ddl) == structWithEmptyString)
+  }
+
   test("Print up to the given level") {
     val schema = StructType.fromDDL(
       "c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")

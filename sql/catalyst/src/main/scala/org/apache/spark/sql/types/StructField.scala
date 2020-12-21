@@ -91,7 +91,7 @@ case class StructField(
    * Returns a string containing a schema in SQL format. For example the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
    */
-  def sql: String = s"${quoteIdentifier(name)}: ${dataType.sql}$getDDLComment"
+  private[sql] def sql: String = s"${quoteIdentifier(name)}: ${dataType.sql}$getDDLComment"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
