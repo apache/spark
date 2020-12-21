@@ -4016,7 +4016,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
        true
   """,
   group = "array_funcs",
-  since = "3.1.0")
+  since = "3.2.0")
 case class HasAll(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
 
