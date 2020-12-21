@@ -67,7 +67,7 @@ class PushFoldableIntoBranchesSuite
     val nonDeterministic = If(LessThan(Rand(1), Literal(0.5)), Literal(1), Literal(2))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, TrueLiteral))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
     assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
       If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, FalseLiteral))
 

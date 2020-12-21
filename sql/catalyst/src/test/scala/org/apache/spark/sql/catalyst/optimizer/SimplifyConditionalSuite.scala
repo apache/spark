@@ -210,9 +210,9 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
     assertEquivalent(
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
-      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral))
+      GreaterThan(Rand(0), UnresolvedAttribute("a")))
     assertEquivalent(
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
-      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral))
+      LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
   }
 }
