@@ -1755,7 +1755,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       > SELECT _FUNC_('10' as int);
        10
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "conversion_funcs")
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
 
