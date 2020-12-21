@@ -30,15 +30,12 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 
 
-class PushCastAndFoldableIntoBranchesSuite
+class PushFoldableIntoBranchesSuite
   extends PlanTest with ExpressionEvalHelper with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("PushCastAndFoldableIntoBranches", FixedPoint(50),
-      BooleanSimplification,
-      ConstantFolding,
-      SimplifyConditionals,
-      PushCastAndFoldableIntoBranches) :: Nil
+    val batches = Batch("PushFoldableIntoBranchesSuite", FixedPoint(50),
+      BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
   }
 
   private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
@@ -226,16 +223,14 @@ class PushCastAndFoldableIntoBranchesSuite
     assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
   }
 
-  test("Push down cast through If") {
+  test("Push down cast through If/CaseWhen") {
     assertEquivalent(If(a, Literal(2), Literal(3)).cast(StringType),
       If(a, Literal("2"), Literal("3")))
     assertEquivalent(If(a, b, Literal(3)).cast(StringType),
       If(a, b.cast(StringType), Literal("3")))
     assertEquivalent(If(a, b, b + 1).cast(StringType),
       If(a, b, b + 1).cast(StringType))
-  }
 
-  test("Push down cast through CaseWhen") {
     assertEquivalent(
       CaseWhen(Seq((a, Literal(1))), Some(Literal(3))).cast(StringType),
       CaseWhen(Seq((a, Literal("1"))), Some(Literal("3"))))
@@ -245,6 +240,13 @@ class PushCastAndFoldableIntoBranchesSuite
     assertEquivalent(
       CaseWhen(Seq((a, b)), Some(b + 1)).cast(StringType),
       CaseWhen(Seq((a, b)), Some(b + 1)).cast(StringType))
+  }
+
+  test("Push down abs through If/CaseWhen") {
+    assertEquivalent(Abs(If(a, Literal(-2), Literal(-3))), If(a, Literal(2), Literal(3)))
+    assertEquivalent(
+      Abs(CaseWhen(Seq((a, Literal(-1))), Some(Literal(-3)))),
+      CaseWhen(Seq((a, Literal(1))), Some(Literal(3))))
   }
 
   test("Push down cast with binary expression through If/CaseWhen") {
