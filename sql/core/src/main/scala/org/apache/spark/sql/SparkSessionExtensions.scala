@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
- * <li>Post Operator Optimization Rules.</li>
+ * <li>Pre CBO Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -200,20 +200,19 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
-  private[this] val postOperatorOptimizationRules = mutable.Buffer.empty[RuleBuilder]
+  private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]
 
-  private[sql] def buildPostOperatorOptimizationRules(
-      session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    postOperatorOptimizationRules.map(_.apply(session)).toSeq
+  private[sql] def buildPreCBORules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    preCBORules.map(_.apply(session)).toSeq
   }
 
   /**
    * Inject an optimizer `Rule` builder that rewrites logical plans into the [[SparkSession]].
-   * The injected rules will be executed after the operator optimization batch and before rules
-   * that depend on stats.
+   * The injected rules will be executed once after the operator optimization batch and
+   * before any cost-based optimization rules that depend on stats.
    */
-  def injectPostOperatorOptimizationRule(builder: RuleBuilder): Unit = {
-    postOperatorOptimizationRules += builder
+  def injectPreCBORule(builder: RuleBuilder): Unit = {
+    preCBORules += builder
   }
 
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]

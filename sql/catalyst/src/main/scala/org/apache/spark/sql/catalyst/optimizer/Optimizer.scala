@@ -185,9 +185,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
-    // This batch rewrites plans after the operator optimization batch and
+    // This batch rewrites plans after the operator optimization and
     // before any batches that depend on stats.
-    Batch("Post Operator Optimization Rules", Once, postOperatorOptimizationRules: _*) :+
+    Batch("Pre CBO Rules", Once, preCBORules: _*) :+
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
@@ -294,9 +294,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
   /**
    * Override to provide additional rules for rewriting plans after operator optimization rules and
-   * before any rules that depend on stats.
+   * before any cost-based optimization rules that depend on stats.
    */
-  def postOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+  def preCBORules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that

@@ -231,8 +231,8 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
-      override def postOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
-        super.postOperatorOptimizationRules ++ customPostOperatorOptimizationRules
+      override def preCBORules: Seq[Rule[LogicalPlan]] =
+        super.preCBORules ++ customPreCBORules
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
@@ -258,13 +258,13 @@ abstract class BaseSessionStateBuilder(
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Custom rules for rewriting plans after operator optimization. Prefer overriding
-   * this instead of creating your own Optimizer.
+   * Custom rules for rewriting plans after operator optimization and before CBO.
+   * Prefer overriding this instead of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customPostOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
-    extensions.buildPostOperatorOptimizationRules(session)
+  protected def customPreCBORules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreCBORules(session)
   }
 
   /**
