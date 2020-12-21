@@ -327,7 +327,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-33860: Change CatalystTypeConverters.convertToCatalyst match special Array value") {
+  test("SPARK-33860: Make CatalystTypeConverters.convertToCatalyst match special Array value") {
     assert(Literal(Array(1, 2, 3)) == Literal.create(Array(1, 2, 3), ArrayType(IntegerType)))
     assert(Literal(Array(1L, 2L, 3L)) == Literal.create(Array(1L, 2L, 3L), ArrayType(LongType)))
     assert(Literal(Array(1D, 2D, 3D)) == Literal.create(Array(1D, 2D, 3D), ArrayType(DoubleType)))
