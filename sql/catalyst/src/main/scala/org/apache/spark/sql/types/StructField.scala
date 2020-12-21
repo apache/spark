@@ -92,7 +92,8 @@ case class StructField(
     val comment = getComment()
       .map(escapeSingleQuotedString)
       .map(" COMMENT '" + _ + "'")
+      .getOrElse("")
 
-    s"${quoteIdentifier(name)} ${dataType.sql}${comment.getOrElse("")}"
+    s"${quoteIdentifier(name)} ${dataType.sql}$comment"
   }
 }
