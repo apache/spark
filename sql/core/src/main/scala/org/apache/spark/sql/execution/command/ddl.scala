@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -343,7 +342,7 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
@@ -375,10 +374,7 @@ case class AlterTableChangeColumnCommand(
   private def findColumnByName(
       schema: StructType, name: String, resolver: Resolver): StructField = {
     schema.fields.collectFirst {
-      case field if resolver(field.name, name) =>
-        CharVarcharUtils.getRawType(field.metadata)
-          .map(dt => field.copy(dataType = dt))
-          .getOrElse(field)
+      case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
       s"Can't find column `$name` given table data columns " +
         s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
