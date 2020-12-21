@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -692,32 +692,6 @@ class DDLParserSuite extends AnalysisTest {
     Seq(s1, s2, s3, s4).foreach { sql =>
       testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = true)
     }
-  }
-
-  test("drop table") {
-    parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
-      DropTable(
-        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl"), "DROP TABLE"),
-        ifExists = false,
-        purge = false))
-    parseCompare(s"DROP TABLE db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = true))
-    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = true))
   }
 
   test("drop view") {
@@ -2106,9 +2080,9 @@ class DDLParserSuite extends AnalysisTest {
         |RENAME TO PARTITION (dt='2008-09-09', country='uk')
       """.stripMargin
     val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableRenamePartitionStatement(
-      Seq("table_name"),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
+    val expected1 = AlterTableRenamePartition(
+      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME TO PARTITION"),
+      UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
       Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed1, expected1)
 
@@ -2118,9 +2092,9 @@ class DDLParserSuite extends AnalysisTest {
         |RENAME TO PARTITION (ds='2018-06-10')
       """.stripMargin
     val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableRenamePartitionStatement(
-      Seq("a", "b", "c"),
-      Map("ds" -> "2017-06-10"),
+    val expected2 = AlterTableRenamePartition(
+      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO PARTITION"),
+      UnresolvedPartitionSpec(Map("ds" -> "2017-06-10")),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed2, expected2)
   }

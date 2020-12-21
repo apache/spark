@@ -53,7 +53,7 @@ class PushFoldableIntoBranchesSuite
 
   test("Push down EqualTo through If") {
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal(3)), If(a, FalseLiteral, TrueLiteral))
+    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a))
 
     // Push down at most one not foldable expressions.
     assertEquivalent(
@@ -67,7 +67,7 @@ class PushFoldableIntoBranchesSuite
     val nonDeterministic = If(LessThan(Rand(1), Literal(0.5)), Literal(1), Literal(2))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, TrueLiteral))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
     assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
       If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, FalseLiteral))
 
@@ -102,8 +102,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(Remainder(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
     assertEquivalent(Divide(If(a, Literal(2.0), Literal(3.0)), Literal(1.0)),
       If(a, Literal(2.0), Literal(3.0)))
-    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral),
-      If(a, FalseLiteral, TrueLiteral))
+    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a))
     assertEquivalent(Or(If(a, FalseLiteral, TrueLiteral), TrueLiteral), TrueLiteral)
   }
 

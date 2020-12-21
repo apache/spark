@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, EqualTo, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, EqualTo, Expression, GreaterThan, If, LambdaFunction, LessThanOrEqual, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -462,9 +462,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val lambda1 = LambdaFunction(
       function = If(cond, Literal(null, BooleanType), TrueLiteral),
       arguments = lambdaArgs)
-    // the optimized lambda body is: if(arg > 0, false, true)
+    // the optimized lambda body is: if(arg > 0, false, true) => arg <= 0
     val lambda2 = LambdaFunction(
-      function = If(cond, FalseLiteral, TrueLiteral),
+      function = LessThanOrEqual(condArg, Literal(0)),
       arguments = lambdaArgs)
     testProjection(
       originalExpr = createExpr(argument, lambda1) as 'x,

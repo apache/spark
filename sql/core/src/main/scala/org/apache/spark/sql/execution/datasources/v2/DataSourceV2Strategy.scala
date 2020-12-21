@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
 
@@ -56,17 +57,24 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
-  private def invalidateCache(r: ResolvedTable, recacheTable: Boolean = false)(): Unit = {
+  // Invalidates the cache associated with the given table. If the invalidated cache matches the
+  // given table, the cache's storage level is returned.
+  private def invalidateCache(
+      r: ResolvedTable,
+      recacheTable: Boolean = false)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
-    if (recacheTable && cache.isDefined) {
-      // save the cache name and cache level for recreation
-      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+    if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-
-      // recache with the same name and cache level.
-      session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
+      if (recacheTable) {
+        val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
+        // recache with the same name and cache level.
+        session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
+      }
+      Some(cacheLevel)
+    } else {
+      None
     }
   }
 
@@ -266,12 +274,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
       if (isView) {
         throw new AnalysisException(
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
       }
-      RenameTableExec(catalog, oldIdent, newIdent.asIdentifier) :: Nil
+      RenameTableExec(
+        catalog,
+        oldIdent,
+        newIdent.asIdentifier,
+        invalidateCache(r),
+        session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
@@ -328,6 +341,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+
+    case AlterTableRenamePartition(_: ResolvedTable, _: ResolvedPartitionSpec, _) =>
+      throw new AnalysisException(
+        "ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables.")
 
     case AlterTableRecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(
