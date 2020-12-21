@@ -2907,17 +2907,18 @@ class HiveDDLSuite
         spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
         spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
 
-        val e1 = intercept[SchemaParseException] {
-          spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-            "AS SELECT ID, IF(ID=1,1,0) FROM view1")
-        }.getMessage
-        assert(e1.contains("Illegal initial character: (IF((ID = CAST(1 AS BIGINT)), 1, 0))"))
 
-        val e2 = intercept[SchemaParseException] {
+        val e1 = intercept[SchemaParseException] {
           spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
             "AS SELECT ID, ABS(ID) FROM view1")
         }.getMessage
-        assert(e2.contains("Illegal character in: abs(ID)"))
+        assert(e1.contains("Illegal character in: abs(ID)"))
+
+        val e2 = intercept[SchemaParseException] {
+          spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
+            "AS SELECT ID, IF(ID=1,1,0) FROM view1")
+        }.getMessage
+        assert(e2.contains("Illegal initial character: (IF((ID = CAST(1 AS BIGINT)), 1, 0))"))
 
         spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
           "AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B FROM view1")
