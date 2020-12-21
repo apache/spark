@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -55,7 +56,8 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
@@ -243,7 +245,8 @@ case class ConcatWs(children: Seq[Expression])
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Elt(
     children: Seq[Expression],
@@ -388,7 +391,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
       > SELECT _FUNC_('SparkSql');
        SPARKSQL
   """,
-  since = "1.0.1")
+  since = "1.0.1",
+  group = "string_funcs")
 case class Upper(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
@@ -411,7 +415,8 @@ case class Upper(child: Expression)
       > SELECT _FUNC_('SparkSql');
        sparksql
   """,
-  since = "1.0.1")
+  since = "1.0.1",
+  group = "string_funcs")
 case class Lower(child: Expression)
   extends UnaryExpression with String2StringExpression with NullIntolerant {
 
@@ -489,7 +494,8 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
       > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
        ABCDEF
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -569,7 +575,8 @@ object Overlay {
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
        Structured SQL
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -656,7 +663,8 @@ object StringTranslate {
       > SELECT _FUNC_('AaBbCc', 'abc', '123');
        A1B2C3
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -721,7 +729,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
       > SELECT _FUNC_('ab','abc,b,ab,c,def');
        3
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes with NullIntolerant {
@@ -829,7 +838,8 @@ object StringTrim {
       > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
        SSparkSQ
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringTrim(
     srcStr: Expression,
     trimStr: Option[Expression] = None)
@@ -922,7 +932,8 @@ object StringTrimLeft {
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringTrimLeft(
     srcStr: Expression,
     trimStr: Option[Expression] = None)
@@ -1016,7 +1027,8 @@ object StringTrimRight {
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTrimRight(
     srcStr: Expression,
@@ -1093,7 +1105,8 @@ case class StringTrimRight(
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1135,7 +1148,8 @@ case class StringInstr(str: Expression, substr: Expression)
       > SELECT _FUNC_('www.apache.org', '.', 2);
        www.apache
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1175,7 +1189,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       > SELECT POSITION('bar' IN 'foobarbar');
        4
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -1265,7 +1280,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
       > SELECT _FUNC_('hi', 5);
           hi
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringLPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1306,7 +1322,8 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression = Litera
       > SELECT _FUNC_('hi', 5);
        hi
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1356,7 +1373,8 @@ object ParseUrl {
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'QUERY', 'query');
        1
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "string_funcs")
 case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression with ExpectsInputTypes with CodegenFallback {
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
@@ -1511,7 +1529,8 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       > SELECT _FUNC_("Hello World %d %s", 100, "days");
        Hello World 100 days
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
@@ -1600,7 +1619,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
       > SELECT _FUNC_('sPark sql');
        Spark Sql
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class InitCap(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1627,7 +1647,8 @@ case class InitCap(child: Expression)
       > SELECT _FUNC_('123', 2);
        123123
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringRepeat(str: Expression, times: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1657,7 +1678,8 @@ case class StringRepeat(str: Expression, times: Expression)
       > SELECT concat(_FUNC_(2), '1');
          1
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1705,7 +1727,8 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1752,7 +1775,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
       > SELECT _FUNC_('Spark SQL', 3);
        SQL
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Right(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
   def this(str: Expression, len: Expression) = {
@@ -1775,7 +1799,8 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Left(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
   def this(str: Expression, len: Expression) = {
@@ -1802,7 +1827,8 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
       > SELECT CHARACTER_LENGTH('Spark SQL ');
        10
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Length(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -1832,7 +1858,8 @@ case class Length(child: Expression)
       > SELECT _FUNC_('Spark SQL');
        72
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 case class BitLength(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
@@ -1864,7 +1891,8 @@ case class BitLength(child: Expression)
       > SELECT _FUNC_('Spark SQL');
        9
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 case class OctetLength(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
   override def dataType: DataType = IntegerType
@@ -1895,7 +1923,8 @@ case class OctetLength(child: Expression)
       > SELECT _FUNC_('kitten', 'sitting');
        3
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1921,7 +1950,8 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
       > SELECT _FUNC_('Miller');
        M460
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class SoundEx(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -1948,7 +1978,8 @@ case class SoundEx(child: Expression)
       > SELECT _FUNC_(2);
        50
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class Ascii(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1990,7 +2021,8 @@ case class Ascii(child: Expression)
       > SELECT _FUNC_(65);
        A
   """,
-  since = "2.3.0")
+  since = "2.3.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Chr(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -2035,7 +2067,8 @@ case class Chr(child: Expression)
       > SELECT _FUNC_('Spark SQL');
        U3BhcmsgU1FM
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class Base64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -2064,7 +2097,8 @@ case class Base64(child: Expression)
       > SELECT _FUNC_('U3BhcmsgU1FM');
        Spark SQL
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class UnBase64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -2082,6 +2116,66 @@ case class UnBase64(child: Expression)
   }
 }
 
+object Decode {
+  def createExpr(params: Seq[Expression]): Expression = {
+    params.length match {
+      case 0 | 1 =>
+        throw new AnalysisException("Invalid number of arguments for function decode. " +
+          s"Expected: 2; Found: ${params.length}")
+      case 2 => StringDecode(params.head, params.last)
+      case _ =>
+        val input = params.head
+        val other = params.tail
+        val itr = other.iterator
+        var default: Expression = Literal.create(null, StringType)
+        val branches = ArrayBuffer.empty[(Expression, Expression)]
+        while (itr.hasNext) {
+          val search = itr.next
+          if (itr.hasNext) {
+            val condition = EqualTo(input, search)
+            branches += ((condition, itr.next))
+          } else {
+            default = search
+          }
+        }
+        CaseWhen(branches.seq.toSeq, default)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+            |_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.
+            |
+            |_FUNC_(expr, search, result [, search, result ] ... [, default]) - Decode compares expr
+            |  to each search value one by one. If expr is equal to a search, returns the corresponding result.
+            |  If no match is found, then Oracle returns default. If default is omitted, returns null.
+          """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
+       abc
+      > SELECT _FUNC_(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       San Francisco
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
+       Non domestic
+      > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+       NULL
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
+
+  def this(params: Seq[Expression]) = {
+    this(params, Decode.createExpr(params))
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(params)
+  override def exprsReplaced: Seq[Expression] = params
+}
+
 /**
  * Decodes the first argument into a String using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
@@ -2095,9 +2189,10 @@ case class UnBase64(child: Expression)
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
        abc
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Decode(bin: Expression, charset: Expression)
+case class StringDecode(bin: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def left: Expression = bin
@@ -2135,7 +2230,8 @@ case class Decode(bin: Expression, charset: Expression)
       > SELECT _FUNC_('abc', 'utf-8');
        abc
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Encode(value: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -2180,7 +2276,8 @@ case class Encode(value: Expression, charset: Expression)
       > SELECT _FUNC_(12332.123456, '##################.###');
        12332.123
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -2351,7 +2448,8 @@ case class FormatNumber(x: Expression, d: Expression)
       > SELECT _FUNC_('Hi there! Good morning.');
        [["Hi","there"],["Good","morning"]]
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "string_funcs")
 case class Sentences(
     str: Expression,
     language: Expression = Literal(""),

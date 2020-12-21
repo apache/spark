@@ -808,10 +808,10 @@ case class SchemaOfJson(
 }
 
 /**
- * A function that returns the number of elements in the outmost JSON array.
+ * A function that returns the number of elements in the outermost JSON array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outermost JSON array.",
   arguments = """
     Arguments:
       * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
@@ -877,13 +877,13 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 }
 
 /**
- * A function which returns all the keys of the outmost JSON object.
+ * A function which returns all the keys of the outermost JSON object.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
+  usage = "_FUNC_(json_object) - Returns all the keys of the outermost JSON object as an array.",
   arguments = """
     Arguments:
-      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outermost
           object will be returned as an array. If it is any other valid JSON string, an invalid JSON
           string or an empty string, the function returns null.
   """,
@@ -921,7 +921,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
           if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
             return null
           }
-          // Parse the JSON string to get all the keys of outmost JSON object
+          // Parse the JSON string to get all the keys of outermost JSON object
           getJsonKeys(parser, input)
         }
       }

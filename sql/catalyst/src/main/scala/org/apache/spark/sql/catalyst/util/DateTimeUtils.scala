@@ -189,7 +189,7 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def microsToMillis(micros: Long): Long = {
-    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // When the timestamp is negative i.e before 1970, we need to adjust the milliseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
     Math.floorDiv(micros, MICROS_PER_MILLIS)
@@ -364,6 +364,12 @@ object DateTimeUtils {
     }
   }
 
+  def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
+    stringToTimestamp(s, timeZoneId).getOrElse {
+      throw new DateTimeException(s"Cannot cast $s to TimestampType.")
+    }
+  }
+
   /**
    * Gets the number of microseconds since the epoch of 1970-01-01 00:00:00Z from the given
    * instance of `java.time.Instant`. The epoch microsecond count is a simple incrementing count of
@@ -454,6 +460,12 @@ object DateTimeUtils {
       Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
+    stringToDate(s, zoneId).getOrElse {
+      throw new DateTimeException(s"Cannot cast $s to DateType.")
     }
   }
 

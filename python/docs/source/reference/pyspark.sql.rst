@@ -307,6 +307,7 @@ Functions
 
     abs
     acos
+    acosh
     add_months
     aggregate
     approxCountDistinct
@@ -331,8 +332,10 @@ Functions
     asc_nulls_last
     ascii
     asin
+    asinh
     assert_true
     atan
+    atanh
     atan2
     avg
     base64
@@ -583,4 +586,3 @@ Grouping
     GroupedData.pivot
     GroupedData.sum
     PandasCogroupedOps.applyInPandas
-

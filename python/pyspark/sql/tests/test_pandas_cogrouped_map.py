@@ -25,7 +25,7 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
     import pyarrow as pa  # noqa: F401
@@ -135,8 +135,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .applyInPandas(lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]),
                            'sum1 int, sum2 int').collect()
 
-        self.assertEquals(result[0]['sum1'], 165)
-        self.assertEquals(result[0]['sum2'], 165)
+        self.assertEqual(result[0]['sum1'], 165)
+        self.assertEqual(result[0]['sum2'], 165)
 
     def test_with_key_left(self):
         self._test_with_key(self.data1, self.data1, isLeft=True)
@@ -174,7 +174,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     NotImplementedError,
                     'Invalid return type.*ArrayType.*TimestampType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
@@ -183,7 +183,7 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
     def test_wrong_args(self):
         left = self.data1
         right = self.data2
-        with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+        with self.assertRaisesRegex(ValueError, 'Invalid function'):
             left.groupby('id').cogroup(right.groupby('id')) \
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
 
@@ -194,14 +194,14 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         row = df1.groupby("ColUmn").cogroup(
             df1.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
         df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
 
         row = df1.groupby("ColUmn").cogroup(
             df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

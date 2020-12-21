@@ -483,6 +483,12 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
+    if "GITHUB_ACTIONS" in os.environ:
+        # See SPARK-33565. Python 3.8 was temporarily removed as its default Python executables
+        # to test because of Jenkins environment issue. Once Jenkins has Python 3.8 to test,
+        # we should remove this change back and add python3.8 into python/run-tests.py script.
+        command.append("--python-executable=%s" % ','.join(
+            x for x in ["python3.6", "python3.8", "pypy3"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
@@ -515,10 +521,13 @@ def post_python_tests_results():
         # 6. Commit current HTMLs.
         run_cmd([
             "git",
+            "-c",
+            "user.name='Apache Spark Test Account'",
+            "-c",
+            "user.email='sparktestacc@gmail.com'",
             "commit",
             "-am",
-            "Coverage report at latest commit in Apache Spark",
-            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+            "Coverage report at latest commit in Apache Spark"])
         # 7. Delete the old branch.
         run_cmd(["git", "branch", "-D", "gh-pages"])
         # 8. Rename the temporary branch to master.
@@ -636,7 +645,7 @@ def main():
         # /home/jenkins/anaconda2/envs/py36/bin
         os.environ["PATH"] = "/home/anaconda/envs/py36/bin:" + os.environ.get("PATH")
     else:
-        # else we're running locally or Github Actions.
+        # else we're running locally or GitHub Actions.
         build_tool = "sbt"
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
@@ -654,12 +663,12 @@ def main():
     included_tags = []
     excluded_tags = []
     if should_only_test_modules:
-        # If we're running the tests in Github Actions, attempt to detect and test
+        # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
             if os.environ["GITHUB_INPUT_BRANCH"] != "":
                 # Dispatched request
-                # Note that it assumes Github Actions has already merged
+                # Note that it assumes GitHub Actions has already merged
                 # the given `GITHUB_INPUT_BRANCH` branch.
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_branch=os.environ["GITHUB_SHA"])

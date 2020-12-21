@@ -61,7 +61,7 @@ val df = spark
   .option("includeHeaders", "true")
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
-  .as[(String, String, Map)]
+  .as[(String, String, Array[(String, Array[Byte])])]
 
 // Subscribe to multiple topics
 val df = spark
@@ -511,6 +511,26 @@ The following configurations are optional:
   <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
+
+### Offset fetching
+
+In Spark 3.0 and before Spark uses <code>KafkaConsumer</code> for offset fetching which could cause infinite wait in the driver.
+In Spark 3.1 a new configuration option added <code>spark.sql.streaming.kafka.useDeprecatedOffsetFetching</code> (default: <code>true</code>)
+which could be set to `false` allowing Spark to use new offset fetching mechanism using <code>AdminClient</code>.
+When the new mechanism used the following applies.
+
+First of all the new approach supports Kafka brokers `0.11.0.0+`.
+
+In Spark 3.0 and below, secure Kafka processing needed the following ACLs from driver perspective:
+* Topic resource describe operation
+* Topic resource read operation
+* Group resource read operation
+
+Since Spark 3.1, offsets can be obtained with <code>AdminClient</code> instead of <code>KafkaConsumer</code> and for that the following ACLs needed from driver perspective:
+* Topic resource describe operation
+
+Since <code>AdminClient</code> in driver is not connecting to consumer group, <code>group.id</code> based authorization will not work anymore (executors never done group based authorization).
+Worth to mention executor side is behaving the exact same way like before (group prefix and override works).
 
 ### Consumer Caching
 

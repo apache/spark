@@ -390,14 +390,13 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
       val createTableColTypes =
         colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
-      val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row.empty)), schema)
 
       val expectedSchemaStr =
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
       assert(JdbcUtils.schemaString(
-        df.schema,
-        df.sqlContext.conf.caseSensitiveAnalysis,
+        schema,
+        spark.sqlContext.conf.caseSensitiveAnalysis,
         url1,
         Option(createTableColTypes)) == expectedSchemaStr)
     }

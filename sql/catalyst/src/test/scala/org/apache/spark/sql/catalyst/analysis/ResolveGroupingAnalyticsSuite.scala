@@ -160,7 +160,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   }
 
   test("grouping function") {
-    // GrouingSets
+    // GroupingSets
     val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
       Seq(unresolved_a, unresolved_b), r1,
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
@@ -200,7 +200,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   }
 
   test("grouping_id") {
-    // GrouingSets
+    // GroupingSets
     val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
       Seq(unresolved_a, unresolved_b), r1,
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),

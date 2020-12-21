@@ -336,7 +336,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       conf.get(SparkLauncher.PYSPARK_PYTHON),
       System.getenv("PYSPARK_DRIVER_PYTHON"),
       System.getenv("PYSPARK_PYTHON"),
-      "python"));
+      "python3"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (conf.containsKey(SparkLauncher.PYSPARK_PYTHON)) {
       // pass conf spark.pyspark.python to python by environment variable.

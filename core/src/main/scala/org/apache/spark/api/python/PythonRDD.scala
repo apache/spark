@@ -48,14 +48,14 @@ import org.apache.spark.util._
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean,
+    preservePartitioning: Boolean,
     isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
   override val partitioner: Option[Partitioner] = {
-    if (preservePartitoning) firstParent.partitioner else None
+    if (preservePartitioning) firstParent.partitioner else None
   }
 
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
@@ -837,7 +837,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
  * We might be serializing a really large object from python -- we don't want
  * python to buffer the whole thing in memory, nor can it write to a file,
  * so we don't know the length in advance.  So python writes it in chunks, each chunk
- * preceeded by a length, till we get a "length" of -1 which serves as EOF.
+ * preceded by a length, till we get a "length" of -1 which serves as EOF.
  *
  * Tested from python tests.
  */

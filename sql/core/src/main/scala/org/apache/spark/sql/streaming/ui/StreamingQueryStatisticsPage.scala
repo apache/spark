@@ -58,8 +58,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = parent.statusListener.allQueryStatus.find { case q =>
-      q.runId.equals(UUID.fromString(parameterId))
+    val query = parent.store.allQueryUIData.find { uiData =>
+      uiData.summary.runId.equals(UUID.fromString(parameterId))
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
@@ -109,35 +109,88 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <script>{Unparsed(js)}</script>
   }
 
-  def generateBasicInfo(query: StreamingQueryUIData): Seq[Node] = {
-    val duration = if (query.isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.startTimestamp)
+  def generateBasicInfo(uiData: StreamingQueryUIData): Seq[Node] = {
+    val duration = if (uiData.summary.isActive) {
+      val durationMs = System.currentTimeMillis() - uiData.summary.startTimestamp
+      SparkUIUtils.formatDurationVerbose(durationMs)
     } else {
-      withNoProgress(query, {
-        val end = query.lastProgress.timestamp
-        val start = query.recentProgress.head.timestamp
+      withNoProgress(uiData, {
+        val end = uiData.lastProgress.timestamp
+        val start = uiData.recentProgress.head.timestamp
         SparkUIUtils.formatDurationVerbose(
           parseProgressTimestamp(end) - parseProgressTimestamp(start))
       }, "-")
     }
 
-    val name = UIUtils.getQueryName(query)
-    val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
+    val name = UIUtils.getQueryName(uiData)
+    val numBatches = withNoProgress(uiData, { uiData.lastProgress.batchId + 1L }, 0)
     <div>Running batches for
       <strong>
         {duration}
       </strong>
       since
       <strong>
-        {SparkUIUtils.formatDate(query.startTimestamp)}
+        {SparkUIUtils.formatDate(uiData.summary.startTimestamp)}
       </strong>
       (<strong>{numBatches}</strong> completed batches)
     </div>
     <br />
     <div><strong>Name: </strong>{name}</div>
-    <div><strong>Id: </strong>{query.id}</div>
-    <div><strong>RunId: </strong>{query.runId}</div>
+    <div><strong>Id: </strong>{uiData.summary.id}</div>
+    <div><strong>RunId: </strong>{uiData.summary.runId}</div>
     <br />
+  }
+
+  def generateWatermark(
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): Seq[Node] = {
+    // This is made sure on caller side but put it here to be defensive
+    require(query.lastProgress != null)
+    if (query.lastProgress.eventTime.containsKey("watermark")) {
+      val watermarkData = query.recentProgress.flatMap { p =>
+        val batchTimestamp = parseProgressTimestamp(p.timestamp)
+        val watermarkValue = parseProgressTimestamp(p.eventTime.get("watermark"))
+        if (watermarkValue > 0L) {
+          // seconds
+          Some((batchTimestamp, ((batchTimestamp - watermarkValue) / 1000.0)))
+        } else {
+          None
+        }
+      }
+
+      if (watermarkData.nonEmpty) {
+        val maxWatermark = watermarkData.maxBy(_._2)._2
+        val graphUIDataForWatermark =
+          new GraphUIData(
+            "watermark-gap-timeline",
+            "watermark-gap-histogram",
+            watermarkData,
+            minBatchTime,
+            maxBatchTime,
+            0,
+            maxWatermark,
+            "seconds")
+        graphUIDataForWatermark.generateDataJs(jsCollector)
+
+        // scalastyle:off
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class="watermark-gap-histogram">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        // scalastyle:on
+      } else {
+        Seq.empty[Node]
+      }
+    } else {
+      Seq.empty[Node]
+    }
   }
 
   def generateAggregatedStateOperators(
@@ -465,6 +518,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             </td>
             <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
+          {generateWatermark(query, minBatchTime, maxBatchTime, jsCollector)}
           {generateAggregatedStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}
         </tbody>
       </table>

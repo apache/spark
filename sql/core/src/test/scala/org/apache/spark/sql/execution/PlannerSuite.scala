@@ -877,7 +877,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("aliases in the project should not introduce extra shuffle") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("df1", "df2") {
         spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
         spark.range(20).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
@@ -897,7 +899,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-33399: aliases should be handled properly in PartitioningCollection output" +
     " partitioning") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2", "t3") {
         spark.range(10).repartition($"id").createTempView("t1")
         spark.range(20).repartition($"id").createTempView("t2")
@@ -917,17 +921,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = planned.collect { case p: ProjectExec => p }
         assert(projects.exists(_.outputPartitioning match {
-          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
-            HashPartitioning(Seq(k2: AttributeReference), _))) if k1.name == "t1id" =>
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
             true
-          case _ => false
+          case _ =>
+            false
         }))
       }
     }
   }
 
   test("SPARK-33399: aliases should be handled properly in HashPartitioning") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2", "t3") {
         spark.range(10).repartition($"id").createTempView("t1")
         spark.range(20).repartition($"id").createTempView("t2")
@@ -955,7 +961,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-33399: alias handling should happen properly for RangePartitioning") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = spark.range(1, 100)
         .select(col("id").as("id1")).groupBy("id1").count()
       // Plan for this will be Range -> ProjectWithAlias -> HashAggregate -> HashAggregate
@@ -976,7 +984,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-33399: aliased should be handled properly " +
     "for partitioning and sortorder involving complex expressions") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2", "t3") {
         spark.range(10).select(col("id").as("id1")).createTempView("t1")
         spark.range(20).select(col("id").as("id2")).createTempView("t2")
@@ -998,23 +1008,19 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = planned.collect { case p: ProjectExec => p }
         assert(projects.exists(_.outputPartitioning match {
-          case PartitioningCollection(Seq(HashPartitioning(Seq(Multiply(ar1, _, _)), _),
-            HashPartitioning(Seq(Multiply(ar2, _, _)), _))) =>
-            Seq(ar1, ar2) match {
-              case Seq(ar1: AttributeReference, ar2: AttributeReference) =>
-                ar1.name == "t1id" && ar2.name == "id2"
-              case _ =>
-                false
-            }
-          case _ => false
+          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
+            ar1.name == "t1id"
+          case _ =>
+            false
         }))
-
       }
     }
   }
 
   test("SPARK-33399: alias handling should happen properly for SinglePartition") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = spark.range(1, 100, 1, 1)
         .select(col("id").as("id1")).groupBy("id1").count()
       val planned = df.queryExecution.executedPlan
@@ -1031,7 +1037,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-33399: No extra exchanges in case of" +
     " [Inner Join -> Project with aliases -> HashAggregate]") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2") {
         spark.range(10).repartition($"id").createTempView("t1")
         spark.range(20).repartition($"id").createTempView("t2")
@@ -1060,7 +1068,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-33400: Normalization of sortOrder should take care of sameOrderExprs") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("t1", "t2", "t3") {
         spark.range(10).repartition($"id").createTempView("t1")
         spark.range(20).repartition($"id").createTempView("t2")
@@ -1090,8 +1100,38 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("sort order doesn't have repeated expressions") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t12.id, t1.id
+            | FROM (SELECT t1.id FROM t1, t2 WHERE t1.id * 2 = t2.id) t12, t1
+            | where 2 * t12.id = t1.id
+        """.stripMargin).queryExecution.executedPlan
+
+        // t12 is already sorted on `t1.id * 2`. and we need to sort it on `2 * t12.id`
+        // for 2nd join. So sorting on t12 can be avoided
+        val sortNodes = planned.collect { case s: SortExec => s }
+        assert(sortNodes.size == 3)
+        val outputOrdering = planned.outputOrdering
+        assert(outputOrdering.size == 1)
+        // Sort order should have 3 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
+        assert(outputOrdering.head.children.size == 3)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 2)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
+      }
+    }
+  }
+
   test("aliases to expressions should not be replaced") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       withTempView("df1", "df2") {
         spark.range(10).selectExpr("id AS key", "0").repartition($"key").createTempView("df1")
         spark.range(20).selectExpr("id AS key", "0").repartition($"key").createTempView("df2")
@@ -1117,7 +1157,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("aliases in the aggregate expressions should not introduce extra shuffle") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
       val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
 
@@ -1134,7 +1176,9 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("aliases in the object hash/sort aggregate expressions should not introduce extra shuffle") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       Seq(true, false).foreach { useObjectHashAgg =>
         withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> useObjectHashAgg.toString) {
           val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
@@ -1159,21 +1203,22 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("aliases in the sort aggregate expressions should not introduce extra sort") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
-        val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
-        val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+      val t1 = spark.range(10).selectExpr("floor(id/4) as k1")
+      val t2 = spark.range(20).selectExpr("floor(id/4) as k2")
 
-        val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
-        val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
+      val agg1 = t1.groupBy("k1").agg(collect_list("k1")).withColumnRenamed("k1", "k3")
+      val agg2 = t2.groupBy("k2").agg(collect_list("k2"))
 
-        val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
-        assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
+      val planned = agg1.join(agg2, $"k3" === $"k2").queryExecution.executedPlan
+      assert(planned.collect { case s: SortAggregateExec => s }.nonEmpty)
 
-        // We expect two SortExec nodes on each side of join.
-        val sorts = planned.collect { case s: SortExec => s }
-        assert(sorts.size == 4)
-      }
+      // We expect two SortExec nodes on each side of join.
+      val sorts = planned.collect { case s: SortExec => s }
+      assert(sorts.size == 4)
     }
   }
 
@@ -1182,6 +1227,40 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val range = spark.range(1, 1, 1, 1000)
     val numPartitions = range.rdd.getNumPartitions
     assert(numPartitions == 0)
+  }
+
+  test("SPARK-33758: Prune unnecessary output partitioning") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t1.id as t1id, t2.id as t2id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+
+        assert(planned.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            k1.name == "t1id" && k2.name == "t2id"
+        })
+
+        val planned2 = sql(
+          """
+            | SELECT t1.id as t1id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+        assert(planned2.outputPartitioning match {
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
+            true
+        })
+      }
+    }
   }
 }
 
