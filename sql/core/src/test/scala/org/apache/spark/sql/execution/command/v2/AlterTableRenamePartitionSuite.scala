@@ -31,7 +31,7 @@ class AlterTableRenamePartitionSuite
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
       }.getMessage
-      assert(errMsg.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
+      assert(errMsg.contains("ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables"))
     }
   }
 }

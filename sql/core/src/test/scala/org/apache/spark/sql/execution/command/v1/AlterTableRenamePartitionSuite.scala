@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchTableException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -43,10 +43,10 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
   test("table to alter does not exist") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
-      val errMsg = intercept[NoSuchTableException] {
+      val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
       }.getMessage
-      assert(errMsg.contains("Table or view 'no_tbl' not found"))
+      assert(errMsg.contains("Table not found"))
     }
   }
 
