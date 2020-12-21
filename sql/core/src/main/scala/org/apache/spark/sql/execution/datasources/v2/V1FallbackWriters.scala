@@ -20,12 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.UUID
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
-import org.apache.spark.sql.execution.{AlreadyOptimized, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -118,9 +119,7 @@ trait SupportsV1Write extends SparkPlan {
   protected def writeWithV1(
       relation: InsertableRelation,
       refreshCache: () => Unit = () => ()): Seq[InternalRow] = {
-    val session = sqlContext.sparkSession
-    // The `plan` is already optimized, we should not analyze and optimize it again.
-    relation.insert(AlreadyOptimized.dataFrame(session, plan), overwrite = false)
+    relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)
     refreshCache()
 
     Nil
