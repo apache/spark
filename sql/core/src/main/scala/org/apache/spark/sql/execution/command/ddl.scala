@@ -926,6 +926,7 @@ object DDLUtils {
           }
         case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
         case "orc" => OrcFileFormat.checkFieldNames(colNames)
+        case "avro" => AvroFileFormat.checkFieldNames(colNames)
         case _ =>
       }
     }
