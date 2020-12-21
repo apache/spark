@@ -577,8 +577,8 @@ class ColumnarAlias(child: ColumnarExpression, name: String)(
     override val exprId: ExprId = NamedExpression.newExprId,
     override val qualifier: Seq[String] = Seq.empty,
     override val explicitMetadata: Option[Metadata] = None,
-    override val deniedMetadataKeys: Seq[String] = Seq.empty)
-  extends Alias(child, name)(exprId, qualifier, explicitMetadata, deniedMetadataKeys)
+    override val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
+  extends Alias(child, name)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
   with ColumnarExpression {
 
   override def columnarEval(batch: ColumnarBatch): Any = child.columnarEval(batch)
@@ -715,7 +715,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
   def replaceWithColumnarExpression(exp: Expression): ColumnarExpression = exp match {
     case a: Alias =>
       new ColumnarAlias(replaceWithColumnarExpression(a.child),
-        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.deniedMetadataKeys)
+        a.name)(a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
     case att: AttributeReference =>
       new ColumnarAttributeReference(att.name, att.dataType, att.nullable,
         att.metadata)(att.exprId, att.qualifier)

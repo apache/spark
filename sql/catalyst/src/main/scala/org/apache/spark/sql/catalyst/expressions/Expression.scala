@@ -636,6 +636,11 @@ abstract class BinaryExpression extends Expression {
 }
 
 
+object BinaryExpression {
+  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
+}
+
+
 /**
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
