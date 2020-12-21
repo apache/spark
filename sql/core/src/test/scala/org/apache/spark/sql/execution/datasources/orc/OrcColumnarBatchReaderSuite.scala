@@ -69,7 +69,7 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
         val file = new File(SpecificParquetRecordReaderBase.listDirectory(dir).get(0))
         val fileSplit = new FileSplit(new Path(file.getCanonicalPath), 0L, file.length, Array.empty)
         val taskConf = sqlContext.sessionState.newHadoopConf()
-        val orcFileSchema = TypeDescription.fromString(partitionSchema.simpleString)
+        val orcFileSchema = TypeDescription.fromString(dataSchema.simpleString)
         val vectorizedReader = new OrcColumnarBatchReader(
           conf.offHeapColumnVectorEnabled, conf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK), 4096)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
@@ -79,8 +79,8 @@ class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
           vectorizedReader.initialize(fileSplit, taskAttemptContext)
           vectorizedReader.initBatch(
             orcFileSchema,
-            Array(0, -1),
-            (dataSchema ++ partitionSchema).toArray,
+            Array(0),
+            dataSchema.toArray,
             partitionSchema,
             partitionValues)
           vectorizedReader.nextKeyValue()
