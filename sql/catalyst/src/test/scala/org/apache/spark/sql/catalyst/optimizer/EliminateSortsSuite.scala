@@ -51,15 +51,11 @@ class EliminateSortsSuite extends AnalysisTest {
 
   val testRelation = LocalRelation.fromExternalRows(
     Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
-    Seq(
-      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3),
-      Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3), Row(1, 2, 3))
+    1.to(12).map(_ => Row(1, 2, 3))
   )
   val testRelationB = LocalRelation.fromExternalRows(
     Seq(Symbol("d").int),
-    Seq(
-      Row(1), Row(1), Row(1), Row(1), Row(1), Row(1),
-      Row(1), Row(1), Row(1), Row(1), Row(1), Row(1))
+    1.to(12).map(_ => Row(1))
   )
 
   test("Empty order by clause") {
