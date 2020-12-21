@@ -953,6 +953,36 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
+    def table(self, tableName):
+        """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+        support streaming mode.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+
+        Returns
+        --------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> csv_sdf = spark.readStream.table('input_table') # doctest: +SKIP
+        >>> csv_sdf.isStreaming # doctest: +SKIP
+        True
+        """
+        if isinstance(tableName, str):
+            return self._df(self._jreader.table(tableName))
+        else:
+            raise TypeError("tableName can be only a single string")
+
 
 class DataStreamWriter(object):
     """
@@ -987,7 +1017,7 @@ class DataStreamWriter(object):
         * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
         * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
-           every time these is some updates
+           every time these are some updates
         * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
@@ -1416,7 +1446,7 @@ class DataStreamWriter(object):
             * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
             * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
-              sink every time these is some updates
+              sink every time these are some updates
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
@@ -1463,6 +1493,77 @@ class DataStreamWriter(object):
             return self._sq(self._jwrite.start())
         else:
             return self._sq(self._jwrite.start(path))
+
+    def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
+                **options):
+        """
+        Starts the execution of the streaming query, which will continually output results to the
+        given table as new data arrives.
+
+        A new table will be created if the table not exists. The returned
+        :class:`StreamingQuery` object can be used to interact with the stream.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+        format : str, optional
+            the format used to save.
+        outputMode : str, optional
+            specifies how data of a streaming DataFrame/Dataset is written to a
+            streaming sink.
+
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
+              sink
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these are some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
+              written to the sink every time there are some updates. If the query doesn't contain
+              aggregations, it will be equivalent to `append` mode.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        queryName : str, optional
+            unique name for the query
+        **options : dict
+            All other string options. You may want to provide a `checkpointLocation`.
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> sq = sdf.writeStream.format('parquet').queryName('this_query').option(
+        ...      'checkpointLocation', '/tmp/checkpoint').toTable('output_table') # doctest: +SKIP
+        >>> sq.isActive # doctest: +SKIP
+        True
+        >>> sq.name # doctest: +SKIP
+        'this_query'
+        >>> sq.stop() # doctest: +SKIP
+        >>> sq.isActive # doctest: +SKIP
+        False
+        >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').toTable(
+        ...     'output_table', queryName='that_query', outputMode="append", format='parquet',
+        ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
+        >>> sq.name # doctest: +SKIP
+        'that_query'
+        >>> sq.isActive # doctest: +SKIP
+        True
+        >>> sq.stop() # doctest: +SKIP
+        """
+        # TODO(SPARK-33659): document the current behavior for DataStreamWriter.toTable API
+        self.options(**options)
+        if outputMode is not None:
+            self.outputMode(outputMode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        if format is not None:
+            self.format(format)
+        if queryName is not None:
+            self.queryName(queryName)
+        return self._sq(self._jwrite.toTable(tableName))
 
 
 def _test():
