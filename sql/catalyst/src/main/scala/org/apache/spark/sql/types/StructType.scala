@@ -445,8 +445,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     stringConcat.toString
   }
 
-  override def sql: String =
-    s"STRUCT<${fields.map(_.toDDL.replaceFirst(" ", ": ")).mkString(", ")}>"
+  override def sql: String = s"STRUCT<${fields.map(_.sql).mkString(", ")}>"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
