@@ -3260,16 +3260,6 @@
               <groupId>net.alchim31.maven</groupId>
               <artifactId>scala-maven-plugin</artifactId>
               <configuration>
-                <scalaVersion>${scala.version}</scalaVersion>
-                <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
-                <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
-                <recompileMode>incremental</recompileMode>
-                <useZincServer>true</useZincServer>
-                <jvmArgs>
-                  <jvmArg>-Xms1024m</jvmArg>
-                  <jvmArg>-Xmx1024m</jvmArg>
-                  <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
-                </jvmArgs>
                 <args>
                   <arg>-unchecked</arg>
                   <arg>-deprecation</arg>
@@ -3288,13 +3278,6 @@
                   <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
                   <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
                 </args>
-                <javacArgs>
-                  <javacArg>-source</javacArg>
-                  <javacArg>${java.version}</javacArg>
-                  <javacArg>-target</javacArg>
-                  <javacArg>${java.version}</javacArg>
-                  <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
-                </javacArgs>
                 <compilerPlugins combine.self="override">
                 </compilerPlugins>
               </configuration>
