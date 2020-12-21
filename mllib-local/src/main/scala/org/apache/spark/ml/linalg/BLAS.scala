@@ -18,7 +18,6 @@
 package org.apache.spark.ml.linalg
 
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
-import scala.util.Try
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -33,13 +32,16 @@ private[spark] object BLAS extends Serializable {
   private[ml] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
       // scalastyle:off classforname
-      _javaBLAS = Try(
-        Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
-                        Option(Thread.currentThread().getContextClassLoader)
-                          .getOrElse(getClass.getClassLoader))
-             .newInstance()
-             .asInstanceOf[NetlibBLAS])
-          .getOrElse(new F2jBLAS)
+      _javaBLAS =
+        try {
+          Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
+                          Option(Thread.currentThread().getContextClassLoader)
+                            .getOrElse(getClass.getClassLoader))
+              .newInstance()
+              .asInstanceOf[NetlibBLAS]
+        } catch {
+          case _: Throwable => new F2jBLAS
+        }
       // scalastyle:on classforname
     }
     _javaBLAS

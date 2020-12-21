@@ -21,7 +21,6 @@ import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import scala.util.Try
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.util.Utils
 
 /**
  * Serialization benchmark for BLAS.
@@ -42,11 +41,16 @@ object BLASBenchmark extends BenchmarkBase {
 
     val f2jBLAS = new F2jBLAS
     val nativeBLAS = NetlibBLAS.getInstance
-    val vectorBLAS = Try(
-      Utils.classForName("dev.ludovic.blas.VectorizedBLAS")
+    val vectorBLAS =
+      try {
+        Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
+                        Option(Thread.currentThread().getContextClassLoader)
+                          .getOrElse(getClass.getClassLoader))
             .newInstance()
-            .asInstanceOf[NetlibBLAS])
-        .getOrElse(new F2jBLAS)
+            .asInstanceOf[NetlibBLAS]
+      } catch {
+        case _: Throwable => new F2jBLAS
+      }
 
     // scalastyle:off println
     println("nativeBLAS = " + nativeBLAS.getClass.getName)
