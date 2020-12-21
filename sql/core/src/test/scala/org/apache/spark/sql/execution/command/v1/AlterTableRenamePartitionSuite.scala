@@ -60,6 +60,18 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       assert(errMsg.contains("Partition not found in table"))
     }
   }
+
+  test("target partition exists") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      val errMsg = intercept[PartitionAlreadyExistsException] {
+        sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      }.getMessage
+      assert(errMsg.contains("Partition already exists"))
+    }
+  }
 }
 
 class AlterTableRenamePartitionSuite
@@ -153,18 +165,6 @@ class AlterTableRenamePartitionSuite
         checkPartitions(t, Map("id" -> "2"))
         checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
       }
-    }
-  }
-
-  test("target partition exists") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createSinglePartTable(t)
-      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      val errMsg = intercept[PartitionAlreadyExistsException] {
-        sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition already exists"))
     }
   }
 }
