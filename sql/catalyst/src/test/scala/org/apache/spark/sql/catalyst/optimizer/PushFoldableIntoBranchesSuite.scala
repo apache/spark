@@ -223,7 +223,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(EqualTo(Literal(4), caseWhen), FalseLiteral)
   }
 
-  test("Push down cast through If/CaseWhen") {
+  test("SPARK-33848: Push down cast through If/CaseWhen") {
     assertEquivalent(If(a, Literal(2), Literal(3)).cast(StringType),
       If(a, Literal("2"), Literal("3")))
     assertEquivalent(If(a, b, Literal(3)).cast(StringType),
@@ -242,14 +242,14 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((a, b)), Some(b + 1)).cast(StringType))
   }
 
-  test("Push down abs through If/CaseWhen") {
+  test("SPARK-33848: Push down abs through If/CaseWhen") {
     assertEquivalent(Abs(If(a, Literal(-2), Literal(-3))), If(a, Literal(2), Literal(3)))
     assertEquivalent(
       Abs(CaseWhen(Seq((a, Literal(-1))), Some(Literal(-3)))),
       CaseWhen(Seq((a, Literal(1))), Some(Literal(3))))
   }
 
-  test("Push down cast with binary expression through If/CaseWhen") {
+  test("SPARK-33848: Push down cast with binary expression through If/CaseWhen") {
     assertEquivalent(EqualTo(If(a, Literal(2), Literal(3)).cast(StringType), Literal("4")),
       FalseLiteral)
     assertEquivalent(
