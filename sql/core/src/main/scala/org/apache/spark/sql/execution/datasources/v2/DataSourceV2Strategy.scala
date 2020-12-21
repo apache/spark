@@ -204,7 +204,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case v2Write =>
           throw new AnalysisException(
             s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
-            s"${v2Write.getClass} is not an instance of ${classOf[V1Write]}")
+            s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
       }
 
     case AppendData(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), query, writeOptions,
@@ -220,7 +220,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case v2Write =>
           throw new AnalysisException(
             s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
-            s"${v2Write.getClass} is not an instance of ${classOf[V1Write]}")
+            s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
       }
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), _, query,
