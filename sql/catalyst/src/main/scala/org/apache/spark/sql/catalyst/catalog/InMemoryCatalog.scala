@@ -24,13 +24,13 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -112,8 +112,8 @@ class InMemoryCatalog(
         fs.mkdirs(location)
       } catch {
         case e: IOException =>
-          throw new SparkException(s"Unable to create database ${dbDefinition.name} as failed " +
-            s"to create its directory ${dbDefinition.locationUri}", e)
+          throw QueryExecutionErrors.unableCreateDatabaseAsFailedCreateDirectoryError(
+            dbDefinition, e)
       }
       catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
     }
@@ -127,10 +127,10 @@ class InMemoryCatalog(
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
         if (catalog(db).tables.nonEmpty) {
-          throw new AnalysisException(s"Database $db is not empty. One or more tables exist.")
+          throw QueryCompilationErrors.databaseExistTableError(db)
         }
         if (catalog(db).functions.nonEmpty) {
-          throw new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
+          throw QueryCompilationErrors.databaseExistFunctionError(db)
         }
       }
       // Remove the database.
@@ -141,8 +141,7 @@ class InMemoryCatalog(
         fs.delete(location, true)
       } catch {
         case e: IOException =>
-          throw new SparkException(s"Unable to drop database ${dbDefinition.name} as failed " +
-            s"to delete its directory ${dbDefinition.locationUri}", e)
+          throw QueryExecutionErrors.unableDropDatabaseAsFailedDeleteDirectoryError(dbDefinition, e)
       }
       catalog.remove(db)
     } else {
@@ -209,8 +208,8 @@ class InMemoryCatalog(
           fs.mkdirs(defaultTableLocation)
         } catch {
           case e: IOException =>
-            throw new SparkException(s"Unable to create table $table as failed " +
-              s"to create its directory $defaultTableLocation", e)
+            throw QueryExecutionErrors.unableCreateTableAsFailedCreateDirectoryError(
+              table, defaultTableLocation, e)
         }
         tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
       } else {
@@ -239,7 +238,7 @@ class InMemoryCatalog(
             fs.delete(partitionPath, true)
           } catch {
             case e: IOException =>
-              throw new SparkException(s"Unable to delete partition path $partitionPath", e)
+              throw QueryExecutionErrors.unableDeletePartitionPathError(partitionPath, e)
           }
         }
         assert(tableMeta.storage.locationUri.isDefined,
@@ -252,8 +251,7 @@ class InMemoryCatalog(
           fs.delete(dir, true)
         } catch {
           case e: IOException =>
-            throw new SparkException(s"Unable to drop table $table as failed " +
-              s"to delete its directory $dir", e)
+            throw QueryExecutionErrors.unableDropTableAsFailedDeleteDirectoryError(table, dir, e)
         }
       }
       catalog(db).tables.remove(table)
@@ -284,8 +282,8 @@ class InMemoryCatalog(
         fs.rename(oldDir, newDir)
       } catch {
         case e: IOException =>
-          throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
-            s"to rename its directory $oldDir", e)
+          throw QueryExecutionErrors.unableRenameTableAsFailedRenameDirectoryError(
+            oldName, newName, oldDir, e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
     }
@@ -358,7 +356,7 @@ class InMemoryCatalog(
       loadPath: String,
       isOverwrite: Boolean,
       isSrcLocal: Boolean): Unit = {
-    throw new UnsupportedOperationException("loadTable is not implemented")
+    throw QueryExecutionErrors.methodNotImplementedError("loadTable")
   }
 
   override def loadPartition(
@@ -369,7 +367,7 @@ class InMemoryCatalog(
       isOverwrite: Boolean,
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = {
-    throw new UnsupportedOperationException("loadPartition is not implemented.")
+    throw QueryExecutionErrors.methodNotImplementedError("loadPartition")
   }
 
   override def loadDynamicPartitions(
@@ -379,7 +377,7 @@ class InMemoryCatalog(
       partition: TablePartitionSpec,
       replace: Boolean,
       numDP: Int): Unit = {
-    throw new UnsupportedOperationException("loadDynamicPartitions is not implemented.")
+    throw QueryExecutionErrors.methodNotImplementedError("loadDynamicPartitions")
   }
 
   // --------------------------------------------------------------------------
@@ -416,7 +414,7 @@ class InMemoryCatalog(
         }
       } catch {
         case e: IOException =>
-          throw new SparkException(s"Unable to create partition path $partitionPath", e)
+          throw QueryExecutionErrors.unableCreatePartitionPathError(partitionPath, e)
       }
 
       existingParts.put(
@@ -457,7 +455,7 @@ class InMemoryCatalog(
           fs.delete(partitionPath, true)
         } catch {
           case e: IOException =>
-            throw new SparkException(s"Unable to delete partition path $partitionPath", e)
+            throw QueryExecutionErrors.unableDeletePartitionPathError(partitionPath, e)
         }
       }
       existingParts.remove(p)
@@ -490,7 +488,7 @@ class InMemoryCatalog(
           fs.rename(oldPartPath, newPartPath)
         } catch {
           case e: IOException =>
-            throw new SparkException(s"Unable to rename partition path $oldPartPath", e)
+            throw QueryExecutionErrors.unableRenamePartitionPathError(oldPartPath, e)
         }
         oldPartition.copy(
           spec = newSpec,

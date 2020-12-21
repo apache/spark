@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.errors
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -500,5 +504,172 @@ object QueryCompilationErrors {
 
   def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
     new AnalysisException(s"$command does not support nested column: $quoted")
+  }
+
+  def renameTempViewToExistsViewError(oldName: String, newName: String): Throwable = {
+    new AnalysisException(
+      s"rename temporary view from '$oldName' to '$newName': destination view already exists")
+  }
+
+  def databaseExistTableError(db: String): Throwable = {
+    new AnalysisException(s"Database $db is not empty. One or more tables exist.")
+  }
+
+  def databaseExistFunctionError(db: String): Throwable = {
+    new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
+  }
+
+  def invalidNameForTableOrDatabaseError(name: String): Throwable = {
+    new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
+      "Valid names only contain alphabet characters, numbers and _.")
+  }
+
+  def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
+    new AnalysisException(s"$database is a system preserved database, " +
+      "you cannot create a database with this name.")
+  }
+
+  def cannotDropDefaultDatabaseError(): Throwable = {
+    new AnalysisException("Can not drop default database")
+  }
+
+  def cannotUsePreservedDatabaseAsCurrentDatabaseError(database: String): Throwable = {
+    new AnalysisException(s"$database is a system preserved database, you cannot use it as " +
+      "current database. To access global temporary views, you should use qualified name with " +
+      s"the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM $database.viewName.")
+  }
+
+  def createExternalTableWithoutLocationError(): Throwable = {
+    new AnalysisException("CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+  }
+
+  def cannotOperateManagedTableWithExistsLocationError(
+      methodName: String, tableIdentifier: TableIdentifier, tableLocation: Path): Throwable = {
+    new AnalysisException(s"Can not $methodName the managed table('$tableIdentifier')" +
+      s". The associated location('${tableLocation.toString}') already exists.")
+  }
+
+  def alterTableDropColumnsNotSupportedError(
+      nonExistentColumnNames: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"""
+         |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
+         |not present in the new schema. We don't support dropping columns yet.
+         """.stripMargin)
+  }
+
+  def cannotRetrieveTableOrViewNotInSomeDatabaseError(
+      qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
+    new AnalysisException("Only the tables/views belong to the same database can be retrieved. " +
+      s"Querying tables/views are $qualifiedTableNames")
+  }
+
+  def renameTableSourceAndDestinationMismatchError(db: String, newDb: String): Throwable = {
+    new AnalysisException(
+      s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+  }
+
+  def renameTempViewSpecifyDestinationDatabaseNotAllowedError(
+      oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot " +
+      s"specify database name '${newName.database.get}' in the destination table")
+  }
+
+  def renameTempViewToExistingDestinationTableError(
+      oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
+    new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
+      "destination table already exists")
+  }
+
+  def invalidPartitionSpecContainsEmptyValueError(spec: String): Throwable = {
+    new AnalysisException(
+      s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+  }
+
+  def partitionSpecNotContainedInDefinedPartitionSpecError(
+      s: TablePartitionSpec, table: CatalogTable): Throwable = {
+    new AnalysisException(
+      s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
+        s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
+        s"in table '${table.identifier}'")
+  }
+
+  def invalidFunctionArgumentsError(
+      name: String, expectedNumber: Int, actualNumber: Int): Throwable = {
+    new AnalysisException(s"Invalid number of arguments for function $name. " +
+      s"Expected: $expectedNumber; Found: $actualNumber")
+  }
+
+  def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
+    new AnalysisException(s"Function $func already exists")
+  }
+
+  def cannotLoadClassWhenRegisteringFunctionError(
+      className: String, func: FunctionIdentifier): Throwable = {
+    new AnalysisException(s"Can not load class '$className' when registering " +
+      s"the function '$func', please make sure it is on the classpath")
+  }
+
+  def v2CatalogNotSupportFunctionError(
+      catalog: String, namespace: Seq[String]): Throwable = {
+    new AnalysisException("V2 catalog does not support functions yet. " +
+      s"catalog: $catalog, namespace: '${namespace.quoted}'")
+  }
+
+  def resourceTypeNotSupportedError(resourceType: String): Throwable = {
+    new AnalysisException(s"Resource Type '$resourceType' is not supported.")
+  }
+
+  def tableNotSpecifyDatabaseError(identifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"table $identifier did not specify database")
+  }
+
+  def tableNotSpecifyLocationUriError(identifier: TableIdentifier): Throwable = {
+    new AnalysisException(s"table $identifier did not specify locationUri")
+  }
+
+  def partitionNotSpecifyLocationUriError(specString: String): Throwable = {
+    new AnalysisException(s"Partition [$specString] did not specify locationUri")
+  }
+
+  def bucketsNumberNotGreatThanZeroError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
+    new AnalysisException(
+      s"Number of buckets should be greater than 0 but less than or equal to " +
+        s"bucketing.maxBuckets (`$bucketingMaxBuckets`). Got `$numBuckets`")
+  }
+
+  def missCatalogAndNamespacePartInCatalogError(numParts: Int, index: Int): Throwable = {
+    new AnalysisException("Corrupted table name context in catalog: " +
+      s"$numParts parts expected, but part $index is missing.")
+  }
+
+  def corruptedViewSQLConfigsInCatalogError(e: Exception): Throwable = {
+    new AnalysisException("Corrupted view SQL configs in catalog", cause = Some(e))
+  }
+
+  def missViewQueryOutputColumnsInCatalogError(numCols: String, index: Int): Throwable = {
+    new AnalysisException("Corrupted view query output column names in catalog: " +
+      s"$numCols parts expected, but part $index is missing.")
+  }
+
+  def corruptedViewReferredTempViewInCatalogError(e: Exception): Throwable = {
+    new AnalysisException("corrupted view referred temp view names in catalog", cause = Some(e))
+  }
+
+  def corruptedViewReferredTempFunctionsInCatalogError(e: Exception): Throwable = {
+    new AnalysisException(
+      "corrupted view referred temp functions names in catalog", cause = Some(e))
+  }
+
+  def columnStatisticsDeserializationNotSupportedError(
+      name: String, dataType: DataType): Throwable = {
+    new AnalysisException("Column statistics deserialization is not supported for " +
+      s"column $name of data type: $dataType.")
+  }
+
+  def columnStatisticsSerializationNotSupportedError(
+      colName: String, dataType: DataType): Throwable = {
+    new AnalysisException("Column statistics serialization is not supported for " +
+      s"column $colName of data type: $dataType.")
   }
 }
