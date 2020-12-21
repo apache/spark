@@ -2094,18 +2094,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("Test dagScheduler.shouldUnregisterMapOutput with map stage re-running") {
     reInit()
-    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleMapRdd = new MyRDD(sc, 4, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(4))
     val shuffleId = shuffleDep.shuffleId
-    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
-    submit(reduceRdd, Array(0, 1))
+    val reduceRdd = new MyRDD(sc, 4, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1, 2, 3))
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
       (Success, makeMapStatus("hostB", reduceRdd.partitions.length)),
-      (Success, makeMapStatus("hostC", reduceRdd.partitions.length))))
+      (Success, makeMapStatus("hostC", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostD", reduceRdd.partitions.length))))
     // The MapOutputTracker should know about both map output locations.
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1.host).toSet ===
-      HashSet("hostA", "hostB", "hostC"))
+      HashSet("hostA", "hostB", "hostC", "hostD"))
 
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
@@ -2129,16 +2130,18 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       makeMapStatus("hostA", reduceRdd.partitions.length)))
 
     runEvent(makeCompletionEvent(
-      taskSets(1).tasks(1),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 1, 0, "ignored"),
+      taskSets(1).tasks(2),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, 1, "ignored"),
       null))
 
     assert(sparkListener.failedStages.contains(1))
     val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
     logInfo(s"${mapStatuses}")
-    assert(mapStatuses.count(_ != null) === 2)
+
+    assert(mapStatuses.count(_ != null) === 3)
     assert(mapStatuses(0).location === makeBlockManagerId("hostA"))
     assert(mapStatuses(2).location === makeBlockManagerId("hostC"))
+    assert(mapStatuses(3).location === makeBlockManagerId("hostD"))
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
