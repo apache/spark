@@ -19,6 +19,7 @@ package org.apache.spark.sql.util
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 object PartitioningUtils {
   /**
@@ -43,5 +44,22 @@ object PartitioningUtils {
       normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
+  }
+
+  /**
+   * Verify if the input partition spec exactly matches the existing defined partition spec
+   * The columns must be the same but the orders could be different.
+   */
+  def requireExactMatchedPartitionSpec(
+      tableName: String,
+      spec: TablePartitionSpec,
+      partitionColumnNames: Seq[String]): Unit = {
+    val defined = partitionColumnNames.sorted
+    if (spec.keys.toSeq.sorted != defined) {
+      throw new AnalysisException(
+        s"Partition spec is invalid. The spec (${spec.keys.mkString(", ")}) must match " +
+        s"the partition spec (${partitionColumnNames.mkString(", ")}) defined in " +
+        s"table '$tableName'")
+    }
   }
 }

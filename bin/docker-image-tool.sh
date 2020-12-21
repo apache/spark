@@ -274,7 +274,7 @@ Examples:
   - Build and push JDK11-based image for multiple archs to docker.io/myrepo
     $0 -r docker.io/myrepo -t v3.0.0 -X -b java_image_tag=11-jre-slim build
     # Note: buildx, which does cross building, needs to do the push during build
-    # So there is no seperate push step with -X
+    # So there is no separate push step with -X
 
 EOF
 }

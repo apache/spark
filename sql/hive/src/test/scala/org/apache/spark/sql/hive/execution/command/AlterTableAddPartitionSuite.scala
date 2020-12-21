@@ -15,19 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan, NoopDropTable}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.v1
 
-/**
- * A rule for handling [[DropTable]] logical plan when the table or temp view is not resolved.
- * If "ifExists" flag is set to true, the plan is resolved to [[NoopDropTable]],
- * which is a no-op command.
- */
-object ResolveNoopDropTable extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
-      NoopDropTable(u.multipartIdentifier)
-  }
-}
+class AlterTableAddPartitionSuite
+    extends v1.AlterTableAddPartitionSuiteBase
+    with CommandSuiteBase

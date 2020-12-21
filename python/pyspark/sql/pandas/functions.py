@@ -99,7 +99,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ...     s3['col2'] = s1 + s2.str.len()
     ...     return s3
     ...
-    >>> # Create a Spark DataFrame that has three columns including a sturct column.
+    >>> # Create a Spark DataFrame that has three columns including a struct column.
     ... df = spark.createDataFrame(
     ...     [[1, "a string", ("a nested string",)]],
     ...     "long_col long, string_col string, struct_col struct<col1:string>")
@@ -114,7 +114,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     |    |-- col1: string (nullable = true)
     |    |-- col2: long (nullable = true)
 
-    In the following sections, it describes the cominations of the supported type hints. For
+    In the following sections, it describes the combinations of the supported type hints. For
     simplicity, `pandas.DataFrame` variant is omitted.
 
     * Series to Series

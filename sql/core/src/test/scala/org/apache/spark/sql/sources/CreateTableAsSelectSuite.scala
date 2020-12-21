@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf.BUCKETING_MAX_BUCKETS
 import org.apache.spark.sql.test.SharedSparkSession
@@ -166,24 +166,21 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         )
       }.getMessage
       assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE TEMPORARY TABLE ... USING ... AS query"))
+        error.contains("CREATE TEMPORARY TABLE"))
     }
   }
 
-  test("disallows CREATE EXTERNAL TABLE ... USING ... AS query") {
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE ... USING ... if location is specified") {
     withTable("t") {
-      val error = intercept[ParseException] {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toURI}')
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-
-      assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE EXTERNAL TABLE ..."))
+      sql(
+        s"""
+           |CREATE EXTERNAL TABLE t USING PARQUET
+           |OPTIONS (PATH '${path.toURI}')
+           |AS SELECT 1 AS a, 2 AS b
+         """.stripMargin)
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.tableType == CatalogTableType.EXTERNAL)
+      assert(table.location.toString == path.toURI.toString.stripSuffix("/"))
     }
   }
 
@@ -237,7 +234,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("create table using as select - with overriden max number of buckets") {
+  test("create table using as select - with overridden max number of buckets") {
     def createTableSql(numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET

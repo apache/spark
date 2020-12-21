@@ -254,20 +254,25 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
+  @transient private lazy val surrogates = {
+    val row = surrogateDF.head()
+    row.schema.fieldNames.zipWithIndex
+      .map { case (name, index) => (name, row.getDouble(index)) }
+      .toMap
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val (inputColumns, outputColumns) = getInOutCols
-    val surrogates = surrogateDF.select(inputColumns.map(col): _*).head().toSeq
+    val (inputColumns, outputColumns) = getInOutCols()
 
-
-    val newCols = inputColumns.zip(outputColumns).zip(surrogates).map {
-      case ((inputCol, outputCol), surrogate) =>
-        val inputType = dataset.schema(inputCol).dataType
-        val ic = col(inputCol).cast(DoubleType)
-        when(ic.isNull, surrogate)
-          .when(ic === $(missingValue), surrogate)
-          .otherwise(ic)
-          .cast(inputType)
+    val newCols = inputColumns.map { inputCol =>
+      val surrogate = surrogates(inputCol)
+      val inputType = dataset.schema(inputCol).dataType
+      val ic = col(inputCol).cast(DoubleType)
+      when(ic.isNull, surrogate)
+        .when(ic === $(missingValue), surrogate)
+        .otherwise(ic)
+        .cast(inputType)
     }
     dataset.withColumns(outputColumns, newCols).toDF()
   }

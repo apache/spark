@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.DateTimeException
 import java.util.{Calendar, TimeZone}
 
 import scala.collection.parallel.immutable.ParVector
@@ -25,11 +26,13 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -91,12 +94,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Cast(Literal("2015-03-18 123142"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T123123"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T"), DateType), new Date(c.getTimeInMillis))
-
-    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
-    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
-    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
-    checkEvaluation(Cast(Literal("20150318"), DateType), null)
-    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("cast string to timestamp") {
@@ -104,8 +101,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       def checkCastStringToTimestamp(str: String, expected: Timestamp): Unit = {
         checkEvaluation(cast(Literal(str), TimestampType, Option(zid.getId)), expected)
       }
-
-      checkCastStringToTimestamp("123", null)
 
       val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
@@ -183,15 +178,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       c.set(2015, 2, 18, 12, 3, 17)
       c.set(Calendar.MILLISECOND, 123)
       checkCastStringToTimestamp("2015-03-18T12:03:17.123+7:3", new Timestamp(c.getTimeInMillis))
-
-      checkCastStringToTimestamp("2015-03-18 123142", null)
-      checkCastStringToTimestamp("2015-03-18T123123", null)
-      checkCastStringToTimestamp("2015-03-18X", null)
-      checkCastStringToTimestamp("2015/03/18", null)
-      checkCastStringToTimestamp("2015.03.18", null)
-      checkCastStringToTimestamp("20150318", null)
-      checkCastStringToTimestamp("2015-031-8", null)
-      checkCastStringToTimestamp("2015-03-18T12:03:17-0:70", null)
     }
   }
 
@@ -301,7 +287,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     checkEvaluation(cast("abdef", StringType), "abdef")
-    checkEvaluation(cast("abdef", TimestampType, UTC_OPT), null)
     checkEvaluation(cast("12.65", DecimalType.SYSTEM_DEFAULT), Decimal(12.65))
 
     checkEvaluation(cast(cast(sd, DateType), StringType), sd)
@@ -841,21 +826,45 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
   }
 
+  protected def setConfigurationHint: String
+
+  private def verifyCastFailure(c: CastBase, optionalExpectedMsg: Option[String] = None): Unit = {
+    val typeCheckResult = c.checkInputDataTypes()
+    assert(typeCheckResult.isFailure)
+    assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
+    val message = typeCheckResult.asInstanceOf[TypeCheckFailure].message
+
+    if (optionalExpectedMsg.isDefined) {
+      assert(message.contains(optionalExpectedMsg.get))
+    } else {
+      assert(message.contains("with ANSI mode on"))
+      assert(message.contains(setConfigurationHint))
+    }
+  }
+
   test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(TimestampType)
+    var errorMsg =
+      "you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead"
+    verifyCastFailure(cast(Literal(0L), TimestampType), Some(errorMsg))
+
     val timestampLiteral = Literal(1L, TimestampType)
+    errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
     numericTypes.foreach { numericType =>
-      assert(cast(timestampLiteral, numericType).checkInputDataTypes().isFailure)
+      verifyCastFailure(cast(timestampLiteral, numericType), Some(errorMsg))
     }
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(DateType)
+    var errorMsg = "you can use function DATE_FROM_UNIX_DATE instead"
+    verifyCastFailure(cast(Literal(0L), DateType), Some(errorMsg))
     val dateLiteral = Literal(1, DateType)
+    errorMsg = "you can use function UNIX_DATE instead"
     numericTypes.foreach { numericType =>
-      assert(cast(dateLiteral, numericType).checkInputDataTypes().isFailure)
+      verifyCastFailure(cast(dateLiteral, numericType), Some(errorMsg))
     }
   }
 
@@ -880,9 +889,9 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("ANSI mode: disallow casting complex types as String type") {
-    assert(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType).checkInputDataTypes().isFailure)
-    assert(cast(Literal.create(Map(1 -> "a")), StringType).checkInputDataTypes().isFailure)
-    assert(cast(Literal.create((1, "a", 0.1)), StringType).checkInputDataTypes().isFailure)
+    verifyCastFailure(cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType))
+    verifyCastFailure(cast(Literal.create(Map(1 -> "a")), StringType))
+    verifyCastFailure(cast(Literal.create((1, "a", 0.1)), StringType))
   }
 
   test("cast from invalid string to numeric should throw NumberFormatException") {
@@ -945,6 +954,59 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast("abcd", DecimalType(38, 1)),
       "invalid input syntax for type numeric")
   }
+
+  test("ANSI mode: cast string to timestamp with parse error") {
+    val activeConf = conf
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), TimestampType, Option(zid.getId)),
+          s"Cannot cast $str to TimestampType.")
+      }
+
+      SQLConf.withExistingConf(activeConf) {
+        checkCastWithParseError("123")
+        checkCastWithParseError("2015-03-18 123142")
+        checkCastWithParseError("2015-03-18T123123")
+        checkCastWithParseError("2015-03-18X")
+        checkCastWithParseError("2015/03/18")
+        checkCastWithParseError("2015.03.18")
+        checkCastWithParseError("20150318")
+        checkCastWithParseError("2015-031-8")
+        checkCastWithParseError("2015-03-18T12:03:17-0:70")
+        checkCastWithParseError("abdef")
+      }
+    }
+  }
+
+  test("ANSI mode: cast string to date with parse error") {
+    val activeConf = conf
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), DateType, Option(zid.getId)),
+          s"Cannot cast $str to DateType.")
+      }
+
+      SQLConf.withExistingConf(activeConf) {
+        checkCastWithParseError("12345")
+        checkCastWithParseError("12345-12-18")
+        checkCastWithParseError("2015-13-18")
+        checkCastWithParseError("2015-03-128")
+        checkCastWithParseError("2015/03/18")
+        checkCastWithParseError("2015.03.18")
+        checkCastWithParseError("20150318")
+        checkCastWithParseError("2015-031-8")
+        checkCastWithParseError("2015-03-18ABC")
+        checkCastWithParseError("abdef")
+      }
+    }
+  }
+
+  test("SPARK-26218: Fix the corner case of codegen when casting float to Integer") {
+    checkExceptionInExpression[ArithmeticException](
+      cast(cast(Literal("2147483648"), FloatType), IntegerType), "overflow")
+  }
 }
 
 /**
@@ -981,6 +1043,14 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
+  }
+
+  test("cast string to date #2") {
+    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
+    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
+    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
+    checkEvaluation(Cast(Literal("20150318"), DateType), null)
+    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("casting to fixed-precision decimals") {
@@ -1311,20 +1381,6 @@ class CastSuite extends CastSuiteBase {
     }
   }
 
-  test("SPARK-31710: fail casting from numeric to timestamp if it is forbidden") {
-    Seq(true, false).foreach { enable =>
-      withSQLConf(SQLConf.LEGACY_ALLOW_CAST_NUMERIC_TO_TIMESTAMP.key -> enable.toString) {
-        assert(cast(2.toByte, TimestampType).resolved == enable)
-        assert(cast(10.toShort, TimestampType).resolved == enable)
-        assert(cast(3, TimestampType).resolved == enable)
-        assert(cast(10L, TimestampType).resolved == enable)
-        assert(cast(Decimal(1.2), TimestampType).resolved == enable)
-        assert(cast(1.7f, TimestampType).resolved == enable)
-        assert(cast(2.3d, TimestampType).resolved == enable)
-      }
-    }
-  }
-
   test("SPARK-32828: cast from a derived user-defined type to a base type") {
     val v = Literal.create(Row(1), new ExampleSubTypeUDT())
     checkEvaluation(cast(v, new ExampleBaseTypeUDT), Row(1))
@@ -1503,6 +1559,9 @@ class CastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
       case _ => Cast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.ANSI_ENABLED.key} as false"
 }
 
 /**
@@ -1525,6 +1584,10 @@ class AnsiCastSuiteWithAnsiModeOn extends AnsiCastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
+      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
 }
 
 /**
@@ -1547,4 +1610,8 @@ class AnsiCastSuiteWithAnsiModeOff extends AnsiCastSuiteBase {
       case _ => AnsiCast(Literal(v), targetType, timeZoneId)
     }
   }
+
+  override def setConfigurationHint: String =
+    s"set ${SQLConf.STORE_ASSIGNMENT_POLICY.key} as" +
+      s" ${SQLConf.StoreAssignmentPolicy.LEGACY.toString}"
 }

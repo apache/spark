@@ -32,7 +32,11 @@ import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
+import org.apache.hive.service.cli.HiveSQLException;
+import org.apache.hive.service.rpc.thrift.TGetQueryIdReq;
+import org.apache.hive.service.rpc.thrift.TGetQueryIdResp;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
+import org.apache.thrift.TException;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.server.TThreadPoolServer;
@@ -104,6 +108,15 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       LOG.info(msg);
     } catch (Exception t) {
       throw new ServiceException("Error initializing " + getName(), t);
+    }
+  }
+
+  @Override
+  public TGetQueryIdResp GetQueryId(TGetQueryIdReq req) throws TException {
+    try {
+      return new TGetQueryIdResp(cliService.getQueryId(req.getOperationHandle()));
+    } catch (HiveSQLException e) {
+      throw new TException(e);
     }
   }
 

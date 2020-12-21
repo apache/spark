@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
 
-class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
+class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   override def mode: ServerMode.Value = ServerMode.binary
 

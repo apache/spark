@@ -418,7 +418,7 @@ class ExternalMerger(Merger):
 
 class ExternalSorter(object):
     """
-    ExtenalSorter will divide the elements into chunks, sort them in
+    ExternalSorter will divide the elements into chunks, sort them in
     memory and dump them into disks, finally merge them back.
 
     The spilling will only happen when the used memory goes above

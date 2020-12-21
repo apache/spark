@@ -153,7 +153,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20201015
+      image: dongjoon/apache-spark-github-action-image:20201025
     strategy:
       fail-fast: false
       matrix:
@@ -335,7 +335,7 @@ jobs:
         r-version: 4.0
     - name: Install R linter dependencies and SparkR
       run: |
-        sudo apt-get install -y libcurl4-openssl-dev
+        sudo apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         sudo Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         sudo Rscript -e "devtools::install_github('jimhester/lintr@v2.0.0')"
         ./R/install-dev.sh
@@ -414,7 +414,7 @@ jobs:
     - name: Build with SBT
       run: |
         ./dev/change-scala-version.sh 2.13
-        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Djava.version=11 -Pscala-2.13 compile test:compile
+        ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   hadoop-2:
     name: Hadoop 2 build with SBT

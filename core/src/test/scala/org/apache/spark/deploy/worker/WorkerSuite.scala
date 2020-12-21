@@ -342,7 +342,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testWorkDirCleanupAndRemoveMetadataWithConfig(true)
   }
 
-  test("WorkdDirCleanup cleans only app dirs when" +
+  test("WorkDirCleanup cleans only app dirs when" +
     "spark.shuffle.service.db.enabled=false") {
     testWorkDirCleanupAndRemoveMetadataWithConfig(false)
   }
