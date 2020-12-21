@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class RemoveRedundantAggregatesSuite extends PlanTest {
 
@@ -30,31 +33,43 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       RemoveRedundantAggregates) :: Nil
   }
 
+  private def aggregates(e: Expression): Seq[Expression] = {
+    Seq(
+      count(e),
+      PythonUDF("pyUDF", null, IntegerType, Seq(e),
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, udfDeterministic = true)
+    )
+  }
+
   test("Remove redundant aggregate") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a)('a, count('b))
-      .groupBy('a)('a)
-      .analyze
-    val expected = relation
-      .groupBy('a)('a)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, expected)
+    for (agg <- aggregates('b)) {
+      val query = relation
+        .groupBy('a)('a, agg)
+        .groupBy('a)('a)
+        .analyze
+      val expected = relation
+        .groupBy('a)('a)
+        .analyze
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expected)
+    }
   }
 
   test("Remove 2 redundant aggregates") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a)('a, count('b))
-      .groupBy('a)('a)
-      .groupBy('a)('a)
-      .analyze
-    val expected = relation
-      .groupBy('a)('a)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, expected)
+    for (agg <- aggregates('b)) {
+      val query = relation
+        .groupBy('a)('a, agg)
+        .groupBy('a)('a)
+        .groupBy('a)('a)
+        .analyze
+      val expected = relation
+        .groupBy('a)('a)
+        .analyze
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expected)
+    }
   }
 
   test("Remove redundant aggregate with different grouping") {
@@ -72,15 +87,17 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate with aliases") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a + 'b)(('a + 'b) as 'c, count('b))
-      .groupBy('c)('c)
-      .analyze
-    val expected = relation
-      .groupBy('a + 'b)(('a + 'b) as 'c)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, expected)
+    for (agg <- aggregates('b)) {
+      val query = relation
+        .groupBy('a + 'b)(('a + 'b) as 'c, agg)
+        .groupBy('c)('c)
+        .analyze
+      val expected = relation
+        .groupBy('a + 'b)(('a + 'b) as 'c)
+        .analyze
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, expected)
+    }
   }
 
   test("Remove redundant aggregate with non-deterministic upper") {
@@ -111,23 +128,27 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Keep non-redundant aggregate - upper has agg expression") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a, 'b)('a, 'b)
-      // The count would change if we remove the first aggregate
-      .groupBy('a)('a, count('b))
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    for (agg <- aggregates('b)) {
+      val query = relation
+        .groupBy('a, 'b)('a, 'b)
+        // The count would change if we remove the first aggregate
+        .groupBy('a)('a, agg)
+        .analyze
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, query)
+    }
   }
 
   test("Keep non-redundant aggregate - upper references non-grouping") {
     val relation = LocalRelation('a.int, 'b.int)
-    val query = relation
-      .groupBy('a)('a, count('b) as 'c)
-      .groupBy('c)('c)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    for (agg <- aggregates('b)) {
+      val query = relation
+        .groupBy('a)('a, agg as 'c)
+        .groupBy('c)('c)
+        .analyze
+      val optimized = Optimize.execute(query)
+      comparePlans(optimized, query)
+    }
   }
 
 }

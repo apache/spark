@@ -511,13 +511,13 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   }
 
   private def lowerIsRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
-    val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
-      lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
-
     val upperHasNoAggregateExpressions = upper.aggregateExpressions
       .forall(_.find(isAggregate).isEmpty)
 
-    upperReferencesOnlyGrouping && upperHasNoAggregateExpressions
+    lazy val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
+      lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
+
+    upperHasNoAggregateExpressions && upperReferencesOnlyGrouping
   }
 
   private def isAggregate(expr: Expression): Boolean = {
@@ -809,7 +809,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
   }
 
-  def haveCommonNonDeterministicOutput(
+  private def haveCommonNonDeterministicOutput(
       upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
     val aliases = getAliasMap(lower)
 
