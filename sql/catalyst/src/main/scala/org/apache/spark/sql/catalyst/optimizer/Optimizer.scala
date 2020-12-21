@@ -99,6 +99,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
+        PushFoldableIntoBranches,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,

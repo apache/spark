@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -885,8 +885,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case UnresolvedRelation(ident, _, false) =>
             lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ => throw new AnalysisException("Cannot write into temp view " +
-                s"${ident.quoted} as it's not a data source v2 relation.")
+              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
             }.getOrElse(write)
           case _ => write
         }
@@ -927,8 +926,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
 
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
-          s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
+        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
       }
       tmpView.map(ResolveRelations.resolveViews)
     }
@@ -1020,8 +1018,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedRelation if !u.isStreaming =>
             lookupV2Relation(u.multipartIdentifier, u.options, false).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case other => throw new IllegalStateException(
-                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
+              case other =>
+                throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupV2Relation")
             }.getOrElse(write)
           case _ => write
         }
@@ -1107,12 +1105,16 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
+          .map(resolveViews)
+          .map(EliminateSubqueryAliases(_))
+          .map(relation => c.copy(table = relation))
           .getOrElse(c)
 
       case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(relation => c.copy(table = EliminateSubqueryAliases(relation)))
+          .map(resolveViews)
+          .map(EliminateSubqueryAliases(_))
+          .map(relation => c.copy(table = relation))
           .getOrElse(c)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -1128,8 +1130,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
-                case other => throw new IllegalStateException(
-                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
+                case other =>
+                  throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupRelation")
               }.getOrElse(write)
           case _ => write
         }
@@ -1183,9 +1185,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table =>
               if (isStreaming) {
                 if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-                  throw new AnalysisException(s"${identifier.quoted} is a permanent view, " +
-                    "which is not supported by streaming reading API such as " +
-                    "`DataStreamReader.table` yet.")
+                  throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+                    identifier.quoted)
                 }
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
@@ -3542,8 +3543,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
           case column: ColumnChange =>
             // This is informational for future developers
-            throw new UnsupportedOperationException(
-              "Please add an implementation for a column change here")
+            throw QueryExecutionErrors.columnChangeUnsupportedError
           case other => Some(other)
         }
 
