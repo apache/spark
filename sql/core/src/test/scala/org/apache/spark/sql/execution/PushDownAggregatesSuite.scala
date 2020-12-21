@@ -37,13 +37,12 @@ abstract class PushDownAggregatesSuiteBase
     }.isEmpty == expected)
   }
 
-  test("Partial aggregate is pushed bellow manually inserted exchange") {
+  test("Partial aggregate is pushed bellow manually inserted repartition") {
     withTempPath { path =>
       spark.range(1000)
         .select('id % 7 as "a")
         .repartition()
         .write.format("parquet").save(path.getAbsolutePath)
-
 
       withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
         val df1 = spark.read.parquet(path.getAbsolutePath)
@@ -65,6 +64,35 @@ abstract class PushDownAggregatesSuiteBase
       }
     }
   }
+
+  test("Partial aggregate is pushed bellow manually inserted repartitionByRange") {
+    withTempPath { path =>
+      spark.range(1000)
+        .select('id % 7 as "a")
+        .repartition()
+        .write.format("parquet").save(path.getAbsolutePath)
+
+      withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
+        val df1 = spark.read.parquet(path.getAbsolutePath)
+          .repartitionByRange('a)
+          .groupBy('a)
+          .count()
+
+        assertExchangeBetweenAggregates(df1, false)
+        val result = df1.collect()
+        withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "true") {
+          val df2 = spark.read.parquet(path.getAbsolutePath)
+            .repartitionByRange('a)
+            .groupBy('a)
+            .count()
+
+          assertExchangeBetweenAggregates(df2, true)
+          checkAnswer(df2, result)
+        }
+      }
+    }
+  }
+
 }
 
 class PushDownAggregatesSuite extends PushDownAggregatesSuiteBase
