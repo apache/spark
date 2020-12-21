@@ -666,11 +666,17 @@ case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command {
+    purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
 
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
+ */
+case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -711,7 +717,6 @@ case class TruncateTable(
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
-
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
@@ -744,6 +749,16 @@ case class RepairTable(child: LogicalPlan) extends Command {
 }
 
 /**
+ * The logical plan of the ALTER VIEW ... AS command.
+ */
+case class AlterViewAs(
+    child: LogicalPlan,
+    originalText: String,
+    query: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class AlterViewSetProperties(
@@ -761,3 +776,40 @@ case class AlterViewUnsetProperties(
     ifExists: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] command.
+ */
+case class AlterTableSerDeProperties(
+    child: LogicalPlan,
+    serdeClassName: Option[String],
+    serdeProperties: Option[Map[String, String]],
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the CACHE TABLE command.
+ */
+case class CacheTable(
+    table: LogicalPlan,
+    multipartIdentifier: Seq[String],
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the CACHE TABLE ... AS SELECT command.
+ */
+case class CacheTableAsSelect(
+    tempViewName: String,
+    plan: LogicalPlan,
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the UNCACHE TABLE command.
+ */
+case class UncacheTable(
+    table: LogicalPlan,
+    ifExists: Boolean,
+    isTempView: Boolean = false) extends Command

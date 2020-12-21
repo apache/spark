@@ -54,6 +54,13 @@ private[sql] object LogicalExpressions {
   def days(reference: NamedReference): DaysTransform = DaysTransform(reference)
 
   def hours(reference: NamedReference): HoursTransform = HoursTransform(reference)
+
+  def sort(
+      reference: Expression,
+      direction: SortDirection,
+      nullOrdering: NullOrdering): SortOrder = {
+    SortValue(reference, direction, nullOrdering)
+  }
 }
 
 /**
@@ -110,6 +117,18 @@ private[sql] final case class BucketTransform(
 }
 
 private[sql] object BucketTransform {
+  def unapply(expr: Expression): Option[(Int, FieldReference)] = expr match {
+    case transform: Transform =>
+      transform match {
+        case BucketTransform(n, FieldReference(parts)) =>
+          Some((n, FieldReference(parts)))
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[(Int, NamedReference)] = transform match {
     case NamedTransform("bucket", Seq(
         Lit(value: Int, IntegerType),
@@ -170,6 +189,18 @@ private[sql] final case class IdentityTransform(
 }
 
 private[sql] object IdentityTransform {
+  def unapply(expr: Expression): Option[FieldReference] = expr match {
+    case transform: Transform =>
+      transform match {
+        case IdentityTransform(ref) =>
+          Some(ref)
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[FieldReference] = transform match {
     case NamedTransform("identity", Seq(Ref(parts))) =>
       Some(FieldReference(parts))
@@ -185,6 +216,18 @@ private[sql] final case class YearsTransform(
 }
 
 private[sql] object YearsTransform {
+  def unapply(expr: Expression): Option[FieldReference] = expr match {
+    case transform: Transform =>
+      transform match {
+        case YearsTransform(ref) =>
+          Some(ref)
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[FieldReference] = transform match {
     case NamedTransform("years", Seq(Ref(parts))) =>
       Some(FieldReference(parts))
@@ -200,6 +243,18 @@ private[sql] final case class MonthsTransform(
 }
 
 private[sql] object MonthsTransform {
+  def unapply(expr: Expression): Option[FieldReference] = expr match {
+    case transform: Transform =>
+      transform match {
+        case MonthsTransform(ref) =>
+          Some(ref)
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[FieldReference] = transform match {
     case NamedTransform("months", Seq(Ref(parts))) =>
       Some(FieldReference(parts))
@@ -215,6 +270,18 @@ private[sql] final case class DaysTransform(
 }
 
 private[sql] object DaysTransform {
+  def unapply(expr: Expression): Option[FieldReference] = expr match {
+    case transform: Transform =>
+      transform match {
+        case DaysTransform(ref) =>
+          Some(ref)
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[FieldReference] = transform match {
     case NamedTransform("days", Seq(Ref(parts))) =>
       Some(FieldReference(parts))
@@ -230,6 +297,18 @@ private[sql] final case class HoursTransform(
 }
 
 private[sql] object HoursTransform {
+  def unapply(expr: Expression): Option[FieldReference] = expr match {
+    case transform: Transform =>
+      transform match {
+        case HoursTransform(ref) =>
+          Some(ref)
+        case _ =>
+          None
+      }
+    case _ =>
+      None
+  }
+
   def unapply(transform: Transform): Option[FieldReference] = transform match {
     case NamedTransform("hours", Seq(Ref(parts))) =>
       Some(FieldReference(parts))
@@ -259,5 +338,22 @@ private[sql] final case class FieldReference(parts: Seq[String]) extends NamedRe
 private[sql] object FieldReference {
   def apply(column: String): NamedReference = {
     LogicalExpressions.parseReference(column)
+  }
+}
+
+private[sql] final case class SortValue(
+    expression: Expression,
+    direction: SortDirection,
+    nullOrdering: NullOrdering) extends SortOrder {
+
+  override def describe(): String = s"$expression $direction $nullOrdering"
+}
+
+private[sql] object SortValue {
+  def unapply(expr: Expression): Option[(Expression, SortDirection, NullOrdering)] = expr match {
+    case sort: SortOrder =>
+      Some((sort.expression, sort.direction, sort.nullOrdering))
+    case _ =>
+      None
   }
 }

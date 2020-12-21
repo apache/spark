@@ -738,8 +738,7 @@ case class AlterTableRecoverPartitionsCommand(
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
       val numParallelism = Math.min(serializedPaths.length,
-        Math.min(spark.sessionState.conf.defaultParallelism
-          .getOrElse(spark.sparkContext.defaultParallelism), 10000))
+        Math.min(spark.sparkContext.defaultParallelism, 10000))
       // gather the fast stats for all the partitions otherwise Hive metastore will list all the
       // files for all the new partitions in sequential way, which is super slow.
       logInfo(s"Gather the fast stats in parallel using $numParallelism tasks.")

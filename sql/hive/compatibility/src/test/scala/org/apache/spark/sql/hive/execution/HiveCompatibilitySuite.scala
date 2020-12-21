@@ -525,6 +525,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_xpath_short",
     "udf_xpath_string",
 
+    // [SPARK-33428][SQL] CONV UDF use BigInt to avoid Long value overflow
+    "udf_conv",
+
     // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
     "alter_rename_partition1",
     "date_1",
@@ -1003,7 +1006,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",
-    "udf_conv",
     "udf_cos",
     "udf_count",
     "udf_date_add",

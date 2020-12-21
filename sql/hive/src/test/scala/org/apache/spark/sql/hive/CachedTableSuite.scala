@@ -113,7 +113,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistentTable")
     }.getMessage
-    assert(e.contains(s"$expectedErrorMsg nonexistentTable"))
+    assert(e.contains("Table or view not found: nonexistentTable"))
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 
@@ -115,7 +116,7 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
-        throw new AnalysisException(s"undefined function $name")
+        throw QueryCompilationErrors.functionUndefinedError(name)
       }
     }
     func(children)
@@ -356,6 +357,7 @@ object FunctionRegistry {
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
+    expression[RLike]("regexp_like", true),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
     expression[Overlay]("overlay"),
@@ -622,19 +624,8 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
-            s"Invalid arguments for function $name"
-          } else {
-            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
-              validParametersCount.head.toString
-            } else {
-              validParametersCount.init.mkString("one of ", ", ", " and ") +
-                validParametersCount.last
-            }
-            s"Invalid number of arguments for function $name. " +
-              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
-          }
-          throw new AnalysisException(invalidArgumentsMsg)
+          throw QueryCompilationErrors.invalidFunctionArgumentNumberError(
+            validParametersCount, name, params)
         }
         try {
           val exp = f.newInstance(expressions : _*).asInstanceOf[Expression]
@@ -662,7 +653,7 @@ object FunctionRegistry {
       dataType: DataType): (String, (ExpressionInfo, FunctionBuilder)) = {
     val builder = (args: Seq[Expression]) => {
       if (args.size != 1) {
-        throw new AnalysisException(s"Function $name accepts only one argument")
+        throw QueryCompilationErrors.functionAcceptsOnlyOneArgumentError(name)
       }
       Cast(args.head, dataType)
     }

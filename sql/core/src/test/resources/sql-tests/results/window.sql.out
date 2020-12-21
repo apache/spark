@@ -19,6 +19,7 @@ struct<>
 -- !query output
 
 
+
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
 ('Diane Murphy','Accounting',8435),
@@ -42,6 +43,7 @@ AS basic_pays(employee_name, department, salary)
 -- !query schema
 struct<>
 -- !query output
+
 
 
 -- !query
@@ -345,7 +347,7 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table;
+Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table
 
 
 -- !query
@@ -414,7 +416,7 @@ FROM testData ORDER BY cate, val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-window aggregate function with filter predicate is not supported yet.;
+window aggregate function with filter predicate is not supported yet.
 
 
 -- !query

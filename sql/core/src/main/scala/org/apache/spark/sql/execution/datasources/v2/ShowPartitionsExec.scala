@@ -49,7 +49,7 @@ case class ShowPartitionsExec(
     val len = schema.length
     val partitions = new Array[String](len)
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
-    partitionIdentifiers.map { row =>
+    val output = partitionIdentifiers.map { row =>
       var i = 0
       while (i < len) {
         val dataType = schema(i).dataType
@@ -59,7 +59,8 @@ case class ShowPartitionsExec(
         partitions(i) = escapePathName(schema(i).name) + "=" + escapePathName(partValueStr)
         i += 1
       }
-      InternalRow(UTF8String.fromString(partitions.mkString("/")))
+      partitions.mkString("/")
     }
+    output.sorted.map(p => InternalRow(UTF8String.fromString(p)))
   }
 }
