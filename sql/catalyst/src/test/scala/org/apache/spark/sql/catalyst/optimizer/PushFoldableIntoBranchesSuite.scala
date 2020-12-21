@@ -122,7 +122,7 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), Some(TrueLiteral)))
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None), Literal(4)),
-      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
+      CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), Literal.create(null, BooleanType)))
 
     assertEquivalent(
       And(EqualTo(caseWhen, Literal(5)), EqualTo(caseWhen, Literal(6))),
@@ -130,11 +130,12 @@ class PushFoldableIntoBranchesSuite
 
     // Push down at most one branch is not foldable expressions.
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, Literal(1))), None), Literal(1)),
-      CaseWhen(Seq((a, EqualTo(b, Literal(1))), (c, TrueLiteral)), None))
+      CaseWhen(Seq((a, EqualTo(b, Literal(1))), (c, TrueLiteral)),
+        Literal.create(null, BooleanType)))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)),
-      EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), None), Literal(1)))
+      EqualTo(CaseWhen(Seq((a, b), (c, b + 1)), Literal.create(null, IntegerType)), Literal(1)))
     assertEquivalent(EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)),
-      EqualTo(CaseWhen(Seq((a, b)), None), Literal(1)))
+      CaseWhen(Seq((a, b === Literal(1))), Literal.create(null, BooleanType)))
 
     // Push down non-deterministic expressions.
     val nonDeterministic =
