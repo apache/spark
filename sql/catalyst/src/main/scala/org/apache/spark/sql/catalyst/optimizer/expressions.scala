@@ -542,14 +542,15 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
+      case a: Alias => a // Skip an alias.
       case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
-          if !u.isInstanceOf[Alias] && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+          if atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = u.withNewChildren(Array(trueValue)),
           falseValue = u.withNewChildren(Array(falseValue)))
 
       case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
-          if !u.isInstanceOf[Alias] && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+          if atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           elseValue.map(e => u.withNewChildren(Array(e))))
