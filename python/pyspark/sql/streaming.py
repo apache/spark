@@ -974,9 +974,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> csv_sdf = spark.readStream.table('input_table') # doctest: +SKIP
-        >>> csv_sdf.isStreaming # doctest: +SKIP
-        True
+        >>> spark.readStream.table('input_table') # doctest: +SKIP
         """
         if isinstance(tableName, str):
             return self._df(self._jreader.table(tableName))
@@ -1535,23 +1533,15 @@ class DataStreamWriter(object):
 
         Examples
         --------
-        >>> sq = sdf.writeStream.format('parquet').queryName('this_query').option(
-        ...      'checkpointLocation', '/tmp/checkpoint').toTable('output_table') # doctest: +SKIP
-        >>> sq.isActive # doctest: +SKIP
-        True
-        >>> sq.name # doctest: +SKIP
-        'this_query'
-        >>> sq.stop() # doctest: +SKIP
-        >>> sq.isActive # doctest: +SKIP
-        False
-        >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').toTable(
-        ...     'output_table', queryName='that_query', outputMode="append", format='parquet',
+        >>> sdf.writeStream.format('parquet').queryName('query').toTable('output_table')
+        ... # doctest: +SKIP
+
+        >>> sdf.writeStream.trigger(processingTime='5 seconds').toTable(
+        ...     'output_table',
+        ...     queryName='that_query',
+        ...     outputMode="append",
+        ...     format='parquet',
         ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
-        >>> sq.name # doctest: +SKIP
-        'that_query'
-        >>> sq.isActive # doctest: +SKIP
-        True
-        >>> sq.stop() # doctest: +SKIP
         """
         # TODO(SPARK-33659): document the current behavior for DataStreamWriter.toTable API
         self.options(**options)
