@@ -58,13 +58,11 @@ case class Product(child: Expression, scale: Double = 1.0)
     // when multiplying together many child values, without needing
     // to explicitly rescale a Column beforehand.
 
-    val castChild = child.cast(resultType)
-
     val protoResult =
       coalesce(product, one) * (scale match {
-        case 1.0 => castChild
-        case -1.0 => -castChild
-        case _ => castChild * scale
+        case 1.0 => child
+        case -1.0 => -child
+        case _ => child * scale
       })
 
     if (child.nullable) {

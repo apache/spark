@@ -38,7 +38,7 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
   }
 
   test("type flexibility") {
-    import org.apache.spark.sql.types.{ ByteType, FloatType, DoubleType, IntegerType, ShortType }
+    import org.apache.spark.sql.types.{ ByteType, DoubleType, FloatType, IntegerType, ShortType }
     val bytes16 = spark.createDataset((1 to 16).map { _.toByte })(Encoders.scalaByte)
                        .toDF("x")
 
