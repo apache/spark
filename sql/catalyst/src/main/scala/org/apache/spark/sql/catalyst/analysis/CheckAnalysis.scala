@@ -99,10 +99,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
 
       case u: UnresolvedNamespace =>
-        u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchNamespaceException(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
@@ -111,43 +111,44 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             s"$cmd expects a view.")
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"View not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
-        u.failAnalysis(
+        throw new NoSuchTableException(
           s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
-        failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       case UncacheTable(u: UnresolvedRelation, _, _) =>
-        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        throw new NoSuchTableException(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
+        throw new NoSuchTableException(s"Table or view not found: ${tblName.quoted}")
 
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
+        throw new NoSuchTableException(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+        throw new NoSuchTableException(
+          s"Table not found: ${u.originalNameParts.quoted}")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
         u.failAnalysis(
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
+        throw new NoSuchTableException(s"Table not found: ${u.originalNameParts.quoted}")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
