@@ -768,7 +768,7 @@ object SQLConf {
   val PARQUET_META_CACHE_ENABLED = buildConf("spark.sql.parquet.metadataCache.enabled")
     .doc("To indicate if enable parquet file meta cache, it is recommended to enabled " +
       "this config in long-running process mode, such as Thrift Server, default is false")
-    .version("3.1.0")
+    .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -828,13 +828,13 @@ object SQLConf {
   val ORC_META_CACHE_ENABLED = buildConf("spark.sql.orc.metadataCache.enabled")
     .doc("To indicate if enable orc file meta cache, it is recommended to enabled " +
       "this config in long-running process mode, such as Thrift Server, default is false")
-    .version("3.1.0")
+    .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
 
   val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
     buildConf("spark.sql.metadataCache.ttl.sinceLastAccess")
-      .version("3.1.0")
+      .version("3.2.0")
       .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(1000L)
