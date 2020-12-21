@@ -678,8 +678,11 @@ case class AlterTableDropPartition(
  */
 case class AlterTableRenamePartition(
     child: LogicalPlan,
-    from: TablePartitionSpec,
+    from: PartitionSpec,
     to: TablePartitionSpec) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && from.isInstanceOf[ResolvedPartitionSpec]
+
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 

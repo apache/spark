@@ -3774,7 +3774,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedTable(
         visitMultipartIdentifier(ctx.multipartIdentifier),
         "ALTER TABLE ... RENAME TO PARTITION"),
-      visitNonOptionalPartitionSpec(ctx.from),
+      UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       visitNonOptionalPartitionSpec(ctx.to))
   }
 

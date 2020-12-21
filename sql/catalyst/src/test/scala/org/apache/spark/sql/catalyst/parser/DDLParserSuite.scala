@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2108,7 +2108,7 @@ class DDLParserSuite extends AnalysisTest {
     val parsed1 = parsePlan(sql1)
     val expected1 = AlterTableRenamePartition(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME TO PARTITION"),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
+      UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
       Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed1, expected1)
 
@@ -2120,7 +2120,7 @@ class DDLParserSuite extends AnalysisTest {
     val parsed2 = parsePlan(sql2)
     val expected2 = AlterTableRenamePartition(
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO PARTITION"),
-      Map("ds" -> "2017-06-10"),
+      UnresolvedPartitionSpec(Map("ds" -> "2017-06-10")),
       Map("ds" -> "2018-06-10"))
     comparePlans(parsed2, expected2)
   }
