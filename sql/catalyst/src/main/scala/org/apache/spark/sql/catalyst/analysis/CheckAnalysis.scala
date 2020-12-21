@@ -140,8 +140,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
 
       case u: UnresolvedV2Relation =>
-        throw new NoSuchTableException(
-          s"Table not found: ${u.originalNameParts.quoted}")
+        throw new NoSuchTableException(s"Table not found: ${u.originalNameParts.quoted}")
 
       case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
         u.failAnalysis(
