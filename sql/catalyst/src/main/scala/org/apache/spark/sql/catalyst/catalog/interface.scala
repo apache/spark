@@ -161,7 +161,8 @@ case class CatalogTablePartition(
       } else {
         spec(field.name)
       }
-      Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
+      val dt = CharVarcharUtils.replaceCharVarcharWithString(field.dataType)
+      Cast(Literal(partValue), dt, Option(timeZoneId)).eval()
     })
   }
 }
