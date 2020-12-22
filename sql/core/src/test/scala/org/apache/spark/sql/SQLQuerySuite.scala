@@ -3719,7 +3719,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-33084: Add jar support ivy url in SQL") {
+  test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
     // default transitive=false, only download specified jar
     sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")

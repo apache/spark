@@ -2003,14 +2003,14 @@ class SparkContext(config: SparkConf) extends Logging {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
         val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
-          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of ivy uri"
+          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
           postEnvironmentUpdate()
         }
         if (existed.nonEmpty) {
-          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of ivy uri"
+          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
-            s" Overwriting of added jar is not supported in the current version.")
+            " Overwriting of added jar is not supported in the current version.")
         }
       }
     }

@@ -56,10 +56,10 @@ private[spark] object DependencyUtils extends Logging {
    * Parse URI query string's parameter value of `transitive` and `exclude`.
    * Other invalid parameters will be ignored.
    *
-   * @param uri Ivy uri need to be downloaded.
+   * @param uri Ivy URI need to be downloaded.
    * @return Tuple value of parameter `transitive` and `exclude` value.
    *
-   *         1. transitive: whether to download dependency jar of ivy URI, default value is false
+   *         1. transitive: whether to download dependency jar of Ivy URI, default value is false
    *            and this parameter value is case-sensitive. Invalid value will be treat as false.
    *            Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
    *            Output:  true
@@ -77,39 +77,39 @@ private[spark] object DependencyUtils extends Logging {
       val mapTokens = uriQuery.split("&").map(_.split("="))
       if (mapTokens.exists(isInvalidQueryString)) {
         throw new IllegalArgumentException(
-          s"Invalid query string in ivy uri ${uri.toString}: $uriQuery")
+          s"Invalid query string in Ivy URI ${uri.toString}: $uriQuery")
       }
       val groupedParams = mapTokens.map(kv => (kv(0), kv(1))).groupBy(_._1)
 
-      // Parse transitive parameters (e.g., transitive=true) in an ivy URL, default value is false
+      // Parse transitive parameters (e.g., transitive=true) in an Ivy URI, default value is false
       val transitiveParams = groupedParams.get("transitive")
       if (transitiveParams.map(_.size).getOrElse(0) > 1) {
-        logWarning("It's best to specify `transitive` parameter in ivy URL query only once." +
+        logWarning("It's best to specify `transitive` parameter in ivy URI query only once." +
           " If there are multiple `transitive` parameter, we will select the last one")
       }
       val transitive =
         transitiveParams.flatMap(_.takeRight(1).map(_._2 == "true").headOption).getOrElse(false)
 
       // Parse an excluded list (e.g., exclude=org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http)
-      // in an ivy URL. When download ivy URL jar, Spark won't download transitive jar
+      // in an Ivy URI. When download Ivy URI jar, Spark won't download transitive jar
       // in a excluded list.
       val exclusionList = groupedParams.get("exclude").map { params =>
         params.map(_._2).flatMap { excludeString =>
           val excludes = excludeString.split(",")
           if (excludes.map(_.split(":")).exists(isInvalidQueryString)) {
             throw new IllegalArgumentException(
-              s"Invalid exclude string in ivy uri ${uri.toString}:" +
-                s" expected 'org:module,org:module,..', found " + excludeString)
+              s"Invalid exclude string in Ivy URI ${uri.toString}:" +
+                " expected 'org:module,org:module,..', found " + excludeString)
           }
           excludes
         }.mkString(",")
       }.getOrElse("")
 
       val validParams = Set("transitive", "exclude")
-      val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq.sorted
+      val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
       if (invalidParams.nonEmpty) {
-        logWarning(s"Invalid parameters `${invalidParams.mkString(",")}` found " +
-          s"in ivy uri query `$uriQuery`.")
+        logWarning(s"Invalid parameters `${invalidParams.sorted.mkString(",")}` found " +
+          s"in Ivy URI query `$uriQuery`.")
       }
 
       (transitive, exclusionList)
@@ -117,16 +117,16 @@ private[spark] object DependencyUtils extends Logging {
   }
 
   /**
-   * Download Ivy URIs dependency jars.
+   * Download Ivy URI's dependency jars.
    *
-   * @param uri Ivy uri need to be downloaded. The URI format should be:
+   * @param uri Ivy URI need to be downloaded. The URI format should be:
    *              `ivy://group:module:version[?query]`
    *            Ivy URI query part format should be:
    *              `parameter=value&parameter=value...`
-   *            Note that currently ivy URI query part support two parameters:
-   *             1. transitive: whether to download dependent jars related to your ivy URL.
+   *            Note that currently Ivy URI query part support two parameters:
+   *             1. transitive: whether to download dependent jars related to your Ivy URI.
    *                transitive=false or `transitive=true`, if not set, the default value is false.
-   *             2. exclude: exclusion list when download ivy URL jar and dependency jars.
+   *             2. exclude: exclusion list when download Ivy URI jar and dependency jars.
    *                The `exclude` parameter content is a ',' separated `group:module` pair string :
    *                `exclude=group:module,group:module...`
    * @return Comma separated string list of jars downloaded.
@@ -136,12 +136,12 @@ private[spark] object DependencyUtils extends Logging {
     val authority = uri.getAuthority
     if (authority == null) {
       throw new IllegalArgumentException(
-        s"Invalid ivy url authority in uri ${uri.toString}:" +
-          s" Expected 'org:module:version', found null.")
+        s"Invalid Ivy URI authority in uri ${uri.toString}:" +
+          " Expected 'org:module:version', found null.")
     }
     if (authority.split(":").length != 3) {
       throw new IllegalArgumentException(
-        s"Invalid ivy uri authority in uri ${uri.toString}:" +
+        s"Invalid Ivy URI authority in uri ${uri.toString}:" +
           s" Expected 'org:module:version', found $authority.")
     }
 
