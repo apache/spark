@@ -218,6 +218,8 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       plan: => QueryPlan[_],
       subqueries: ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)]): Unit = {
     plan.foreach {
+      case a: AdaptiveSparkPlanExec =>
+        getSubqueries(a.executedPlan, subqueries)
       case p: SparkPlan =>
         p.expressions.foreach (_.collect {
           case e: PlanExpression[_] =>
