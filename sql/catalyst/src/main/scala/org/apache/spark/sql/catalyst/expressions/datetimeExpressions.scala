@@ -697,6 +697,7 @@ case class Month(child: Expression) extends GetDateField {
       > SELECT _FUNC_('2009-07-30');
        30
   """,
+  group = "datetime_funcs",
   since = "1.5.0")
 case class DayOfMonth(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getDayOfMonth
@@ -2247,6 +2248,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
   note = """
     The _FUNC_ function is equivalent to `date_part(field, source)`.
   """,
+  group = "datetime_funcs",
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class Extract(field: Expression, source: Expression, child: Expression)

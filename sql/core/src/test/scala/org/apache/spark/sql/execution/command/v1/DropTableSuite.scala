@@ -15,23 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.command
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
+trait DropTableSuiteBase extends command.DropTableSuiteBase {
+  test("purge option") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
 
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+      createTable(s"$catalog.ns.tbl")
+      checkTables("ns", "tbl")
+
+      sql(s"DROP TABLE $catalog.ns.tbl PURGE")
+      checkTables("ns") // no tables
+    }
   }
 }
+
+class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase
+

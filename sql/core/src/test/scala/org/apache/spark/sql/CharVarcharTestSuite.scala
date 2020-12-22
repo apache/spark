@@ -528,6 +528,61 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
   }
+
+  test("create table w/ location and fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val df = sql("select * from t")
+          checkAnswer(sql("select * from t"), Row("12"))
+        }
+      }
+    }
+  }
+
+  test("create table w/ location and over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val e = intercept[SparkException] { sql("select * from t").collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          checkAnswer(spark.table("t"), Row("12"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          val e = intercept[SparkException] { spark.table("t").collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
 }
 
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite

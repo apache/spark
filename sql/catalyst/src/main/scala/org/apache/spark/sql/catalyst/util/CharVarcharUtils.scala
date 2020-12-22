@@ -127,25 +127,36 @@ object CharVarcharUtils extends Logging {
   }
 
   /**
-   * Returns expressions to apply read-side char type padding for the given attributes. String
-   * values should be right-padded to N characters if it's from a CHAR(N) column/field.
+   * Returns expressions to apply read-side char type padding for the given attributes.
+   *
+   * For a CHAR(N) column/field and the length of string value is M
+   * If M > N, raise runtime error
+   * If M <= N, the value should be right-padded to N characters.
+   *
+   * For a VARCHAR(N) column/field and the length of string value is M
+   * If M > N, raise runtime error
+   * If M <= N, the value should be remained.
    */
-  def charTypePadding(output: Seq[AttributeReference]): Seq[NamedExpression] = {
+  def paddingWithLengthCheck(output: Seq[AttributeReference]): Seq[NamedExpression] = {
     output.map { attr =>
       getRawType(attr.metadata).filter { rawType =>
-        rawType.existsRecursively(_.isInstanceOf[CharType])
+        rawType.existsRecursively(dt => dt.isInstanceOf[CharType] || dt.isInstanceOf[VarcharType])
       }.map { rawType =>
-        Alias(charTypePadding(attr, rawType), attr.name)(explicitMetadata = Some(attr.metadata))
+        Alias(paddingWithLengthCheck(attr, rawType), attr.name)(
+          explicitMetadata = Some(attr.metadata))
       }.getOrElse(attr)
     }
   }
 
-  private def charTypePadding(expr: Expression, dt: DataType): Expression = dt match {
-    case CharType(length) => StringRPad(expr, Literal(length))
+  private def paddingWithLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
+    case CharType(length) => StringRPad(stringLengthCheck(expr, dt), Literal(length))
+
+    case VarcharType(_) => stringLengthCheck(expr, dt)
 
     case StructType(fields) =>
       val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-        Seq(Literal(f.name), charTypePadding(GetStructField(expr, i, Some(f.name)), f.dataType))
+        Seq(Literal(f.name),
+          paddingWithLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
       })
       if (expr.nullable) {
         If(IsNull(expr), Literal(null, struct.dataType), struct)
@@ -166,7 +177,7 @@ object CharVarcharUtils extends Logging {
   private def charTypePaddingInArray(
       arr: Expression, et: DataType, containsNull: Boolean): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(charTypePadding(param, et), Seq(param))
+    val func = LambdaFunction(paddingWithLengthCheck(param, et), Seq(param))
     ArrayTransform(arr, func)
   }
 

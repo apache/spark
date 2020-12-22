@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 /**
  * Object for grouping all error messages of the query runtime.
- * Currently it includes all [[SparkException]]s and RuntimeExceptions(e.g.
+ * Currently it includes all SparkExceptions and RuntimeExceptions(e.g.
  * UnsupportedOperationException, IllegalStateException).
  */
 object QueryExecutionErrors {
