@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Locale
 
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -29,9 +29,12 @@ import org.apache.spark.storage.StorageLevel
 
 trait BaseCacheTableExec extends V2CommandExec {
   def relationName: String
-  def dataFrameToCache: DataFrame
+  def planToCache: LogicalPlan
+  def dataFrameForCachedPlan: DataFrame
   def isLazy: Boolean
   def options: Map[String, String]
+
+  protected val sparkSession: SparkSession = sqlContext.sparkSession
 
   override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
@@ -42,20 +45,22 @@ trait BaseCacheTableExec extends V2CommandExec {
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }
 
-    val sparkSession = sqlContext.sparkSession
-    val df = dataFrameToCache
     if (storageLevelValue.nonEmpty) {
       sparkSession.sharedState.cacheManager.cacheQuery(
-        df,
+        sparkSession,
+        planToCache,
         Some(relationName),
         StorageLevel.fromString(storageLevelValue.get))
     } else {
-      sparkSession.sharedState.cacheManager.cacheQuery(df, Some(relationName))
+      sparkSession.sharedState.cacheManager.cacheQuery(
+        sparkSession,
+        planToCache,
+        Some(relationName))
     }
 
     if (!isLazy) {
-      // Performs eager caching
-      df.count()
+      // Performs eager caching.
+      dataFrameForCachedPlan.count()
     }
 
     Seq.empty
@@ -69,9 +74,13 @@ case class CacheTableExec(
     multipartIdentifier: Seq[String],
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
-  override def relationName: String = multipartIdentifier.quoted
+  override lazy val relationName: String = multipartIdentifier.quoted
 
-  override def dataFrameToCache: DataFrame = Dataset.ofRows(sqlContext.sparkSession, relation)
+  override lazy val planToCache: LogicalPlan = relation
+
+  override lazy val dataFrameForCachedPlan: DataFrame = {
+    Dataset.ofRows(sparkSession, planToCache)
+  }
 }
 
 case class CacheTableAsSelectExec(
@@ -79,11 +88,26 @@ case class CacheTableAsSelectExec(
     query: LogicalPlan,
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
-  override def relationName: String = tempViewName
+  override lazy val relationName: String = tempViewName
 
-  override def dataFrameToCache: DataFrame = {
-    val sparkSession = sqlContext.sparkSession
+  override lazy val planToCache: LogicalPlan = {
     Dataset.ofRows(sparkSession, query).createTempView(tempViewName)
+    dataFrameForCachedPlan.logicalPlan
+  }
+
+  override lazy val dataFrameForCachedPlan: DataFrame = {
     sparkSession.table(tempViewName)
   }
+}
+
+case class UncacheTableExec(
+    relation: LogicalPlan,
+    cascade: Boolean) extends V2CommandExec {
+  override def run(): Seq[InternalRow] = {
+    val sparkSession = sqlContext.sparkSession
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, relation, cascade)
+    Seq.empty
+  }
+
+  override def output: Seq[Attribute] = Seq.empty
 }

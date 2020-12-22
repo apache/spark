@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -115,8 +115,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableSetLocationStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
       if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
       }
       val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tbl, changes)

@@ -1689,6 +1689,28 @@ hence the number is not same as the number of original input rows. You'd like to
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
+### State Store and task locality
+
+The stateful operations store states for events in state stores of executors. State stores occupy resources such as memory and disk space to store the states.
+So it is more efficient to keep a state store provider running in the same executor across different streaming batches.
+Changing the location of a state store provider requires the extra overhead of loading checkpointed states. The overhead of loading state from checkpoint depends
+on the external storage and the size of the state, which tends to hurt the latency of micro-batch run. For some use cases such as processing very large state data,
+loading new state store providers from checkpointed states can be very time-consuming and inefficient.
+
+The stateful operations in Structured Streaming queries rely on the preferred location feature of Spark's RDD to run the state store provider on the same executor.
+If in the next batch the corresponding state store provider is scheduled on this executor again, it could reuse the previous states and save the time of loading checkpointed states.
+
+However, generally the preferred location is not a hard requirement and it is still possible that Spark schedules tasks to the executors other than the preferred ones.
+In this case, Spark will load state store providers from checkpointed states on new executors. The state store providers run in the previous batch will not be unloaded immediately.
+Spark runs a maintenance task which checks and unloads the state store providers that are inactive on the executors.
+
+By changing the Spark configurations related to task scheduling, for example `spark.locality.wait`, users can configure Spark how long to wait to launch a data-local task.
+For stateful operations in Structured Streaming, it can be used to let state store providers running on the same executors across batches.
+
+Specifically for built-in HDFS state store provider, users can check the state store metrics such as `loadedMapCacheHitCount` and `loadedMapCacheMissCount`. Ideally,
+it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
+User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs)

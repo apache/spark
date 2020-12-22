@@ -29,7 +29,6 @@ case class RefreshTableExec(
     catalog.invalidateTable(ident)
 
     // invalidate all caches referencing the given table
-    // TODO(SPARK-33437): re-cache the table itself once we support caching a DSv2 table
     invalidateCache()
 
     Seq.empty

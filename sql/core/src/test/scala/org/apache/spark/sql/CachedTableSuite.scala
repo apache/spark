@@ -1272,4 +1272,37 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  test("SPARK-33647: cache table support for permanent view") {
+    withView("v1") {
+      spark.catalog.clearCache()
+      sql("create or replace view v1 as select 1")
+      sql("cache table v1")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isDefined)
+      sql("create or replace view v1 as select 1, 2")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1")).isEmpty)
+      sql("cache table v1")
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("select 1, 2")).isDefined)
+    }
+  }
+
+  test("SPARK-33786: Cache's storage level should be respected when a table name is altered.") {
+    withTable("old", "new") {
+      withTempPath { path =>
+        def getStorageLevel(tableName: String): StorageLevel = {
+          val table = spark.table(tableName)
+          val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
+          cachedData.cachedRepresentation.cacheBuilder.storageLevel
+        }
+        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
+        sql(s"CREATE TABLE old USING parquet LOCATION '${path.toURI}'")
+        sql("CACHE TABLE old OPTIONS('storageLevel' 'MEMORY_ONLY')")
+        val oldStorageLevel = getStorageLevel("old")
+
+        sql("ALTER TABLE old RENAME TO new")
+        val newStorageLevel = getStorageLevel("new")
+        assert(oldStorageLevel === newStorageLevel)
+      }
+    }
+  }
 }
