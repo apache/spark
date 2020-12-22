@@ -57,7 +57,16 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // create the cross product split
-    val array = new Array[Partition](rdd1.partitions.length * rdd2.partitions.length)
+    val key = "spark.sql.cartesianPartitionNumThreshold"
+    val arrayLength = rdd1.partitions.length * rdd2.partitions.length;
+    val threshold = sparkContext.getConf.getInt(key, 0)
+    if (threshold > 0 && arrayLength >= threshold) {
+      throw new SparkException(s"CartesianRDD is trying to generate ${arrayLength} " +
+        s"partition(s), which reaches or exceeds threshold: ${threshold}. Please config " +
+        s"kylin.storage.columnar.spark-conf.spark.sql.cartesianPartitionNumThreshold " +
+        s"or avoid generating too many cartesian partitions.")
+    }
+    val array = new Array[Partition](arrayLength)
     for (s1 <- rdd1.partitions; s2 <- rdd2.partitions) {
       val idx = s1.index * numPartitionsInRdd2 + s2.index
       array(idx) = new CartesianPartition(idx, rdd1, rdd2, s1.index, s2.index)
