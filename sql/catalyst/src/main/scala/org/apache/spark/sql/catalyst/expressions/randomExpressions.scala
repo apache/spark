@@ -101,7 +101,7 @@ case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
 
   def this(child: Expression) = this(child, false)
 
-  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
+  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -151,7 +151,7 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
 
   def this(child: Expression) = this(child, false)
 
-  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
+  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
