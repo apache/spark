@@ -425,86 +425,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 IN (c2)", true)))
     }
   }
-
-  def checkRaiseErrorApplied(df: DataFrame): Unit = {
-    val re = df.queryExecution.optimizedPlan.asInstanceOf[Project].projectList.head.collect {
-      case _: RaiseError => true
-    }
-    assert(re.nonEmpty, "should apply raise_error to output")
-  }
-
-  test("create table w/ location and fit length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
-          val df = sql("select * from t")
-          checkRaiseErrorApplied(df)
-          // for non-v2 table we can track the result too
-          if (format != "foo") checkAnswer(df, Row("12"))
-        }
-      }
-    }
-  }
-
-  test("create table w/ location and over length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
-          val df = sql("select * from t")
-          checkRaiseErrorApplied(df)
-
-          // for non-v2 table we can track the Runtime error too
-          if (format != "foo") {
-            val e = intercept[SparkException] { df.collect() }
-            assert(e.getCause.getMessage.contains(
-              s"input string of length 6 exceeds $typ type length limitation: 2"))
-          }
-        }
-      }
-    }
-  }
-
-  test("alter table set location w/ fit length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
-          sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          val df = spark.table("t")
-          checkRaiseErrorApplied(df)
-
-          // for non-v2 table we can track the result too
-          if (format != "foo") checkAnswer(df, Row("12"))
-        }
-      }
-    }
-  }
-
-  test("alter table set location w/ over length values") {
-    Seq("char", "varchar").foreach { typ =>
-      withTempPath { dir =>
-        withTable("t") {
-          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
-          sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          val df = spark.table("t")
-          checkRaiseErrorApplied(df)
-
-          // for non-v2 table we can track the Runtime error too
-          if (format != "foo") {
-            val e = intercept[SparkException] { df.collect() }
-            assert(e.getCause.getMessage.contains(
-              s"input string of length 6 exceeds $typ type length limitation: 2"))
-          }
-        }
-      }
-    }
-  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
@@ -609,6 +529,76 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+  }
+
+
+  def checkRaiseErrorApplied(df: DataFrame): Unit = {
+    val re = df.queryExecution.optimizedPlan.asInstanceOf[Project].projectList.head.collect {
+      case _: RaiseError => true
+    }
+    assert(re.nonEmpty, "should apply raise_error to output")
+  }
+
+  test("create table w/ location and fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
+          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
+          val df = sql("select * from t")
+          checkRaiseErrorApplied(df)
+          checkAnswer(df, Row("12"))
+        }
+      }
+    }
+  }
+
+  test("create table w/ location and over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
+          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
+          val df = sql("select * from t")
+          checkRaiseErrorApplied(df)
+          val e = intercept[SparkException] { df.collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
+          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          val df = spark.table("t")
+          checkRaiseErrorApplied(df)
+          checkAnswer(df, Row("12"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
+          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          val df = spark.table("t")
+          checkRaiseErrorApplied(df)
+          val e = intercept[SparkException] { df.collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
   }
 }
 
