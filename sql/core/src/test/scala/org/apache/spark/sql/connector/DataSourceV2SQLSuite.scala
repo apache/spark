@@ -154,13 +154,29 @@ class DataSourceV2SQLSuite
       Array("Table Properties", "[bar=baz]", "")))
   }
 
-  test("Describe column is not supported for v2 catalog") {
-    withTable("testcat.tbl") {
-      spark.sql("CREATE TABLE testcat.tbl (id bigint) USING foo")
-      val ex = intercept[AnalysisException] {
-        spark.sql("DESCRIBE testcat.tbl id")
+  test("Describe column for v2 catalog") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val df1 = spark.sql(s"DESCRIBE $t id")
+      assert(df1.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df1.collect === Seq(
+        Row("col_name", "id"),
+        Row("data_type", "bigint"),
+        Row("comment", "NULL")))
+      val df2 = spark.sql(s"DESCRIBE $t data")
+      assert(df2.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df2.collect === Seq(
+        Row("col_name", "data"),
+        Row("data_type", "string"),
+        Row("comment", "hello")))
+
+      val e = intercept[AnalysisException] {
+        sql(s"DESCRIBE $t invalid_col")
       }
-      assert(ex.message.contains("Describing columns is not supported for v2 tables"))
+      assert(e.getMessage.contains("Column not found: invalid_col"))
     }
   }
 

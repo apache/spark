@@ -245,6 +245,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
+      ResolveAttribute(resolver) ::
       AddMetadataColumns ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::

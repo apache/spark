@@ -262,8 +262,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
-    case DescribeColumn(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("Describing columns is not supported for v2 tables.")
+    case desc @ DescribeColumn(_: ResolvedTable, column, isExtended) =>
+      DescribeColumnExec(desc.output, column, isExtended) :: Nil
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
       DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil

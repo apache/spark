@@ -235,7 +235,10 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended) =>
+    case DescribeColumn(
+        ResolvedV1TableOrViewIdentifier(ident),
+        UnresolvedAttribute(colNameParts),
+        isExtended) =>
       DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the

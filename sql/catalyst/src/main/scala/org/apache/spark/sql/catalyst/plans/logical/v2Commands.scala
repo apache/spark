@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
@@ -344,10 +344,11 @@ case class DescribeRelation(
  */
 case class DescribeColumn(
     relation: LogicalPlan,
-    colNameParts: Seq[String],
+    column: NamedExpression,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+  override lazy val references: AttributeSet = AttributeSet.empty
 }
 
 /**
