@@ -64,6 +64,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private var endPartitionOffsets: KafkaSourceOffset = _
 
+  private var latestPartitionOffsets: PartitionOffsetMap = _
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -77,6 +79,10 @@ private[kafka010] class KafkaMicroBatchStream(
     maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
   }
 
+  override def reportLatestOffset(): Offset = {
+    KafkaSourceOffset(latestPartitionOffsets)
+  }
+
   override def latestOffset(): Offset = {
     throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
@@ -84,7 +90,7 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+    latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     endPartitionOffsets = KafkaSourceOffset(readLimit match {
       case rows: ReadMaxRows =>
         rateLimit(rows.maxRows(), startPartitionOffsets, latestPartitionOffsets)
