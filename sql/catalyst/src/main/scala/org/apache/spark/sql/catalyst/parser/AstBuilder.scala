@@ -946,6 +946,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 }
                 Rollup(selectedGroupByExprs)
               } else {
+                assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
                 GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
               }
             } else {
