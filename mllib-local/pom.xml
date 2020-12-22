@@ -90,13 +90,31 @@
     </profile>
     <profile>
       <id>vectorized</id>
-      <dependencies>
-        <dependency>
-          <groupId>dev.ludovic</groupId>
-          <artifactId>vectorizedblas-blas</artifactId>
-          <version>0.1.9</version>
-        </dependency>
-      </dependencies>
+      <properties>
+        <extra.source.dir>src/vectorized/java</extra.source.dir>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-vectorized-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${extra.source.dir}</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
   <build>

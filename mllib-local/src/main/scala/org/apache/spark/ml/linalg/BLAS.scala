@@ -34,7 +34,7 @@ private[spark] object BLAS extends Serializable {
       _javaBLAS =
         try {
           // scalastyle:off classforname
-          Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
+          Class.forName("org.apache.spark.ml.linalg.VectorizedBLAS", true,
                           Option(Thread.currentThread().getContextClassLoader)
                             .getOrElse(getClass.getClassLoader))
                .newInstance()
