@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -445,6 +446,21 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val model = dt.fit(data)
 
     testDefaultReadWrite(model)
+  }
+
+  test("SPARK-33398: Load DecisionTreeClassificationModel prior to Spark 3.0") {
+    val path = testFile("ml-models/dtc-2.4.7")
+    val model = DecisionTreeClassificationModel.load(path)
+    assert(model.numClasses === 2)
+    assert(model.numFeatures === 692)
+    assert(model.numNodes === 5)
+    assert(model.featureImportances ~==
+      Vectors.sparse(692, Array(100, 434),
+        Array(0.03987240829346089, 0.9601275917065392)) absTol 1e-4)
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 
