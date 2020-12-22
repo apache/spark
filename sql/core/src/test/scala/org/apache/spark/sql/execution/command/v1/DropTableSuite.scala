@@ -31,12 +31,7 @@ trait DropTableSuiteBase extends command.DropTableSuiteBase {
       checkTables("ns") // no tables
     }
   }
-}
 
-class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase {
-  // The test fails in Hive External catalog with:
-  // org.apache.spark.sql.AnalysisException:
-  //   spark_catalog.ns.tbl is not a valid TableIdentifier as it has more than 2 name parts.
   test("SPARK-33305: DROP TABLE should also invalidate cache") {
     val t = s"$catalog.ns.tbl"
     val view = "view"
@@ -59,4 +54,6 @@ class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase {
     }
   }
 }
+
+class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase
 
