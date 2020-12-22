@@ -18,7 +18,6 @@
 package org.apache.spark.ml.linalg
 
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
-import scala.util.Try
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
@@ -43,11 +42,13 @@ object BLASBenchmark extends BenchmarkBase {
     val nativeBLAS = NetlibBLAS.getInstance
     val vectorBLAS =
       try {
+        // scalastyle:off classforname
         Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
                         Option(Thread.currentThread().getContextClassLoader)
                           .getOrElse(getClass.getClassLoader))
-            .newInstance()
-            .asInstanceOf[NetlibBLAS]
+             .newInstance()
+             .asInstanceOf[NetlibBLAS]
+        // scalastyle:on classforname
       } catch {
         case _: Throwable => new F2jBLAS
       }

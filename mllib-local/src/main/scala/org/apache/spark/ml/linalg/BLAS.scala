@@ -31,18 +31,18 @@ private[spark] object BLAS extends Serializable {
   // For level-1 function dspmv, use javaBLAS for better performance.
   private[ml] def javaBLAS: NetlibBLAS = {
     if (_javaBLAS == null) {
-      // scalastyle:off classforname
       _javaBLAS =
         try {
+          // scalastyle:off classforname
           Class.forName("dev.ludovic.blas.VectorizedBLAS", true,
                           Option(Thread.currentThread().getContextClassLoader)
                             .getOrElse(getClass.getClassLoader))
-              .newInstance()
-              .asInstanceOf[NetlibBLAS]
+               .newInstance()
+               .asInstanceOf[NetlibBLAS]
+          // scalastyle:on classforname
         } catch {
           case _: Throwable => new F2jBLAS
         }
-      // scalastyle:on classforname
     }
     _javaBLAS
   }
