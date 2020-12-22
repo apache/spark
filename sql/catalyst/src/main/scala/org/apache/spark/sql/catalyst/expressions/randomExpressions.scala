@@ -71,7 +71,7 @@ trait ExpressionWithRandomSeed {
 /**
  * A place holder expression used in random functions, will be replaced after analyze.
  */
-case class DefaultSeed() extends Expression with Unevaluable {
+case object DefaultSeed extends Expression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil
@@ -97,7 +97,7 @@ case class DefaultSeed() extends Expression with Unevaluable {
 // scalastyle:on line.size.limit
 case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(DefaultSeed(), true)
+  def this() = this(DefaultSeed, true)
 
   def this(child: Expression) = this(child, false)
 
@@ -147,7 +147,7 @@ object Rand {
 // scalastyle:on line.size.limit
 case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(DefaultSeed(), true)
+  def this() = this(DefaultSeed, true)
 
   def this(child: Expression) = this(child, false)
 
