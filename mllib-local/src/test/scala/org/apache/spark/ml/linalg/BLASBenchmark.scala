@@ -28,7 +28,7 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * 1. without sbt: bin/spark-submit --class <this class> <spark mllib test jar>
  * 2. build/sbt "mllib/test:runMain <this class>"
  * 3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "mllib/test:runMain <this class>"
- *    Results will be written to "benchmarks/UDTSerializationBenchmark-results.txt".
+ *    Results will be written to "benchmarks/BLASBenchmark-results.txt".
  * }}}
  */
 object BLASBenchmark extends BenchmarkBase {

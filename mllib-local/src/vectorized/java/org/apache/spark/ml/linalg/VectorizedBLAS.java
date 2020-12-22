@@ -367,16 +367,14 @@ public class VectorizedBLAS extends F2jBLAS {
   public void dgemm(String transa, String transb, int m, int n, int k,
       double alpha, double[] a, int lda, double[] b, int ldb,
       double beta, double[] c, int ldc) {
-    dgemm(transa, transb, m, n, k, alpha, a, 0, lda, b, 0, ldb, beta, c, ldc, 0);
+    dgemm(transa, transb, m, n, k, alpha, a, 0, lda, b, 0, ldb, beta, c, 0, ldc);
   }
 
   // c = alpha * a * b + beta * c
   @Override
   public void dgemm(String transa, String transb, int m, int n, int k,
       double alpha, double[] a, int offseta, int lda, double[] b, int offsetb, int ldb,
-      double beta, double[] c, int ldc, int offsetc) {
-    // System.out.println(String.format("dgemm(transa=%s, transb=%s, m=%s, n=%s, k=%s, alpha=%s, a=%s, lda=%s, b=%s, ldb=%s, beta=%s, c=%s, ldc=%s)",
-    //     transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc));
+      double beta, double[] c, int offsetc, int ldc) {
     if ("N".equals(transa) && "N".equals(transb)
         && m >= 0 && n >= 0 && k >= 0
         && a != null && a.length >= offseta + m * k && lda == m
