@@ -94,10 +94,13 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("empty partition string") {
+  test("null and empty string as partition values") {
     import testImplicits._
     withTable("t") {
-      val df = Seq((0, "")).toDF("a", "part")
+      val df = Seq(
+        (0, ""),
+        (1, null)
+      ).toDF("a", "part")
       df.write
         .partitionBy("part")
         .format("parquet")
@@ -107,6 +110,9 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       runShowPartitionsSql(
         "SHOW PARTITIONS t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
+      checkAnswer(spark.table("t"),
+        Row(0, null) ::
+        Row(1, null) :: Nil)
     }
   }
 }
