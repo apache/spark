@@ -533,8 +533,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
         withTable("t") {
-          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           val df = sql("select * from t")
           checkAnswer(sql("select * from t"), Row("12"))
         }
@@ -546,8 +546,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
         withTable("t") {
-          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           val e = intercept[SparkException] { sql("select * from t").collect() }
           assert(e.getCause.getMessage.contains(
             s"input string of length 6 exceeds $typ type length limitation: 2"))
@@ -560,8 +560,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
         withTable("t") {
-          sql("SELECT '12' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
           checkAnswer(spark.table("t"), Row("12"))
         }
@@ -573,8 +573,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
         withTable("t") {
-          sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
-          sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
           val e = intercept[SparkException] { spark.table("t").collect() }
           assert(e.getCause.getMessage.contains(
