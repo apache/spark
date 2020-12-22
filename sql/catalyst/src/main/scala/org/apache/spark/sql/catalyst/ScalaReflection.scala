@@ -232,7 +232,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Instant]) =>
         createDeserializerForInstant(path)
 
-      case t if t <:< localTypeOf[java.lang.Enum[_]] =>
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) =>
         createDeserializerForTypesSupportValueOf(
           Invoke(path, "toString", ObjectType(classOf[String]), returnNullable = false),
           getClassFromType(t))
