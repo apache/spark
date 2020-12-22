@@ -48,100 +48,104 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     newCatalog
   }
 
+  private def hasPartitions(table: SupportsPartitionManagement): Boolean = {
+    !table.listPartitionIdentifiers(Array.empty, InternalRow.empty).isEmpty
+  }
+
   test("createPartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("dropPartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
     val partIdent1 = InternalRow.apply("4")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 2)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("replacePartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
     assert(partTable.loadPartitionMetadata(partIdent).isEmpty)
 
     partTable.replacePartitionMetadata(partIdent, Map("paramKey" -> "paramValue").asJava)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
     assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
     assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("loadPartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
     partTable.createPartition(partIdent, Map("paramKey" -> "paramValue").asJava)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).nonEmpty)
+    assert(hasPartitions(partTable))
     assert(partTable.partitionExists(partIdent))
     assert(!partTable.loadPartitionMetadata(partIdent).isEmpty)
     assert(partTable.loadPartitionMetadata(partIdent).get("paramKey") == "paramValue")
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
   test("listPartitionIdentifiers") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
       table.name(), table.schema(), table.partitioning(), table.properties())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
 
     val partIdent1 = InternalRow.apply("4")
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 2)
-    assert(partTable.listPartitionIdentifiers(partIdent1).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
+    assert(partTable.listPartitionIdentifiers(Array("dt"), partIdent1).length == 1)
 
     partTable.dropPartition(partIdent)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).length == 1)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 1)
     partTable.dropPartition(partIdent1)
-    assert(partTable.listPartitionIdentifiers(InternalRow.empty).isEmpty)
+    assert(!hasPartitions(partTable))
   }
 
-  test("listPartitionByNames") {
+  private def createMultiPartTable(): InMemoryPartitionTable = {
     val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     val table = partCatalog.createTable(
@@ -152,14 +156,20 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
         .add("part1", StringType),
       Array(LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
       util.Collections.emptyMap[String, String])
-    val partTable = table.asInstanceOf[InMemoryPartitionTable]
 
+    val partTable = table.asInstanceOf[InMemoryPartitionTable]
     Seq(
       InternalRow(0, "abc"),
       InternalRow(0, "def"),
       InternalRow(1, "abc")).foreach { partIdent =>
       partTable.createPartition(partIdent, new util.HashMap[String, String]())
     }
+
+    partTable
+  }
+
+  test("listPartitionByNames") {
+    val partTable = createMultiPartTable()
 
     Seq(
       (Array("part0", "part1"), InternalRow(0, "abc")) -> Set(InternalRow(0, "abc")),
@@ -170,7 +180,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       (Array("part0", "part1"), InternalRow(3, "xyz")) -> Set(),
       (Array("part1"), InternalRow(3.14f)) -> Set()
     ).foreach { case ((names, idents), expected) =>
-      assert(partTable.listPartitionByNames(names, idents).toSet === expected)
+      assert(partTable.listPartitionIdentifiers(names, idents).toSet === expected)
     }
     // Check invalid parameters
     Seq(
@@ -178,7 +188,20 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       (Array("col0", "part1"), InternalRow(0, 1)),
       (Array("wrong"), InternalRow("invalid"))
     ).foreach { case (names, idents) =>
-      intercept[AssertionError](partTable.listPartitionByNames(names, idents))
+      intercept[AssertionError](partTable.listPartitionIdentifiers(names, idents))
     }
+  }
+
+  test("partitionExists") {
+    val partTable = createMultiPartTable()
+
+    assert(partTable.partitionExists(InternalRow(0, "def")))
+    assert(!partTable.partitionExists(InternalRow(-1, "def")))
+    assert(!partTable.partitionExists(InternalRow("abc", "def")))
+
+    val errMsg = intercept[IllegalArgumentException] {
+      partTable.partitionExists(InternalRow(0))
+    }.getMessage
+    assert(errMsg.contains("The identifier might not refer to one partition"))
   }
 }

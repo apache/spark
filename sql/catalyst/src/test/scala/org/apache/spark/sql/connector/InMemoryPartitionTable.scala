@@ -83,22 +83,11 @@ class InMemoryPartitionTable(
     }
   }
 
-  def listPartitionIdentifiers(ident: InternalRow): Array[InternalRow] = {
-    val prefixPartCols =
-      new StructType(partitionSchema.dropRight(partitionSchema.length - ident.numFields).toArray)
-    val prefixPart = ident.toSeq(prefixPartCols)
-    memoryTablePartitions.keySet().asScala
-      .filter(_.toSeq(partitionSchema).startsWith(prefixPart)).toArray
-  }
-
-  override def partitionExists(ident: InternalRow): Boolean =
-    memoryTablePartitions.containsKey(ident)
-
   override protected def addPartitionKey(key: Seq[Any]): Unit = {
     memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
   }
 
-  override def listPartitionByNames(
+  override def listPartitionIdentifiers(
       names: Array[String],
       ident: InternalRow): Array[InternalRow] = {
     assert(names.length == ident.numFields,

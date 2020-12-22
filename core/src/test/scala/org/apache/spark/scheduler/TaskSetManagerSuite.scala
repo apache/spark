@@ -377,8 +377,8 @@ class TaskSetManagerSuite
 
     // offers not accepted due to task set zombies are not delay schedule rejects
     manager.isZombie = true
-    val (taskDesciption, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
-    assert(taskDesciption.isEmpty)
+    val (taskDescription, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
+    assert(taskDescription.isEmpty)
     assert(delayReject === false)
     manager.isZombie = false
 
@@ -1322,7 +1322,7 @@ class TaskSetManagerSuite
 
   test("SPARK-19868: DagScheduler only notified of taskEnd when state is ready") {
     // dagScheduler.taskEnded() is async, so it may *seem* ok to call it before we've set all
-    // appropriate state, eg. isZombie.   However, this sets up a race that could go the wrong way.
+    // appropriate state, e.g. isZombie.   However, this sets up a race that could go the wrong way.
     // This is a super-focused regression test which checks the zombie state as soon as
     // dagScheduler.taskEnded() is called, to ensure we haven't introduced a race.
     sc = new SparkContext("local", "test")

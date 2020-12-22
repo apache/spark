@@ -499,7 +499,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      if (ansiEnabled) {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, zoneId))
+      } else {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      }
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -1135,15 +1139,22 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         val zid = getZoneId()
         (c, evPrim, evNull) =>
-          code"""
-          scala.Option<Integer> $intOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
-          if ($intOpt.isDefined()) {
-            $evPrim = ((Integer) $intOpt.get()).intValue();
+          if (ansiEnabled) {
+            code"""
+              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c, $zid);
+            """
           } else {
-            $evNull = true;
+            code"""
+              scala.Option<Integer> $intOpt =
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+              if ($intOpt.isDefined()) {
+                $evPrim = ((Integer) $intOpt.get()).intValue();
+              } else {
+                $evNull = true;
+              }
+            """
           }
-         """
+
       case TimestampType =>
         val zid = getZoneId()
         (c, evPrim, evNull) =>
@@ -1393,25 +1404,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       """
   }
 
-  private[this] def lowerAndUpperBound(
-      fractionType: String,
-      integralType: String): (String, String) = {
-    assert(fractionType == "float" || fractionType == "double")
-    val typeIndicator = fractionType.charAt(0)
-    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
-      case "long" => (Long.MinValue, Long.MaxValue)
-      case "int" => (Int.MinValue, Int.MaxValue)
-      case "short" => (Short.MinValue, Short.MaxValue)
-      case "byte" => (Byte.MinValue, Byte.MaxValue)
+  private[this] def lowerAndUpperBound(integralType: String): (String, String) = {
+    val (min, max, typeIndicator) = integralType.toLowerCase(Locale.ROOT) match {
+      case "long" => (Long.MinValue, Long.MaxValue, "L")
+      case "int" => (Int.MinValue, Int.MaxValue, "")
+      case "short" => (Short.MinValue, Short.MaxValue, "")
+      case "byte" => (Byte.MinValue, Byte.MaxValue, "")
     }
     (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
-  private[this] def castFractionToIntegralTypeCode(
-      fractionType: String,
-      integralType: String): CastFunction = {
+  private[this] def castFractionToIntegralTypeCode(integralType: String): CastFunction = {
     assert(ansiEnabled)
-    val (min, max) = lowerAndUpperBound(fractionType, integralType)
+    val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
     // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
@@ -1449,12 +1454,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte")
-    case _: ShortType | _: IntegerType | _: LongType if ansiEnabled =>
+    case ShortType | IntegerType | LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode("byte")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "byte")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "byte")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("byte")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
@@ -1482,12 +1485,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short")
-    case _: IntegerType | _: LongType if ansiEnabled =>
+    case IntegerType | LongType if ansiEnabled =>
       castIntegralTypeToIntegralTypeExactCode("short")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "short")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "short")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("short")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
@@ -1513,11 +1514,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int")
-    case _: LongType if ansiEnabled => castIntegralTypeToIntegralTypeExactCode("int")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "int")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "int")
+    case LongType if ansiEnabled => castIntegralTypeToIntegralTypeExactCode("int")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("int")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
@@ -1544,10 +1543,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long")
-    case _: FloatType if ansiEnabled =>
-      castFractionToIntegralTypeCode("float", "long")
-    case _: DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("double", "long")
+    case FloatType | DoubleType if ansiEnabled =>
+      castFractionToIntegralTypeCode("long")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
@@ -1758,7 +1755,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       > SELECT _FUNC_('10' as int);
        10
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "conversion_funcs")
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
 
@@ -1908,6 +1906,19 @@ object AnsiCast {
     case _ => false
   }
 
+  // Show suggestion on how to complete the disallowed explicit casting with built-in type
+  // conversion functions.
+  private def suggestionOnConversionFunctions (
+      from: DataType,
+      to: DataType,
+      functionNames: String): String = {
+    // scalastyle:off line.size.limit
+    s"""cannot cast ${from.catalogString} to ${to.catalogString}.
+       |To convert values from ${from.catalogString} to ${to.catalogString}, you can use $functionNames instead.
+       |""".stripMargin
+    // scalastyle:on line.size.limit
+  }
+
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
@@ -1915,12 +1926,19 @@ object AnsiCast {
       fallbackConfValue: String): String =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
-        // scalastyle:off line.size.limit
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString}.
-           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
-           |""".stripMargin
+        suggestionOnConversionFunctions(from, to,
+          "functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS")
 
+      case (TimestampType, _: NumericType) =>
+        suggestionOnConversionFunctions(from, to, "functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS")
+
+      case (_: NumericType, DateType) =>
+        suggestionOnConversionFunctions(from, to, "function DATE_FROM_UNIX_DATE")
+
+      case (DateType, _: NumericType) =>
+        suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
+
+      // scalastyle:off line.size.limit
       case (_: ArrayType, StringType) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.

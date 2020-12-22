@@ -785,6 +785,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.archives</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of archives to be extracted into the working directory of each executor.
+    .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory name to unpack via
+    adding <code>#</code> after the file name to unpack, for example, <code>file.zip#directory</code>.
+    This configuration is experimental.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.pyspark.driver.python</code></td>
   <td></td>
   <td>
@@ -1908,7 +1919,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerHeartbeatTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1970,16 +1980,6 @@ Apart from these, the following properties are also available, and may be useful
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td><code>spark.network.timeout</code></td>
-  <td>
-    How long for the connection to wait for ack to occur before timing
-    out and giving up. To avoid unwilling timeout caused by long pause like GC,
-    you can set larger value.
-  </td>
-  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>
@@ -2170,7 +2170,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     The timeout in seconds to wait to acquire a new executor and schedule a task before aborting a
-    TaskSet which is unschedulable because all executors are exluded due to task failures.
+    TaskSet which is unschedulable because all executors are excluded due to task failures.
   </td>
   <td>2.4.1</td>
 </tr>

@@ -56,7 +56,7 @@ private[spark] class PrometheusServlet(
   def getMetricsSnapshot(request: HttpServletRequest): String = {
     import scala.collection.JavaConverters._
 
-    val guagesLabel = """{type="gauges"}"""
+    val gaugesLabel = """{type="gauges"}"""
     val countersLabel = """{type="counters"}"""
     val metersLabel = countersLabel
     val histogramslabels = """{type="histograms"}"""
@@ -65,8 +65,8 @@ private[spark] class PrometheusServlet(
     val sb = new StringBuilder()
     registry.getGauges.asScala.foreach { case (k, v) =>
       if (!v.getValue.isInstanceOf[String]) {
-        sb.append(s"${normalizeKey(k)}Number$guagesLabel ${v.getValue}\n")
-        sb.append(s"${normalizeKey(k)}Value$guagesLabel ${v.getValue}\n")
+        sb.append(s"${normalizeKey(k)}Number$gaugesLabel ${v.getValue}\n")
+        sb.append(s"${normalizeKey(k)}Value$gaugesLabel ${v.getValue}\n")
       }
     }
     registry.getCounters.asScala.foreach { case (k, v) =>

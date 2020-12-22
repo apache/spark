@@ -127,7 +127,7 @@ object ParserUtils {
     }
   }
 
-  /** Unescape baskslash-escaped string enclosed by quotes. */
+  /** Unescape backslash-escaped string enclosed by quotes. */
   def unescapeSQLString(b: String): String = {
     var enclosure: Character = null
     val sb = new StringBuilder(b.length())

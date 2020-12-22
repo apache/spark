@@ -1425,7 +1425,8 @@ test_that("column functions", {
   c25 <- overlay(c1, c2, c3, c3) + overlay(c1, c2, c3) + overlay(c1, c2, 1) +
     overlay(c1, c2, 3, 4)
   c26 <- timestamp_seconds(c1) + vector_to_array(c) +
-    vector_to_array(c, "float32") + vector_to_array(c, "float64")
+    vector_to_array(c, "float32") + vector_to_array(c, "float64") +
+    array_to_vector(c)
   c27 <- nth_value("x", 1L) + nth_value("y", 2, TRUE) +
     nth_value(column("v"), 3) + nth_value(column("z"), 4L, FALSE)
   c28 <- asc_nulls_first(c1) + asc_nulls_last(c1) +
@@ -2883,6 +2884,15 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(nrow(result), 153)
   expect_equal(ncol(result), 2)
   detach(airquality)
+
+  # ensure long inferred names are handled without error (SPARK-26199)
+  #   test implicitly assumes eval(formals(deparse)$width.cutoff) = 60
+  #   (which has always been true as of 2020-11-15)
+  newDF <- mutate(
+    df,
+    df$age + 12345678901234567890 + 12345678901234567890 + 12345678901234
+  )
+  expect_match(tail(columns(newDF), 1L), "234567890", fixed = TRUE)
 })
 
 test_that("read/write ORC files", {
@@ -3272,6 +3282,12 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
+
+  # attach method uses deparse(); ensure no errors from a very long input
+  abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop <- df # nolint
+  attach(abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop)
+  expect_true(any(grepl("abcdefghijklmnopqrstuvwxyz", search())))
+  detach("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop")
 })
 
 test_that("with() on a DataFrame", {

@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -352,25 +353,25 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val mayebePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
+    val maybePaths = if (ctx.STRING != null) string(ctx.STRING) else remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
-          case "file" => AddFileCommand(mayebePaths)
-          case "jar" => AddJarCommand(mayebePaths)
+          case "file" => AddFileCommand(maybePaths)
+          case "jar" => AddJarCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
-            if (mayebePaths.length > 0) {
-              ListFilesCommand(mayebePaths.split("\\s+"))
+            if (maybePaths.length > 0) {
+              ListFilesCommand(maybePaths.split("\\s+"))
             } else {
               ListFilesCommand()
             }
           case "jars" | "jar" =>
-            if (mayebePaths.length > 0) {
-              ListJarsCommand(mayebePaths.split("\\s+"))
+            if (maybePaths.length > 0) {
+              ListJarsCommand(maybePaths.split("\\s+"))
             } else {
               ListJarsCommand()
             }
@@ -438,14 +439,16 @@ class SparkSqlAstBuilder extends AstBuilder {
     checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
     val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
     val location = visitLocationSpecList(ctx.locationSpec())
-    // TODO: Do not skip serde check for CREATE TABLE LIKE.
     val serdeInfo = getSerdeInfo(
-      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx, skipCheck = true)
+      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     if (provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    // TODO: remove this restriction as it seems unnecessary.
+    // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
+    // it's a bit weird to use the default file format, but it's also weird to get file format
+    // from the source table while the serde class is user-specified.
+    // Here we require both serde and format to be specified, to avoid confusion.
     serdeInfo match {
       case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
         if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
@@ -454,7 +457,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       case _ =>
     }
 
-    // TODO: also look at `HiveSerDe.getDefaultStorage`.
     val storage = toStorageFormat(location, serdeInfo, ctx)
     val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     CreateTableLikeCommand(
@@ -477,70 +479,62 @@ class SparkSqlAstBuilder extends AstBuilder {
         "Unsupported operation: Used defined record reader/writer classes.", ctx)
     }
 
-    // Decode and input/output format.
-    type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
-    def format(
-        fmt: RowFormatContext,
-        configKey: String,
-        defaultConfigValue: String): Format = fmt match {
-      case c: RowFormatDelimitedContext =>
-        // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
-        // expects a seq of pairs in which the old parsers' token names are used as keys.
-        // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
-        // retrieving the key value pairs ourselves.
-        val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
-          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs) ++
-          Option(c.linesSeparatedBy).toSeq.map { token =>
-            val value = string(token)
-            validate(
-              value == "\n",
-              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-              c)
-            "TOK_TABLEROWFORMATLINES" -> value
+    if (!conf.getConf(CATALOG_IMPLEMENTATION).equals("hive")) {
+      super.withScriptIOSchema(
+        ctx,
+        inRowFormat,
+        recordWriter,
+        outRowFormat,
+        recordReader,
+        schemaLess)
+    } else {
+      def format(
+          fmt: RowFormatContext,
+          configKey: String,
+          defaultConfigValue: String): ScriptIOFormat = fmt match {
+        case c: RowFormatDelimitedContext =>
+          getRowFormatDelimited(c)
+
+        case c: RowFormatSerdeContext =>
+          // Use a serde format.
+          val SerdeInfo(None, None, Some(name), props) = visitRowFormatSerde(c)
+
+          // SPARK-10310: Special cases LazySimpleSerDe
+          val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
+            Option(conf.getConfString(configKey, defaultConfigValue))
+          } else {
+            None
           }
+          (Seq.empty, Option(name), props.toSeq, recordHandler)
 
-        (entries, None, Seq.empty, None)
+        case null =>
+          // Use default (serde) format.
+          val name = conf.getConfString("hive.script.serde",
+            "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+          val props = Seq(
+            "field.delim" -> "\t",
+            "serialization.last.column.takes.rest" -> "true")
+          val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
+          (Nil, Option(name), props, recordHandler)
+      }
 
-      case c: RowFormatSerdeContext =>
-        // Use a serde format.
-        val SerdeInfo(None, None, Some(name), props) = visitRowFormatSerde(c)
+      val (inFormat, inSerdeClass, inSerdeProps, reader) =
+        format(
+          inRowFormat, "hive.script.recordreader",
+          "org.apache.hadoop.hive.ql.exec.TextRecordReader")
 
-        // SPARK-10310: Special cases LazySimpleSerDe
-        val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
-          Option(conf.getConfString(configKey, defaultConfigValue))
-        } else {
-          None
-        }
-        (Seq.empty, Option(name), props.toSeq, recordHandler)
+      val (outFormat, outSerdeClass, outSerdeProps, writer) =
+        format(
+          outRowFormat, "hive.script.recordwriter",
+          "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
 
-      case null =>
-        // Use default (serde) format.
-        val name = conf.getConfString("hive.script.serde",
-          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        val props = Seq(
-          "field.delim" -> "\t",
-          "serialization.last.column.takes.rest" -> "true")
-        val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
-        (Nil, Option(name), props, recordHandler)
+      ScriptInputOutputSchema(
+        inFormat, outFormat,
+        inSerdeClass, outSerdeClass,
+        inSerdeProps, outSerdeProps,
+        reader, writer,
+        schemaLess)
     }
-
-    val (inFormat, inSerdeClass, inSerdeProps, reader) =
-      format(
-        inRowFormat, "hive.script.recordreader", "org.apache.hadoop.hive.ql.exec.TextRecordReader")
-
-    val (outFormat, outSerdeClass, outSerdeProps, writer) =
-      format(
-        outRowFormat, "hive.script.recordwriter",
-        "org.apache.hadoop.hive.ql.exec.TextRecordWriter")
-
-    ScriptInputOutputSchema(
-      inFormat, outFormat,
-      inSerdeClass, outSerdeClass,
-      inSerdeProps, outSerdeProps,
-      reader, writer,
-      schemaLess)
   }
 
   /**

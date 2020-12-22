@@ -812,6 +812,14 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           right <- convert(expr2)
         } yield s"($left or $right)"
 
+      case Not(EqualTo(
+          ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value))) if useAdvanced =>
+        Some(s"$name != $value")
+
+      case Not(EqualTo(
+          ExtractableLiteral(value), ExtractAttribute(SupportedAttribute(name)))) if useAdvanced =>
+        Some(s"$value != $name")
+
       case _ => None
     }
 

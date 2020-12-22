@@ -75,11 +75,18 @@ public interface SupportsPartitionManagement extends Table {
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
      *
-     * @param ident a partition identifier
+     * @param ident a partition identifier which must contain all partition fields in order
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
-        return listPartitionIdentifiers(ident).length > 0;
+      String[] partitionNames = partitionSchema().names();
+      if (ident.numFields() == partitionNames.length) {
+        return listPartitionIdentifiers(partitionNames, ident).length > 0;
+      } else {
+        throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
+          ") in the partition identifier is not equal to the partition schema length (" +
+          partitionNames.length + "). The identifier might not refer to one partition.");
+      }
     }
 
     /**
@@ -106,19 +113,11 @@ public interface SupportsPartitionManagement extends Table {
         throws UnsupportedOperationException;
 
     /**
-     * List the identifiers of all partitions that have the ident prefix in a table.
-     *
-     * @param ident a prefix of partition identifier
-     * @return an array of Identifiers for the partitions
-     */
-    InternalRow[] listPartitionIdentifiers(InternalRow ident);
-
-    /**
      * List the identifiers of all partitions that match to the ident by names.
      *
      * @param names the names of partition values in the identifier.
      * @param ident a partition identifier values.
      * @return an array of Identifiers for the partitions
      */
-    InternalRow[] listPartitionByNames(String[] names, InternalRow ident);
+    InternalRow[] listPartitionIdentifiers(String[] names, InternalRow ident);
 }
