@@ -86,32 +86,6 @@ object BLASBenchmark extends BenchmarkBase {
       benchmark.run()
     }
 
-    runBenchmark("sdot") {
-      val n = 1e7.toInt
-      val x = Array.fill(n) { rnd.nextFloat }
-      val y = Array.fill(n) { rnd.nextFloat }
-
-      val benchmark = new Benchmark("sdot", n, iters, output = output)
-
-      benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sdot(n, x, 1, y, 1)
-      }
-
-      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
-        benchmark.addCase("native") { _ =>
-          nativeBLAS.sdot(n, x, 1, y, 1)
-        }
-      }
-
-      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
-        benchmark.addCase("vector") { _ =>
-          vectorBLAS.sdot(n, x, 1, y, 1)
-        }
-      }
-
-      benchmark.run()
-    }
-
     runBenchmark("ddot") {
       val n = 1e7.toInt
       val x = Array.fill(n) { rnd.nextDouble }
@@ -132,6 +106,32 @@ object BLASBenchmark extends BenchmarkBase {
       if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("vector") { _ =>
           vectorBLAS.ddot(n, x, 1, y, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("sdot") {
+      val n = 1e7.toInt
+      val x = Array.fill(n) { rnd.nextFloat }
+      val y = Array.fill(n) { rnd.nextFloat }
+
+      val benchmark = new Benchmark("sdot", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.sdot(n, x, 1, y, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.sdot(n, x, 1, y, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.sdot(n, x, 1, y, 1)
         }
       }
 
@@ -164,11 +164,68 @@ object BLASBenchmark extends BenchmarkBase {
       benchmark.run()
     }
 
+    runBenchmark("sscal") {
+      val n = 1e7.toInt
+      val a = rnd.nextFloat
+      val x = Array.fill(n) { rnd.nextFloat }
+
+      val benchmark = new Benchmark("sscal", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.sscal(n, a, x, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.sscal(n, a, x, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.sscal(n, a, x, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dgemv[N]") {
+      val m = 1e4.toInt
+      val n = 1e3.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(m * n) { rnd.nextDouble }
+      val lda = m
+      val x = Array.fill(n) { rnd.nextDouble }
+      val beta = rnd.nextDouble
+      val y = Array.fill(m) { rnd.nextDouble }
+
+      val benchmark = new Benchmark("dgemv[N]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
     runBenchmark("dgemv[T]") {
       val m = 1e4.toInt
       val n = 1e3.toInt
       val alpha = rnd.nextDouble
-      val a = Array.fill(n * m) { rnd.nextDouble }
+      val a = Array.fill(m * n) { rnd.nextDouble }
       val lda = m
       val x = Array.fill(m) { rnd.nextDouble }
       val beta = rnd.nextDouble
@@ -195,14 +252,144 @@ object BLASBenchmark extends BenchmarkBase {
       benchmark.run()
     }
 
+    runBenchmark("sgemv[N]") {
+      val m = 1e4.toInt
+      val n = 1e3.toInt
+      val alpha = rnd.nextFloat
+      val a = Array.fill(m * n) { rnd.nextFloat }
+      val lda = m
+      val x = Array.fill(n) { rnd.nextFloat }
+      val beta = rnd.nextFloat
+      val y = Array.fill(m) { rnd.nextFloat }
+
+      val benchmark = new Benchmark("sgemv[N]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.sgemv("N", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("sgemv[T]") {
+      val m = 1e4.toInt
+      val n = 1e3.toInt
+      val alpha = rnd.nextFloat
+      val a = Array.fill(m * n) { rnd.nextFloat }
+      val lda = m
+      val x = Array.fill(m) { rnd.nextFloat }
+      val beta = rnd.nextFloat
+      val y = Array.fill(n) { rnd.nextFloat }
+
+      val benchmark = new Benchmark("sgemv[T]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.sgemv("T", m, n, alpha, a, lda, x, 1, beta, y, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dgemm[N,N]") {
+      val m = 1e3.toInt
+      val n = 1e2.toInt
+      val k = 1e3.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(m * k) { rnd.nextDouble }
+      val lda = m
+      val b = Array.fill(k * n) { rnd.nextDouble }
+      val ldb = k
+      val beta = rnd.nextDouble
+      val c = Array.fill(m * n) { rnd.nextDouble }
+      var ldc = m
+
+      val benchmark = new Benchmark("dgemm[N,N]", m*n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dgemm("N", "N", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dgemm[N,T]") {
+      val m = 1e3.toInt
+      val n = 1e2.toInt
+      val k = 1e3.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(m * k) { rnd.nextDouble }
+      val lda = m
+      val b = Array.fill(k * n) { rnd.nextDouble }
+      val ldb = n
+      val beta = rnd.nextDouble
+      val c = Array.fill(m * n) { rnd.nextDouble }
+      var ldc = m
+
+      val benchmark = new Benchmark("dgemm[N,T]", m*n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dgemm("N", "T", m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
+        }
+      }
+
+      benchmark.run()
+    }
+
     runBenchmark("dgemm[T,N]") {
       val m = 1e3.toInt
       val n = 1e2.toInt
       val k = 1e3.toInt
       val alpha = rnd.nextDouble
-      val a = Array.fill(k * m) { rnd.nextDouble }
+      val a = Array.fill(m * k) { rnd.nextDouble }
       val lda = k
-      val b = Array.fill(n * k) { rnd.nextDouble }
+      val b = Array.fill(k * n) { rnd.nextDouble }
       val ldb = k
       val beta = rnd.nextDouble
       val c = Array.fill(m * n) { rnd.nextDouble }
