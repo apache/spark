@@ -96,7 +96,7 @@ public enum TableCapability {
   /**
    * Signals that the table supports append writes using the V1 InsertableRelation interface.
    * <p>
-   * Tables that return this capability must create a V1WriteBuilder and may also support additional
+   * Tables that return this capability must create a V1Write and may also support additional
    * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
    * {@link #OVERWRITE_DYNAMIC}.
    */
