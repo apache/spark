@@ -67,10 +67,6 @@ class InMemoryPartitionTable(
     }
   }
 
-  override def purgePartition(ident: InternalRow): Boolean = {
-    throw new UnsupportedOperationException("Partition purge is not supported")
-  }
-
   def replacePartitionMetadata(ident: InternalRow, properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.put(ident, properties)

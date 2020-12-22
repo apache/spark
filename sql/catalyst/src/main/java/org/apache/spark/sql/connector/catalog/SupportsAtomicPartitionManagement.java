@@ -98,7 +98,11 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @return true if partitions were deleted, false if any partition not exists
    * @throws NoSuchPartitionException If any partition identifier to alter doesn't exist
    * @throws UnsupportedOperationException If partition purging is not supported
+   *
+   * @since 3.2.0
    */
-  boolean purgePartitions(InternalRow[] idents)
-    throws NoSuchPartitionException, UnsupportedOperationException;
+  default boolean purgePartitions(InternalRow[] idents)
+    throws NoSuchPartitionException, UnsupportedOperationException {
+    throw new UnsupportedOperationException("Partition purge is not supported");
+  }
 }

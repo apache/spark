@@ -83,9 +83,13 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if a partition was deleted, false if no partition exists for the identifier
      * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
      * @throws UnsupportedOperationException If partition purging is not supported
+     *
+     * @since 3.2.0
      */
-    boolean purgePartition(InternalRow ident)
-      throws NoSuchPartitionException, UnsupportedOperationException;
+    default boolean purgePartition(InternalRow ident)
+      throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition purge is not supported");
+    }
 
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
