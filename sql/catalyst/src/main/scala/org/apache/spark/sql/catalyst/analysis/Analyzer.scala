@@ -2999,7 +2999,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
-        case e: ExpressionWithRandomSeed if e.seedExpression == DefaultSeed =>
+        case e: ExpressionWithRandomSeed if e.seedExpression == UnresolvedSeed =>
           e.withNewSeed(random.nextLong())
       }
     }
