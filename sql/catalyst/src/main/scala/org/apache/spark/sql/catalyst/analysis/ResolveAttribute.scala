@@ -19,13 +19,15 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.catalog.V1Table
 
 /**
  * Resolve [[UnresolvedAttribute]] in column related commands.
  */
 case class ResolveAttribute(resolver: Resolver) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r @ DescribeColumn(ResolvedTable(_, _, table), UnresolvedAttribute(colNameParts), _) =>
+    case r @ DescribeColumn(ResolvedTable(_, _, table), UnresolvedAttribute(colNameParts), _)
+        if !table.isInstanceOf[V1Table] =>
       table.schema().toAttributes.resolve(colNameParts, resolver).map { resolvedCol =>
         r.copy(column = resolvedCol)
       }.getOrElse(r)
