@@ -1,20 +1,20 @@
-TakeOrderedAndProject [count(1)]
-  WholeStageCodegen (5)
-    HashAggregate [count] [count,count(1),count(1)]
+WholeStageCodegen (5)
+  Sort [count(1)]
+    HashAggregate [count] [count(1),count(1),count]
       InputAdapter
         Exchange #1
           WholeStageCodegen (4)
             HashAggregate [count,count]
               Project
-                BroadcastHashJoin [hd_demo_sk,ss_hdemo_sk]
+                BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                   Project [ss_hdemo_sk]
-                    BroadcastHashJoin [s_store_sk,ss_store_sk]
+                    BroadcastHashJoin [ss_store_sk,s_store_sk]
                       Project [ss_hdemo_sk,ss_store_sk]
                         BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
                           Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.store_sales [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
+                                Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                           InputAdapter
                             BroadcastExchange #2
                               WholeStageCodegen (1)
@@ -22,7 +22,7 @@ TakeOrderedAndProject [count(1)]
                                   Filter [t_hour,t_minute,t_time_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.time_dim [t_hour,t_minute,t_time_sk]
+                                        Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
                       InputAdapter
                         BroadcastExchange #3
                           WholeStageCodegen (2)
@@ -30,12 +30,12 @@ TakeOrderedAndProject [count(1)]
                               Filter [s_store_name,s_store_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store [s_store_name,s_store_sk]
+                                    Scan parquet default.store [s_store_sk,s_store_name]
                   InputAdapter
                     BroadcastExchange #4
                       WholeStageCodegen (3)
                         Project [hd_demo_sk]
-                          Filter [hd_demo_sk,hd_dep_count]
+                          Filter [hd_dep_count,hd_demo_sk]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]

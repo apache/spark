@@ -54,11 +54,10 @@ object SqlResourceSuite {
       SQLPlanMetric(NUMBER_OF_OUTPUT_ROWS, 4, ""),
       SQLPlanMetric(SIZE_OF_FILES_READ, 5, ""))))
 
+  val edges: Seq[SparkPlanGraphEdge] = Seq(SparkPlanGraphEdge(3, 2))
+
   val nodesWhenCodegenIsOff: Seq[SparkPlanGraphNode] =
     SparkPlanGraph(nodes, edges).allNodes.filterNot(_.name == WHOLE_STAGE_CODEGEN_1)
-
-  val edges: Seq[SparkPlanGraphEdge] =
-    Seq(SparkPlanGraphEdge(3, 2))
 
   val metrics: Seq[SQLPlanMetric] = {
     Seq(SQLPlanMetric(DURATION, 0, ""),

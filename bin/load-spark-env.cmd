@@ -24,7 +24,7 @@ rem conf\ subdirectory.
 if not defined SPARK_ENV_LOADED (
   set SPARK_ENV_LOADED=1
 
-  if [%SPARK_CONF_DIR%] == [] (
+  if not defined SPARK_CONF_DIR (
     set SPARK_CONF_DIR=%~dp0..\conf
   )
 
@@ -36,8 +36,8 @@ rem Setting SPARK_SCALA_VERSION if not already set.
 set SCALA_VERSION_1=2.13
 set SCALA_VERSION_2=2.12
 
-set ASSEMBLY_DIR1=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%
-set ASSEMBLY_DIR2=%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%
+set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_1%"
+set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-%SCALA_VERSION_2%"
 set ENV_VARIABLE_DOC=https://spark.apache.org/docs/latest/configuration.html#environment-variables
 
 if not defined SPARK_SCALA_VERSION (

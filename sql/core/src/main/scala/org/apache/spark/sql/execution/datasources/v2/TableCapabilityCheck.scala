@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -48,14 +49,14 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
 
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.
-      case AppendData(r: DataSourceV2Relation, _, _, _) if !supportsBatchWrite(r.table) =>
+      case AppendData(r: DataSourceV2Relation, _, _, _, _) if !supportsBatchWrite(r.table) =>
         failAnalysis(s"Table ${r.table.name()} does not support append in batch mode.")
 
-      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _)
+      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _, _)
         if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
         failAnalysis(s"Table ${r.table.name()} does not support dynamic overwrite in batch mode.")
 
-      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _) =>
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!supportsBatchWrite(r.table) ||

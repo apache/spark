@@ -21,7 +21,7 @@ import java.io.File
 import java.time.ZoneOffset
 
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
@@ -183,7 +183,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
                 // This is the important assert.  Column stats are written, but they are ignored
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
-                // assert makes sure this holds even if we change parquet versions (if eg. there
+                // assert makes sure this holds even if we change parquet versions (if e.g. there
                 // were ever statistics even on unsigned columns).
                 assert(!oneBlockColumnMeta.getStatistics.hasNonNullValue)
               }

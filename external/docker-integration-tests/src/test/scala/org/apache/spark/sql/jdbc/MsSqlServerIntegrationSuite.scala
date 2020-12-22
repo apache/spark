@@ -24,10 +24,19 @@ import java.util.Properties
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
+ * {{{
+ *   MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mcr.microsoft.com/mssql/server:2019-GA-ubuntu-16.04"
+    override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
+      "mcr.microsoft.com/mssql/server:2019-GA-ubuntu-16.04")
     override val env = Map(
       "SA_PASSWORD" -> "Sapass123",
       "ACCEPT_EULA" -> "Y"

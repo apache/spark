@@ -173,7 +173,7 @@ Input [14]: [ss_customer_sk#2, ss_net_paid#5, s_store_name#10, s_state#12, s_zip
 Output [3]: [ca_state#27, ca_zip#28, ca_country#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_zip), IsNotNull(ca_country)]
+PushedFilters: [IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_state:string,ca_zip:string,ca_country:string>
 
 (30) ColumnarToRow [codegen id : 5]
@@ -181,7 +181,7 @@ Input [3]: [ca_state#27, ca_zip#28, ca_country#29]
 
 (31) Filter [codegen id : 5]
 Input [3]: [ca_state#27, ca_zip#28, ca_country#29]
-Condition : (isnotnull(ca_zip#28) AND isnotnull(ca_country#29))
+Condition : (isnotnull(ca_country#29) AND isnotnull(ca_zip#28))
 
 (32) BroadcastExchange
 Input [3]: [ca_state#27, ca_zip#28, ca_country#29]

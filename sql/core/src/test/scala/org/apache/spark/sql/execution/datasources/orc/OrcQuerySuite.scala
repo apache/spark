@@ -136,7 +136,7 @@ abstract class OrcQueryTest extends OrcTest {
       assertResult(10) {
         sql("SELECT name, contacts FROM t where age > 5")
           .rdd
-          .flatMap(_.getAs[Seq[_]]("contacts"))
+          .flatMap(_.getAs[scala.collection.Seq[_]]("contacts"))
           .count()
       }
 
@@ -148,7 +148,7 @@ abstract class OrcQueryTest extends OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
         assert(df.count() === 2)
         assertResult(4) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[scala.collection.Seq[_]]("contacts")).count()
         }
       }
 
@@ -160,7 +160,7 @@ abstract class OrcQueryTest extends OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
         assert(df.count() === 3)
         assertResult(6) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[scala.collection.Seq[_]]("contacts")).count()
         }
       }
     }
@@ -217,7 +217,6 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
-  // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
       spark.range(0, 10).write

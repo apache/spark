@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Unary
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -45,7 +45,8 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  */
 case class UnresolvedRelation(
     multipartIdentifier: Seq[String],
-    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val isStreaming: Boolean = false)
   extends LeafNode with NamedRelation {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -60,6 +61,14 @@ case class UnresolvedRelation(
 }
 
 object UnresolvedRelation {
+  def apply(
+      tableIdentifier: TableIdentifier,
+      extraOptions: CaseInsensitiveStringMap,
+      isStreaming: Boolean): UnresolvedRelation = {
+    UnresolvedRelation(
+      tableIdentifier.database.toSeq :+ tableIdentifier.table, extraOptions, isStreaming)
+  }
+
   def apply(tableIdentifier: TableIdentifier): UnresolvedRelation =
     UnresolvedRelation(tableIdentifier.database.toSeq :+ tableIdentifier.table)
 }
@@ -184,7 +193,7 @@ object UnresolvedAttribute {
    * Escape character is not supported now, so we can't use backtick inside name part.
    */
   def parseAttributeName(name: String): Seq[String] = {
-    def e = new AnalysisException(s"syntax error in attribute name: $name")
+    def e = QueryCompilationErrors.attributeNameSyntaxError(name)
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
     var inBacktick = false
@@ -236,13 +245,13 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateGeneratorError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForGeneratorError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot terminate expression: $this")
+    throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 }
 
 case class UnresolvedFunction(
@@ -255,12 +264,14 @@ case class UnresolvedFunction(
   override def children: Seq[Expression] = arguments ++ filter.toSeq
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
   override def prettyName: String = name.unquotedString
-  override def toString: String = s"'$name(${children.mkString(", ")})"
+  override def toString: String = {
+    val distinct = if (isDistinct) "distinct " else ""
+    s"'$name($distinct${children.mkString(", ")})"
+  }
 }
 
 object UnresolvedFunction {
@@ -347,13 +358,13 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
         }
 
         case _ =>
-          throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
-            target.get + "`")
+          throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
+      throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
+        targetString, from)
     }
   }
 
@@ -443,7 +454,6 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def right: Expression = extraction
 
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
@@ -513,14 +523,12 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
 
   override def child: Expression = deserializer
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
@@ -538,7 +546,6 @@ case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpr
 case class UnresolvedOrdinal(ordinal: Int)
     extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }

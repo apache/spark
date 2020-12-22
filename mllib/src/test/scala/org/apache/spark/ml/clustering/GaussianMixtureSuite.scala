@@ -181,7 +181,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  test("multivariate data and check againt R mvnormalmixEM") {
+  test("multivariate data and check against R mvnormalmixEM") {
     /*
       Using the following R code to generate data and train the model using mixtools package.
       library(mvtnorm)
@@ -284,17 +284,6 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
     testClusteringModelSingleProbabilisticPrediction(model, model.predictProbability, dataset,
       model.getFeaturesCol, model.getProbabilityCol)
-  }
-
-  test("GMM on blocks") {
-    Seq(dataset, sparseDataset, denseDataset, rDataset).foreach { dataset =>
-      val gmm = new GaussianMixture().setK(k).setMaxIter(20).setBlockSize(1).setSeed(seed)
-      val model = gmm.fit(dataset)
-      Seq(2, 4, 8, 16, 32).foreach { blockSize =>
-        val model2 = gmm.setBlockSize(blockSize).fit(dataset)
-        modelEquals(model, model2)
-      }
-    }
   }
 }
 

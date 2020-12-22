@@ -37,7 +37,11 @@ object AttributeSet {
   val empty = apply(Iterable.empty)
 
   /** Constructs a new [[AttributeSet]] that contains a single [[Attribute]]. */
-  def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
+  def apply(a: Attribute): AttributeSet = {
+    val baseSet = new mutable.LinkedHashSet[AttributeEquals]
+    baseSet += new AttributeEquals(a)
+    new AttributeSet(baseSet)
+  }
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Iterable[Expression]): AttributeSet = {
@@ -47,7 +51,7 @@ object AttributeSet {
   /** Constructs a new [[AttributeSet]] given a sequence of [[AttributeSet]]s. */
   def fromAttributeSets(sets: Iterable[AttributeSet]): AttributeSet = {
     val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())( _ ++= _.baseSet)
-    new AttributeSet(baseSet.toSet)
+    new AttributeSet(baseSet)
   }
 }
 
@@ -62,7 +66,7 @@ object AttributeSet {
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */
-class AttributeSet private (val baseSet: Set[AttributeEquals])
+class AttributeSet private (private val baseSet: mutable.LinkedHashSet[AttributeEquals])
   extends Iterable[Attribute] with Serializable {
 
   override def hashCode: Int = baseSet.hashCode()
@@ -101,10 +105,12 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
    */
   def --(other: Iterable[NamedExpression]): AttributeSet = {
     other match {
+      // SPARK-32755: `--` method behave differently under scala 2.12 and 2.13,
+      // use a Scala 2.12 based code to maintains the insertion order in Scala 2.13
       case otherSet: AttributeSet =>
-        new AttributeSet(baseSet -- otherSet.baseSet)
+        new AttributeSet(baseSet.clone() --= otherSet.baseSet)
       case _ =>
-        new AttributeSet(baseSet -- other.map(a => new AttributeEquals(a.toAttribute)))
+        new AttributeSet(baseSet.clone() --= other.map(a => new AttributeEquals(a.toAttribute)))
     }
   }
 

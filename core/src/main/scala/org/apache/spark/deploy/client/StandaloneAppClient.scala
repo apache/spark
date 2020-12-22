@@ -175,15 +175,15 @@ private[spark] class StandaloneAppClient(
           cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
-      case ExecutorUpdated(id, state, message, exitStatus, workerLost) =>
+      case ExecutorUpdated(id, state, message, exitStatus, workerHost) =>
         val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
-          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerLost)
+          listener.executorRemoved(fullId, message.getOrElse(""), exitStatus, workerHost)
         } else if (state == ExecutorState.DECOMMISSIONED) {
           listener.executorDecommissioned(fullId,
-            ExecutorDecommissionInfo(message.getOrElse(""), isHostDecommissioned = workerLost))
+            ExecutorDecommissionInfo(message.getOrElse(""), workerHost))
         }
 
       case WorkerRemoved(id, host, message) =>

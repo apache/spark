@@ -182,8 +182,7 @@ if [[ "$1" == "package" ]]; then
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
+  shasum -a 512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
   ZINC_PORT=3035
@@ -275,6 +274,9 @@ if [[ "$1" == "package" ]]; then
   # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
   # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
 
+  # NOTE: Don't forget to update the valid combinations of distributions at
+  #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
+  #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
   BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
@@ -282,13 +284,12 @@ if [[ "$1" == "package" ]]; then
     if [[ $SPARK_VERSION < "3.0." ]]; then
       BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     else
-      BINARY_PKGS_ARGS["hadoop2.7-hive1.2"]="-Phadoop-2.7 -Phive-1.2 $HIVE_PROFILES"
       BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
     fi
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
   if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
     key="without-hadoop-scala-2.11"
@@ -451,7 +452,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-    echo "Uplading files to $nexus_upload"
+    echo "Uploading files to $nexus_upload"
     for file in $(find . -type f)
     do
       # strip leading ./

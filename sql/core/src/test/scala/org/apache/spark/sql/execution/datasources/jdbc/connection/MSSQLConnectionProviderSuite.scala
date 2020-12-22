@@ -17,35 +17,35 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
+import java.sql.Driver
+
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+
 class MSSQLConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded default parser must set authentication if not set") {
-    val driver = registerDriver(MSSQLConnectionProvider.driverClass)
-    val defaultProvider = new MSSQLConnectionProvider(
-      driver, options("jdbc:sqlserver://localhost/mssql"))
-    val customProvider = new MSSQLConnectionProvider(
-      driver, options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
+    val provider = new MSSQLConnectionProvider()
+    val driver = registerDriver(provider.driverClass)
 
-    testProviders(defaultProvider, customProvider)
+    testProviders(driver, provider, options("jdbc:sqlserver://localhost/mssql"),
+      options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
   }
 
   test("setAuthenticationConfigIfNeeded custom parser must set authentication if not set") {
-    val parserMethod = "IntentionallyNotExistingMethod"
-    val driver = registerDriver(MSSQLConnectionProvider.driverClass)
-    val defaultProvider = new MSSQLConnectionProvider(
-      driver, options("jdbc:sqlserver://localhost/mssql"), parserMethod)
-    val customProvider = new MSSQLConnectionProvider(
-      driver,
-      options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"),
-      parserMethod)
+    val provider = new MSSQLConnectionProvider() {
+      override val parserMethod: String = "IntentionallyNotExistingMethod"
+    }
+    val driver = registerDriver(provider.driverClass)
 
-    testProviders(defaultProvider, customProvider)
+    testProviders(driver, provider, options("jdbc:sqlserver://localhost/mssql"),
+      options("jdbc:sqlserver://localhost/mssql;jaasConfigurationName=custommssql"))
   }
 
   private def testProviders(
-      defaultProvider: SecureConnectionProvider,
-      customProvider: SecureConnectionProvider) = {
-    assert(defaultProvider.appEntry !== customProvider.appEntry)
-    testSecureConnectionProvider(defaultProvider)
-    testSecureConnectionProvider(customProvider)
+      driver: Driver,
+      provider: SecureConnectionProvider,
+      defaultOptions: JDBCOptions,
+      customOptions: JDBCOptions) = {
+    testSecureConnectionProvider(provider, driver, defaultOptions)
+    testSecureConnectionProvider(provider, driver, customOptions)
   }
 }

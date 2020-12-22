@@ -35,8 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS
+import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -47,7 +46,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class StreamSuite extends StreamTest {
@@ -1065,13 +1064,13 @@ class StreamSuite extends StreamTest {
   }
 
   test("SPARK-30657: streaming limit should not apply on limits on state subplans") {
-    val streanData = MemoryStream[Int]
-    val streamingDF = streanData.toDF().toDF("value")
+    val streamData = MemoryStream[Int]
+    val streamingDF = streamData.toDF().toDF("value")
     val staticDF = spark.createDataset(Seq(1)).toDF("value").orderBy("value")
     testStream(streamingDF.join(staticDF.limit(1), "value"))(
-      AddData(streanData, 1, 2, 3),
+      AddData(streamData, 1, 2, 3),
       CheckAnswer(Row(1)),
-      AddData(streanData, 1, 3, 5),
+      AddData(streamData, 1, 3, 5),
       CheckAnswer(Row(1), Row(1)))
   }
 
@@ -1135,7 +1134,7 @@ class StreamSuite extends StreamTest {
     verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
 
     verifyLocalLimit(
-      inputDF.groupBy().count().limit(1),
+      inputDF.groupBy("value").count().limit(1),
       expectStreamingLimit = false,
       outputMode = OutputMode.Complete())
   }
@@ -1268,7 +1267,7 @@ class StreamSuite extends StreamTest {
 }
 
 abstract class FakeSource extends StreamSourceProvider {
-  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+  private val fakeSchema = StructType(StructField("a", LongType) :: Nil)
 
   override def sourceSchema(
       spark: SQLContext,
@@ -1290,7 +1289,7 @@ class FakeDefaultSource extends FakeSource {
     new Source {
       private var offset = -1L
 
-      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+      override def schema: StructType = StructType(StructField("a", LongType) :: Nil)
 
       override def getOffset: Option[Offset] = {
         if (offset >= 10) {

@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 
 /**
  * The data type representing `Double` values. Please use the singleton `DataTypes.DoubleType`.
@@ -38,7 +39,7 @@ class DoubleType private() extends FractionalType {
   private[sql] val numeric = implicitly[Numeric[Double]]
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering =
-    (x: Double, y: Double) => java.lang.Double.compare(x, y)
+    (x: Double, y: Double) => SQLOrderingUtil.compareDoubles(x, y)
   private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 
   override private[sql] def exactNumeric = DoubleExactNumeric

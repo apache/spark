@@ -105,12 +105,15 @@ object MLUtils extends Logging {
   }
 
   private[spark] def parseLibSVMFile(
-      sparkSession: SparkSession, paths: Seq[String]): RDD[(Double, Array[Int], Array[Double])] = {
+      sparkSession: SparkSession,
+      paths: Seq[String],
+      options: Map[String, String]): RDD[(Double, Array[Int], Array[Double])] = {
     val lines = sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
-        className = classOf[TextFileFormat].getName
+        className = classOf[TextFileFormat].getName,
+        options = options ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
       ).resolveRelation(checkFilesExist = false))
       .select("value")
 

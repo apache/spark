@@ -69,11 +69,11 @@ INSERT INTO students VALUES
     ('Amy Smith', '123 Park Ave, San Jose', 111111);
 
 SELECT * FROM students;
-+---------+---------------------+----------+
-|     name|              address|student_id|
-+---------+---------------------+----------+
-|Amy Smith|123 Park Ave,San Jose|    111111|
-+---------+---------------------+----------+
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Amy Smith|123 Park Ave, San Jose|    111111|
++---------+----------------------+----------+
 ```
 
 #### Multi-Row Insert Using a VALUES Clause
@@ -100,29 +100,29 @@ SELECT * FROM students;
 ```sql
 -- Assuming the persons table has already been created and populated.
 SELECT * FROM persons;
-+-------------+-------------------------+---------+
-|         name|                  address|      ssn|
-+-------------+-------------------------+---------+
-|Dora Williams|134 Forest Ave, Melo Park|123456789|
-+-------------+-------------------------+---------+
-|  Eddie Davis|  245 Market St, Milpitas|345678901|
-+-------------+-------------------------+---------+
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
 
 INSERT INTO students PARTITION (student_id = 444444)
     SELECT name, address FROM persons WHERE name = "Dora Williams";
 
 SELECT * FROM students;
-+-------------+-------------------------+----------+
-|         name|                  address|student_id|
-+-------------+-------------------------+----------+
-|    Amy Smith|   123 Park Ave, San Jose|    111111|
-+-------------+-------------------------+----------+
-|    Bob Brown| 456 Taylor St, Cupertino|    222222|
-+-------------+-------------------------+----------+
-|Cathy Johnson|  789 Race Ave, Palo Alto|    333333|
-+-------------+-------------------------+----------+
-|Dora Williams|134 Forest Ave, Melo Park|    444444|
-+-------------+-------------------------+----------+
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
++-------------+--------------------------+----------+
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
++-------------+--------------------------+----------+
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    444444|
++-------------+--------------------------+----------+
 ```
 
 #### Insert Using a TABLE Statement
@@ -141,21 +141,21 @@ SELECT * FROM visiting_students;
 INSERT INTO students TABLE visiting_students;
 
 SELECT * FROM students;
-+-------------+-------------------------+----------+
-|         name|                  address|student_id|
-+-------------+-------------------------+----------+
-|    Amy Smith|    123 Park Ave,San Jose|    111111|
-+-------------+-------------------------+----------+
-|    Bob Brown| 456 Taylor St, Cupertino|    222222|
-+-------------+-------------------------+----------+
-|Cathy Johnson|  789 Race Ave, Palo Alto|    333333|
-+-------------+-------------------------+----------+
-|Dora Williams|134 Forest Ave, Melo Park|    444444|
-+-------------+-------------------------+----------+
-|Fleur Laurent|    345 Copper St, London|    777777|
-+-------------+-------------------------+----------+
-|Gordon Martin|     779 Lake Ave, Oxford|    888888|
-+-------------+-------------------------+----------+
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
++-------------+--------------------------+----------+
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
++-------------+--------------------------+----------+
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    444444|
++-------------+--------------------------+----------+
+|Fleur Laurent|     345 Copper St, London|    777777|
++-------------+--------------------------+----------+
+|Gordon Martin|      779 Lake Ave, Oxford|    888888|
++-------------+--------------------------+----------+
 ```
 
 #### Insert Using a FROM Statement
@@ -177,25 +177,25 @@ INSERT INTO students
      FROM applicants SELECT name, address, id applicants WHERE qualified = true;
 
 SELECT * FROM students;
-+-------------+-------------------------+----------+
-|         name|                  address|student_id|
-+-------------+-------------------------+----------+
-|    Amy Smith|   123 Park Ave, San Jose|    111111|
-+-------------+-------------------------+----------+
-|    Bob Brown| 456 Taylor St, Cupertino|    222222|
-+-------------+-------------------------+----------+
-|Cathy Johnson|  789 Race Ave, Palo Alto|    333333|
-+-------------+-------------------------+----------+
-|Dora Williams|134 Forest Ave, Melo Park|    444444|
-+-------------+-------------------------+----------+
-|Fleur Laurent|    345 Copper St, London|    777777|
-+-------------+-------------------------+----------+
-|Gordon Martin|     779 Lake Ave, Oxford|    888888|
-+-------------+-------------------------+----------+
-|  Helen Davis|469 Mission St, San Diego|    999999|
-+-------------+-------------------------+----------+
-|   Jason Wang|    908 Bird St, Saratoga|    121212|
-+-------------+-------------------------+----------+
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
++-------------+--------------------------+----------+
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
++-------------+--------------------------+----------+
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    444444|
++-------------+--------------------------+----------+
+|Fleur Laurent|     345 Copper St, London|    777777|
++-------------+--------------------------+----------+
+|Gordon Martin|      779 Lake Ave, Oxford|    888888|
++-------------+--------------------------+----------+
+|  Helen Davis| 469 Mission St, San Diego|    999999|
++-------------+--------------------------+----------+
+|   Jason Wang|     908 Bird St, Saratoga|    121212|
++-------------+--------------------------+----------+
 ```
 
 ### Related Statements

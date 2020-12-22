@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.types
 
-import java.lang.{Long => JLong}
-import java.math.{BigInteger, MathContext, RoundingMode}
+import java.math.{BigDecimal => JavaBigDecimal, BigInteger, MathContext, RoundingMode}
 
 import scala.util.Try
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A mutable implementation of BigDecimal that can hold a Long if values are small enough.
@@ -478,7 +478,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal + that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal + that.toBigDecimal)
+      Decimal(toBigDecimal.bigDecimal.add(that.toBigDecimal.bigDecimal))
     }
   }
 
@@ -486,7 +486,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null) && that.decimalVal.eq(null) && scale == that.scale) {
       Decimal(longVal - that.longVal, Math.max(precision, that.precision), scale)
     } else {
-      Decimal(toBigDecimal - that.toBigDecimal)
+      Decimal(toBigDecimal.bigDecimal.subtract(that.toBigDecimal.bigDecimal))
     }
   }
 
@@ -550,9 +550,6 @@ object Decimal {
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
 
-  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
-  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
-
   def apply(value: Double): Decimal = new Decimal().set(value)
 
   def apply(value: Long): Decimal = new Decimal().set(value)
@@ -586,6 +583,52 @@ object Decimal {
       case k: scala.math.BigInt => apply(k)
       case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
+    }
+  }
+
+  private def calculatePrecision(bigDecimal: JavaBigDecimal): Int = {
+    if (bigDecimal.scale < 0) {
+      bigDecimal.precision - bigDecimal.scale
+    } else {
+      bigDecimal.precision
+    }
+  }
+
+  private def stringToJavaBigDecimal(str: UTF8String): JavaBigDecimal = {
+    // According the benchmark test,  `s.toString.trim` is much faster than `s.trim.toString`.
+    // Please refer to https://github.com/apache/spark/pull/26640
+    new JavaBigDecimal(str.toString.trim)
+  }
+
+  def fromString(str: UTF8String): Decimal = {
+    try {
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
+      // For example: Decimal("6.0790316E+25569151")
+      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
+        null
+      } else {
+        Decimal(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        null
+    }
+  }
+
+  def fromStringANSI(str: UTF8String): Decimal = {
+    try {
+      val bigDecimal = stringToJavaBigDecimal(str)
+      // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
+      // For example: Decimal("6.0790316E+25569151")
+      if (calculatePrecision(bigDecimal) > DecimalType.MAX_PRECISION) {
+        throw new ArithmeticException(s"out of decimal type range: $str")
+      } else {
+        Decimal(bigDecimal)
+      }
+    } catch {
+      case _: NumberFormatException =>
+        throw new NumberFormatException(s"invalid input syntax for type numeric: $str")
     }
   }
 

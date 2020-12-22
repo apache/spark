@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -40,7 +39,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorLossReason, TaskDescription}
+import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
@@ -79,12 +78,14 @@ private[spark] class CoarseGrainedExecutorBackend(
    */
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
-  @volatile private var decommissioned = false
+  private var decommissioned = false
 
   override def onStart(): Unit = {
-    logInfo("Registering PWR handler.")
-    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling decommission feature.")(decommissionSelf)
+    if (env.conf.get(DECOMMISSION_ENABLED)) {
+      logInfo("Registering PWR handler to trigger decommissioning.")
+      SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
+        "disabling executor decommission feature.") (self.askSync[Boolean](ExecutorSigPWRReceived))
+    }
 
     logInfo("Connecting to driver: " + driverUrl)
     try {
@@ -166,20 +167,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
       } else {
-        if (decommissioned) {
-          val msg = "Asked to launch a task while decommissioned."
-          logError(msg)
-          driver match {
-            case Some(endpoint) =>
-              logInfo("Sending DecommissionExecutor to driver.")
-              endpoint.send(
-                DecommissionExecutor(
-                  executorId,
-                  ExecutorDecommissionInfo(msg, isHostDecommissioned = false)))
-            case _ =>
-              logError("No registered driver to send Decommission to.")
-          }
-        }
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
         taskResources(taskDesc.taskId) = taskDesc.resources
@@ -216,9 +203,29 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(s"Received tokens of ${tokenBytes.length} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
-    case DecommissionSelf =>
-      logInfo("Received decommission self")
+    case DecommissionExecutor =>
       decommissionSelf()
+  }
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case ExecutorSigPWRReceived =>
+      var driverNotified = false
+      try {
+        driver.foreach { driverRef =>
+          // Tell driver that we are starting decommissioning so it stops trying to schedule us
+          driverNotified = driverRef.askSync[Boolean](ExecutorDecommissioning(executorId))
+          if (driverNotified) decommissionSelf()
+        }
+      } catch {
+        case e: Exception =>
+          if (driverNotified) {
+            logError("Fail to decommission self (but driver has been notified).", e)
+          } else {
+            logError("Fail to tell driver that we are starting decommissioning", e)
+          }
+          decommissioned = false
+      }
+      context.reply(decommissioned)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -267,17 +274,20 @@ private[spark] class CoarseGrainedExecutorBackend(
     System.exit(code)
   }
 
-  private def decommissionSelf(): Boolean = {
-    val msg = "Decommissioning self w/sync"
+  private def decommissionSelf(): Unit = {
+    if (!env.conf.get(DECOMMISSION_ENABLED)) {
+      logWarning(s"Receive decommission request, but decommission feature is disabled.")
+      return
+    } else if (decommissioned) {
+      logWarning(s"Executor $executorId already started decommissioning.")
+      return
+    }
+    val msg = s"Decommission executor $executorId."
     logInfo(msg)
     try {
       decommissioned = true
-      // Tell master we are are decommissioned so it stops trying to schedule us
-      if (driver.nonEmpty) {
-        driver.get.askSync[Boolean](DecommissionExecutor(
-            executorId, ExecutorDecommissionInfo(msg, false)))
-      } else {
-        logError("No driver to message decommissioning.")
+      if (env.conf.get(STORAGE_DECOMMISSION_ENABLED)) {
+        env.blockManager.decommissionBlockManager()
       }
       if (executor != null) {
         executor.decommission()
@@ -336,12 +346,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       shutdownThread.start()
 
       logInfo("Will exit when finished decommissioning")
-      // Return true since we are handling a signal
-      true
     } catch {
       case e: Exception =>
+        decommissioned = false
         logError("Unexpected error while decommissioning self", e)
-        false
     }
   }
 }

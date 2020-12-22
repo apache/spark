@@ -125,6 +125,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(sinh, math.sinh)
   }
 
+  test("asinh") {
+    testOneToOneMathFunction(asinh,
+      (x: Double) => math.log(x + math.sqrt(x * x + 1)) )
+  }
+
   test("cos") {
     testOneToOneMathFunction(cos, math.cos)
   }
@@ -137,6 +142,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     testOneToOneMathFunction(cosh, math.cosh)
   }
 
+  test("acosh") {
+    testOneToOneMathFunction(acosh,
+      (x: Double) => math.log(x + math.sqrt(x * x - 1)) )
+  }
+
   test("tan") {
     testOneToOneMathFunction(tan, math.tan)
   }
@@ -147,6 +157,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("tanh") {
     testOneToOneMathFunction(tanh, math.tanh)
+  }
+
+  test("atanh") {
+    testOneToOneMathFunction(atanh,
+      (x: Double) => (0.5 * (math.log1p(x) - math.log1p(-x))) )
   }
 
   test("degrees") {
@@ -185,7 +200,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
     checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
     checkAnswer(
-      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
+      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("12DDAC15F246BAF8C0D551AC7"))
   }
 
   test("floor") {

@@ -18,16 +18,18 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
-  private def conf = session.sessionState.conf
+case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
+
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS, REPARTITION)
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
@@ -49,7 +51,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
     val shuffleStages = collectShuffleStages(plan)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStages.forall(_.shuffle.canChangeNumPartitions)) {
+    if (!shuffleStages.forall(s => supportCoalesce(s.shuffle))) {
       plan
     } else {
       // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
@@ -83,5 +85,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPl
         plan
       }
     }
+  }
+
+  private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
+    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

@@ -31,6 +31,8 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
 
   private val hasTemplate = conf.contains(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
 
+  private val configmapName = s"${conf.resourceNamePrefix}-$POD_TEMPLATE_CONFIGMAP"
+
   def configurePod(pod: SparkPod): SparkPod = {
     if (hasTemplate) {
       val podWithVolume = new PodBuilder(pod.pod)
@@ -38,7 +40,7 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
             .addNewVolume()
               .withName(POD_TEMPLATE_VOLUME)
               .withNewConfigMap()
-                .withName(POD_TEMPLATE_CONFIGMAP)
+                .withName(configmapName)
                 .addNewItem()
                   .withKey(POD_TEMPLATE_KEY)
                   .withPath(EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME)
@@ -76,7 +78,7 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
       val podTemplateString = Files.toString(new File(podTemplateFile), StandardCharsets.UTF_8)
       Seq(new ConfigMapBuilder()
           .withNewMetadata()
-            .withName(POD_TEMPLATE_CONFIGMAP)
+            .withName(configmapName)
           .endMetadata()
           .addToData(POD_TEMPLATE_KEY, podTemplateString)
         .build())

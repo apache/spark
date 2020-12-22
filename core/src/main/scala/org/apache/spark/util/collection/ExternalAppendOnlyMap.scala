@@ -76,7 +76,7 @@ class ExternalAppendOnlyMap[K, V, C](
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       serializer: Serializer,
-      blockManager: BlockManager) {
+      blockManager: BlockManager) = {
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 

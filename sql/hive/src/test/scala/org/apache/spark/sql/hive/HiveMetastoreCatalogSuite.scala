@@ -113,24 +113,19 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
         .add("c9", "date")
         .add("c10", "timestamp")
         .add("c11", "string")
-        .add("c12", "string", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "char(10)").build())
-        .add("c13", "string", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "varchar(10)").build())
+        .add("c12", CharType(10), true)
+        .add("c13", VarcharType(10), true)
         .add("c14", "binary")
         .add("c15", "decimal")
         .add("c16", "decimal(10)")
         .add("c17", "decimal(10,2)")
         .add("c18", "array<string>")
         .add("c19", "array<int>")
-        .add("c20", "array<string>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "array<char(10)>").build())
+        .add("c20", ArrayType(CharType(10)), true)
         .add("c21", "map<int,int>")
-        .add("c22", "map<int,string>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "map<int,char(10)>").build())
+        .add("c22", MapType(IntegerType, CharType(10)), true)
         .add("c23", "struct<a:int,b:int>")
-        .add("c24", "struct<c:string,d:int>", true,
-          new MetadataBuilder().putString(HIVE_TYPE_STRING, "struct<c:varchar(10),d:int>").build())
+        .add("c24", new StructType().add("c", VarcharType(10)).add("d", "int"), true)
       assert(schema == expectedSchema)
     }
   }
@@ -206,13 +201,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
         checkAnswer(table("t"), testDF)
-        if (HiveUtils.isHive23) {
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-            Seq("1.100\t1", "2.100\t2"))
-        } else {
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-            Seq("1.1\t1", "2.1\t2"))
-        }
+        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+          Seq("1.100\t1", "2.100\t2"))
       }
     }
 
@@ -244,13 +234,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
           checkAnswer(table("t"), testDF)
-          if (HiveUtils.isHive23) {
-            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-              Seq("1.100\t1", "2.100\t2"))
-          } else {
-            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-              Seq("1.1\t1", "2.1\t2"))
-          }
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+            Seq("1.100\t1", "2.100\t2"))
         }
       }
     }

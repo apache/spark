@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -102,6 +103,14 @@ package object dsl {
     def like(other: Expression, escapeChar: Char = '\\'): Expression =
       Like(expr, other, escapeChar)
     def rlike(other: Expression): Expression = RLike(expr, other)
+    def likeAll(others: Expression*): Expression =
+      LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAll(others: Expression*): Expression =
+      NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def likeAny(others: Expression*): Expression =
+      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAny(others: Expression*): Expression =
+      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)
@@ -126,9 +135,9 @@ package object dsl {
     }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
-    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -197,6 +206,12 @@ package object dsl {
       Max(e).toAggregateExpression(isDistinct = false, filter = filter)
     def maxDistinct(e: Expression, filter: Option[Expression] = None): Expression =
       Max(e).toAggregateExpression(isDistinct = true, filter = filter)
+    def bitAnd(e: Expression, filter: Option[Expression] = None): Expression =
+      BitAndAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitOr(e: Expression, filter: Option[Expression] = None): Expression =
+      BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
+      BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
@@ -420,7 +435,7 @@ package object dsl {
           partition: Map[String, Option[String]] = Map.empty,
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
-        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
+        InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 

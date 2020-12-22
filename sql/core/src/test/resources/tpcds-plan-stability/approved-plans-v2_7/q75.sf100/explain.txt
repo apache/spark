@@ -157,7 +157,7 @@ Condition : (isnotnull(cs_item_sk#2) AND isnotnull(cs_sold_date_sk#1))
 Output [6]: [i_item_sk#6, i_brand_id#7, i_class_id#8, i_category_id#9, i_category#10, i_manufact_id#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Books), IsNotNull(i_item_sk), IsNotNull(i_class_id), IsNotNull(i_brand_id), IsNotNull(i_category_id), IsNotNull(i_manufact_id)]
+PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Books), IsNotNull(i_item_sk), IsNotNull(i_brand_id), IsNotNull(i_class_id), IsNotNull(i_category_id), IsNotNull(i_manufact_id)]
 ReadSchema: struct<i_item_sk:int,i_brand_id:int,i_class_id:int,i_category_id:int,i_category:string,i_manufact_id:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -165,7 +165,7 @@ Input [6]: [i_item_sk#6, i_brand_id#7, i_class_id#8, i_category_id#9, i_category
 
 (6) Filter [codegen id : 1]
 Input [6]: [i_item_sk#6, i_brand_id#7, i_class_id#8, i_category_id#9, i_category#10, i_manufact_id#11]
-Condition : ((((((isnotnull(i_category#10) AND (i_category#10 = Books)) AND isnotnull(i_item_sk#6)) AND isnotnull(i_class_id#8)) AND isnotnull(i_brand_id#7)) AND isnotnull(i_category_id#9)) AND isnotnull(i_manufact_id#11))
+Condition : ((((((isnotnull(i_category#10) AND (i_category#10 = Books)) AND isnotnull(i_item_sk#6)) AND isnotnull(i_brand_id#7)) AND isnotnull(i_class_id#8)) AND isnotnull(i_category_id#9)) AND isnotnull(i_manufact_id#11))
 
 (7) Project [codegen id : 1]
 Output [5]: [i_item_sk#6, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
@@ -223,7 +223,7 @@ Arguments: [cs_order_number#3 ASC NULLS FIRST, cs_item_sk#2 ASC NULLS FIRST], fa
 Output [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
+PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (20) ColumnarToRow [codegen id : 5]
@@ -231,7 +231,7 @@ Input [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_
 
 (21) Filter [codegen id : 5]
 Input [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
-Condition : (isnotnull(cr_item_sk#17) AND isnotnull(cr_order_number#18))
+Condition : (isnotnull(cr_order_number#18) AND isnotnull(cr_item_sk#17))
 
 (22) Exchange
 Input [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
@@ -300,7 +300,7 @@ Arguments: [cast(ss_ticket_number#26 as bigint) ASC NULLS FIRST, cast(ss_item_sk
 Output [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return_amt#33]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (38) ColumnarToRow [codegen id : 12]
@@ -308,7 +308,7 @@ Input [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return
 
 (39) Filter [codegen id : 12]
 Input [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return_amt#33]
-Condition : (isnotnull(sr_item_sk#30) AND isnotnull(sr_ticket_number#31))
+Condition : (isnotnull(sr_ticket_number#31) AND isnotnull(sr_item_sk#30))
 
 (40) Exchange
 Input [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return_amt#33]
@@ -397,7 +397,7 @@ Arguments: [cast(ws_order_number#40 as bigint) ASC NULLS FIRST, cast(ws_item_sk#
 Output [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_amt#47]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
-PushedFilters: [IsNotNull(wr_item_sk), IsNotNull(wr_order_number)]
+PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (60) ColumnarToRow [codegen id : 21]
@@ -405,7 +405,7 @@ Input [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_
 
 (61) Filter [codegen id : 21]
 Input [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_amt#47]
-Condition : (isnotnull(wr_item_sk#44) AND isnotnull(wr_order_number#45))
+Condition : (isnotnull(wr_order_number#45) AND isnotnull(wr_item_sk#44))
 
 (62) Exchange
 Input [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_amt#47]

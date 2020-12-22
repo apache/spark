@@ -20,14 +20,14 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import scala.collection.mutable
+import scala.annotation.tailrec
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.execution.streaming.state.StreamingAggregationStateManager
+import org.apache.spark.sql.execution.streaming.state.{StateSchemaNotCompatible, StateStore, StreamingAggregationStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -335,6 +335,49 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 2), (2, 3, 2))
     )
+  }
+
+  testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead streaming aggregation to use" +
+    " shifted partition IDs") {
+    def constructUnionDf(desiredPartitionsForInput1: Int)
+      : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
+      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input2 = MemoryStream[Int]
+      val df1 = input1.toDF()
+        .select($"value", $"value" + 1)
+      val df2 = input2.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+
+      // Unioned DF would have columns as (Int, Int)
+      (input1, input2, df1.union(df2))
+    }
+
+    withTempDir { checkpointDir =>
+      val (input1, input2, unionDf) = constructUnionDf(2)
+      testStream(unionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(input1, 11, 12)(input2, 21, 22),
+        CheckNewAnswer(Row(11, 12), Row(12, 13), Row(21, 1), Row(22, 1)),
+        StopStream
+      )
+
+      // We're restoring the query with different number of partitions in left side of UNION,
+      // which may lead right side of union to have mismatched partition IDs (e.g. if it relies on
+      // TaskContext.partitionId()). This test will verify streaming aggregation doesn't have
+      // such issue.
+
+      val (newInput1, newInput2, newUnionDf) = constructUnionDf(3)
+
+      newInput1.addData(11, 12)
+      newInput2.addData(21, 22)
+
+      testStream(newUnionDf, Update)(
+        StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+        MultiAddData(newInput1, 13, 14)(newInput2, 22, 23),
+        CheckNewAnswer(Row(13, 14), Row(14, 15), Row(22, 2), Row(23, 1))
+      )
+    }
   }
 
   testQuietlyWithAllStateVersions("midbatch failure") {
@@ -712,6 +755,89 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     )
   }
 
+  testQuietlyWithAllStateVersions("changing schema of state when restarting query",
+    (SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key, "false")) {
+    withTempDir { tempDir =>
+      val (inputData, aggregated) = prepareTestForChangingSchemaOfState(tempDir)
+
+      // if we don't have verification phase on state schema, modified query would throw NPE with
+      // stack trace which end users would not easily understand
+
+      testStream(aggregated, Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(inputData, 21),
+        ExpectFailure[SparkException] { e =>
+          val stateSchemaExc = findStateSchemaNotCompatible(e)
+          assert(stateSchemaExc.isDefined)
+          val msg = stateSchemaExc.get.getMessage
+          assert(msg.contains("Provided schema doesn't match to the schema for existing state"))
+          // other verifications are presented in StateStoreSuite
+        }
+      )
+    }
+  }
+
+  testQuietlyWithAllStateVersions("changing schema of state when restarting query -" +
+    " schema check off",
+    (SQLConf.STATE_SCHEMA_CHECK_ENABLED.key, "false"),
+    (SQLConf.STATE_STORE_FORMAT_VALIDATION_ENABLED.key, "false")) {
+    withTempDir { tempDir =>
+      val (inputData, aggregated) = prepareTestForChangingSchemaOfState(tempDir)
+
+      testStream(aggregated, Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(inputData, 21),
+        ExpectFailure[SparkException] { e =>
+          val stateSchemaExc = findStateSchemaNotCompatible(e)
+          // it would bring other error in runtime, but it shouldn't check schema in any way
+          assert(stateSchemaExc.isEmpty)
+        }
+      )
+    }
+  }
+
+  private def prepareTestForChangingSchemaOfState(
+      tempDir: File): (MemoryStream[Int], DataFrame) = {
+    val inputData = MemoryStream[Int]
+    val aggregated = inputData.toDF()
+      .selectExpr("value % 10 AS id", "value")
+      .groupBy($"id")
+      .agg(
+        sum("value").as("sum_value"),
+        avg("value").as("avg_value"),
+        max("value").as("max_value"))
+
+    testStream(aggregated, Update())(
+      StartStream(checkpointLocation = tempDir.getAbsolutePath),
+      AddData(inputData, 1, 11),
+      CheckLastBatch((1L, 12L, 6.0, 11)),
+      StopStream
+    )
+
+    StateStore.unloadAll()
+
+    val inputData2 = MemoryStream[Int]
+    val aggregated2 = inputData2.toDF()
+      .selectExpr("value % 10 AS id", "value")
+      .groupBy($"id")
+      .agg(
+        sum("value").as("sum_value"),
+        avg("value").as("avg_value"),
+        collect_list("value").as("values"))
+
+    inputData2.addData(1, 11)
+
+    (inputData2, aggregated2)
+  }
+
+  @tailrec
+  private def findStateSchemaNotCompatible(exc: Throwable): Option[StateSchemaNotCompatible] = {
+    exc match {
+      case e1: StateSchemaNotCompatible => Some(e1)
+      case e1 if e1.getCause != null => findStateSchemaNotCompatible(e1.getCause)
+      case _ => None
+    }
+  }
 
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {

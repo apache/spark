@@ -44,7 +44,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -59,7 +59,7 @@ def report_times(outfile, boot, init, finish):
 
 
 def add_path(path):
-    # worker can be used, so donot add path multiple times
+    # worker can be used, so do not add path multiple times
     if path not in sys.path:
         # overwrite system packages
         sys.path.insert(1, path)
@@ -387,7 +387,10 @@ def read_udfs(pickleSer, infile, eval_type):
         Helper function to extract the key and value indexes from arg_offsets for the grouped and
         cogrouped pandas udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
 
-        :param grouped_arg_offsets:  List containing the key and value indexes of columns of the
+        Parameters
+        ----------
+        grouped_arg_offsets:  list
+            List containing the key and value indexes of columns of the
             DataFrames to be passed to the udf. It consists of n repeating groups where n is the
             number of DataFrames.  Each group has the following format:
                 group[0]: length of group
@@ -604,21 +607,23 @@ def main(infile, outfile):
         # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
-    except Exception:
+    except BaseException as e:
         try:
-            exc_info = traceback.format_exc()
-            if isinstance(exc_info, bytes):
-                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
-                # it back to utf-8 again
-                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
-            else:
-                exc_info = exc_info.encode("utf-8")
+            exc_info = None
+            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
+                tb = try_simplify_traceback(sys.exc_info()[-1])
+                if tb is not None:
+                    e.__cause__ = None
+                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
+            if exc_info is None:
+                exc_info = traceback.format_exc()
+
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info, outfile)
+            write_with_length(exc_info.encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass
-        except Exception:
+        except BaseException:
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)

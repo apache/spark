@@ -41,11 +41,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
-  with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
-  // TODO(SPARK-32354): Fix and re-enable the R tests.
-  with DepsTestsSuite with DecommissionSuite /* with RTestsSuite */ with Logging with Eventually
-  with Matchers {
+  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
+  with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
+  with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging
+  with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -159,6 +158,7 @@ class KubernetesSuite extends SparkFunSuite
       kubernetesTestComponents.deleteNamespace()
     }
     deleteDriverPod()
+    deleteExecutorPod(appLocator)
   }
 
   protected def runSparkPiAndVerifyCompletion(
@@ -172,6 +172,7 @@ class KubernetesSuite extends SparkFunSuite
       appResource,
       SPARK_PI_MAIN_CLASS,
       Seq("Pi is roughly 3"),
+      Seq(),
       appArgs,
       driverPodChecker,
       executorPodChecker,
@@ -193,6 +194,7 @@ class KubernetesSuite extends SparkFunSuite
       SPARK_DFS_READ_WRITE_TEST,
       Seq(s"Success! Local Word Count $wordCount and " +
     s"DFS Word Count $wordCount agree."),
+      Seq(),
       appArgs,
       driverPodChecker,
       executorPodChecker,
@@ -213,6 +215,7 @@ class KubernetesSuite extends SparkFunSuite
       appResource,
       SPARK_REMOTE_MAIN_CLASS,
       Seq(s"Mounting of ${appArgs.head} was true"),
+      Seq(),
       appArgs,
       driverPodChecker,
       executorPodChecker,
@@ -262,7 +265,8 @@ class KubernetesSuite extends SparkFunSuite
   protected def runSparkApplicationAndVerifyCompletion(
       appResource: String,
       mainClass: String,
-      expectedLogOnCompletion: Seq[String],
+      expectedDriverLogOnCompletion: Seq[String],
+      expectedExecutorLogOnCompletion: Seq[String] = Seq(),
       appArgs: Array[String],
       driverPodChecker: Pod => Unit,
       executorPodChecker: Pod => Unit,
@@ -270,7 +274,8 @@ class KubernetesSuite extends SparkFunSuite
       isJVM: Boolean,
       pyFiles: Option[String] = None,
       executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
-      decommissioningTest: Boolean = false): Unit = {
+      decommissioningTest: Boolean = false,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
 
   // scalastyle:on argcount
     val appArguments = SparkAppArguments(
@@ -366,7 +371,8 @@ class KubernetesSuite extends SparkFunSuite
       TIMEOUT.value.toSeconds.toInt,
       sparkHomeDir,
       isJVM,
-      pyFiles)
+      pyFiles,
+      env)
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -375,7 +381,6 @@ class KubernetesSuite extends SparkFunSuite
       .list()
       .getItems
       .get(0)
-
     driverPodChecker(driverPod)
 
     // If we're testing decommissioning we an executors, but we should have an executor
@@ -384,14 +389,35 @@ class KubernetesSuite extends SparkFunSuite
       execPods.values.nonEmpty should be (true)
     }
     execPods.values.foreach(executorPodChecker(_))
+
+    val execPod: Option[Pod] = if (expectedExecutorLogOnCompletion.nonEmpty) {
+      Some(kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withLabel("spark-app-locator", appLocator)
+        .withLabel("spark-role", "executor")
+        .list()
+        .getItems
+        .get(0))
+    } else {
+      None
+    }
+
     Eventually.eventually(patienceTimeout, patienceInterval) {
-      expectedLogOnCompletion.foreach { e =>
+      expectedDriverLogOnCompletion.foreach { e =>
         assert(kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(driverPod.getMetadata.getName)
           .getLog
           .contains(e),
-          s"The application did not complete, did not find str ${e}")
+          s"The application did not complete, driver log did not contain str ${e}")
+      }
+      expectedExecutorLogOnCompletion.foreach { e =>
+        assert(kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withName(execPod.get.getMetadata.getName)
+          .getLog
+          .contains(e),
+          s"The application did not complete, executor log did not contain str ${e}")
       }
     }
     execWatcher.close()
@@ -483,6 +509,23 @@ class KubernetesSuite extends SparkFunSuite
         .pods()
         .withName(driverPodName)
         .get() == null)
+    }
+  }
+
+  private def deleteExecutorPod(appLocator: String): Unit = {
+    kubernetesTestComponents
+      .kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "executor")
+      .delete()
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withLabel("spark-app-locator", appLocator)
+        .withLabel("spark-role", "executor")
+        .list()
+        .getItems.isEmpty)
     }
   }
 }

@@ -286,6 +286,7 @@ private[ml] object RFormulaParser extends RegexParsers {
 
   private val pow: Parser[Term] = term ~ "^" ~ "^[1-9]\\d*".r ^^ {
     case base ~ "^" ~ degree => power(base, degree.toInt)
+    case t => throw new IllegalArgumentException(s"Invalid term: $t")
   } | term
 
   private val interaction: Parser[Term] = pow * (":" ^^^ { interact _ })
@@ -298,7 +299,10 @@ private[ml] object RFormulaParser extends RegexParsers {
   private val expr = (sum | term)
 
   private val formula: Parser[ParsedRFormula] =
-    (label ~ "~" ~ expr) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms) }
+    (label ~ "~" ~ expr) ^^ {
+      case r ~ "~" ~ t => ParsedRFormula(r, t.asTerms.terms)
+      case t => throw new IllegalArgumentException(s"Invalid term: $t")
+    }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {
     case Success(result, _) => result

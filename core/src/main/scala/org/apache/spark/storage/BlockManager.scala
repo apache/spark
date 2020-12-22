@@ -55,8 +55,7 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.shuffle.{ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.storage.BlockManagerMessages.ReplicateBlock
+import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -120,9 +119,7 @@ private[spark] class ByteBufferBlockData(
 private[spark] class HostLocalDirManager(
     futureExecutionContext: ExecutionContext,
     cacheSize: Int,
-    externalBlockStoreClient: ExternalBlockStoreClient,
-    host: String,
-    externalShuffleServicePort: Int) extends Logging {
+    blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
     CacheBuilder
@@ -130,24 +127,25 @@ private[spark] class HostLocalDirManager(
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
 
-  private[spark] def getCachedHostLocalDirs()
-      : scala.collection.Map[String, Array[String]] = executorIdToLocalDirsCache.synchronized {
-    import scala.collection.JavaConverters._
-    return executorIdToLocalDirsCache.asMap().asScala
-  }
+  private[spark] def getCachedHostLocalDirs: Map[String, Array[String]] =
+    executorIdToLocalDirsCache.synchronized {
+      executorIdToLocalDirsCache.asMap().asScala.toMap
+    }
 
   private[spark] def getHostLocalDirs(
+      host: String,
+      port: Int,
       executorIds: Array[String])(
-      callback: Try[java.util.Map[String, Array[String]]] => Unit): Unit = {
+      callback: Try[Map[String, Array[String]]] => Unit): Unit = {
     val hostLocalDirsCompletable = new CompletableFuture[java.util.Map[String, Array[String]]]
-    externalBlockStoreClient.getHostLocalDirs(
+    blockStoreClient.getHostLocalDirs(
       host,
-      externalShuffleServicePort,
+      port,
       executorIds,
       hostLocalDirsCompletable)
     hostLocalDirsCompletable.whenComplete { (hostLocalDirs, throwable) =>
       if (hostLocalDirs != null) {
-        callback(Success(hostLocalDirs))
+        callback(Success(hostLocalDirs.asScala.toMap))
         executorIdToLocalDirsCache.synchronized {
           executorIdToLocalDirsCache.putAll(hostLocalDirs)
         }
@@ -165,7 +163,7 @@ private[spark] class HostLocalDirManager(
  * Note that [[initialize()]] must be called before the BlockManager is usable.
  */
 private[spark] class BlockManager(
-    executorId: String,
+    val executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
     val serializerManager: SerializerManager,
@@ -212,7 +210,7 @@ private[spark] class BlockManager(
   private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
   private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
-  private val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
+  private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
   var blockManagerId: BlockManagerId = _
 
@@ -244,8 +242,9 @@ private[spark] class BlockManager(
 
   private var blockReplicationPolicy: BlockReplicationPolicy = _
 
+  // visible for test
   // This is volatile since if it's defined we should not accept remote blocks.
-  @volatile private var decommissioner: Option[BlockManagerDecommissioner] = None
+  @volatile private[spark] var decommissioner: Option[BlockManagerDecommissioner] = None
 
   // A DownloadFileManager used to track all the files of remote blocks which are above the
   // specified memory threshold. Files will be deleted automatically based on weak reference.
@@ -264,6 +263,8 @@ private[spark] class BlockManager(
   private[storage] lazy val migratableResolver: MigratableResolver = {
     shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
+
+  override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -492,20 +493,17 @@ private[spark] class BlockManager(
       registerWithExternalShuffleServer()
     }
 
-    hostLocalDirManager =
+    hostLocalDirManager = {
       if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
           !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
-        externalBlockStoreClient.map { blockStoreClient =>
-          new HostLocalDirManager(
-            futureExecutionContext,
-            conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
-            blockStoreClient,
-            blockManagerId.host,
-            externalShuffleServicePort)
-        }
+        Some(new HostLocalDirManager(
+          futureExecutionContext,
+          conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
+          blockStoreClient))
       } else {
         None
       }
+    }
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
   }
@@ -629,7 +627,16 @@ private[spark] class BlockManager(
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      try {
+        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+      } catch {
+        case e: IOException =>
+          if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+            FallbackStorage.read(conf, blockId)
+          } else {
+            throw e
+          }
+      }
     } else {
       getLocalBytes(blockId) match {
         case Some(blockData) =>
@@ -1105,7 +1112,7 @@ private[spark] class BlockManager(
       blockSize: Long): Option[ManagedBuffer] = {
     val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
     if (file.exists()) {
-      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+      val managedBuffer = securityManager.getIOEncryptionKey() match {
         case Some(key) =>
           // Encrypted blocks cannot be memory mapped; return a special object that does decryption
           // and provides InputStream / FileRegion implementations for reading the data.
@@ -1116,7 +1123,7 @@ private[spark] class BlockManager(
           val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
           new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
       }
-      Some(mangedBuffer)
+      Some(managedBuffer)
     } else {
       None
     }
@@ -1582,7 +1589,12 @@ private[spark] class BlockManager(
         lastPeerFetchTimeNs = System.nanoTime()
         logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
-      cachedPeers
+      if (cachedPeers.isEmpty &&
+          conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+        Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      } else {
+        cachedPeers
+      }
     }
   }
 
@@ -1811,7 +1823,9 @@ private[spark] class BlockManager(
     blocksToRemove.size
   }
 
-  def decommissionBlockManager(): Unit = synchronized {
+  def decommissionBlockManager(): Unit = storageEndpoint.ask(DecommissionBlockManager)
+
+  private[spark] def decommissionSelf(): Unit = synchronized {
     decommissioner match {
       case None =>
         logInfo("Starting block manager decommissioning process...")
