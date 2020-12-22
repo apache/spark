@@ -43,7 +43,9 @@ class ExecutorPodsSnapshotSuite extends SparkFunSuite {
       testCase(succeededExecutor(2), PodSucceeded),
       testCase(failedExecutorWithoutDeletion(3), PodFailed),
       testCase(deletedExecutor(4), PodDeleted),
-      testCase(unknownExecutor(5), PodUnknown)
+      testCase(unknownExecutor(5), PodUnknown),
+      testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded),
+      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed)
     )
     doTest(testCases)
   }

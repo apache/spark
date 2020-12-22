@@ -53,6 +53,10 @@ object ExecutorPodsSnapshot extends Logging {
     shouldCheckAllContainers = watchAllContainers
   }
 
+  def setSparkContainerName(containerName: String): Unit = {
+    sparkContainerName = containerName
+  }
+
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
       (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
@@ -84,7 +88,7 @@ object ExecutorPodsSnapshot extends Logging {
                 sparkContainerStatus.getState.getTerminated match {
                   case null => PodRunning(pod)
                   case t =>
-                    if (t.getExitCode != 0) {
+                    if (t.getExitCode == 0) {
                       PodSucceeded(pod)
                     } else {
                       PodFailed(pod)
