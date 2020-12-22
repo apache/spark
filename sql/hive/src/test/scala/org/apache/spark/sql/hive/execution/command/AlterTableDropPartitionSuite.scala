@@ -21,4 +21,6 @@ import org.apache.spark.sql.execution.command.v1
 
 class AlterTableDropPartitionSuite
   extends v1.AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+  override protected def nullPartitionValue: String = "__HIVE_DEFAULT_PARTITION__"
+}
