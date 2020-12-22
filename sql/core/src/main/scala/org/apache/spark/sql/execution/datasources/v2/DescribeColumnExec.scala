@@ -45,6 +45,8 @@ case class DescribeColumnExec(
     rows += toCatalystRow("data_type", column.dataType.catalogString)
     rows += toCatalystRow("comment", comment)
 
+    // TODO: The extended description (isExtended = true) can be added here.
+
     rows.toSeq
   }
 
