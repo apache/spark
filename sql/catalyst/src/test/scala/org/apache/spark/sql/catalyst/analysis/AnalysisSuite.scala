@@ -427,7 +427,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+  test("SPARK-12102: Ignore nullability when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
     val plan = relation.select(
@@ -665,6 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)
@@ -981,6 +982,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
         s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
+  }
+
+  test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
     }
   }
 }

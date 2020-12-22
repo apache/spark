@@ -32,7 +32,8 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_();
 
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "misc_funcs")
 // scalastyle:on whitespace.end.of.line
 case class InputFileName() extends LeafExpression with Nondeterministic {
 
@@ -64,7 +65,8 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
       > SELECT _FUNC_();
        -1
   """,
-  since = "2.2.0")
+  since = "2.2.0",
+  group = "misc_funcs")
 case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
   override def nullable: Boolean = false
 
@@ -93,7 +95,8 @@ case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
       > SELECT _FUNC_();
        -1
   """,
-  since = "2.2.0")
+  since = "2.2.0",
+  group = "misc_funcs")
 case class InputFileBlockLength() extends LeafExpression with Nondeterministic {
   override def nullable: Boolean = false
 

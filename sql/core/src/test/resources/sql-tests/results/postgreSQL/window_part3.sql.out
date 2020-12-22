@@ -295,7 +295,7 @@ SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause;
+It is not allowed to use window functions inside WHERE clause
 
 
 -- !query
@@ -307,7 +307,7 @@ org.apache.spark.sql.AnalysisException
 
 The query operator `Join` contains one or more unsupported
 expression types Aggregate, Window or Generate.
-Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
+Invalid expressions: [row_number() OVER (ORDER BY spark_catalog.default.empsalary.`salary` ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
 
 
 -- !query
@@ -319,7 +319,7 @@ org.apache.spark.sql.AnalysisException
 
 The query operator `Aggregate` contains one or more unsupported
 expression types Aggregate, Window or Generate.
-Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)];
+Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
 
 
 -- !query
@@ -342,7 +342,7 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause;
+It is not allowed to use window functions inside WHERE clause
 
 
 -- !query
@@ -351,7 +351,7 @@ SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random())
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use window functions inside WHERE clause;
+It is not allowed to use window functions inside WHERE clause
 
 
 -- !query

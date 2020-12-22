@@ -158,6 +158,7 @@ class KubernetesSuite extends SparkFunSuite
       kubernetesTestComponents.deleteNamespace()
     }
     deleteDriverPod()
+    deleteExecutorPod(appLocator)
   }
 
   protected def runSparkPiAndVerifyCompletion(
@@ -273,7 +274,8 @@ class KubernetesSuite extends SparkFunSuite
       isJVM: Boolean,
       pyFiles: Option[String] = None,
       executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
-      decommissioningTest: Boolean = false): Unit = {
+      decommissioningTest: Boolean = false,
+      env: Map[String, String] = Map.empty[String, String]): Unit = {
 
   // scalastyle:on argcount
     val appArguments = SparkAppArguments(
@@ -369,7 +371,8 @@ class KubernetesSuite extends SparkFunSuite
       TIMEOUT.value.toSeconds.toInt,
       sparkHomeDir,
       isJVM,
-      pyFiles)
+      pyFiles,
+      env)
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -506,6 +509,23 @@ class KubernetesSuite extends SparkFunSuite
         .pods()
         .withName(driverPodName)
         .get() == null)
+    }
+  }
+
+  private def deleteExecutorPod(appLocator: String): Unit = {
+    kubernetesTestComponents
+      .kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-role", "executor")
+      .delete()
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      assert(kubernetesTestComponents.kubernetesClient
+        .pods()
+        .withLabel("spark-app-locator", appLocator)
+        .withLabel("spark-role", "executor")
+        .list()
+        .getItems.isEmpty)
     }
   }
 }

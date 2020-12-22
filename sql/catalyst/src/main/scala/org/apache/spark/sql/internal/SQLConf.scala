@@ -29,7 +29,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -74,6 +74,29 @@ object SQLConf {
     ConfigBuilder(key).onCreate { entry =>
       staticConfKeys.add(entry.key)
       SQLConf.register(entry)
+    }
+  }
+
+  /**
+   * Merge all non-static configs to the SQLConf. For example, when the 1st [[SparkSession]] and
+   * the global [[SharedState]] have been initialized, all static configs have taken affect and
+   * should not be set to other values. Other later created sessions should respect all static
+   * configs and only be able to change non-static configs.
+   */
+  private[sql] def mergeNonStaticSQLConfigs(
+      sqlConf: SQLConf,
+      configs: Map[String, String]): Unit = {
+    for ((k, v) <- configs if !staticConfKeys.contains(k)) {
+      sqlConf.setConfString(k, v)
+    }
+  }
+
+  /**
+   * Extract entries from `SparkConf` and put them in the `SQLConf`
+   */
+  private[sql] def mergeSparkConf(sqlConf: SQLConf, sparkConf: SparkConf): Unit = {
+    sparkConf.getAll.foreach { case (k, v) =>
+      sqlConf.setConfString(k, v)
     }
   }
 
@@ -374,6 +397,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEAF_NODE_DEFAULT_PARALLELISM = buildConf("spark.sql.leafNodeDefaultParallelism")
+    .doc("The default parallelism of Spark SQL leaf nodes that produce data, such as the file " +
+      "scan node, the local data scan node, the range node, etc. The default value of this " +
+      "config is 'SparkContext#defaultParallelism'.")
+    .version("3.2.0")
+    .intConf
+    .checkValue(_ > 0, "The value of spark.sql.leafNodeDefaultParallelism must be positive.")
+    .createOptional
+
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations. " +
       "Note: For structured streaming, this configuration cannot be changed between query " +
@@ -396,7 +428,7 @@ object SQLConf {
       "middle of query execution, based on accurate runtime statistics.")
     .version("1.6.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ADAPTIVE_EXECUTION_FORCE_APPLY = buildConf("spark.sql.adaptive.forceApply")
     .internal()
@@ -873,6 +905,16 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
+  val HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD =
+    buildConf("spark.sql.hive.tablePropertyLengthThreshold")
+      .internal()
+      .doc("The maximum length allowed in a single cell when storing Spark-specific information " +
+        "in Hive's metastore as table properties. Currently it covers 2 things: the schema's " +
+        "JSON string, the histogram of column statistics.")
+      .version("3.2.0")
+      .intConf
+      .createOptional
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -914,13 +956,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val THRIFTSERVER_FORCE_CANCEL =
+    buildConf("spark.sql.thriftServer.interruptOnCancel")
+      .doc("When true, all running tasks will be interrupted if one cancels a query. " +
+        "When false, all running tasks will remain until finished.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
       .doc("Set a query duration timeout in seconds in Thrift Server. If the timeout is set to " +
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence.")
+        "than this configuration value, they take precedence. If you set this timeout and prefer" +
+        "to cancel the queries right away without waiting task to finish, consider enabling" +
+        s"${THRIFTSERVER_FORCE_CANCEL.key} together.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(0L)
@@ -1137,7 +1189,7 @@ object SQLConf {
 
   val CODEGEN_FACTORY_MODE = buildConf("spark.sql.codegen.factoryMode")
     .doc("This config determines the fallback behavior of several codegen generators " +
-      "during tests. `FALLBACK` means trying codegen first and then fallbacking to " +
+      "during tests. `FALLBACK` means trying codegen first and then falling back to " +
       "interpreted if any compile error happens. Disabling fallback if `CODEGEN_ONLY`. " +
       "`NO_CODEGEN` skips codegen and goes interpreted path always. Note that " +
       "this config works only for tests.")
@@ -1294,6 +1346,14 @@ object SQLConf {
       .createWithDefault(
         "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
+  val STATE_SCHEMA_CHECK_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.stateSchemaCheck")
+      .doc("When true, Spark will validate the state schema against schema on existing state and " +
+        "fail query if it's incompatible.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
       .internal()
@@ -1351,6 +1411,17 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(2)
+
+  val STREAMING_MAINTENANCE_INTERVAL =
+    buildConf("spark.sql.streaming.stateStore.maintenanceInterval")
+      .internal()
+      .doc("The interval in milliseconds between triggering maintenance tasks in StateStore. " +
+        "The maintenance task executes background maintenance task in all the loaded store " +
+        "providers if they are still the active instances according to the coordinator. If not, " +
+        "inactive instances of store providers will be closed.")
+      .version("2.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(TimeUnit.MINUTES.toMillis(1)) // 1 minute
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -1489,6 +1560,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STORE_ANALYZED_PLAN_FOR_VIEW =
+    buildConf("spark.sql.legacy.storeAnalyzedPlanForView")
+      .internal()
+      .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
+        "temporary view")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .version("2.1.0")
@@ -1545,7 +1625,7 @@ object SQLConf {
   val JSON_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableJsonExpressionOptimization")
       .doc("Whether to optimize JSON expressions in SQL optimizer. It includes pruning " +
-        "unnecessary columns from from_json, simplifing from_json + to_json, to_json + " +
+        "unnecessary columns from from_json, simplifying from_json + to_json, to_json + " +
         "named_struct(from_json.col1, from_json.col2, ....).")
       .version("3.1.0")
       .booleanConf
@@ -2033,7 +2113,7 @@ object SQLConf {
     buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
       .internal()
       .doc("When true (default), establishing the result type of an arithmetic operation " +
-        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, i.e. rounding the " +
         "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
         "is returned in those cases, as previously.")
       .version("2.3.1")
@@ -2209,11 +2289,12 @@ object SQLConf {
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
-      "throw an exception at runtime if the inputs to a SQL operator/function are invalid, " +
-      "e.g. overflow in arithmetic operations, out-of-range index when accessing array elements. " +
-      "2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
-      "the SQL parser. 3. Spark will return NULL for null input for function `size`.")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
     .createWithDefault(false)
@@ -2736,20 +2817,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
-      .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
-        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars.")
-      .version("3.0.0")
-      .stringConf
-      .transform(_.toUpperCase(Locale.ROOT))
-      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
-
   val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .internal()
@@ -2764,15 +2831,17 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .internal()
-      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
-        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
-        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
+        "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2789,6 +2858,24 @@ object SQLConf {
         "that are ambiguous between the two calendars. This config is only effective if the " +
         "writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
+      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+
+  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+      .internal()
+      .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
+        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
+      .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2930,6 +3017,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_CHAR_VARCHAR_AS_STRING =
+    buildConf("spark.sql.legacy.charVarcharAsString")
+      .internal()
+      .doc("When true, Spark will not fail if user uses char and varchar type directly in those" +
+        " APIs that accept or parse data types as parameters, e.g." +
+        " `SparkSession.read.schema(...)`, `SparkSession.udf.register(...)` but treat them as" +
+        " string type as Spark 3.0 and earlier.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -2962,7 +3060,11 @@ object SQLConf {
         s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
       DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
         "Avoid to depend on this optimization to prevent a potential correctness issue. " +
-          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule.")
+          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
+      DeprecatedConfig(CONVERT_CTAS.key, "3.1",
+        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
+      DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
+        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3063,6 +3165,8 @@ class SQLConf extends Serializable with Logging {
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
+  def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
+
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
@@ -3158,6 +3262,8 @@ class SQLConf extends Serializable with Logging {
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
@@ -3434,6 +3540,8 @@ class SQLConf extends Serializable with Logging {
 
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
+  def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
+
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
@@ -3573,6 +3681,8 @@ class SQLConf extends Serializable with Logging {
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
+
+  def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   /** ********************** SQLConf functionality methods ************ */
 

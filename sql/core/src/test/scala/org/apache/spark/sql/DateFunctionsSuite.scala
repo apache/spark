@@ -372,11 +372,21 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq(("mon", "2015-07-23"), ("tuesday", "2015-07-20")).toDF("dow", "d")
     val df2 = Seq(("th", "2015-07-23 00:11:22"), ("xx", "2015-07-24 11:22:33")).toDF("dow", "t")
     checkAnswer(
-      df1.select(next_day(col("d"), "MONDAY")),
-      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-07-27"))))
+      df1.select(
+        next_day(col("d"), "MONDAY"),
+        next_day(col("d"), col("dow")),
+        next_day(col("d"), "NonValidDay")),
+      Seq(
+        Row(Date.valueOf("2015-07-27"), Date.valueOf("2015-07-27"), null),
+        Row(Date.valueOf("2015-07-27"), Date.valueOf("2015-07-21"), null)))
     checkAnswer(
-      df2.select(next_day(col("t"), "th")),
-      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-07-30"))))
+      df2.select(
+        next_day(col("t"), "th"),
+        next_day(col("t"), col("dow")),
+        next_day(col("t"), "NonValidDay")),
+      Seq(
+        Row(Date.valueOf("2015-07-30"), Date.valueOf("2015-07-30"), null),
+        Row(Date.valueOf("2015-07-30"), null, null)))
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
@@ -454,7 +464,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e.getCause.isInstanceOf[IllegalArgumentException])
     assert(e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
 
-    // february
+    // February
     val x1 = "2016-02-29"
     val x2 = "2017-02-29"
     val df1 = Seq(x1, x2).toDF("x")
@@ -629,7 +639,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
             e.getMessage.contains("You may get a different result due to the upgrading of Spark"))
         }
 
-        // february
+        // February
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")
@@ -680,7 +690,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd mm:HH:ss')"), Seq(
           Row(secs(ts4.getTime)), Row(null), Row(secs(ts3.getTime)), Row(null)))
 
-        // february
+        // February
         val y1 = "2016-02-29"
         val y2 = "2017-02-29"
         val ts5 = Timestamp.valueOf("2016-02-29 00:00:00")

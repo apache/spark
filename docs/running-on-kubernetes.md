@@ -222,7 +222,7 @@ The app jar file will be uploaded to the S3 and then when the driver is launched
 to the driver pod and will be added to its classpath. Spark will generate a subdir under the upload path with a random name
 to avoid conflicts with spark apps running in parallel. User could manage the subdirs created according to his needs.
 
-The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars` and `spark.files`.
+The client scheme is supported for the application jar, and dependencies specified by properties `spark.jars`, `spark.files` and `spark.archives`.
 
 Important: all client-side dependencies will be uploaded to the given path with a flat directory structure so
 file names must be unique otherwise files will be overwritten. Also make sure in the derived k8s image default ivy dir
@@ -1087,7 +1087,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.pyspark.pythonVersion</code></td>
   <td><code>"3"</code></td>
   <td>
-   This sets the major Python version of the docker image used to run the driver and executor containers. Can be 3.
+   This sets the major Python version of the docker image used to run the driver and executor containers.
+   It can be only "3". This configuration was deprecated from Spark 3.1.0, and is effectively no-op.
+   Users should set 'spark.pyspark.python' and 'spark.pyspark.driver.python' configurations or
+   'PYSPARK_PYTHON' and 'PYSPARK_DRIVER_PYTHON' environment variables.
   </td>
   <td>2.4.0</td>
 </tr>

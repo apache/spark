@@ -228,7 +228,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `a function doesn't exist`"), Nil)
       checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
 
       // this probably will failed if we add more function with `sha` prefixing.
@@ -768,7 +768,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("SELECT * FROM nested").collect().toSeq)
 
         intercept[AnalysisException] {
-          sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+          sql("CREATE TABLE test_ctas_1234 AS SELECT * from nonexistent").collect()
         }
       }
     }
@@ -1739,12 +1739,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |SELECT 'blarr'
          """.stripMargin)
 
-      // project list is the same order of paritioning columns in table definition
+      // project list is the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
         Row("a", "b", "c", "d", "e", "blarr") :: Nil)
 
-      // project list does not have the same order of paritioning columns in table definition
+      // project list does not have the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
         Row("b", "c", "d", "a", "e", "blarr") :: Nil)

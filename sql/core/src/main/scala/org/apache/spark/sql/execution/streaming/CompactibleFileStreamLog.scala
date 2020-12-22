@@ -288,7 +288,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   /**
    * Delete expired log entries that proceed the currentBatchId and retain
-   * sufficient minimum number of batches (given by minBatchsToRetain). This
+   * sufficient minimum number of batches (given by minBatchesToRetain). This
    * equates to retaining the earliest compaction log that proceeds
    * batch id position currentBatchId + 1 - minBatchesToRetain. All log entries
    * prior to the earliest compaction log proceeding that position will be removed.

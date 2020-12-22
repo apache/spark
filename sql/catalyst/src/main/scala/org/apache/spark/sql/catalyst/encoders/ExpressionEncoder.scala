@@ -189,7 +189,7 @@ object ExpressionEncoder {
   }
 
   /**
-   * Function that serializesa an object of type `T` to an [[InternalRow]]. This class is not
+   * Function that serializes an object of type `T` to an [[InternalRow]]. This class is not
    * thread-safe. Note that multiple calls to `apply(..)` return the same actual [[InternalRow]]
    * object.  Thus, the caller should copy the result before making another call if required.
    */

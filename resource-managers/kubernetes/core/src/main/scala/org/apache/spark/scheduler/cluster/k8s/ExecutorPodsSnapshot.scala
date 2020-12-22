@@ -93,7 +93,8 @@ object ExecutorPodsSnapshot extends Logging {
       (
         pod.getStatus == null ||
         pod.getStatus.getPhase == null ||
-        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+          (pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating" &&
+           pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "running")
       ))
   }
 }

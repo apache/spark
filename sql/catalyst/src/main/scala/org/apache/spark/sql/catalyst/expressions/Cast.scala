@@ -499,7 +499,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      if (ansiEnabled) {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, zoneId))
+      } else {
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
+      }
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
@@ -1135,15 +1139,22 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         val zid = getZoneId()
         (c, evPrim, evNull) =>
-          code"""
-          scala.Option<Integer> $intOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
-          if ($intOpt.isDefined()) {
-            $evPrim = ((Integer) $intOpt.get()).intValue();
+          if (ansiEnabled) {
+            code"""
+              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c, $zid);
+            """
           } else {
-            $evNull = true;
+            code"""
+              scala.Option<Integer> $intOpt =
+                org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+              if ($intOpt.isDefined()) {
+                $evPrim = ((Integer) $intOpt.get()).intValue();
+              } else {
+                $evNull = true;
+              }
+            """
           }
-         """
+
       case TimestampType =>
         val zid = getZoneId()
         (c, evPrim, evNull) =>
@@ -1744,7 +1755,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       > SELECT _FUNC_('10' as int);
        10
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "conversion_funcs")
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
 
@@ -1894,6 +1906,19 @@ object AnsiCast {
     case _ => false
   }
 
+  // Show suggestion on how to complete the disallowed explicit casting with built-in type
+  // conversion functions.
+  private def suggestionOnConversionFunctions (
+      from: DataType,
+      to: DataType,
+      functionNames: String): String = {
+    // scalastyle:off line.size.limit
+    s"""cannot cast ${from.catalogString} to ${to.catalogString}.
+       |To convert values from ${from.catalogString} to ${to.catalogString}, you can use $functionNames instead.
+       |""".stripMargin
+    // scalastyle:on line.size.limit
+  }
+
   def typeCheckFailureMessage(
       from: DataType,
       to: DataType,
@@ -1901,12 +1926,19 @@ object AnsiCast {
       fallbackConfValue: String): String =
     (from, to) match {
       case (_: NumericType, TimestampType) =>
-        // scalastyle:off line.size.limit
-        s"""
-           | cannot cast ${from.catalogString} to ${to.catalogString}.
-           | To convert values from ${from.catalogString} to ${to.catalogString}, you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead.
-           |""".stripMargin
+        suggestionOnConversionFunctions(from, to,
+          "functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS")
 
+      case (TimestampType, _: NumericType) =>
+        suggestionOnConversionFunctions(from, to, "functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS")
+
+      case (_: NumericType, DateType) =>
+        suggestionOnConversionFunctions(from, to, "function DATE_FROM_UNIX_DATE")
+
+      case (DateType, _: NumericType) =>
+        suggestionOnConversionFunctions(from, to, "function UNIX_DATE")
+
+      // scalastyle:off line.size.limit
       case (_: ArrayType, StringType) =>
         s"""
            | cannot cast ${from.catalogString} to ${to.catalogString} with ANSI mode on.

@@ -24,13 +24,13 @@ import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
 import java.util.jar.JarInputStream
+import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Properties, Try}
 
-import org.apache.commons.io.FilenameUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -386,12 +386,40 @@ private[spark] class SparkSubmit extends Logging {
         // Replace with the downloaded local jar path to avoid propagating hadoop compatible uris.
         // Executors will get the jars from the Spark file server.
         // Explicitly download the related files here
-        args.jars = renameResourcesToLocalFS(args.jars, localJars)
-        val localFiles = Option(args.files).map {
+        args.jars = localJars
+        val filesLocalFiles = Option(args.files).map {
           downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
         }.orNull
-        args.files = renameResourcesToLocalFS(args.files, localFiles)
-        args.pyFiles = renameResourcesToLocalFS(args.pyFiles, localPyFiles)
+        val archiveLocalFiles = Option(args.archives).map { uris =>
+          val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
+          val localArchives = downloadFileList(
+            resolvedUris.map(
+              UriBuilder.fromUri(_).fragment(null).build().toString).mkString(","),
+            targetDir, sparkConf, hadoopConf, secMgr)
+
+          // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
+          // in cluster mode, the archives should be available in the driver's current working
+          // directory too.
+          Utils.stringToSeq(localArchives).map(Utils.resolveURI).zip(resolvedUris).map {
+            case (localArchive, resolvedUri) =>
+              val source = new File(localArchive.getPath)
+              val dest = new File(
+                ".",
+                if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
+              logInfo(
+                s"Unpacking an archive $resolvedUri " +
+                  s"from ${source.getAbsolutePath} to ${dest.getAbsolutePath}")
+              Utils.deleteRecursively(dest)
+              Utils.unpack(source, dest)
+
+              // Keep the URIs of local files with the given fragments.
+              UriBuilder.fromUri(
+                localArchive).fragment(resolvedUri.getFragment).build().toString
+          }.mkString(",")
+        }.orNull
+        args.files = filesLocalFiles
+        args.archives = archiveLocalFiles
+        args.pyFiles = localPyFiles
       }
     }
 
@@ -825,21 +853,6 @@ private[spark] class SparkSubmit extends Logging {
     sparkConf.set(SUBMIT_PYTHON_FILES, formattedPyFiles.split(",").toSeq)
 
     (childArgs.toSeq, childClasspath.toSeq, sparkConf, childMainClass)
-  }
-
-  private def renameResourcesToLocalFS(resources: String, localResources: String): String = {
-    if (resources != null && localResources != null) {
-      val localResourcesSeq = Utils.stringToSeq(localResources)
-      Utils.stringToSeq(resources).map { resource =>
-        val filenameRemote = FilenameUtils.getName(new URI(resource).getPath)
-        localResourcesSeq.find { localUri =>
-          val filenameLocal = FilenameUtils.getName(new URI(localUri).getPath)
-          filenameRemote == filenameLocal
-        }.getOrElse(resource)
-      }.mkString(",")
-    } else {
-      resources
-    }
   }
 
   // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with

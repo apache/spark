@@ -359,7 +359,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       val schemaNotMatch = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType relationProvierWithSchema (i int)
+             |CREATE $tableType relationProviderWithSchema (i int)
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
              |  From '1',
@@ -373,7 +373,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       val schemaNeeded = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType schemaRelationProvierWithoutSchema
+             |CREATE $tableType schemaRelationProviderWithoutSchema
              |USING org.apache.spark.sql.sources.AllDataTypesScanSource
              |OPTIONS (
              |  From '1',
@@ -387,7 +387,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
 
   test("read the data source tables that do not extend SchemaRelationProvider") {
     Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
-      val tableName = "relationProvierWithSchema"
+      val tableName = "relationProviderWithSchema"
       withTable (tableName) {
         sql(
           s"""

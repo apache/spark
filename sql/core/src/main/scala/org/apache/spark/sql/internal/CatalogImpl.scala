@@ -538,8 +538,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
 
+      // creates a new logical plan since the old table refers to old relation which
+      // should be refreshed
+      val newTable = sparkSession.table(tableIdent)
+
       // recache with the same name and cache level.
-      sparkSession.sharedState.cacheManager.cacheQuery(table, cacheName, cacheLevel)
+      sparkSession.sharedState.cacheManager.cacheQuery(newTable, cacheName, cacheLevel)
     }
   }
 

@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>Analyzer Rules.</li>
  * <li>Check Analysis Rules.</li>
  * <li>Optimizer Rules.</li>
+ * <li>Data Source Rewrite Rules.</li>
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
@@ -197,6 +198,21 @@ class SparkSessionExtensions {
    */
   def injectOptimizerRule(builder: RuleBuilder): Unit = {
     optimizerRules += builder
+  }
+
+  private[this] val dataSourceRewriteRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildDataSourceRewriteRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    dataSourceRewriteRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder that rewrites data source plans into the [[SparkSession]].
+   * The injected rules will be executed after the operator optimization batch and before rules
+   * that depend on stats.
+   */
+  def injectDataSourceRewriteRule(builder: RuleBuilder): Unit = {
+    dataSourceRewriteRules += builder
   }
 
   private[this] val plannerStrategyBuilders = mutable.Buffer.empty[StrategyBuilder]
