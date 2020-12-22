@@ -94,7 +94,7 @@
         <dependency>
           <groupId>dev.ludovic</groupId>
           <artifactId>vectorizedblas-blas</artifactId>
-          <version>0.1.7</version>
+          <version>0.1.9</version>
         </dependency>
       </dependencies>
     </profile>
