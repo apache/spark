@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.annotation.Unstable;
+import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.sources.InsertableRelation;
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
-
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
-  }
+/**
+ * A logical write that should be executed using V1 InsertableRelation interface.
+ * <p>
+ * Tables that have {@link TableCapability#V1_BATCH_WRITE} in the list of their capabilities
+ * must build {@link V1Write}.
+ */
+@Unstable
+public interface V1Write extends Write {
+  InsertableRelation toInsertableRelation();
 }

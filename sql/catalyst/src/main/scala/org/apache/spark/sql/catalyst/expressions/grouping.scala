@@ -150,7 +150,8 @@ object GroupingSets {
         Bob	0	5
         NULL	1	7
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Grouping(child: Expression) extends Expression with Unevaluable {
   @transient
@@ -187,7 +188,8 @@ case class Grouping(child: Expression) extends Expression with Unevaluable {
     Input columns should match with grouping columns exactly, or empty (means all the grouping
     columns).
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "agg_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Unevaluable {
   @transient

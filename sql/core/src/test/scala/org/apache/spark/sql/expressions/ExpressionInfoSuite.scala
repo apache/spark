@@ -43,6 +43,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   test("group info in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getGroup === "agg_funcs")
+    Seq("agg_funcs", "array_funcs", "binary_funcs", "bitwise_funcs", "collection_funcs",
+      "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
+      "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
+      "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs")
 
     Seq("agg_funcs", "array_funcs", "datetime_funcs", "json_funcs", "map_funcs", "window_funcs")
         .foreach { groupName =>
@@ -106,7 +110,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("SPARK-32870: Default expressions in FunctionRegistry should have their " +
-    "usage, examples and since filled") {
+    "usage, examples, since, and group filled") {
     val ignoreSet = Set(
       // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
       "org.apache.spark.sql.catalyst.expressions.TimeWindow",
@@ -121,6 +125,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
           assert(info.getExamples.startsWith("\n    Examples:\n"))
           assert(info.getExamples.endsWith("\n  "))
           assert(info.getSince.matches("[0-9]+\\.[0-9]+\\.[0-9]+"))
+          assert(info.getGroup.nonEmpty)
 
           if (info.getArguments.nonEmpty) {
             assert(info.getArguments.startsWith("\n    Arguments:\n"))

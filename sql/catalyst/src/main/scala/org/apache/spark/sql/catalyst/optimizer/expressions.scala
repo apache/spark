@@ -475,6 +475,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, TrueLiteral, FalseLiteral) => cond
+      case If(cond, FalseLiteral, TrueLiteral) => Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
@@ -542,29 +544,42 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
+      case a: Alias => a // Skip an alias.
+      case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
+          if atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = u.withNewChildren(Array(trueValue)),
+          falseValue = u.withNewChildren(Array(falseValue)))
+
+      case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
+          if atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
+          elseValue.map(e => u.withNewChildren(Array(e))))
+
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
           if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.makeCopy(Array(trueValue, right)),
-          falseValue = b.makeCopy(Array(falseValue, right)))
+          trueValue = b.withNewChildren(Array(trueValue, right)),
+          falseValue = b.withNewChildren(Array(falseValue, right)))
 
       case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
           if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
-          trueValue = b.makeCopy(Array(left, trueValue)),
-          falseValue = b.makeCopy(Array(left, falseValue)))
+          trueValue = b.withNewChildren(Array(left, trueValue)),
+          falseValue = b.withNewChildren(Array(left, falseValue)))
 
       case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
           if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.makeCopy(Array(e._2, right)))),
-          elseValue.map(e => b.makeCopy(Array(e, right))))
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
+          elseValue.map(e => b.withNewChildren(Array(e, right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
           if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
-          branches.map(e => e.copy(_2 = b.makeCopy(Array(left, e._2)))),
-          elseValue.map(e => b.makeCopy(Array(left, e))))
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
+          elseValue.map(e => b.withNewChildren(Array(left, e))))
     }
   }
 }
