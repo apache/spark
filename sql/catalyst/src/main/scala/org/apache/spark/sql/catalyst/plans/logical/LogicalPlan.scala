@@ -180,7 +180,7 @@ abstract class UnaryNode extends LogicalPlan {
     val aliasMap = projectList.collect{
       case alias @ Alias(expr, _) if !expr.foldable => (expr.canonicalized, alias)
     }.groupBy(_._1).mapValues(_.map(_._2))
-    val remainingExpressions = aliasMap.keySet.to[collection.mutable.Set]
+    val remainingExpressions = collection.mutable.Set(aliasMap.keySet.toSeq: _*)
 
     /**
      * Filtering allConstraints between each iteration is necessary, because
