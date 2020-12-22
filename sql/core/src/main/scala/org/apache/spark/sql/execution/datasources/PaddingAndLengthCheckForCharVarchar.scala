@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * When comparing char type column/field with string literal or char type column/field,
  * right-pad the shorter one to the longer length.
  */
-object PaddingAndLengthCheckForCharVarChar extends Rule[LogicalPlan] {
+object PaddingAndLengthCheckForCharVarchar extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val padded = plan.resolveOperatorsUpWithNewOutput {
