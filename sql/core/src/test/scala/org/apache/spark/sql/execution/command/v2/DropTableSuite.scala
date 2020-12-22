@@ -29,8 +29,8 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       val errMsg = intercept[UnsupportedOperationException] {
         sql(s"DROP TABLE $catalog.ns.tbl PURGE")
       }.getMessage
-      // The default TableCatalog.dropTable implementation doesn't support the purge option.
-      assert(errMsg.contains("Purge option is not supported"))
+      // The default TableCatalog.purgeTable implementation throws an exception.
+      assert(errMsg.contains("Purge table is not supported"))
     }
   }
 
