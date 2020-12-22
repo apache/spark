@@ -179,7 +179,7 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
-        ApplyCharTypePadding +:
+        PaddingAndLengthCheckForCharVarChar +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
