@@ -604,7 +604,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables = describedTables ++ logical.collect {
       case UnresolvedRelation(ident, _, _) =>
-        if (!ident.isEmpty && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+        if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
           ident.tail.asTableIdentifier
         } else ident.asTableIdentifier
     }
