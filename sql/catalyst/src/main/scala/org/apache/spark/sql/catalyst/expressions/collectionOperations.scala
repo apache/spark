@@ -942,6 +942,8 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None)
 
   def this(child: Expression) = this(child, None)
 
+  override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(DefaultSeed())
+
   override def withNewSeed(seed: Long): Shuffle = copy(randomSeed = Some(seed))
 
   override lazy val resolved: Boolean =

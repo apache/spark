@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -32,7 +31,8 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful {
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
+  with ExpressionWithRandomSeed {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -43,7 +43,9 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
     rng = new XORShiftRandom(seed + partitionIndex)
   }
 
-  @transient protected lazy val seed: Long = child match {
+  override def seedExpression: Expression = child
+
+  @transient protected lazy val seed: Long = seedExpression match {
     case Literal(s, IntegerType) => s.asInstanceOf[Int]
     case Literal(s, LongType) => s.asInstanceOf[Long]
     case _ => throw new AnalysisException(
@@ -62,7 +64,17 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
  * Usually the random seed needs to be renewed at each execution under streaming queries.
  */
 trait ExpressionWithRandomSeed {
+  def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
+}
+
+/**
+ * A place holder expression used in random functions, will be replaced after analyze.
+ */
+case class DefaultSeed() extends Expression with Unevaluable {
+  override def nullable: Boolean = true
+  override def dataType: DataType = NullType
+  override def children: Seq[Expression] = Nil
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
@@ -83,10 +95,9 @@ trait ExpressionWithRandomSeed {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression, hideSeed: Boolean = false)
-  extends RDG with ExpressionWithRandomSeed {
+case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
+  def this() = this(DefaultSeed(), true)
 
   def this(child: Expression) = this(child, false)
 
@@ -134,10 +145,9 @@ object Rand {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression, hideSeed: Boolean = false)
-  extends RDG with ExpressionWithRandomSeed {
+case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType), true)
+  def this() = this(DefaultSeed(), true)
 
   def this(child: Expression) = this(child, false)
 

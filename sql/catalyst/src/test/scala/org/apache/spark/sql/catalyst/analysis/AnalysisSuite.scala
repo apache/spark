@@ -1006,4 +1006,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(plan, expect)
     }
   }
+
+  test("SPARK-33857: Unify the default seed of random functions") {
+    Seq(new Rand(), new Randn(), Shuffle(Literal(Array())), Uuid()).foreach { r =>
+      assert(r.seedExpression.isInstanceOf[DefaultSeed])
+      val p = getAnalyzer.execute(Project(Seq(r.as("r")), testRelation))
+      assert(
+        p.asInstanceOf[Project].projectList.head.asInstanceOf[Alias]
+          .child.asInstanceOf[ExpressionWithRandomSeed]
+          .seedExpression.isInstanceOf[Literal]
+      )
+    }
+  }
 }
