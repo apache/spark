@@ -73,4 +73,11 @@ class InMemoryAtomicPartitionTable (
     }
     idents.forall(dropPartition)
   }
+
+  override def purgePartitions(idents: Array[InternalRow]): Boolean = {
+    if (!idents.forall(partitionExists)) {
+      return false;
+    }
+    idents.forall(purgePartition)
+  }
 }
