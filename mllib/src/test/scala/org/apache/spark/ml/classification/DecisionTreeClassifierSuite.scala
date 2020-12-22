@@ -454,9 +454,6 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(model.numClasses === 2)
     assert(model.numFeatures === 692)
     assert(model.numNodes === 5)
-    assert(model.featureImportances ~==
-      Vectors.sparse(692, Array(100, 434),
-        Array(0.03987240829346089, 0.9601275917065392)) absTol 1e-4)
 
     val metadata = spark.read.json(s"$path/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
