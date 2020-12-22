@@ -96,7 +96,6 @@ abstract class AbstractCommandBuilder {
       childEnv.get("JAVA_HOME"),
       System.getenv("JAVA_HOME"),
       System.getProperty("java.home"));
-
     if (firstJavaHome != null) {
       cmd.add(join(File.separator, firstJavaHome, "bin", "java"));
     }
