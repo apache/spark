@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -455,10 +454,10 @@ package object dsl {
         UnresolvedHint(name, parameters, logicalPlan)
 
       def sample(
-          lowerBound: Double = 0.0,
+          lowerBound: Double,
           upperBound: Double,
-          withReplacement: Boolean = false,
-          seed: Long = Utils.random.nextLong): LogicalPlan = {
+          withReplacement: Boolean,
+          seed: Long): LogicalPlan = {
         Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
       }
 

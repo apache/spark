@@ -152,8 +152,8 @@ class CombiningLimitsSuite extends PlanTest {
 
   test("SPARK-33497: Eliminate Limit if Sample max rows not larger than Limit") {
     checkPlanAndMaxRow(
-      testRelation.select().sample(upperBound = 0.2, seed = 1).limit(10),
-      testRelation.select().sample(upperBound = 0.2, seed = 1),
+      testRelation.select().sample(0, 0.2, false, 1).limit(10),
+      testRelation.select().sample(0, 0.2, false, 1),
       10
     )
   }
