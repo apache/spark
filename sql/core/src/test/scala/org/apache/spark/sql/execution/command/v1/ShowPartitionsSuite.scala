@@ -61,22 +61,6 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
-
-  test("empty partition string") {
-    import testImplicits._
-    withTable("part_datasrc") {
-      val df = Seq((0, "")).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable("part_datasrc")
-
-      runShowPartitionsSql(
-        "SHOW PARTITIONS part_datasrc",
-        Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
-    }
-  }
 }
 
 class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
@@ -107,6 +91,22 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         .saveAsTable("part_datasrc")
 
       assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
+    }
+  }
+
+  test("empty partition string") {
+    import testImplicits._
+    withTable("t") {
+      val df = Seq((0, "")).toDF("a", "part")
+      df.write
+        .partitionBy("part")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("t")
+
+      runShowPartitionsSql(
+        "SHOW PARTITIONS t",
+        Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
     }
   }
 }

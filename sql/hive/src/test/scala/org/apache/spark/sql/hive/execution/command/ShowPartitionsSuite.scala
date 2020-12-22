@@ -17,6 +17,25 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.command.v1
 
-class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase
+class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
+  test("empty partition string") {
+    import testImplicits._
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("t") {
+        val df = Seq((0, "")).toDF("a", "part")
+        df.write
+          .partitionBy("part")
+          .format("hive")
+          .mode(SaveMode.Overwrite)
+          .saveAsTable("t")
+
+        runShowPartitionsSql(
+          "SHOW PARTITIONS t",
+          Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
+      }
+    }
+  }
+}
