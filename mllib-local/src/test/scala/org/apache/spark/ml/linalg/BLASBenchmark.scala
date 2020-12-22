@@ -61,25 +61,25 @@ object BLASBenchmark extends BenchmarkBase {
 
     runBenchmark("daxpy") {
       val n = 1e7.toInt
-      val a = rnd.nextDouble
+      val alpha = rnd.nextDouble
       val x = Array.fill(n) { rnd.nextDouble }
       val y = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("daxpy", n, iters, output = output)
 
       benchmark.addCase("f2j") { _ =>
-        f2jBLAS.daxpy(n, a, x, 1, y, 1)
+        f2jBLAS.daxpy(n, alpha, x, 1, y, 1)
       }
 
       if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("native") { _ =>
-          nativeBLAS.daxpy(n, a, x, 1, y, 1)
+          nativeBLAS.daxpy(n, alpha, x, 1, y, 1)
         }
       }
 
       if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("vector") { _ =>
-          vectorBLAS.daxpy(n, a, x, 1, y, 1)
+          vectorBLAS.daxpy(n, alpha, x, 1, y, 1)
         }
       }
 
@@ -140,24 +140,24 @@ object BLASBenchmark extends BenchmarkBase {
 
     runBenchmark("dscal") {
       val n = 1e7.toInt
-      val a = rnd.nextDouble
+      val alpha = rnd.nextDouble
       val x = Array.fill(n) { rnd.nextDouble }
 
       val benchmark = new Benchmark("dscal", n, iters, output = output)
 
       benchmark.addCase("f2j") { _ =>
-        f2jBLAS.dscal(n, a, x, 1)
+        f2jBLAS.dscal(n, alpha, x, 1)
       }
 
       if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("native") { _ =>
-          nativeBLAS.dscal(n, a, x, 1)
+          nativeBLAS.dscal(n, alpha, x, 1)
         }
       }
 
       if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("vector") { _ =>
-          vectorBLAS.dscal(n, a, x, 1)
+          vectorBLAS.dscal(n, alpha, x, 1)
         }
       }
 
@@ -166,24 +166,107 @@ object BLASBenchmark extends BenchmarkBase {
 
     runBenchmark("sscal") {
       val n = 1e7.toInt
-      val a = rnd.nextFloat
+      val alpha = rnd.nextFloat
       val x = Array.fill(n) { rnd.nextFloat }
 
       val benchmark = new Benchmark("sscal", n, iters, output = output)
 
       benchmark.addCase("f2j") { _ =>
-        f2jBLAS.sscal(n, a, x, 1)
+        f2jBLAS.sscal(n, alpha, x, 1)
       }
 
       if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("native") { _ =>
-          nativeBLAS.sscal(n, a, x, 1)
+          nativeBLAS.sscal(n, alpha, x, 1)
         }
       }
 
       if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
         benchmark.addCase("vector") { _ =>
-          vectorBLAS.sscal(n, a, x, 1)
+          vectorBLAS.sscal(n, alpha, x, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dspmv[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
+      val x = Array.fill(n) { rnd.nextDouble }
+      val beta = rnd.nextDouble
+      val y = Array.fill(n) { rnd.nextDouble }
+
+      val benchmark = new Benchmark("dspmv[U]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dspmv("U", n, alpha, a, x, 1, beta, y, 1)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dspmv("U", n, alpha, a, x, 1, beta, y, 1)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dspmv("U", n, alpha, a, x, 1, beta, y, 1)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dspr[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val x = Array.fill(n) { rnd.nextDouble }
+      val a = Array.fill(n * (n + 1) / 2) { rnd.nextDouble }
+
+      val benchmark = new Benchmark("dspr[U]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dspr("U", n, alpha, x, 1, a)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dspr("U", n, alpha, x, 1, a)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dspr("U", n, alpha, x, 1, a)
+        }
+      }
+
+      benchmark.run()
+    }
+
+    runBenchmark("dsyr[U]") {
+      val n = 1e4.toInt
+      val alpha = rnd.nextDouble
+      val x = Array.fill(n) { rnd.nextDouble }
+      val a = Array.fill(n * n) { rnd.nextDouble }
+
+      val benchmark = new Benchmark("dsyr[U]", n, iters, output = output)
+
+      benchmark.addCase("f2j") { _ =>
+        f2jBLAS.dsyr("U", n, alpha, x, 1, a, n)
+      }
+
+      if (!nativeBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("native") { _ =>
+          nativeBLAS.dsyr("U", n, alpha, x, 1, a, n)
+        }
+      }
+
+      if (!vectorBLAS.getClass.equals(classOf[F2jBLAS])) {
+        benchmark.addCase("vector") { _ =>
+          vectorBLAS.dsyr("U", n, alpha, x, 1, a, n)
         }
       }
 
