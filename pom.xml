@@ -1137,7 +1137,7 @@
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3 -->
           <exclusion>
             <groupId>javax.ws.rs</groupId>
             <artifactId>jsr311-api</artifactId>
@@ -1432,7 +1432,7 @@
             <groupId>com.sun.jersey.contribs</groupId>
             <artifactId>*</artifactId>
           </exclusion>
-          <!-- Hadoop-3.2 -->
+          <!-- Hadoop-3 -->
           <exclusion>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP-java7</artifactId>
@@ -3146,7 +3146,7 @@
     -->
 
     <profile>
-      <id>hadoop-2.7</id>
+      <id>hadoop-2</id>
       <properties>
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
@@ -3155,7 +3155,7 @@
     </profile>
 
     <profile>
-      <id>hadoop-3.2</id>
+      <id>hadoop-3</id>
       <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 

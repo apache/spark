@@ -36,7 +36,7 @@ strings /path/to/libgfortran.so.3.0.0 | grep GFORTRAN_1.4
 
 To build Spark with `netlib-java` native library proxies, you need to add `-Pnetlib-lgpl` to Maven build command line. For example:
 ```
-$SPARK_SOURCE_HOME/build/mvn -Pnetlib-lgpl -DskipTests -Pyarn -Phadoop-2.7 clean package
+$SPARK_SOURCE_HOME/build/mvn -Pnetlib-lgpl -DskipTests -Pyarn -Phadoop-2 clean package
 ```
 
 If you only want to enable it in your project, include `com.github.fommil.netlib:all:1.1.2` as a dependency of your project.
