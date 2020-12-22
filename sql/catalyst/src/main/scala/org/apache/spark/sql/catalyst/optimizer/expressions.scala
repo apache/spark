@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /*
  * Optimization rules defined in this file should not affect the structure of the logical plan.
@@ -582,33 +581,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           elseValue.map(e => b.withNewChildren(Array(left, e))))
     }
-  }
-}
-
-
-object SimplifyConditionalInPredicate extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f @ Filter(cond, _) => f.copy(condition = simplifyConditional(cond))
-  }
-
-  private def simplifyConditional(e: Expression): Expression = e match {
-    case cw @ CaseWhen(branches, elseValue) if cw.dataType == BooleanType && branches.size == 1 &&
-        elseValue.forall(_.semanticEquals(FalseLiteral)) =>
-      val (whenVal, thenVal) = branches.head
-      And(whenVal, thenVal)
-    case i @ If(pred, trueVal, FalseLiteral) if i.dataType == BooleanType =>
-      And(pred, trueVal)
-    case e if e.dataType == BooleanType =>
-      e
-    case e =>
-      val message = "Expected a Boolean type expression in simplifyConditional, " +
-        s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
-      if (Utils.isTesting) {
-        throw new IllegalArgumentException(message)
-      } else {
-        logWarning(message)
-        e
-      }
   }
 }
 
