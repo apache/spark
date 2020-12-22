@@ -298,17 +298,6 @@ private[sql] trait SQLTestUtilsBase
   }
 
   /**
-   * Drops view `viewName` after calling `f`.
-   */
-  protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(
-      viewNames.foreach { name =>
-        spark.sql(s"DROP VIEW IF EXISTS $name")
-      }
-    )
-  }
-
-  /**
    * Drops table `tableName` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
@@ -317,6 +306,17 @@ private[sql] trait SQLTestUtilsBase
         spark.sql(s"DROP TABLE IF EXISTS $name")
       }
     }
+  }
+
+  /**
+   * Drops view `viewName` after calling `f`.
+   */
+  protected def withView(viewNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f)(
+      viewNames.foreach { name =>
+        spark.sql(s"DROP VIEW IF EXISTS $name")
+      }
+    )
   }
 
   /**
