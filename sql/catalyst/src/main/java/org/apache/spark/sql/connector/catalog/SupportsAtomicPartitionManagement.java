@@ -34,6 +34,9 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  *     add an array of partitions and any data they contain to the table
  * ${@link #dropPartitions}:
  *     remove an array of partitions and any data they contain from the table
+ * ${@link #purgePartitions}:
+ *     remove an array of partitions and any data they contain from the table by skipping
+ *     a trash even if it is supported
  *
  * @since 3.1.0
  */
