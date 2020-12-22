@@ -72,11 +72,6 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       assert(errMsg.contains("Partition already exists"))
     }
   }
-}
-
-class AlterTableRenamePartitionSuite
-  extends AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase {
 
   test("single part partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -168,3 +163,7 @@ class AlterTableRenamePartitionSuite
     }
   }
 }
+
+class AlterTableRenamePartitionSuite
+  extends AlterTableRenamePartitionSuiteBase
+  with CommandSuiteBase
