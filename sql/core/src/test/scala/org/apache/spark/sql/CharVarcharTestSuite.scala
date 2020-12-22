@@ -18,8 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.catalyst.expressions.RaiseError
-import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -531,14 +529,6 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
   }
 
-
-  def checkRaiseErrorApplied(df: DataFrame): Unit = {
-    val re = df.queryExecution.optimizedPlan.asInstanceOf[Project].projectList.head.collect {
-      case _: RaiseError => true
-    }
-    assert(re.nonEmpty, "should apply raise_error to output")
-  }
-
   test("create table w/ location and fit length values") {
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
@@ -546,8 +536,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '12' as c0").write.option("path", dir.toString).save()
           sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
           val df = sql("select * from t")
-          checkRaiseErrorApplied(df)
-          checkAnswer(df, Row("12"))
+          checkAnswer(sql("select * from t"), Row("12"))
         }
       }
     }
@@ -559,9 +548,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         withTable("t") {
           sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
           sql(s"CREATE TABLE t (c0 $typ(2)) using $format LOCATION '$dir'")
-          val df = sql("select * from t")
-          checkRaiseErrorApplied(df)
-          val e = intercept[SparkException] { df.collect() }
+          val e = intercept[SparkException] { sql("select * from t").collect() }
           assert(e.getCause.getMessage.contains(
             s"input string of length 6 exceeds $typ type length limitation: 2"))
         }
@@ -576,9 +563,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '12' as c0").write.option("path", dir.toString).save()
           sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          val df = spark.table("t")
-          checkRaiseErrorApplied(df)
-          checkAnswer(df, Row("12"))
+          checkAnswer(spark.table("t"), Row("12"))
         }
       }
     }
@@ -591,9 +576,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as c0").write.option("path", dir.toString).save()
           sql(s"CREATE TABLE t (c0 $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          val df = spark.table("t")
-          checkRaiseErrorApplied(df)
-          val e = intercept[SparkException] { df.collect() }
+          val e = intercept[SparkException] { spark.table("t").collect() }
           assert(e.getCause.getMessage.contains(
             s"input string of length 6 exceeds $typ type length limitation: 2"))
         }
