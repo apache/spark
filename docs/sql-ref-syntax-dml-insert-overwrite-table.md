@@ -26,7 +26,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 ### Syntax
 
 ```sql
-INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ] [ column_list ]
+INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ] [ ( column_list ) ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 ```
 
@@ -40,17 +40,21 @@ INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
 
 * **partition_spec**
 
-    An optional parameter that specifies a comma separated list of key and value pairs
+    An optional parameter that specifies a comma-separated list of key and value pairs
     for partitions.
 
     **Syntax:** `PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )`
 
 * **column_list**
 
-  An optional parameter that specifies a comma separated list of columns belong to the `table_identifier`.
-  All specified columns should exist in the `table_identifier` and not be duplicated from each other. It includes all columns except the static partition columns.
-  The size of the column list should be exactly the size of the data from `VALUES` clause or query.
-  The order of the column list is alterable and determines how the data from `VALUES` clause or query to be inserted by position.
+  An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table.
+
+  **Note**
+
+  The current behaviour has some limitations:
+  - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
+  - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
+  - The order of the column list is alterable and determines how the data from `VALUES` clause or query to be inserted by position.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
@@ -188,7 +192,6 @@ SELECT * FROM students WHERE name = 'Kent Yao';
 +---------+----------------------+----------+
 |Kent Yao |Hangzhou, China       |  11215016|
 +---------+----------------------+----------+
-
 ```
 
 #### Insert with both a partition spec and a column list
@@ -203,7 +206,6 @@ SELECT * FROM students WHERE student_id = '11215017';
 +------------+----------------------+----------+
 |Kent Yao Jr.|Hangzhou, China       |  11215017|
 +------------+----------------------+----------+
-
 ```
 
 ### Related Statements
