@@ -42,15 +42,15 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation.fromExternalRows(
-    Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
+    Seq("a".attr.int, "b".attr.int, "c".attr.int),
     1.to(10).map(_ => Row(1, 2, 3))
   )
   val testRelation2 = LocalRelation.fromExternalRows(
-    Seq(Symbol("x").int, Symbol("y").int, Symbol("z").int),
+    Seq("x".attr.int, "y".attr.int, "z".attr.int),
     Seq(Row(1, 2, 3), Row(2, 3, 4))
   )
-  val testRelation3 = RelationWithoutMaxRows(Seq(Symbol("i").int))
-  val testRelation4 = LongMaxRelation(Seq(Symbol("j").int))
+  val testRelation3 = RelationWithoutMaxRows(Seq("i".attr.int))
+  val testRelation4 = LongMaxRelation(Seq("j".attr.int))
 
   test("limits: combines two limits") {
     val originalQuery =
@@ -160,8 +160,8 @@ class CombiningLimitsSuite extends PlanTest {
 
   test("SPARK-33497: Eliminate Limit if Deduplicate max rows not larger than Limit") {
     checkPlanAndMaxRow(
-      testRelation.deduplicate(Symbol("a")).limit(10),
-      testRelation.deduplicate(Symbol("a")),
+      testRelation.deduplicate("a".attr).limit(10),
+      testRelation.deduplicate("a".attr),
       10
     )
   }
@@ -173,8 +173,8 @@ class CombiningLimitsSuite extends PlanTest {
       10
     )
     checkPlanAndMaxRow(
-      testRelation.distribute(Symbol("a"))(2).limit(10),
-      testRelation.distribute(Symbol("a"))(2),
+      testRelation.distribute("a".attr)(2).limit(10),
+      testRelation.distribute("a".attr)(2),
       10
     )
   }
@@ -222,9 +222,9 @@ class CombiningLimitsSuite extends PlanTest {
   test("SPARK-33497: Eliminate Limit if Window max rows not larger than Limit") {
     checkPlanAndMaxRow(
       testRelation.window(
-        Seq(count(1).as("c")), Seq(Symbol("a")), Seq(Symbol("b").asc)).limit(20),
+        Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)).limit(20),
       testRelation.window(
-        Seq(count(1).as("c")), Seq(Symbol("a")), Seq(Symbol("b").asc)),
+        Seq(count(1).as("c")), Seq("a".attr), Seq("b".attr.asc)),
       10
     )
   }
