@@ -3822,6 +3822,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
         }
       }
+      System.clearProperty("ivy.home")
     }
     }
   }
