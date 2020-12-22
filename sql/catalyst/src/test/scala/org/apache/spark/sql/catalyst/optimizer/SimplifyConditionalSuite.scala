@@ -83,7 +83,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     // i.e. removing branches whose conditions are always false
     assertEquivalent(
       CaseWhen(unreachableBranch :: normalBranch :: unreachableBranch :: nullBranch :: Nil, None),
-      CaseWhen(normalBranch :: Nil, Literal.create(null, IntegerType)))
+      CaseWhen(normalBranch :: Nil, None))
   }
 
   test("remove entire CaseWhen if only the else branch is reachable") {
@@ -216,9 +216,23 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
   }
 
-  test("SPARK-33847: Replace None of elseValue inside CaseWhen to null literal") {
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
     assertEquivalent(
-      CaseWhen(normalBranch :: Nil, None),
-      CaseWhen(normalBranch :: Nil, Literal.create(null, IntegerType)))
+      CaseWhen((GreaterThan('a, 1), Literal.create(null, IntegerType)) :: Nil,
+        None),
+      Literal.create(null, IntegerType))
+    assertEquivalent(
+      CaseWhen((GreaterThan(Rand(0), 1), Literal.create(null, IntegerType)) :: Nil,
+        None),
+      Literal.create(null, IntegerType))
+
+    assertEquivalent(
+      CaseWhen((GreaterThan('a, 1), Literal.create(null, IntegerType)) :: Nil,
+        Some(Literal.create(null, IntegerType))),
+      Literal.create(null, IntegerType))
+    assertEquivalent(
+      CaseWhen((GreaterThan('a, 1), Literal(20)) :: (GreaterThan('b, 1), Literal(20)) :: Nil,
+        Some(Literal(20))),
+      Literal(20))
   }
 }

@@ -115,7 +115,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val expectedBranches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
       (UnresolvedAttribute("i") > Literal(40)) -> TrueLiteral)
-    val expectedCond = CaseWhen(expectedBranches, FalseLiteral)
+    val expectedCond = CaseWhen(expectedBranches)
 
     testFilter(originalCond, expectedCond)
     testJoin(originalCond, expectedCond)
@@ -241,13 +241,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       Literal(2) === nestedCaseWhen,
       TrueLiteral,
       FalseLiteral)
-    val branches = Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue)
-    val condition = CaseWhen(branches)
+    val condition = CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue))
     val expectedCond = CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) ->
-      CaseWhen(
-        Seq((UnresolvedAttribute("i") > Literal(20)) -> TrueLiteral),
-        FalseLiteral)),
-      FalseLiteral)
+      CaseWhen(Seq((UnresolvedAttribute("i") > Literal(20)) -> TrueLiteral), FalseLiteral)))
     testFilter(originalCond = condition, expectedCond = expectedCond)
     testJoin(originalCond = condition, expectedCond = expectedCond)
     testDelete(originalCond = condition, expectedCond = expectedCond)
@@ -406,6 +402,18 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testJoin(nonAllFalseCond, nonAllFalseCond)
     testDelete(nonAllFalseCond, nonAllFalseCond)
     testUpdate(nonAllFalseCond, nonAllFalseCond)
+  }
+
+  test("replace None of elseValue inside CaseWhen if all branches are null") {
+    val allFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> Literal.create(null, BooleanType),
+      (UnresolvedAttribute("i") > Literal(40)) -> Literal.create(null, BooleanType))
+    val allFalseCond = CaseWhen(allFalseBranches)
+
+    testFilter(allFalseCond, FalseLiteral)
+    testJoin(allFalseCond, FalseLiteral)
+    testDelete(allFalseCond, FalseLiteral)
+    testUpdate(allFalseCond, FalseLiteral)
   }
 
   test("replace None of elseValue inside CaseWhen with PushFoldableIntoBranches") {
