@@ -422,4 +422,35 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
   }
+
+  test("SPARK-33152: Avoid exponential growth of constraints") {
+    val relation = LocalRelation('a.int, 'b.int, 'c.int)
+
+    val plan1 = relation
+      .where('a.attr + 'b.attr > intToLiteral(0))
+      .select('a as 'a1, 'b as 'b1)
+      .analyze
+
+    verifyConstraints(plan1.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan1, "a1")),
+        IsNotNull(resolveColumn(plan1, "b1")),
+        resolveColumn(plan1, "a1") + resolveColumn(plan1, "b1") > 0
+      )))
+
+
+    val plan2 = relation
+      .where('a.attr + 'b.attr > intToLiteral(0))
+      .select('a as 'a1, 'b as 'b1, ('a.attr + 'b.attr) as 'c1)
+      .analyze
+
+    verifyConstraints(plan2.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan2, "a1")),
+        IsNotNull(resolveColumn(plan2, "b1")),
+        IsNotNull(resolveColumn(plan2, "c1")),
+        resolveColumn(plan2, "a1") + resolveColumn(plan2, "b1") > 0,
+        resolveColumn(plan2, "c1") > 0
+      )))
+  }
 }

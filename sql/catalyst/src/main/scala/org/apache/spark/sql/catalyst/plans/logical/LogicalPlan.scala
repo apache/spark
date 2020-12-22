@@ -175,20 +175,57 @@ abstract class UnaryNode extends LogicalPlan {
    */
   protected def getAllValidConstraints(projectList: Seq[NamedExpression]): ExpressionSet = {
     var allConstraints = child.constraints
-    projectList.foreach {
-      case a @ Alias(l: Literal, _) =>
-        allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) =>
-        // For every alias in `projectList`, replace the reference in constraints by its attribute.
-        allConstraints ++= allConstraints.map(_ transform {
-          case expr: Expression if expr.semanticEquals(e) =>
-            a.toAttribute
+
+    // For each expression collect its aliases
+    val aliasMap = projectList.collect{
+      case alias @ Alias(expr, _) if !expr.foldable => (expr.canonicalized, alias)
+    }.groupBy(_._1).mapValues(_.map(_._2))
+    val remainingExpressions = aliasMap.keySet.to[collection.mutable.Set]
+
+    /**
+     * Filtering allConstraints between each iteration is necessary, because
+     * otherwise collecting valid constraints could in the worst case have exponential
+     * time and memory complexity. Each replaced alias could double the number of constraints,
+     * because we would keep both the original constraint and the one with alias.
+     */
+    def shouldBeKept(expr: Expression): Boolean = {
+      expr.references.subsetOf(outputSet) ||
+        remainingExpressions.contains(expr.canonicalized) ||
+        (expr.children.nonEmpty && expr.children.forall(shouldBeKept))
+    }
+
+    // Replace expressions with aliases
+    for ((expr, aliases) <- aliasMap) {
+      allConstraints ++= allConstraints.flatMap(constraint => {
+        aliases.map(alias => {
+          constraint transform {
+            case e: Expression if e.semanticEquals(expr) =>
+              alias.toAttribute
+          }
         })
-        allConstraints += EqualNullSafe(e, a.toAttribute)
+      })
+
+      for { alias1 <- aliases; alias2 <- aliases } {
+        if (!alias1.fastEquals(alias2)) {
+          allConstraints += EqualNullSafe(alias1.toAttribute, alias2.toAttribute)
+        }
+      }
+
+      remainingExpressions.remove(expr)
+      allConstraints = allConstraints.filter(shouldBeKept)
+    }
+
+    /**
+    We keep the child constraints and equality between original and aliased attributes,
+    so [[ConstraintHelper.inferAdditionalConstraints]] would have the full information available.
+     */
+    projectList.foreach {
+      case alias @ Alias(expr, _) =>
+        allConstraints += EqualNullSafe(alias.toAttribute, expr)
       case _ => // Don't change.
     }
 
-    allConstraints
+    allConstraints ++ child.constraints
   }
 
   override protected lazy val validConstraints: ExpressionSet = child.constraints
