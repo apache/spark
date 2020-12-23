@@ -21,7 +21,7 @@ import java.net.URI
 
 import org.apache.spark.SparkFunSuite
 
-object DependencyUtils extends SparkFunSuite {
+class DependencyUtilsSuite extends SparkFunSuite {
 
   test("SPARK-33084: Add jar support Ivy URI -- test invalid ivy uri") {
     val e1 = intercept[IllegalArgumentException] {
