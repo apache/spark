@@ -1634,8 +1634,7 @@ object SQLConf {
   val CSV_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableCsvExpressionOptimization")
       .doc("Whether to optimize CSV expressions in SQL optimizer. It includes pruning " +
-        "unnecessary columns from from_csv, simplifying from_csv + to_csv, to_csv + " +
-        "named_struct(from_csv.col1, from_csv.col2, ....).")
+        "unnecessary columns from from_csv.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
