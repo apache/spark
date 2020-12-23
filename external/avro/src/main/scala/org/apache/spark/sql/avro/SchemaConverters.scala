@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
-import org.apache.avro.LogicalTypes.{Date, Decimal, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{Date, Decimal, TimeMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -59,6 +59,7 @@ object SchemaConverters {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
+        case _: TimeMillis => SchemaType(TimestampType, nullable = false)
         case _ => SchemaType(IntegerType, nullable = false)
       }
       case STRING => SchemaType(StringType, nullable = false)
