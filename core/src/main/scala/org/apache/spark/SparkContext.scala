@@ -1973,15 +1973,15 @@ class SparkContext(config: SparkConf) extends Logging {
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
-      val (keys, schema) = if (path.contains("\\") && Utils.isWindows) {
+      val (keys, scheme) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
         (addLocalJarFile(new File(path)), "local")
       } else {
         val uri = new Path(path).toUri
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
-        val uriSchema = uri.getScheme
-        val jarPaths = uriSchema match {
+        val uriScheme = uri.getScheme
+        val jarPaths = uriScheme match {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
@@ -1997,18 +1997,18 @@ class SparkContext(config: SparkConf) extends Logging {
               .flatMap(jar => addLocalJarFile(new File(jar)))
           case _ => checkRemoteJarFile(path)
         }
-        (jarPaths, uriSchema)
+        (jarPaths, uriScheme)
       }
       if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
         val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
         if (added.nonEmpty) {
-          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of Ivy URI"
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
           postEnvironmentUpdate()
         }
         if (existed.nonEmpty) {
-          val jarMessage = if (schema != "ivy") "JAR" else "dependency jars of Ivy URI"
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
           logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
             " Overwriting of added jar is not supported in the current version.")
         }
