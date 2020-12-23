@@ -3796,7 +3796,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
-    withTempDir { dir => {
+    withTempDir { dir =>
       System.setProperty("ivy.home", dir.getAbsolutePath)
       val sourceJar = new File(Thread.currentThread().getContextClassLoader
         .getResource("SPARK-33084.jar").getFile)
@@ -3823,7 +3823,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
       System.clearProperty("ivy.home")
-    }
     }
   }
 }

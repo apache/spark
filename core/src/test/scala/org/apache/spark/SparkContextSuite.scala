@@ -445,29 +445,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-33084: add jar when path contains comma") {
-    withTempDir { tmpDir =>
-      val tmpJar = File.createTempFile("Test,UDTF", ".jar", tmpDir)
-      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addJar(tmpJar.getAbsolutePath)
-      assert(sc.listJars().exists(_.contains("Test,UDTF")))
-
-      val jarPath = "hdfs:///no/path/to/Test,UDTF1.jar"
-      sc.addJar(jarPath)
-      // Add jar failed since file not exists
-      assert(!sc.listJars().exists(_.contains("/no/path/to/Test,UDTF.jar")))
-
-      Seq("http", "https", "ftp").foreach { scheme =>
-        val badURL = s"$scheme://user:pwd/path/Test,UDTF_${scheme}.jar"
-        val e = intercept[MalformedURLException] {
-          sc.addJar(badURL)
-        }
-        assert(e.getMessage.contains(badURL))
-        assert(!sc.listJars().exists(_.contains(s"Test,UDTF_${scheme}.jar")))
-      }
-    }
-  }
-
   test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
     withTempDir { dir =>
       val tmpDir = new File(dir, "host%3A443")
@@ -1152,7 +1129,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- test param case sensitive") {
+  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case sensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
@@ -1172,39 +1149,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
-  }
-
-  test("SPARK-33084: Add jar support Ivy URI -- test invalid ivy uri") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    val e1 = intercept[IllegalArgumentException] {
-      sc.addJar("ivy://")
-    }.getMessage
-    assert(e1.contains("Expected authority at index 6: ivy://"))
-
-    val e2 = intercept[IllegalArgumentException] {
-      sc.addJar("ivy://org.apache.hive:hive-contrib")
-    }.getMessage
-    assert(e2.contains("Invalid Ivy URI authority in uri ivy://org.apache.hive:hive-contrib:" +
-      " Expected 'org:module:version', found org.apache.hive:hive-contrib."))
-
-    val e3 = intercept[IllegalArgumentException] {
-      sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?foo=")
-    }.getMessage
-    assert(e3.contains("Invalid query string in Ivy URI" +
-      " ivy://org.apache.hive:hive-contrib:2.3.7?foo=:"))
-
-    val e4 = intercept[IllegalArgumentException] {
-      sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo")
-    }.getMessage
-    assert(e4.contains("Invalid query string in Ivy URI" +
-      " ivy://org.apache.hive:hive-contrib:2.3.7?bar=&baz=foo: bar=&baz=foo"))
-
-    val e5 = intercept[IllegalArgumentException] {
-      sc.addJar("ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho")
-    }.getMessage
-    assert(e5.contains("Invalid exclude string in Ivy URI" +
-      " ivy://org.apache.hive:hive-contrib:2.3.7?exclude=org.pentaho:" +
-      " expected 'org:module,org:module,..', found org.pentaho"))
   }
 }
 

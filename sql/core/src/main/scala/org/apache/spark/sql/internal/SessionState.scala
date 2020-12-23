@@ -161,7 +161,7 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
   }
 
-  protected def resolveJars(path: URI): Seq[String] = {
+  def resolveJars(path: URI): Seq[String] = {
     path.getScheme match {
       case "ivy" => DependencyUtils.resolveMavenDependencies(path)
       case _ => path.toString :: Nil
