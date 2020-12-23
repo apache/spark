@@ -928,7 +928,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. See
+    executors so the executors can be safely removed. The external shuffle service
+    must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
   </td>
