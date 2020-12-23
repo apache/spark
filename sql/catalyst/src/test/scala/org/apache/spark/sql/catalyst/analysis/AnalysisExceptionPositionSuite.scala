@@ -35,6 +35,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
 
   private def verifyTablePosition(sql: String, table: String): Unit = {
     val expectedPos = sql.indexOf(table)
+    assert(expectedPos != -1)
     assertAnalysisError(
       parsePlan(sql),
       Seq(s"Table not found: $table; line 1 pos $expectedPos"))
