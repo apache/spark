@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 
 class AnalysisExceptionPositionSuite extends AnalysisTest {
-  test("UnresolvedTable should retain sql text position") {
+  test("SPARK-33886: UnresolvedTable should retain sql text position") {
     verifyTablePosition("MSCK REPAIR TABLE unknown", "unknown")
     verifyTablePosition("LOAD DATA LOCAL INPATH 'filepath' INTO TABLE unknown", "unknown")
     verifyTablePosition("TRUNCATE TABLE unknown", "unknown")
