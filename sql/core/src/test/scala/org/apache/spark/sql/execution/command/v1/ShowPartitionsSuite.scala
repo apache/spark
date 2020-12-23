@@ -97,10 +97,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
   test("null and empty string as partition values") {
     import testImplicits._
     withTable("t") {
-      val df = Seq(
-        (0, ""),
-        (1, null)
-      ).toDF("a", "part")
+      val df = Seq((0, ""), (1, null)).toDF("a", "part")
       df.write
         .partitionBy("part")
         .format("parquet")

@@ -25,10 +25,7 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBa
     import testImplicits._
     withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
       withTable("t") {
-        val df = Seq(
-          (0, ""),
-          (1, null)
-        ).toDF("a", "part")
+        val df = Seq((0, ""), (1, null)).toDF("a", "part")
         df.write
           .partitionBy("part")
           .format("hive")
