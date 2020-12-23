@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 import org.apache.spark.sql.types.StructType
 
@@ -30,6 +30,9 @@ case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
+
+
+  override def producedAttributes: AttributeSet = outputSet
 
   private val toRow = {
     RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()

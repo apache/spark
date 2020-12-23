@@ -443,6 +443,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 IN (c2)", true)))
     }
   }
+
+  test("DESCRIBE TABLE w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      checkAnswer(sql("desc t").selectExpr("data_type").where("data_type like '%char%'"),
+        Seq(Row("char(5)"), Row("varchar(3)")))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
@@ -601,6 +609,25 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
             s"input string of length 6 exceeds $typ type length limitation: 2"))
         }
       }
+    }
+  }
+
+  test("DESCRIBE COLUMN w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("varchar(3)"))
+      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("char(5)"))
+    }
+  }
+
+  test("SHOW CREATE TABLE w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      val rest = sql("SHOW CREATE TABLE t").head().getString(0)
+      assert(rest.contains("VARCHAR(3)"))
+      assert(rest.contains("CHAR(5)"))
     }
   }
 }
