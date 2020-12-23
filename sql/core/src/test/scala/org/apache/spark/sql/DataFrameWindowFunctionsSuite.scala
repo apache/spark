@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.scalatest.matchers.must.Matchers.the
-
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -28,6 +27,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Window function testing for DataFrame API.
@@ -705,13 +705,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq(
       ("a", 0, nullStr),
       ("a", 1, "x"),
-      ("a", 2, "y"),
-      ("a", 3, "z"),
-      ("a", 4, nullStr),
-      ("b", 1, nullStr),
       ("b", 2, nullStr),
-      ("c", 1, nullStr),
-      ("a", 3, "v")).
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
       toDF("key", "order", "value")
     val window = Window.orderBy($"order")
     checkAnswer(
@@ -739,19 +739,19 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           null, null, null, null, null, null, null),
         Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
           null, null, "x", null, null, null, null),
-        Row("b", 1, null, null, "y", null, "y", "z", "v", "ya",
+        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
           "x", null, null, "x", null, null, "xa"),
-        Row("c", 1, null, "y", null, null, "y", "z", "v", "ya",
+        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
           null, "x", null, "x", null, null, "xa"),
-        Row("a", 2, "y", null, "z", "y", "z", "v", null, "za",
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
           null, null, "y", "x", null, null, "xa"),
-        Row("b", 2, null, "z", "v", null, "z", "v", null, "za",
+        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
           "y", null, null, "y", "x", null, "ya"),
-        Row("a", 3, "z", "v", null, "z", "v", null, null, "va",
+        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
           null, "y", "z", "y", "x", null, "ya"),
-        Row("a", 3, "v", null, null, "v", null, null, null, null,
+        Row("a", 7, "v", null, null, "v", null, null, null, null,
           "z", null, "v", "z", "y", "x", "za"),
-        Row("a", 4, null, null, null, null, null, null, null, null,
+        Row("a", 8, null, null, null, null, null, null, null, null,
           "v", "z", null, "v", "z", "y", "va")))
   }
 
