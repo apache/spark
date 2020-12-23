@@ -515,12 +515,8 @@ object QueryCompilationErrors {
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
 
-  def databaseExistTableError(db: String): Throwable = {
-    new AnalysisException(s"Database $db is not empty. One or more tables exist.")
-  }
-
-  def databaseExistFunctionError(db: String): Throwable = {
-    new AnalysisException(s"Database '$db' is not empty. One or more functions exist.")
+  def databaseNotEmptyError(db: String, details: String): Throwable = {
+    new AnalysisException(s"Database $db is not empty. One or more $details exist.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -585,9 +581,9 @@ object QueryCompilationErrors {
       "destination table already exists")
   }
 
-  def invalidPartitionSpecContainsEmptyValueError(spec: String): Throwable = {
+  def invalidPartitionSpecError(details: String): Throwable = {
     new AnalysisException(
-      s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+      s"Partition spec is invalid. $details")
   }
 
   def partitionSpecNotContainedInDefinedPartitionSpecError(

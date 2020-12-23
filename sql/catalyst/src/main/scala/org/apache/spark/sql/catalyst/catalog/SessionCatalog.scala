@@ -1170,7 +1170,8 @@ class SessionCatalog(
     specs.foreach { s =>
       if (s.values.exists(_.isEmpty)) {
         val spec = s.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-        throw QueryCompilationErrors.invalidPartitionSpecContainsEmptyValueError(spec)
+        throw QueryCompilationErrors.invalidPartitionSpecError(
+          s"The spec ($spec) contains an empty partition column value")
       }
     }
   }
@@ -1200,7 +1201,10 @@ class SessionCatalog(
     val defined = table.partitionColumnNames
     specs.foreach { s =>
       if (!s.keys.forall(defined.contains)) {
-        throw QueryCompilationErrors.partitionSpecNotContainedInDefinedPartitionSpecError(s, table)
+        throw QueryCompilationErrors.invalidPartitionSpecError(
+          s"The spec (${s.keys.mkString(", ")}) must be contained " +
+          s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
+          s"in table '${table.identifier}'")
       }
     }
   }
