@@ -28,7 +28,8 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 case class AlterTableDropPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
-    ignoreIfNotExists: Boolean) extends V2CommandExec {
+    ignoreIfNotExists: Boolean,
+    purge: Boolean) extends V2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
@@ -45,9 +46,11 @@ case class AlterTableDropPartitionExec(
     existsPartIdents match {
       case Seq() => // Nothing will be done
       case Seq(partIdent) =>
-        table.dropPartition(partIdent)
+        if (purge) table.purgePartition(partIdent) else table.dropPartition(partIdent)
       case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        table.asAtomicPartitionable.dropPartitions(existsPartIdents.toArray)
+        val idents = existsPartIdents.toArray
+        val atomicTable = table.asAtomicPartitionable
+        if (purge) atomicTable.purgePartitions(idents) else atomicTable.dropPartitions(idents)
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
