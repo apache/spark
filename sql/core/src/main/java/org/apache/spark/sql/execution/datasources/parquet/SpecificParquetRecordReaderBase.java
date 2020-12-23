@@ -58,6 +58,8 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+import com.google.common.base.Preconditions;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
@@ -91,6 +93,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       throws IOException, InterruptedException {
     Configuration configuration = taskAttemptContext.getConfiguration();
     ParquetInputSplit split = (ParquetInputSplit)inputSplit;
+    Preconditions.checkState(split.getRowGroupOffsets() == null,
+            "rowGroupOffsets in ParquetInputSplit should be null.");
     this.file = split.getPath();
 
     // then we need to apply the predicate push down filter
