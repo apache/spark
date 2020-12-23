@@ -197,7 +197,7 @@ class FrameLessOffsetWindowFunctionFrame(
   }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
-    // For illustration, here is one example: the input data contains six rows,
+    // For illustration, here is one example: the input data contains nine rows,
     // and the input values of each row are: null, x, null, null, y, null, z, v, null.
     // We use lead(input, 2) with IGNORE NULLS and the process is as follows:
     // 1. current row -> null, next selected row -> y, output: y;
@@ -228,7 +228,7 @@ class FrameLessOffsetWindowFunctionFrame(
         }
       }
   } else if (ignoreNulls && offset < 0) {
-    // For illustration, here is one example: the input data contains six rows,
+    // For illustration, here is one example: the input data contains nine rows,
     // and the input values of each row are: null, x, null, null, y, null, z, v, null.
     // We use lag(input, 1) with IGNORE NULLS and the process is as follows:
     // 1. current row -> null, next selected row -> empty, output: null;
