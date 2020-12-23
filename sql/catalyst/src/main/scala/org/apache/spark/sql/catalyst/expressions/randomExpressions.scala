@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -66,15 +67,6 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
 trait ExpressionWithRandomSeed {
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
-}
-
-/**
- * A place holder expression used in random functions, will be replaced after analyze.
- */
-case object UnresolvedSeed extends Expression with Unevaluable {
-  override def nullable: Boolean = true
-  override def dataType: DataType = NullType
-  override def children: Seq[Expression] = Nil
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */

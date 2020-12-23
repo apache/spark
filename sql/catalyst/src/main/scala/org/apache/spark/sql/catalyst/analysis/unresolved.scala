@@ -561,3 +561,12 @@ case class UnresolvedHaving(
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
 }
+
+/**
+ * A place holder expression used in random functions, will be replaced after analyze.
+ */
+case object UnresolvedSeed extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override lazy val resolved = false
+}
