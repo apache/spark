@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.test.SharedSparkSession
@@ -43,6 +43,24 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSpa
       }.getMessage
       assert(errMsg.contains(
         "SHOW PARTITIONS cannot run for a table which does not support partitioning"))
+    }
+  }
+
+  test("SPARK-33889: null and empty string as partition values") {
+    import testImplicits._
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val t = s"$catalog.ns.tbl"
+      withTable(t) {
+        val df = Seq((0, ""), (1, null)).toDF("a", "part")
+        df.write
+          .partitionBy("part")
+          .format("parquet")
+          .mode(SaveMode.Overwrite)
+          .saveAsTable(t)
+
+        runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=") :: Row("part=null") :: Nil)
+      }
     }
   }
 }
