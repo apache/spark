@@ -304,17 +304,17 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * :: Experimental ::
    *
    * Starts the execution of the streaming query, which will continually output results to the given
-   * table as new data arrives. A new table will be created if the table not exists. The returned
-   * [[StreamingQuery]] object can be used to interact with the stream.
+   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
+   * the stream.
    *
-   * Note, if the table does not exist, both V1 and V2 tables will respect the partitioningColumns
-   * provided by `partitionBy`. However, when the table exists, only V1 table will pass the
-   * partitioning info to the sink, V2 table will ignore the provided partitioning info.
+   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
+   * table exists or not. A new table will be created if the table not exists.
    *
-   * Similar to the above issue of partitioning, the new table created by this API lacks
-   * functionality (e.g., customized properties, options, and serde info) on creating V2 tables.
-   * Please create a table manually before the execution to avoid creating a table with incomplete
-   * information.
+   * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will be
+   * respected only if the v2 table does not exist. Besides, the v2 table created by this API lacks
+   * some functionalities (e.g., customized properties, options, and serde info). If you need them,
+   * please create the v2 table manually before the execution to avoid creating a table with
+   * incomplete information.
    *
    * @since 3.1.0
    */
