@@ -742,8 +742,8 @@ class DataSourceV2SQLSuite
       val ex = intercept[UnsupportedOperationException] {
         sql ("DROP TABLE testcat.ns.t PURGE")
       }
-      // The default TableCatalog.dropTable implementation doesn't support the purge option.
-      assert(ex.getMessage.contains("Purge option is not supported"))
+      // The default TableCatalog.purgeTable implementation throws an exception.
+      assert(ex.getMessage.contains("Purge table is not supported"))
     }
   }
 
