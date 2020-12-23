@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v1
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.sql.execution.command
+import org.apache.spark.annotation.Unstable;
+import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.sources.InsertableRelation;
 
-trait DropTableSuiteBase extends command.DropTableSuiteBase {
-  test("purge option") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-
-      createTable(s"$catalog.ns.tbl")
-      checkTables("ns", "tbl")
-
-      sql(s"DROP TABLE $catalog.ns.tbl PURGE")
-      checkTables("ns") // no tables
-    }
-  }
+/**
+ * A logical write that should be executed using V1 InsertableRelation interface.
+ * <p>
+ * Tables that have {@link TableCapability#V1_BATCH_WRITE} in the list of their capabilities
+ * must build {@link V1Write}.
+ */
+@Unstable
+public interface V1Write extends Write {
+  InsertableRelation toInsertableRelation();
 }
-
-class DropTableSuite extends DropTableSuiteBase with CommandSuiteBase
-

@@ -36,6 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
+    // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.write.V1WriteBuilder")
   )
 
   // Exclude rules for 3.1.x
