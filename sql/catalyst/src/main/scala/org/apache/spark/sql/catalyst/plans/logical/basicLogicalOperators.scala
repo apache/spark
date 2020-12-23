@@ -57,6 +57,11 @@ object Subquery {
     Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
+case class SubqueryWrapper(child: LogicalPlan, outerPlans: Seq[LogicalPlan])
+  extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)

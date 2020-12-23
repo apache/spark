@@ -1470,9 +1470,12 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveExpressionTopDown(
         e: Expression,
         q: LogicalPlan,
-        trimAlias: Boolean = false): Expression = {
+        trimAlias: Boolean = false,
+        out: Seq[LogicalPlan] = Seq.empty): Expression = {
 
-      def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
+      def innerResolve(e: Expression,
+                       isTopLevel: Boolean,
+                       out: Seq[LogicalPlan] = Seq.empty): Expression = {
         if (e.resolved) return e
         e match {
           case f: LambdaFunction if !f.bound => f
@@ -1480,8 +1483,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
             val resolved =
               withPosition(u) {
-                q.resolveChildren(nameParts, resolver)
-                  .orElse(resolveLiteralFunction(nameParts, u, q))
+                q.resolveChildren(nameParts, resolver, out).map ({
+                  case OuterAttribute(attr) => OuterReference(attr)
+                  case attr => attr
+                }).orElse(resolveLiteralFunction(nameParts, u, q))
                   .getOrElse(u)
               }
             val result = resolved match {
@@ -1497,57 +1502,75 @@ class Analyzer(override val catalogManager: CatalogManager)
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+          case _ => e.mapChildren(innerResolve(_, isTopLevel = false, out))
         }
       }
 
       innerResolve(e, isTopLevel = true)
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case p: LogicalPlan if !p.childrenResolved => p
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      val (real, outer) = plan match {
+        case _ @ SubqueryWrapper(child, outPlans) => (child, outPlans)
+        case _ => (plan, Seq.empty)
+      }
 
-      // If the projection list contains Stars, expand it.
-      case p: Project if containsStar(p.projectList) =>
-        p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
-          throw QueryCompilationErrors.starNotAllowedWhenGroupByOrdinalPositionUsedError()
-        } else {
-          a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
-        }
-      // If the script transformation input contains Stars, expand it.
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
+      real.resolveOperatorsUp {
+        case p: LogicalPlan if !p.childrenResolved => p
+
+        // If the projection list contains Stars, expand it.
+        case p: Project if containsStar(p.projectList) =>
+          p.copy(projectList = buildExpandedProjectList(p.projectList, p.child))
+        // If the aggregate function argument contains Stars, expand it.
+        case a: Aggregate if containsStar(a.aggregateExpressions) =>
+          if (a.groupingExpressions.exists(_.isInstanceOf[UnresolvedOrdinal])) {
+            throw QueryCompilationErrors
+              .starNotAllowedWhenGroupByOrdinalPositionUsedError()
+          } else {
+            a.copy(
+              aggregateExpressions =
+                buildExpandedProjectList(a.aggregateExpressions, a.child)
+            )
+          }
+        // If the script transformation input contains Stars, expand it.
+        case t: ScriptTransformation if containsStar(t.input) =>
+          t.copy(input = t.input.flatMap {
             case s: Star => s.expand(t.child, resolver)
             case o => o :: Nil
-          }
-        )
-      case g: Generate if containsStar(g.generator.children) =>
-        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
+          })
+        case g: Generate if containsStar(g.generator.children) =>
+          throw QueryCompilationErrors.invalidStarUsageError(
+            "explode/json_tuple/UDTF"
+          )
 
-      // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
-        j.copy(right = dedupRight(left, right))
-      case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
-        val leftRes = leftAttributes
-          .map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
-        val rightRes = rightAttributes
-          .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
-        f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
-      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
-      // deduplicate the right side plan, so that we won't produce an invalid self-join later.
-      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
-        i.copy(right = dedupRight(left, right))
-      case e @ Except(left, right, _) if !e.duplicateResolved =>
-        e.copy(right = dedupRight(left, right))
-      // Only after we finish by-name resolution for Union
-      case u: Union if !u.byName && !u.duplicateResolved =>
-        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
-        // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
+        // To resolve duplicate expression IDs for Join and Intersect
+        case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
+          j.copy(right = dedupRight(left, right))
+        case f @ FlatMapCoGroupsInPandas(
+              leftAttributes,
+              rightAttributes,
+              _,
+              _,
+              left,
+              right
+            ) =>
+          val leftRes = leftAttributes
+            .map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
+          val rightRes = rightAttributes
+            .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
+          f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
+        // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
+        // deduplicate the right side plan, so that we won't produce an invalid self-join later.
+        case i @ Intersect(left, right, _) if !i.duplicateResolved =>
+          i.copy(right = dedupRight(left, right))
+        case e @ Except(left, right, _) if !e.duplicateResolved =>
+          e.copy(right = dedupRight(left, right))
+        // Only after we finish by-name resolution for Union
+        case u: Union if !u.byName && !u.duplicateResolved =>
+          // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
+          // feature in streaming.
+          val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) {
+            (head, tail) =>
           head +: tail.map {
             case child if head.outputSet.intersect(child.outputSet).isEmpty =>
               child
@@ -1557,127 +1580,165 @@ class Analyzer(override val catalogManager: CatalogManager)
               }
               Project(projectList, child)
           }
-        }
-        u.copy(children = newChildren)
+          }
+          u.copy(children = newChildren)
 
-      // When resolve `SortOrder`s in Sort based on child, don't report errors as
-      // we still have chance to resolve it based on its descendants
-      case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
-        val newOrdering =
-          ordering.map(order => resolveExpressionBottomUp(order, child).asInstanceOf[SortOrder])
-        Sort(newOrdering, global, child)
+        // When resolve `SortOrder`s in Sort based on child, don't report errors as
+        // we still have chance to resolve it based on its descendants
+        case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
+          val newOrdering =
+            ordering.map(
+              order =>
+                resolveExpressionBottomUp(order, child).asInstanceOf[SortOrder]
+            )
+          Sort(newOrdering, global, child)
 
-      // A special case for Generate, because the output of Generate should not be resolved by
-      // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
+        // A special case for Generate, because the output of Generate should not be resolved by
+        // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
+        case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
 
-      case g @ Generate(generator, join, outer, qualifier, output, child) =>
-        val newG = resolveExpressionBottomUp(generator, child, throws = true)
-        if (newG.fastEquals(generator)) {
-          g
-        } else {
-          Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
-        }
+        case g @ Generate(generator, join, outer, qualifier, output, child) =>
+          val newG = resolveExpressionBottomUp(generator, child, throws = true)
+          if (newG.fastEquals(generator)) {
+            g
+          } else {
+            Generate(
+              newG.asInstanceOf[Generator],
+              join,
+              outer,
+              qualifier,
+              output,
+              child
+            )
+          }
 
-      // Skips plan which contains deserializer expressions, as they should be resolved by another
-      // rule: ResolveDeserializer.
-      case plan if containsDeserializer(plan.expressions) => plan
+        // Skips plan which contains deserializer expressions, as they should be resolved by another
+        // rule: ResolveDeserializer.
+        case plan if containsDeserializer(plan.expressions) => plan
 
-      // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
-      // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
-      // different ExprId. This cause aggregateExpressions can't be replaced by expanded
-      // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
-      // unnecessary alias of GetStructField here.
-      case a: Aggregate =>
-        val planForResolve = a.child match {
-          // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children, instead of
-          // `AppendColumns`, because `AppendColumns`'s serializer might produce conflict attribute
-          // names leading to ambiguous references exception.
-          case appendColumns: AppendColumns => appendColumns
-          case _ => a
-        }
+        // SPARK-31670: Resolve Struct field in groupByExpressions and aggregateExpressions
+        // with CUBE/ROLLUP will be wrapped with alias like Alias(GetStructField, name) with
+        // different ExprId. This cause aggregateExpressions can't be replaced by expanded
+        // groupByExpressions in `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim
+        // unnecessary alias of GetStructField here.
+        case a: Aggregate =>
+          val planForResolve = a.child match {
+            // SPARK-25942: Resolves aggregate expressions with `AppendColumns`'s children,
+            // instead of `AppendColumns`, because `AppendColumns`'s serializer might produce
+            // conflict attribute names leading to ambiguous references exception.
+            case appendColumns: AppendColumns => appendColumns
+            case _ => a
+          }
 
-        val resolvedGroupingExprs = a.groupingExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
-          .map(trimTopLevelGetStructFieldAlias)
+          val resolvedGroupingExprs = a.groupingExpressions
+            .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+            .map(trimTopLevelGetStructFieldAlias)
 
-        val resolvedAggExprs = a.aggregateExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+          val resolvedAggExprs = a.aggregateExpressions
+            .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
             .map(_.asInstanceOf[NamedExpression])
 
-        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
+          a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
 
-      // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
-      // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
-      // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
-      // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
-      // of GetStructField here.
-      case g: GroupingSets =>
-        val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionTopDown(_, g, trimAlias = true))
-            .map(trimTopLevelGetStructFieldAlias))
+        // SPARK-31670: Resolve Struct field in selectedGroupByExprs/groupByExprs and aggregations
+        // will be wrapped with alias like Alias(GetStructField, name) with different ExprId.
+        // This cause aggregateExpressions can't be replaced by expanded groupByExpressions in
+        // `ResolveGroupingAnalytics.constructAggregateExprs()`, we trim unnecessary alias
+        // of GetStructField here.
+        case g: GroupingSets =>
+          val resolvedSelectedExprs = g.selectedGroupByExprs
+            .map(
+              _.map(resolveExpressionTopDown(_, g, trimAlias = true))
+            .map(trimTopLevelGetStructFieldAlias)
+            )
 
-        val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionTopDown(_, g, trimAlias = true))
-          .map(trimTopLevelGetStructFieldAlias)
+          val resolvedGroupingExprs = g.groupByExprs
+            .map(resolveExpressionTopDown(_, g, trimAlias = true))
+            .map(trimTopLevelGetStructFieldAlias)
 
-        val resolvedAggExprs = g.aggregations
-          .map(resolveExpressionTopDown(_, g, trimAlias = true))
+          val resolvedAggExprs = g.aggregations
+            .map(resolveExpressionTopDown(_, g, trimAlias = true))
             .map(_.asInstanceOf[NamedExpression])
 
-        g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
+          g.copy(
+            resolvedSelectedExprs,
+            resolvedGroupingExprs,
+            g.child,
+            resolvedAggExprs
+          )
 
-      case o: OverwriteByExpression if o.table.resolved =>
-        // The delete condition of `OverwriteByExpression` will be passed to the table
-        // implementation and should be resolved based on the table schema.
-        o.copy(deleteExpr = resolveExpressionBottomUp(o.deleteExpr, o.table))
+        case o: OverwriteByExpression if o.table.resolved =>
+          // The delete condition of `OverwriteByExpression` will be passed to the table
+          // implementation and should be resolved based on the table schema.
+          o.copy(deleteExpr = resolveExpressionBottomUp(o.deleteExpr, o.table))
 
-      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
+        case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+          EliminateSubqueryAliases(targetTable) match {
+            case r: NamedRelation if r.skipSchemaResolution =>
+              // Do not resolve the expression if the target table accepts any schema.
+              // This allows data sources to customize their own resolution logic using
+              // custom resolution rules.
+              m
 
-        EliminateSubqueryAliases(targetTable) match {
-          case r: NamedRelation if r.skipSchemaResolution =>
-            // Do not resolve the expression if the target table accepts any schema.
-            // This allows data sources to customize their own resolution logic using
-            // custom resolution rules.
-            m
+            case _ =>
+              val newMatchedActions = m.matchedActions.map {
+                case DeleteAction(deleteCondition) =>
+                  val resolvedDeleteCondition =
+                    deleteCondition.map(resolveExpressionTopDown(_, m))
+                  DeleteAction(resolvedDeleteCondition)
+                case UpdateAction(updateCondition, assignments) =>
+                  val resolvedUpdateCondition =
+                    updateCondition.map(resolveExpressionTopDown(_, m))
+                  // The update value can access columns from both target and source tables.
+                  UpdateAction(
+                    resolvedUpdateCondition,
+                    resolveAssignments(
+                      assignments,
+                      m,
+                      resolveValuesWithSourceOnly = false
+                    )
+                  )
+                case o => o
+              }
+              val newNotMatchedActions = m.notMatchedActions.map {
+                case InsertAction(insertCondition, assignments) =>
+                  // The insert action is used when not matched, so its condition and value can only
+                  // access columns from the source table.
+                  val resolvedInsertCondition =
+                    insertCondition.map(
+                      resolveExpressionTopDown(_, Project(Nil, m.sourceTable))
+                    )
+                  InsertAction(
+                    resolvedInsertCondition,
+                    resolveAssignments(
+                      assignments,
+                      m,
+                      resolveValuesWithSourceOnly = true
+                    )
+                  )
+                case o => o
+              }
+              val resolvedMergeCondition =
+                resolveExpressionTopDown(m.mergeCondition, m)
+              m.copy(
+                mergeCondition = resolvedMergeCondition,
+                matchedActions = newMatchedActions,
+                notMatchedActions = newNotMatchedActions
+              )
+          }
 
-          case _ =>
-            val newMatchedActions = m.matchedActions.map {
-              case DeleteAction(deleteCondition) =>
-                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
-                DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
-                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
-                // The update value can access columns from both target and source tables.
-                UpdateAction(
-                  resolvedUpdateCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = false))
-              case o => o
-            }
-            val newNotMatchedActions = m.notMatchedActions.map {
-              case InsertAction(insertCondition, assignments) =>
-                // The insert action is used when not matched, so its condition and value can only
-                // access columns from the source table.
-                val resolvedInsertCondition =
-                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
-                InsertAction(
-                  resolvedInsertCondition,
-                  resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
-              case o => o
-            }
-            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
-            m.copy(mergeCondition = resolvedMergeCondition,
-              matchedActions = newMatchedActions,
-              notMatchedActions = newNotMatchedActions)
-        }
+        // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
+        case h: UnresolvedHaving => h
 
-      // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
-      case h: UnresolvedHaving => h
+        case f: Filter => f.mapExpressions(resolveExpressionTopDown(_, f, trimAlias = false, outer))
 
-      case q: LogicalPlan =>
-        logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionTopDown(_, q))
+        case q: LogicalPlan =>
+          logTrace(
+            s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}"
+          )
+          q.mapExpressions(resolveExpressionTopDown(_, q))
+      }
     }
 
     def resolveAssignments(
@@ -2199,7 +2260,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
-        current = executeSameContext(current)
+        current = executeSameContext(SubqueryWrapper(current, plans))
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
         val i = plans.iterator

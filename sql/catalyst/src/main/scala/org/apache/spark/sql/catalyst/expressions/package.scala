@@ -127,24 +127,22 @@ package object expressions  {
       m.mapValues(_.distinct).toMap
     }
 
-    /** Map to use for direct case insensitive attribute lookups. */
-    @transient private lazy val direct: Map[String, Seq[Attribute]] = {
-      unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
+    private def toDirect(attrList: Seq[Attribute]): Map[String, Seq[Attribute]] = {
+      unique(attrList.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
 
-    /** Map to use for qualified case insensitive attribute lookups with 2 part key */
-    @transient private lazy val qualified: Map[(String, String), Seq[Attribute]] = {
+    private def toQualified(attrList: Seq[Attribute]): Map[(String, String), Seq[Attribute]] = {
       // key is 2 part: table/alias and name
-      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy {
+      val grouped = attrList.filter(_.qualifier.nonEmpty).groupBy {
         a => (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
     }
 
-    /** Map to use for qualified case insensitive attribute lookups with 3 part key */
-    @transient private lazy val qualified3Part: Map[(String, String, String), Seq[Attribute]] = {
+    private def toQualified3Part(attrList: Seq[Attribute]):
+    Map[(String, String, String), Seq[Attribute]] = {
       // key is 3 part: database name, table name and name
-      val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
+      val grouped = attrList.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
           val qualifier = if (a.qualifier.length == 2) {
             a.qualifier
@@ -158,11 +156,10 @@ package object expressions  {
       unique(grouped)
     }
 
-    /** Map to use for qualified case insensitive attribute lookups with 4 part key */
-    @transient
-    private lazy val qualified4Part: Map[(String, String, String, String), Seq[Attribute]] = {
+    private def toQualified4Part(attrList: Seq[Attribute]):
+    Map[(String, String, String, String), Seq[Attribute]] = {
       // key is 4 part: catalog name, database name, table name and name
-      val grouped = attrs.filter(_.qualifier.length == 3).groupBy { a =>
+      val grouped = attrList.filter(_.qualifier.length == 3).groupBy { a =>
         a.qualifier match {
           case Seq(catalog, db, tbl) =>
             (catalog.toLowerCase(Locale.ROOT),
@@ -174,6 +171,22 @@ package object expressions  {
       unique(grouped)
     }
 
+    /** Map to use for direct case insensitive attribute lookups. */
+    @transient private lazy val direct: Map[String, Seq[Attribute]] = toDirect(attrs)
+
+    /** Map to use for qualified case insensitive attribute lookups with 2 part key */
+    @transient
+    private lazy val qualified: Map[(String, String), Seq[Attribute]] = toQualified(attrs)
+
+    /** Map to use for qualified case insensitive attribute lookups with 3 part key */
+    @transient private
+    lazy val qualified3Part: Map[(String, String, String), Seq[Attribute]] = toQualified3Part(attrs)
+
+    /** Map to use for qualified case insensitive attribute lookups with 4 part key */
+    @transient
+    private lazy val qualified4Part:
+    Map[(String, String, String, String), Seq[Attribute]] = toQualified4Part(attrs)
+
     /** Returns true if all qualifiers in `attrs` have 3 or less parts. */
     @transient private val hasThreeOrLessQualifierParts: Boolean =
       attrs.forall(_.qualifier.length <= 3)
@@ -181,7 +194,8 @@ package object expressions  {
     /** Match attributes for the case where all qualifiers in `attrs` have 3 or less parts. */
     private def matchWithThreeOrLessQualifierParts(
         nameParts: Seq[String],
-        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
+        resolver: Resolver,
+        outer: Seq[Attribute] = Seq.empty): (Seq[Attribute], Seq[String]) = {
       // Collect matching attributes given a name and a lookup.
       def collectMatches(name: String, candidates: Option[Seq[Attribute]]): Seq[Attribute] = {
         candidates.getOrElse(Nil).collect {
@@ -201,12 +215,19 @@ package object expressions  {
         case catalogPart +: dbPart +: tblPart +: name +: nestedFields =>
           val key = (catalogPart.toLowerCase(Locale.ROOT), dbPart.toLowerCase(Locale.ROOT),
             tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
-          val attributes = collectMatches(name, qualified4Part.get(key)).filter { a =>
+
+          val innerAttributes = collectMatches(name, qualified4Part.get(key)).filter { a =>
             assert(a.qualifier.length == 3)
             resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
               resolver(tblPart, a.qualifier(2))
           }
-          (attributes, nestedFields)
+
+          val outerAttributes = collectMatches(name, toQualified4Part(outer).get(key)).filter { a =>
+            assert(a.qualifier.length == 3)
+            resolver(catalogPart, a.qualifier(0)) && resolver(dbPart, a.qualifier(1)) &&
+              resolver(tblPart, a.qualifier(2))
+          }
+          (innerAttributes ++ outerAttributes, nestedFields)
         case _ =>
           (Seq.empty, Seq.empty)
       }
@@ -224,15 +245,26 @@ package object expressions  {
           case dbPart +: tblPart +: name +: nestedFields =>
             val key = (dbPart.toLowerCase(Locale.ROOT),
               tblPart.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
-            val attributes = collectMatches(name, qualified3Part.get(key)).filter { a =>
-              val qualifier = if (a.qualifier.length == 2) {
+
+            val innerAttributes = collectMatches(name, qualified3Part.get(key)).filter {
+              a => val qualifier = if (a.qualifier.length == 2) {
+                  a.qualifier
+                } else {
+                  a.qualifier.takeRight(2)
+                }
+                resolver(dbPart, qualifier.head) && resolver(tblPart, qualifier.last)
+            }
+
+            val outerAttributes = collectMatches(name, toQualified3Part(outer).get(key)).filter({
+              a => val qualifier = if (a.qualifier.length == 2) {
                 a.qualifier
               } else {
                 a.qualifier.takeRight(2)
               }
-              resolver(dbPart, qualifier.head) && resolver(tblPart, qualifier.last)
-            }
-            (attributes, nestedFields)
+                resolver(dbPart, qualifier.head) && resolver(tblPart, qualifier.last)
+            }).map(OuterAttribute)
+
+            (innerAttributes ++ outerAttributes, nestedFields)
           case _ =>
             (Seq.empty, Seq.empty)
         }
@@ -250,10 +282,17 @@ package object expressions  {
         matches = nameParts match {
           case qualifier +: name +: nestedFields =>
             val key = (qualifier.toLowerCase(Locale.ROOT), name.toLowerCase(Locale.ROOT))
-            val attributes = collectMatches(name, qualified.get(key)).filter { a =>
+
+            val innerAttributes = collectMatches(name, qualified.get(key)).filter { a =>
               resolver(qualifier, a.qualifier.last)
             }
-            (attributes, nestedFields)
+
+            val outerAttributes: Seq[Attribute] =
+              collectMatches(name, toQualified(outer).get(key)).filter({ a =>
+                resolver(qualifier, a.qualifier.last)
+              }).map(OuterAttribute)
+
+            (innerAttributes ++ outerAttributes, nestedFields)
           case _ =>
             (Seq.empty[Attribute], Seq.empty[String])
         }
@@ -264,8 +303,13 @@ package object expressions  {
       matches match {
         case (Seq(), _) =>
           val name = nameParts.head
-          val attributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
-          (attributes, nameParts.tail)
+
+          val innerAttributes = collectMatches(name, direct.get(name.toLowerCase(Locale.ROOT)))
+          val outerAttributes = collectMatches(name,
+            toDirect(outer).get(name.toLowerCase(Locale.ROOT))
+          ).map(OuterAttribute)
+
+          (innerAttributes ++ outerAttributes, nameParts.tail)
         case _ => matches
       }
     }
@@ -275,7 +319,8 @@ package object expressions  {
      */
     private def matchWithFourOrMoreQualifierParts(
         nameParts: Seq[String],
-        resolver: Resolver): (Seq[Attribute], Seq[String]) = {
+        resolver: Resolver,
+        outer: Seq[Attribute] = Seq.empty): (Seq[Attribute], Seq[String]) = {
       // Returns true if the `short` qualifier is a subset of the last elements of
       // `long` qualifier. For example, Seq("a", "b") is a subset of Seq("a", "a", "b"),
       // but not a subset of Seq("a", "b", "b").
@@ -324,15 +369,36 @@ package object expressions  {
         i -= 1
       }
 
-      (candidates, nestedFields)
+      val innerCandidates = candidates
+
+      candidates = Nil
+      nestedFields = Nil
+      i = nameParts.length - 1
+      while (i >= 0 && candidates.isEmpty) {
+        val name = nameParts(i)
+        candidates = collectMatches(
+          name,
+          nameParts.take(i),
+          toDirect(outer).get(name.toLowerCase(Locale.ROOT)))
+        if (candidates.nonEmpty) {
+          nestedFields = nameParts.takeRight(nameParts.length - i - 1)
+        }
+        i -= 1
+      }
+
+      val outerCandidates = candidates
+
+      (innerCandidates ++ outerCandidates, nestedFields)
     }
 
     /** Perform attribute resolution given a name and a resolver. */
-    def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
+    def resolve(nameParts: Seq[String],
+                resolver: Resolver,
+                outer: Seq[Attribute] = Seq.empty): Option[NamedExpression] = {
       val (candidates, nestedFields) = if (hasThreeOrLessQualifierParts) {
-        matchWithThreeOrLessQualifierParts(nameParts, resolver)
+        matchWithThreeOrLessQualifierParts(nameParts, resolver, outer)
       } else {
-        matchWithFourOrMoreQualifierParts(nameParts, resolver)
+        matchWithFourOrMoreQualifierParts(nameParts, resolver, outer)
       }
 
       def name = UnresolvedAttribute(nameParts).name

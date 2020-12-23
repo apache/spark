@@ -351,6 +351,29 @@ case class AttributeReference(
   }
 }
 
+case class OuterAttribute(attr: Attribute) extends Attribute with Unevaluable {
+  override def name: String = attr.name
+  override def dataType: DataType = attr.dataType
+
+  override def toString: String = name
+  override def sql: String = toString
+
+  override def withNullability(newNullability: Boolean): Attribute =
+    throw new UnsupportedOperationException
+  override def newInstance(): Attribute = throw new UnsupportedOperationException
+  override def withQualifier(newQualifier: Seq[String]): Attribute =
+    throw new UnsupportedOperationException
+  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw new UnsupportedOperationException
+  override def qualifier: Seq[String] = throw new UnsupportedOperationException
+  override def exprId: ExprId = throw new UnsupportedOperationException
+  override def withExprId(newExprId: ExprId): Attribute =
+    throw new UnsupportedOperationException
+  override def nullable: Boolean = true
+
+}
+
 /**
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
