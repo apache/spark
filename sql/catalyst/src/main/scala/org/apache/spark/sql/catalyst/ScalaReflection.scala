@@ -232,6 +232,11 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.time.Instant]) =>
         createDeserializerForInstant(path)
 
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) =>
+        createDeserializerForTypesSupportValueOf(
+          Invoke(path, "toString", ObjectType(classOf[String]), returnNullable = false),
+          getClassFromType(t))
+
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
 
@@ -526,6 +531,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.math.BigInteger]) =>
         createSerializerForJavaBigInteger(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) =>
+        createSerializerForJavaEnum(inputObject)
+
       case t if isSubtype(t, localTypeOf[scala.math.BigInt]) =>
         createSerializerForScalaBigInt(inputObject)
 
@@ -749,6 +757,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.lang.Short]) => Schema(ShortType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Byte]) => Schema(ByteType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Boolean]) => Schema(BooleanType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) => Schema(StringType, nullable = true)
       case t if isSubtype(t, definitions.IntTpe) => Schema(IntegerType, nullable = false)
       case t if isSubtype(t, definitions.LongTpe) => Schema(LongType, nullable = false)
       case t if isSubtype(t, definitions.DoubleTpe) => Schema(DoubleType, nullable = false)
