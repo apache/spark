@@ -258,4 +258,17 @@ class PushFoldableIntoBranchesSuite
       EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None).cast(StringType), Literal("4")),
       CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
   }
+
+  test("SPARK-33884: simplify CaseWhen when one clause is null and another is boolean") {
+    val p = IsNull('a)
+    val nullLiteral = Literal(null, BooleanType)
+    assertEquivalent(EqualTo(
+      CaseWhen(Seq((p, Literal.create(null, IntegerType))), Literal(1)),
+      Literal(2)),
+      And(p, nullLiteral))
+    assertEquivalent(EqualTo(
+      CaseWhen(Seq((p, Literal("str"))), Literal("1")).cast(IntegerType),
+      Literal(2)),
+      And(p, nullLiteral))
+  }
 }
