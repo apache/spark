@@ -153,7 +153,7 @@ class FrameLessOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
-  assert(expressions.toSeq.map(_.input).isInstanceOf[Seq[Attribute]])
+  assert(expressions.toSeq.filterNot(_.input.isInstanceOf[Attribute]).isEmpty)
 
   /** The input expression of Lead/Lag. */
   private lazy val inputExpression = expressions.toSeq.map(_.input).head
