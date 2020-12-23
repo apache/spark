@@ -422,25 +422,23 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-32106: TRANSFORM with non-existent command/file") {
-      val e1 = intercept[SparkException] {
-        sql(
-          """
-            |SELECT TRANSFORM(a)
-            |USING 'some_non_existent_command' AS (a)
-            |FROM VALUES (1) t(a)
-          """.stripMargin).collect()
-      }.getMessage
-      assert(e1.contains("Subprocess exited"))
-
-      val e2 = intercept[SparkException] {
-        sql(
-          """
-            |SELECT TRANSFORM(a)
-            |USING 'python some_non_existent_file' AS (a)
-            |FROM VALUES (1) t(a)
-          """.stripMargin).collect()
-      }.getMessage
-      assert(e2.contains("Subprocess exited"))
+    Seq(
+      s"""
+         |SELECT TRANSFORM(a)
+         |USING 'some_non_existent_command' AS (a)
+         |FROM VALUES (1) t(a)
+       """.stripMargin,
+      s"""
+         |SELECT TRANSFORM(a)
+         |USING 'python some_non_existent_file' AS (a)
+         |FROM VALUES (1) t(a)
+       """.stripMargin).foreach { query =>
+      intercept[SparkException] {
+        // Since an error message is shell-dependent, this test just checks
+        // if the expected exception will be thrown.
+        sql(query).collect()
+      }
+    }
   }
 }
 
