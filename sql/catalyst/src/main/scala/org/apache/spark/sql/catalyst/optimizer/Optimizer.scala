@@ -113,7 +113,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
-        OptimizeJsonExprs,
+        OptimizeCsvJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 

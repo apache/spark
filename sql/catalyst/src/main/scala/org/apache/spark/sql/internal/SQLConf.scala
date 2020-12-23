@@ -1631,6 +1631,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CSV_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableCsvExpressionOptimization")
+      .doc("Whether to optimize CSV expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_csv, simplifying from_csv + to_csv, to_csv + " +
+        "named_struct(from_csv.col1, from_csv.col2, ....).")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -3488,6 +3497,8 @@ class SQLConf extends Serializable with Logging {
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
+  def csvExpressionOptimization: Boolean = getConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)
