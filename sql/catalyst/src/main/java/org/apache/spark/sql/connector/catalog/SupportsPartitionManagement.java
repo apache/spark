@@ -36,6 +36,9 @@ import org.apache.spark.sql.types.StructType;
  *     add a partition and any data it contains to the table
  * ${@link #dropPartition}:
  *     remove a partition and any data it contains from the table
+ * ${@link #purgePartition}:
+ *     remove a partition and any data it contains from the table by skipping a trash
+ *     even if it is supported.
  * ${@link #replacePartitionMetadata}:
  *     point a partition to a new location, which will swap one location's data for the other
  *
@@ -71,6 +74,22 @@ public interface SupportsPartitionManagement extends Table {
      * @return true if a partition was deleted, false if no partition exists for the identifier
      */
     boolean dropPartition(InternalRow ident);
+
+    /**
+     * Drop a partition from the table and completely remove partition data by skipping a trash
+     * even if it is supported.
+     *
+     * @param ident a partition identifier
+     * @return true if a partition was deleted, false if no partition exists for the identifier
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition purging is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean purgePartition(InternalRow ident)
+      throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition purge is not supported");
+    }
 
     /**
      * Test whether a partition exists using an {@link InternalRow ident} from the table.
