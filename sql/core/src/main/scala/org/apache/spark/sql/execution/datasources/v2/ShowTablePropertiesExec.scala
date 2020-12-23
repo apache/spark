@@ -30,8 +30,6 @@ case class ShowTablePropertiesExec(
     catalogTable: Table,
     propertyKey: Option[String]) extends V2CommandExec {
 
-  override def producedAttributes: AttributeSet = AttributeSet(output)
-
   override protected def run(): Seq[InternalRow] = {
     import scala.collection.JavaConverters._
     val toRow = RowEncoder(schema).resolveAndBind().createSerializer()

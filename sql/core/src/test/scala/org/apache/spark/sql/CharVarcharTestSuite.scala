@@ -612,6 +612,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
+  // TODO: Move this test to super after SPARK-33875 implements DESCRIBE COLUMN for v2
   test("DESCRIBE COLUMN w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")

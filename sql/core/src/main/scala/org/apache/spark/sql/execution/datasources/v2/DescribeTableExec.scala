@@ -31,9 +31,6 @@ case class DescribeTableExec(
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
 
-
-  override def producedAttributes: AttributeSet = outputSet
-
   private val toRow = {
     RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
   }
