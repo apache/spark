@@ -222,14 +222,5 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         CaseWhen((condition, Literal.create(null, IntegerType)) :: Nil, None),
         Literal.create(null, IntegerType))
     }
-
-    assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal.create(null, IntegerType)) :: Nil,
-        Some(Literal.create(null, IntegerType))),
-      Literal.create(null, IntegerType))
-    assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal(20)) :: (GreaterThan('b, 1), Literal(20)) :: Nil,
-        Some(Literal(20))),
-      Literal(20))
   }
 }
