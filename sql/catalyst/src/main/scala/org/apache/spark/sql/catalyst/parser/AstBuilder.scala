@@ -145,6 +145,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     UnresolvedTable(visitMultipartIdentifier(ctx), commandName)
   }
 
+
+  private def withUnresolvedView(
+      ctx: MultipartIdentifierContext,
+      commandName: String,
+      allowTemp: Boolean = true,
+      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
+    UnresolvedView(visitMultipartIdentifier(ctx), commandName, allowTemp, relationTypeMismatchHint)
+  }
+
   /**
    * Create a logical query plan for a hive-style FROM statement body.
    */
@@ -3212,8 +3221,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
     DropView(
-      UnresolvedView(
-        visitMultipartIdentifier(ctx.multipartIdentifier()),
+      withUnresolvedView(
+        ctx.multipartIdentifier(),
         commandName = "DROP VIEW",
         allowTemp = true,
         relationTypeMismatchHint = Some("Please use DROP TABLE instead.")),
@@ -3463,19 +3472,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
       AlterViewSetProperties(
-        UnresolvedView(
-          identifier,
+        withUnresolvedView(
+          ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
           relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
         cleanedTableProperties)
     } else {
-      AlterTableSetPropertiesStatement(identifier, cleanedTableProperties)
+      AlterTableSetPropertiesStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        cleanedTableProperties)
     }
   }
 
@@ -3490,22 +3500,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitUnsetTableProperties(
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    val identifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     val properties = visitPropertyKeys(ctx.tablePropertyList)
     val cleanedProperties = cleanTableProperties(ctx, properties.map(_ -> "").toMap).keys.toSeq
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
       AlterViewUnsetProperties(
-        UnresolvedView(
-          identifier,
+        withUnresolvedView(
+          ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
           relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
         cleanedProperties,
         ifExists)
     } else {
-      AlterTableUnsetPropertiesStatement(identifier, cleanedProperties, ifExists)
+      AlterTableUnsetPropertiesStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier),
+        cleanedProperties,
+        ifExists)
     }
   }
 
@@ -3947,9 +3959,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     AlterViewAs(
-      UnresolvedView(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
-        "ALTER VIEW ... AS"),
+      withUnresolvedView(ctx.multipartIdentifier, "ALTER VIEW ... AS"),
       originalText = source(ctx.query),
       query = plan(ctx.query))
   }
