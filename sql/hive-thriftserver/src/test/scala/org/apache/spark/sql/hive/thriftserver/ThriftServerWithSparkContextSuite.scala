@@ -102,7 +102,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       spark.sparkContext.addSparkListener(listener)
       try {
-        statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=1")
+        statement.execute(s"SET ${SQLConf.THRIFTSERVER_QUERY_TIMEOUT.key}=500")
         Seq(true, false).foreach { force =>
           statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=$force")
           forceCancel.set(force)
