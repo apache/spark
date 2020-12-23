@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, Expression, If, LambdaFunction, Literal, MapFilter, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If, Literal, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -32,23 +32,6 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(simplifyConditional(cond)))
     case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(simplifyConditional(cond)))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(simplifyConditional(cond)))
-    case p: LogicalPlan => p transformExpressions {
-      case i @ If(pred, _, _) => i.copy(predicate = simplifyConditional(pred))
-      case cw @ CaseWhen(branches, _) =>
-        val newBranches = branches.map { case (cond, value) =>
-          simplifyConditional(cond) -> value
-        }
-        cw.copy(branches = newBranches)
-      case af @ ArrayFilter(_, lf @ LambdaFunction(func, _, _)) =>
-        val newLambda = lf.copy(function = simplifyConditional(func))
-        af.copy(function = newLambda)
-      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _), false) =>
-        val newLambda = lf.copy(function = simplifyConditional(func))
-        ae.copy(function = newLambda)
-      case mf @ MapFilter(_, lf @ LambdaFunction(func, _, _)) =>
-        val newLambda = lf.copy(function = simplifyConditional(func))
-        mf.copy(function = newLambda)
-    }
   }
 
   private def simplifyConditional(e: Expression): Expression = e match {
