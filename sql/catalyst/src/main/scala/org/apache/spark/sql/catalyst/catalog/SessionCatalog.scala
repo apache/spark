@@ -355,7 +355,7 @@ class SessionCatalog(
       val fs = tableLocation.getFileSystem(hadoopConf)
 
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistsLocationError(
+        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
           "create", table.identifier, tableLocation)
       }
     }
@@ -424,7 +424,7 @@ class SessionCatalog(
     val nonExistentColumnNames =
       oldDataSchema.map(_.name).filterNot(columnNameResolved(newDataSchema, _))
     if (nonExistentColumnNames.nonEmpty) {
-      throw QueryCompilationErrors.alterTableDropColumnsNotSupportedError(nonExistentColumnNames)
+      throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
     }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
@@ -490,7 +490,7 @@ class SessionCatalog(
       if (dbs.distinct.size != 1) {
         val tables = names.map(name => formatTableName(name.table))
         val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
-        throw QueryCompilationErrors.cannotRetrieveTableOrViewNotInSomeDatabaseError(
+        throw QueryCompilationErrors.cannotRetrieveTableOrViewNotInSameDatabaseError(
           qualifiedTableNames)
       }
       val db = formatDatabaseName(dbs.head)
@@ -720,11 +720,11 @@ class SessionCatalog(
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
-          throw QueryCompilationErrors.renameTempViewSpecifyDestinationDatabaseNotAllowedError(
+          throw QueryCompilationErrors.cannotRenameTempViewWithDatabaseSpecifiedError(
             oldName, newName)
         }
         if (tempViews.contains(newTableName)) {
-          throw QueryCompilationErrors.renameTempViewToExistingDestinationTableError(
+          throw QueryCompilationErrors.cannotRenameTempViewToExistingTableError(
             oldName, newName)
         }
         val table = tempViews(oldTableName)
@@ -1357,7 +1357,7 @@ class SessionCatalog(
       // Check input argument size
       if (e.inputTypes.size != input.size) {
         throw QueryCompilationErrors.invalidFunctionArgumentsError(
-          name, e.inputTypes.size, input.size)
+          name, e.inputTypes.size.toString, input.size)
       }
       e
     } else {
@@ -1655,7 +1655,7 @@ class SessionCatalog(
       val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
-        throw QueryCompilationErrors.cannotOperateManagedTableWithExistsLocationError(
+        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
           "rename", oldName, newTableLocation)
       }
     }

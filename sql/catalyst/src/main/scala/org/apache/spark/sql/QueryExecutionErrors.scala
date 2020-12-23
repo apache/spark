@@ -64,45 +64,45 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Cannot terminate expression: $generator")
   }
 
-  def unableCreateDatabaseAsFailedCreateDirectoryError(
+  def unableToCreateDatabaseAsFailedToCreateDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(s"Unable to create database ${dbDefinition.name} as failed " +
       s"to create its directory ${dbDefinition.locationUri}", e)
   }
 
-  def unableDropDatabaseAsFailedDeleteDirectoryError(
+  def unableToDropDatabaseAsFailedToDeleteDirectoryError(
       dbDefinition: CatalogDatabase, e: IOException): Throwable = {
     new SparkException(s"Unable to drop database ${dbDefinition.name} as failed " +
       s"to delete its directory ${dbDefinition.locationUri}", e)
   }
 
-  def unableCreateTableAsFailedCreateDirectoryError(
+  def unableToCreateTableAsFailedToCreateDirectoryError(
       table: String, defaultTableLocation: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to create table $table as failed " +
       s"to create its directory $defaultTableLocation", e)
   }
 
-  def unableDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
+  def unableToDeletePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to delete partition path $partitionPath", e)
   }
 
-  def unableDropTableAsFailedDeleteDirectoryError(
+  def unableToDropTableAsFailedToDeleteDirectoryError(
       table: String, dir: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to drop table $table as failed " +
       s"to delete its directory $dir", e)
   }
 
-  def unableRenameTableAsFailedRenameDirectoryError(
+  def unableToRenameTableAsFailedToRenameDirectoryError(
       oldName: String, newName: String, oldDir: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to rename table $oldName to $newName as failed " +
       s"to rename its directory $oldDir", e)
   }
 
-  def unableCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
+  def unableToCreatePartitionPathError(partitionPath: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to create partition path $partitionPath", e)
   }
 
-  def unableRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
+  def unableToRenamePartitionPathError(oldPartPath: Path, e: IOException): Throwable = {
     new SparkException(s"Unable to rename partition path $oldPartPath", e)
   }
 
@@ -110,17 +110,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"$methodName is not implemented")
   }
 
-  def cannotReadCorruptedTablePropertyError(key: String): Throwable = {
-    new AnalysisException(s"Cannot read table property '$key' as it's corrupted.")
-  }
-
-  def cannotReadCorruptedTablePropertyAsMissPartError(
-      key: String, index: Int, numParts: String): Throwable = {
-    new AnalysisException(s"Cannot read table property '$key' as it's corrupted." +
-      s"Missing part $index, $numParts parts are expected.")
-  }
-
-  def tableStatsMustSpecifiedError(): Throwable = {
+  def tableStatsNotSpecifiedError(): Throwable = {
     new IllegalStateException("table stats must be specified.")
   }
 }

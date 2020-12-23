@@ -369,10 +369,16 @@ object QueryCompilationErrors {
     new AnalysisException(s"undefined function $name")
   }
 
+  def invalidFunctionArgumentsError(
+      name: String, expectedInfo: String, actualNumber: Int): Throwable = {
+    new AnalysisException(s"Invalid number of arguments for function $name. " +
+      s"Expected: $expectedInfo; Found: $actualNumber")
+  }
+
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, params: Seq[Class[Expression]]): Throwable = {
-    val invalidArgumentsMsg = if (validParametersCount.length == 0) {
-      s"Invalid arguments for function $name"
+    if (validParametersCount.length == 0) {
+      new AnalysisException(s"Invalid arguments for function $name")
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -380,10 +386,8 @@ object QueryCompilationErrors {
         validParametersCount.init.mkString("one of ", ", ", " and ") +
           validParametersCount.last
       }
-      s"Invalid number of arguments for function $name. " +
-        s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
+      invalidFunctionArgumentsError(name, expectedNumberOfParameters, params.length)
     }
-    new AnalysisException(invalidArgumentsMsg)
   }
 
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
@@ -506,7 +510,7 @@ object QueryCompilationErrors {
     new AnalysisException(s"$command does not support nested column: $quoted")
   }
 
-  def renameTempViewToExistsViewError(oldName: String, newName: String): Throwable = {
+  def renameTempViewToExistingViewError(oldName: String, newName: String): Throwable = {
     new AnalysisException(
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
@@ -543,13 +547,13 @@ object QueryCompilationErrors {
     new AnalysisException("CREATE EXTERNAL TABLE must be accompanied by LOCATION")
   }
 
-  def cannotOperateManagedTableWithExistsLocationError(
+  def cannotOperateManagedTableWithExistingLocationError(
       methodName: String, tableIdentifier: TableIdentifier, tableLocation: Path): Throwable = {
     new AnalysisException(s"Can not $methodName the managed table('$tableIdentifier')" +
       s". The associated location('${tableLocation.toString}') already exists.")
   }
 
-  def alterTableDropColumnsNotSupportedError(
+  def dropNonExistentColumnsNotSupportedError(
       nonExistentColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
       s"""
@@ -558,7 +562,7 @@ object QueryCompilationErrors {
          """.stripMargin)
   }
 
-  def cannotRetrieveTableOrViewNotInSomeDatabaseError(
+  def cannotRetrieveTableOrViewNotInSameDatabaseError(
       qualifiedTableNames: Seq[QualifiedTableName]): Throwable = {
     new AnalysisException("Only the tables/views belong to the same database can be retrieved. " +
       s"Querying tables/views are $qualifiedTableNames")
@@ -569,13 +573,13 @@ object QueryCompilationErrors {
       s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
   }
 
-  def renameTempViewSpecifyDestinationDatabaseNotAllowedError(
+  def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
     new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot " +
       s"specify database name '${newName.database.get}' in the destination table")
   }
 
-  def renameTempViewToExistingDestinationTableError(
+  def cannotRenameTempViewToExistingTableError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
     new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
       "destination table already exists")
@@ -592,12 +596,6 @@ object QueryCompilationErrors {
       s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
         s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
         s"in table '${table.identifier}'")
-  }
-
-  def invalidFunctionArgumentsError(
-      name: String, expectedNumber: Int, actualNumber: Int): Throwable = {
-    new AnalysisException(s"Invalid number of arguments for function $name. " +
-      s"Expected: $expectedNumber; Found: $actualNumber")
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
@@ -632,13 +630,13 @@ object QueryCompilationErrors {
     new AnalysisException(s"Partition [$specString] did not specify locationUri")
   }
 
-  def bucketsNumberNotGreatThanZeroError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
+  def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
       s"Number of buckets should be greater than 0 but less than or equal to " +
         s"bucketing.maxBuckets (`$bucketingMaxBuckets`). Got `$numBuckets`")
   }
 
-  def missCatalogAndNamespacePartInCatalogError(numParts: Int, index: Int): Throwable = {
+  def corruptedTableNameContextInCatalogError(numParts: Int, index: Int): Throwable = {
     new AnalysisException("Corrupted table name context in catalog: " +
       s"$numParts parts expected, but part $index is missing.")
   }
@@ -647,7 +645,7 @@ object QueryCompilationErrors {
     new AnalysisException("Corrupted view SQL configs in catalog", cause = Some(e))
   }
 
-  def missViewQueryOutputColumnsInCatalogError(numCols: String, index: Int): Throwable = {
+  def corruptedViewQueryOutputColumnsInCatalogError(numCols: String, index: Int): Throwable = {
     new AnalysisException("Corrupted view query output column names in catalog: " +
       s"$numCols parts expected, but part $index is missing.")
   }
@@ -671,5 +669,9 @@ object QueryCompilationErrors {
       colName: String, dataType: DataType): Throwable = {
     new AnalysisException("Column statistics serialization is not supported for " +
       s"column $colName of data type: $dataType.")
+  }
+
+  def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
+    new AnalysisException(s"Cannot read table property '$key' as it's corrupted.$details")
   }
 }

@@ -112,7 +112,7 @@ class InMemoryCatalog(
         fs.mkdirs(location)
       } catch {
         case e: IOException =>
-          throw QueryExecutionErrors.unableCreateDatabaseAsFailedCreateDirectoryError(
+          throw QueryExecutionErrors.unableToCreateDatabaseAsFailedToCreateDirectoryError(
             dbDefinition, e)
       }
       catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
@@ -141,7 +141,7 @@ class InMemoryCatalog(
         fs.delete(location, true)
       } catch {
         case e: IOException =>
-          throw QueryExecutionErrors.unableDropDatabaseAsFailedDeleteDirectoryError(dbDefinition, e)
+          throw QueryExecutionErrors.unableToDropDatabaseAsFailedToDeleteDirectoryError(dbDefinition, e)
       }
       catalog.remove(db)
     } else {
@@ -208,7 +208,7 @@ class InMemoryCatalog(
           fs.mkdirs(defaultTableLocation)
         } catch {
           case e: IOException =>
-            throw QueryExecutionErrors.unableCreateTableAsFailedCreateDirectoryError(
+            throw QueryExecutionErrors.unableToCreateTableAsFailedToCreateDirectoryError(
               table, defaultTableLocation, e)
         }
         tableDefinition.withNewStorage(locationUri = Some(defaultTableLocation.toUri))
@@ -238,7 +238,7 @@ class InMemoryCatalog(
             fs.delete(partitionPath, true)
           } catch {
             case e: IOException =>
-              throw QueryExecutionErrors.unableDeletePartitionPathError(partitionPath, e)
+              throw QueryExecutionErrors.unableToDeletePartitionPathError(partitionPath, e)
           }
         }
         assert(tableMeta.storage.locationUri.isDefined,
@@ -251,7 +251,7 @@ class InMemoryCatalog(
           fs.delete(dir, true)
         } catch {
           case e: IOException =>
-            throw QueryExecutionErrors.unableDropTableAsFailedDeleteDirectoryError(table, dir, e)
+            throw QueryExecutionErrors.unableToDropTableAsFailedToDeleteDirectoryError(table, dir, e)
         }
       }
       catalog(db).tables.remove(table)
@@ -282,7 +282,7 @@ class InMemoryCatalog(
         fs.rename(oldDir, newDir)
       } catch {
         case e: IOException =>
-          throw QueryExecutionErrors.unableRenameTableAsFailedRenameDirectoryError(
+          throw QueryExecutionErrors.unableToRenameTableAsFailedToRenameDirectoryError(
             oldName, newName, oldDir, e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
@@ -414,7 +414,7 @@ class InMemoryCatalog(
         }
       } catch {
         case e: IOException =>
-          throw QueryExecutionErrors.unableCreatePartitionPathError(partitionPath, e)
+          throw QueryExecutionErrors.unableToCreatePartitionPathError(partitionPath, e)
       }
 
       existingParts.put(
@@ -455,7 +455,7 @@ class InMemoryCatalog(
           fs.delete(partitionPath, true)
         } catch {
           case e: IOException =>
-            throw QueryExecutionErrors.unableDeletePartitionPathError(partitionPath, e)
+            throw QueryExecutionErrors.unableToDeletePartitionPathError(partitionPath, e)
         }
       }
       existingParts.remove(p)
@@ -488,7 +488,7 @@ class InMemoryCatalog(
           fs.rename(oldPartPath, newPartPath)
         } catch {
           case e: IOException =>
-            throw QueryExecutionErrors.unableRenamePartitionPathError(oldPartPath, e)
+            throw QueryExecutionErrors.unableToRenamePartitionPathError(oldPartPath, e)
         }
         oldPartition.copy(
           spec = newSpec,

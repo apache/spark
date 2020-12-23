@@ -182,7 +182,7 @@ case class BucketSpec(
     sortColumnNames: Seq[String]) extends SQLConfHelper {
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
-    throw QueryCompilationErrors.bucketsNumberNotGreatThanZeroError(
+    throw QueryCompilationErrors.invalidBucketNumberError(
       conf.bucketingMaxBuckets, numBuckets)
   }
 
@@ -294,7 +294,7 @@ case class CatalogTable(
       (0 until numParts).map { index =>
         properties.getOrElse(
           s"$VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX$index",
-          throw QueryCompilationErrors.missCatalogAndNamespacePartInCatalogError(numParts, index)
+          throw QueryCompilationErrors.corruptedTableNameContextInCatalogError(numParts, index)
         )
       }
     } else if (properties.contains(VIEW_DEFAULT_DATABASE)) {
@@ -331,7 +331,7 @@ case class CatalogTable(
       index <- 0 until numCols.toInt
     } yield properties.getOrElse(
       s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index",
-      throw QueryCompilationErrors.missViewQueryOutputColumnsInCatalogError(numCols, index)
+      throw QueryCompilationErrors.corruptedViewQueryOutputColumnsInCatalogError(numCols, index)
     )
   }
 
@@ -492,12 +492,12 @@ object CatalogTable {
       } else {
         val numParts = props.get(s"$key.numParts")
         if (numParts.isEmpty) {
-          throw QueryExecutionErrors.cannotReadCorruptedTablePropertyError(key)
+          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
         } else {
           val parts = (0 until numParts.get.toInt).map { index =>
             props.getOrElse(s"$key.part.$index", {
-              throw QueryExecutionErrors.cannotReadCorruptedTablePropertyAsMissPartError(
-                key, index, numParts.get)
+              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
+                key, s"Missing part $index, $numParts parts are expected.")
             })
           }
           Some(parts.mkString)
@@ -797,7 +797,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw QueryExecutionErrors.tableStatsMustSpecifiedError
+      throw QueryExecutionErrors.tableStatsNotSpecifiedError
     }
   }
 

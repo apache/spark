@@ -92,7 +92,7 @@ class GlobalTempViewManager(val database: String) {
   def rename(oldName: String, newName: String): Boolean = synchronized {
     if (viewDefinitions.contains(oldName)) {
       if (viewDefinitions.contains(newName)) {
-        throw QueryCompilationErrors.renameTempViewToExistsViewError(oldName, newName)
+        throw QueryCompilationErrors.renameTempViewToExistingViewError(oldName, newName)
       }
 
       val viewDefinition = viewDefinitions(oldName)
