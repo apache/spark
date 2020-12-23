@@ -452,5 +452,19 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
         resolveColumn(plan2, "a1") + resolveColumn(plan2, "b1") > 0,
         resolveColumn(plan2, "c1") > 0
       )))
+
+    val plan3 = relation
+      .where('a.attr + 'b.attr > intToLiteral(0))
+      .select('a as 'a1, 'b as 'b1, 'a.attr + 'b.attr)
+      .analyze
+
+    verifyConstraints(plan3.constraints,
+      ExpressionSet(Seq(
+        IsNotNull(resolveColumn(plan3, "a1")),
+        IsNotNull(resolveColumn(plan3, "b1")),
+        IsNotNull(resolveColumn(plan3, "(a + b)")),
+        resolveColumn(plan3, "a1") + resolveColumn(plan3, "b1") > 0,
+        resolveColumn(plan3, "(a + b)") > 0
+      )))
   }
 }
