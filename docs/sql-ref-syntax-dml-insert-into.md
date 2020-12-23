@@ -49,9 +49,7 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
 
     An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table.
 
-    **Note**
-
-    The current behaviour has some limitations:
+    **Note:**The current behaviour has some limitations:
     - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
     - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
     - The order of the column list is alterable and determines how the data from `VALUES` clause or query to be inserted by position.
@@ -219,7 +217,7 @@ SELECT * FROM students WHERE name = 'Kent Yao';
 +---------+----------------------+----------+
 |     name|               address|student_id|
 +---------+----------------------+----------+
-|Kent Yao |Hangzhou, China       |  11215016|
+|Kent Yao |       Hangzhou, China|  11215016|
 +---------+----------------------+----------+
 ```
 
@@ -229,11 +227,11 @@ SELECT * FROM students WHERE name = 'Kent Yao';
 INSERT INTO students PARTITION (student_id = 11215017) (address, name) VALUES
     ('Hangzhou, China', 'Kent Yao Jr.');
 
-SELECT * FROM students WHERE student_id = '11215017';
+SELECT * FROM students WHERE student_id = 11215017;
 +------------+----------------------+----------+
 |        name|               address|student_id|
 +------------+----------------------+----------+
-|Kent Yao Jr.|Hangzhou, China       |  11215017|
+|Kent Yao Jr.|       Hangzhou, China|  11215017|
 +------------+----------------------+----------+
 ```
 
