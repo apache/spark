@@ -91,6 +91,8 @@ object ExecutorPodsSnapshot extends Logging {
                   case t if t.getExitCode == 0 =>
                     PodSucceeded(pod)
                   case _ =>
+                    logWarning(s"Unable to find container ${sparkContainerName} in pod ${pod} " +
+                      "defaulting to entire pod status (running).")
                     PodRunning(pod)
                 }
               // If we can't find the Spark container status, fall back to the pod status
