@@ -484,6 +484,19 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
       case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
 
+      case CaseWhen(Seq((cond, l @ Literal(null, _))), Some(FalseLiteral))
+          if !cond.nullable =>
+        And(cond, l)
+      case CaseWhen(Seq((cond, l @ Literal(null, _))), Some(TrueLiteral))
+          if !cond.nullable =>
+        Or(Not(cond), l)
+      case CaseWhen(Seq((cond, FalseLiteral)), elseOpt @ (Some(Literal(null, BooleanType)) | None))
+          if !cond.nullable =>
+        And(Not(cond), elseOpt.getOrElse(Literal(null, BooleanType)))
+      case CaseWhen(Seq((cond, TrueLiteral)), elseOpt @ (Some(Literal(null, BooleanType)) | None))
+          if !cond.nullable =>
+        Or(cond, elseOpt.getOrElse(Literal(null, BooleanType)))
+
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
         // If there are no more branches left, just use the else value.

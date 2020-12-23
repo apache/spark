@@ -215,4 +215,52 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
       LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
   }
+
+  test("SPARK-33884: simplify CaseWhen when one clause is null and another is boolean") {
+    val p = IsNull('a)
+    val nullLiteral = Literal(null, BooleanType)
+    assertEquivalent(CaseWhen(Seq((p, nullLiteral)), FalseLiteral), And(p, nullLiteral))
+    assertEquivalent(CaseWhen(Seq((p, nullLiteral)), TrueLiteral), Or(IsNotNull('a), nullLiteral))
+    assertEquivalent(CaseWhen(Seq((p, FalseLiteral)), nullLiteral), And(IsNotNull('a), nullLiteral))
+    assertEquivalent(CaseWhen(Seq((p, FalseLiteral)), None), And(IsNotNull('a), nullLiteral))
+    assertEquivalent(CaseWhen(Seq((p, TrueLiteral)), nullLiteral), Or(p, nullLiteral))
+    assertEquivalent(CaseWhen(Seq((p, TrueLiteral)), None), Or(p, nullLiteral))
+
+    // the rule should not apply to nullable predicate
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), nullLiteral)), b),
+        CaseWhen(Seq((GreaterThan('a, 42), nullLiteral)), b))
+      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), b)), nullLiteral),
+        CaseWhen(Seq((GreaterThan('a, 42), b)), nullLiteral))
+      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), b)), None),
+        CaseWhen(Seq((GreaterThan('a, 42), b)), None))
+    }
+
+    // check evaluation also
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(CaseWhen(Seq((b, nullLiteral)), FalseLiteral),
+        And(b, nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((b, nullLiteral)), TrueLiteral),
+        Or(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((b, FalseLiteral)), nullLiteral),
+        And(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((b, FalseLiteral)), None),
+        And(Not(b), nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((b, TrueLiteral)), nullLiteral),
+        Or(b, nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((b, TrueLiteral)), None),
+        Or(b, nullLiteral).eval(EmptyRow))
+    }
+
+    // should have no effect on expressions with nullable if condition
+    assert((Factorial(5) > 100L).nullable)
+    Seq(TrueLiteral, FalseLiteral).foreach { b =>
+      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, nullLiteral)), b),
+        CaseWhen(Seq((Factorial(5) > 100L, nullLiteral)), b).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, b)), nullLiteral),
+        CaseWhen(Seq((Factorial(5) > 100L, b)), nullLiteral).eval(EmptyRow))
+      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, b)), None),
+        CaseWhen(Seq((Factorial(5) > 100L, b)), None).eval(EmptyRow))
+    }
+  }
 }
