@@ -710,7 +710,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       ("a", 4, nullStr),
       ("b", 1, nullStr),
       ("b", 2, nullStr),
-      ("c", 1, nullStr)).
+      ("c", 1, nullStr),
+      ("a", 3, "v")).
       toDF("key", "order", "value")
     val window = Window.orderBy($"order")
     checkAnswer(
@@ -736,20 +737,22 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
           null, null, null, null, null, null, null),
-        Row("a", 1, "x", null, null, "x", "y", "z", null, "ya",
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
           null, null, "x", null, null, null, null),
-        Row("b", 1, null, null, "y", null, "y", "z", null, "ya",
+        Row("b", 1, null, null, "y", null, "y", "z", "v", "ya",
           "x", null, null, "x", null, null, "xa"),
-        Row("c", 1, null, "y", null, null, "y", "z", null, "ya",
+        Row("c", 1, null, "y", null, null, "y", "z", "v", "ya",
           null, "x", null, "x", null, null, "xa"),
-        Row("a", 2, "y", null, "z", "y", "z", null, null, "za",
+        Row("a", 2, "y", null, "z", "y", "z", "v", null, "za",
           null, null, "y", "x", null, null, "xa"),
-        Row("b", 2, null, "z", null, null, "z", null, null, "za",
+        Row("b", 2, null, "z", "v", null, "z", "v", null, "za",
           "y", null, null, "y", "x", null, "ya"),
-        Row("a", 3, "z", null, null, "z", null, null, null, null,
+        Row("a", 3, "z", "v", null, "z", "v", null, null, "va",
           null, "y", "z", "y", "x", null, "ya"),
+        Row("a", 3, "v", null, null, "v", null, null, null, null,
+          "z", null, "v", "z", "y", "x", "za"),
         Row("a", 4, null, null, null, null, null, null, null, null,
-          "z", null, null, "z", "y", "x", "za")))
+          "v", "z", null, "v", "z", "y", "va")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {

@@ -162,19 +162,17 @@ class FrameLessOffsetWindowFunctionFrame(
   /** Holder the UnsafeRow where the input operator by function is not null. */
   private var nextSelectedRow = EmptyRow
 
-  /**
-   *  The number of UnsafeRows skipped to get the next UnsafeRow where
-   *  the input operator by function is not null.
-   */
-  private var skipNonNullCount = 0
+  // The number of rows skipped to get the next UnsafeRow where the input operator by function
+  // is not null.
+  private var skippedNonNullCount = 0
 
   /** find the offset row whose input is not null */
   private def findNextRowWithNonNullInput(): Unit = {
-    while (skipNonNullCount < offset && inputIndex < input.length) {
+    while (skippedNonNullCount < offset && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       if (!r.isNullAt(idx)) {
         nextSelectedRow = r
-        skipNonNullCount += 1
+        skippedNonNullCount += 1
       }
       inputIndex += 1
     }
@@ -186,7 +184,7 @@ class FrameLessOffsetWindowFunctionFrame(
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
     if (ignoreNulls) {
-      findNextRowWithNonNullInput
+      findNextRowWithNonNullInput()
     } else {
       while (inputIndex < offset) {
         if (inputIterator.hasNext) inputIterator.next()
@@ -198,37 +196,39 @@ class FrameLessOffsetWindowFunctionFrame(
 
   private val doWrite = if (ignoreNulls && offset > 0) {
     // For illustration, here is one example: the input data contains six rows,
-    // and the input values of each row are: null, x, null, null, y, null, z, null.
-    // We use Lead(input, 2) with IGNORE NULLS and the process is as follows:
+    // and the input values of each row are: null, x, null, null, y, null, z, v, null.
+    // We use lead(input, 2) with IGNORE NULLS and the process is as follows:
     // 1. current row -> null, next selected row -> y, output: y;
     // 2. current row -> x, next selected row -> z, output: z;
     // 3. current row -> null, next selected row -> z, output: z;
     // 4. current row -> null, next selected row -> z, output: z;
-    // 5. current row -> y, next selected row -> empty, output: null;
+    // 5. current row -> y, next selected row -> v, output: v;
+    // 6. current row -> null, next selected row -> v, output: v;
+    // 7. current row -> z, next selected row -> empty, output: null;
     // ... next selected row is empty, all following return null.
     (current: InternalRow) =>
-      if (current.isNullAt(idx)) {
-        if (nextSelectedRow == EmptyRow) {
-          // Use default values since the offset row whose input value is not null does not exist.
-          fillDefaultValue(current)
-        } else {
-          projection(nextSelectedRow)
-        }
+      if (nextSelectedRow == EmptyRow) {
+        // Use default values since the offset row whose input value is not null does not exist.
+        fillDefaultValue(current)
       } else {
-        skipNonNullCount -= 1
-        findNextRowWithNonNullInput
-        if (skipNonNullCount == offset) {
+        if (current.isNullAt(idx)) {
           projection(nextSelectedRow)
         } else {
-          // Use default values since the offset row whose input value is not null does not exist.
-          fillDefaultValue(current)
-          nextSelectedRow = EmptyRow
+          skippedNonNullCount -= 1
+          findNextRowWithNonNullInput()
+          if (skippedNonNullCount == offset) {
+            projection(nextSelectedRow)
+          } else {
+            // Use default values since the offset row whose input value is not null does not exist.
+            fillDefaultValue(current)
+            nextSelectedRow = EmptyRow
+          }
         }
       }
   } else if (ignoreNulls && offset < 0) {
     // For illustration, here is one example: the input data contains six rows,
-    // and the input values of each row are: null, x, null, null, y, null, z, null.
-    // We use Lag(input, 1) with IGNORE NULLS and the process is as follows:
+    // and the input values of each row are: null, x, null, null, y, null, z, v, null.
+    // We use lag(input, 1) with IGNORE NULLS and the process is as follows:
     // 1. current row -> null, next selected row -> empty, output: null;
     // 2. current row -> x, next selected row -> empty, output: null;
     // 3. current row -> null, next selected row -> x, output: x;
@@ -236,17 +236,20 @@ class FrameLessOffsetWindowFunctionFrame(
     // 5. current row -> y, next selected row -> x, output: x;
     // 6. current row -> null, next selected row -> y, output: y;
     // 7. current row -> z, next selected row -> y, output: y;
-    // 8. current row -> z, next selected row -> z, output: z;
+    // 8. current row -> v, next selected row -> z, output: z;
+    // 9. current row -> null, next selected row -> v, output: v;
     val absOffset = Math.abs(offset)
     (current: InternalRow) =>
-      if (nextSelectedRow == EmptyRow && skipNonNullCount == absOffset) {
-        do {
+      if (skippedNonNullCount == absOffset) {
+        nextSelectedRow = EmptyRow
+        skippedNonNullCount -= 1
+        while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
           val r = WindowFunctionFrame.getNextOrNull(inputIterator)
           if (!r.isNullAt(idx)) {
             nextSelectedRow = r
           }
           inputIndex += 1
-        } while (nextSelectedRow == EmptyRow && inputIndex < input.length)
+        }
       }
       if (nextSelectedRow == EmptyRow) {
         // Use default values since the offset row whose input value is not null does not exist.
@@ -255,11 +258,7 @@ class FrameLessOffsetWindowFunctionFrame(
         projection(nextSelectedRow)
       }
       if (!current.isNullAt(idx)) {
-        if (skipNonNullCount < absOffset) {
-          skipNonNullCount += 1
-        } else {
-          nextSelectedRow = EmptyRow
-        }
+        skippedNonNullCount += 1
       }
   } else {
     (current: InternalRow) =>
