@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.TimeZone
 
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
-class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
+class ConstraintPropagationSuite extends SparkFunSuite with PlanTest with PrivateMethodTester {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
     resolveColumn(tr.analyze, columnName)
@@ -424,47 +426,58 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   }
 
   test("SPARK-33152: Avoid exponential growth of constraints") {
+    val validConstraints = PrivateMethod[ExpressionSet](Symbol("validConstraints"))
+
     val relation = LocalRelation('a.int, 'b.int, 'c.int)
+      .where('a + 'b + 'c > intToLiteral(0))
 
     val plan1 = relation
-      .where('a.attr + 'b.attr > intToLiteral(0))
-      .select('a as 'a1, 'b as 'b1)
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1)
       .analyze
 
+    assert(plan1.invokePrivate(validConstraints()).size == 11)
     verifyConstraints(plan1.constraints,
       ExpressionSet(Seq(
         IsNotNull(resolveColumn(plan1, "a1")),
         IsNotNull(resolveColumn(plan1, "b1")),
-        resolveColumn(plan1, "a1") + resolveColumn(plan1, "b1") > 0
+        IsNotNull(resolveColumn(plan1, "c1")),
+        resolveColumn(plan1, "a1")
+          + resolveColumn(plan1, "b1")
+          + resolveColumn(plan1, "c1") > 0
       )))
 
-
     val plan2 = relation
-      .where('a.attr + 'b.attr > intToLiteral(0))
-      .select('a as 'a1, 'b as 'b1, ('a.attr + 'b.attr) as 'c1)
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1, 'a + 'b + 'c)
       .analyze
 
+    assert(plan2.invokePrivate(validConstraints()).size == 13)
     verifyConstraints(plan2.constraints,
       ExpressionSet(Seq(
         IsNotNull(resolveColumn(plan2, "a1")),
         IsNotNull(resolveColumn(plan2, "b1")),
         IsNotNull(resolveColumn(plan2, "c1")),
-        resolveColumn(plan2, "a1") + resolveColumn(plan2, "b1") > 0,
-        resolveColumn(plan2, "c1") > 0
+        IsNotNull(resolveColumn(plan2, "((a + b) + c)")),
+        resolveColumn(plan2, "((a + b) + c)") > 0,
+        resolveColumn(plan2, "a1")
+          + resolveColumn(plan2, "b1")
+          + resolveColumn(plan2, "c1") > 0
       )))
 
     val plan3 = relation
-      .where('a.attr + 'b.attr > intToLiteral(0))
-      .select('a as 'a1, 'b as 'b1, 'a.attr + 'b.attr)
+      .select('a as 'a1, 'b as 'b1, 'c as 'c1, ('a + 'b + 'c) as 'x1)
       .analyze
 
+    assert(plan3.invokePrivate(validConstraints()).size == 13)
     verifyConstraints(plan3.constraints,
       ExpressionSet(Seq(
         IsNotNull(resolveColumn(plan3, "a1")),
         IsNotNull(resolveColumn(plan3, "b1")),
-        IsNotNull(resolveColumn(plan3, "(a + b)")),
-        resolveColumn(plan3, "a1") + resolveColumn(plan3, "b1") > 0,
-        resolveColumn(plan3, "(a + b)") > 0
+        IsNotNull(resolveColumn(plan3, "c1")),
+        IsNotNull(resolveColumn(plan3, "x1")),
+        resolveColumn(plan3, "x1") > 0,
+        resolveColumn(plan3, "a1")
+          + resolveColumn(plan3, "b1")
+          + resolveColumn(plan3, "c1") > 0
       )))
   }
 }
