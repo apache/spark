@@ -141,7 +141,8 @@ class InMemoryCatalog(
         fs.delete(location, true)
       } catch {
         case e: IOException =>
-          throw QueryExecutionErrors.unableToDropDatabaseAsFailedToDeleteDirectoryError(dbDefinition, e)
+          throw QueryExecutionErrors.unableToDropDatabaseAsFailedToDeleteDirectoryError(
+            dbDefinition, e)
       }
       catalog.remove(db)
     } else {
@@ -251,7 +252,8 @@ class InMemoryCatalog(
           fs.delete(dir, true)
         } catch {
           case e: IOException =>
-            throw QueryExecutionErrors.unableToDropTableAsFailedToDeleteDirectoryError(table, dir, e)
+            throw QueryExecutionErrors.unableToDropTableAsFailedToDeleteDirectoryError(
+              table, dir, e)
         }
       }
       catalog(db).tables.remove(table)
