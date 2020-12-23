@@ -21,14 +21,14 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.util.{ContextAwareIterator, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -89,7 +89,7 @@ trait EvalPythonExec extends UnaryExecNode {
 
     inputRDD.mapPartitions { iter =>
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(iter, context)
+      val contextAwareIterator = new ContextAwareIterator(context, iter)
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.

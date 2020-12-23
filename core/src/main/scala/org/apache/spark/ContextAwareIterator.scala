@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark
 
-import org.apache.spark.TaskContext
+import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * A TaskContext aware iterator.
  *
  * As the Python evaluation consumes the parent iterator in a separate thread,
@@ -28,10 +29,12 @@ import org.apache.spark.TaskContext
  * which crashes the executor.
  * Thus, we should use [[ContextAwareIterator]] to stop consuming after the task ends.
  */
-class ContextAwareIterator[IN](iter: Iterator[IN], context: TaskContext) extends Iterator[IN] {
+@DeveloperApi
+class ContextAwareIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+  extends Iterator[T] {
 
   override def hasNext: Boolean =
-    !context.isCompleted() && !context.isInterrupted() && iter.hasNext
+    !context.isCompleted() && !context.isInterrupted() && delegate.hasNext
 
-  override def next(): IN = iter.next()
+  override def next(): T = delegate.next()
 }

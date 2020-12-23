@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{ContextAwareIterator, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
-import org.apache.spark.util.ContextAwareIterator
 
 /**
  * A relation produced by applying a function that takes an iterator of pandas DataFrames
@@ -63,7 +62,7 @@ case class MapInPandasExec(
       val outputTypes = child.schema
 
       val context = TaskContext.get()
-      val contextAwareIterator = new ContextAwareIterator(inputIter, context)
+      val contextAwareIterator = new ContextAwareIterator(context, inputIter)
 
       // Here we wrap it via another row so that Python sides understand it
       // as a DataFrame.
