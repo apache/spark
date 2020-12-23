@@ -1130,7 +1130,7 @@ class StreamSuite extends StreamTest {
     verifyLocalLimit(inputDF.dropDuplicates().repartition(1).limit(1), expectStreamingLimit = false)
 
     // Should be LocalLimitExec in the first place, not from optimization of StreamingLocalLimitExec
-    val staticDF = spark.range(1).toDF("value").limit(1)
+    val staticDF = spark.range(2).toDF("value").limit(1)
     verifyLocalLimit(inputDF.toDF("value").join(staticDF, "value"), expectStreamingLimit = false)
 
     verifyLocalLimit(
