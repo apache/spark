@@ -261,7 +261,8 @@ USING 'cat' AS (`a` INT, b STRING)
 FROM script_trans
 GROUP BY a
 ) t
-SELECT (b + 1) AS result;
+SELECT (b + 1) AS result
+ORDER BY result;
 
 MAP k / 10 USING 'cat' AS (one) FROM (SELECT 10 AS k);
 
