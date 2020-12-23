@@ -1129,7 +1129,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case sensitive") {
+  test("SPARK-33084: Add jar support Ivy URI -- test param key case sensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
