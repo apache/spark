@@ -1693,6 +1693,33 @@ class DatasetSuite extends QueryTest
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
   }
 
+  test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {
+    val saveModeSeq =
+      Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists, SaveMode.Ignore, null)
+    assert(saveModeSeq.toDS().collect().toSeq === saveModeSeq)
+    assert(saveModeSeq.toDS().schema === new StructType().add("value", StringType, nullable = true))
+
+    val saveModeCaseSeq = saveModeSeq.map(SaveModeCase.apply)
+    assert(saveModeCaseSeq.toDS().collect().toSet === saveModeCaseSeq.toSet)
+    assert(saveModeCaseSeq.toDS().schema ===
+      new StructType().add("mode", StringType, nullable = true))
+
+    val saveModeArrayCaseSeq =
+      Seq(SaveModeArrayCase(Array()), SaveModeArrayCase(saveModeSeq.toArray))
+    val collected = saveModeArrayCaseSeq.toDS().collect()
+    assert(collected.length === 2)
+    val sortedByLength = collected.sortBy(_.modes.length)
+    assert(sortedByLength(0).modes === Array())
+    assert(sortedByLength(1).modes === saveModeSeq.toArray)
+    assert(saveModeArrayCaseSeq.toDS().schema ===
+      new StructType().add("modes", ArrayType(StringType, containsNull = true), nullable = true))
+
+    // Enum is stored as string, so it is possible to convert to/from string
+    val stringSeq = saveModeSeq.map(Option.apply).map(_.map(_.toString).orNull)
+    assert(stringSeq.toDS().as[SaveMode].collect().toSet === saveModeSeq.toSet)
+    assert(saveModeSeq.toDS().as[String].collect().toSet === stringSeq.toSet)
+  }
+
   test("SPARK-24571: filtering of string values by char literal") {
     val df = Seq("Amsterdam", "San Francisco", "X").toDF("city")
     checkAnswer(df.where($"city" === 'X'), Seq(Row("X")))
@@ -2053,3 +2080,7 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+/** Used to test Java Enums from Scala code */
+case class SaveModeCase(mode: SaveMode)
+case class SaveModeArrayCase(modes: Array[SaveMode])
