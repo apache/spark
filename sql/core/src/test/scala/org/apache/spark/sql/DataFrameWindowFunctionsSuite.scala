@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.scalatest.matchers.must.Matchers.the
+
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -27,7 +28,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 /**
  * Window function testing for DataFrame API.
