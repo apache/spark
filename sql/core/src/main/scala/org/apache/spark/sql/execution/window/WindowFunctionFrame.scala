@@ -153,14 +153,6 @@ class FrameLessOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
-  assert(expressions.toSeq.filterNot(_.input.isInstanceOf[Attribute]).isEmpty)
-
-  /** The input expression of Lead/Lag. */
-  private lazy val inputExpression = expressions.toSeq.map(_.input).head
-
-  /** The index of input expression in the row. */
-  private lazy val idx = inputAttrs.zipWithIndex.find(_._1 == inputExpression).map(_._2).head
-
   /** Holder the UnsafeRow where the input operator by function is not null. */
   private var nextSelectedRow = EmptyRow
 
@@ -168,11 +160,17 @@ class FrameLessOffsetWindowFunctionFrame(
   // is not null.
   private var skippedNonNullCount = 0
 
+  /** Create the projection to determine whether input is null. */
+  private val project = UnsafeProjection.create(Seq(IsNull(expressions.head.input)), inputSchema)
+
+  /** Check if the output value of the first index is null. */
+  private val nullCheck: InternalRow => Boolean = row => project(row).getBoolean(0)
+
   /** find the offset row whose input is not null */
   private def findNextRowWithNonNullInput(): Unit = {
     while (skippedNonNullCount < offset && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      if (!r.isNullAt(idx)) {
+      if (!nullCheck(r)) {
         nextSelectedRow = r
         skippedNonNullCount += 1
       }
@@ -213,7 +211,7 @@ class FrameLessOffsetWindowFunctionFrame(
         // Use default values since the offset row whose input value is not null does not exist.
         fillDefaultValue(current)
       } else {
-        if (current.isNullAt(idx)) {
+        if (nullCheck(current)) {
           projection(nextSelectedRow)
         } else {
           skippedNonNullCount -= 1
@@ -247,7 +245,7 @@ class FrameLessOffsetWindowFunctionFrame(
         skippedNonNullCount -= 1
         while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
           val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-          if (!r.isNullAt(idx)) {
+          if (!nullCheck(r)) {
             nextSelectedRow = r
           }
           inputIndex += 1
@@ -259,7 +257,7 @@ class FrameLessOffsetWindowFunctionFrame(
       } else {
         projection(nextSelectedRow)
       }
-      if (!current.isNullAt(idx)) {
+      if (!nullCheck(current)) {
         skippedNonNullCount += 1
       }
   } else {
