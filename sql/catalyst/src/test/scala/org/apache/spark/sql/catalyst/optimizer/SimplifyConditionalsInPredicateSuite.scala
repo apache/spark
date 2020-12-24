@@ -44,7 +44,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation('d.int)
 
-  test("if(cond, trueVal, false) => And(cond, trueVal)") {
+  test("IF(cond, trueVal, false) => AND(cond, trueVal)") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       UnresolvedAttribute("b"),
@@ -59,7 +59,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("if(cond, trueVal, true) => or(not(cond), trueVal)") {
+  test("IF(cond, trueVal, true) => OR(NOT(cond), trueVal)") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       UnresolvedAttribute("b"),
@@ -74,7 +74,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("if(cond, false, falseVal) => and(not(cond), falseVal)") {
+  test("IF(cond, false, falseVal) => AND(NOT(cond), elseVal)") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       FalseLiteral,
@@ -89,7 +89,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("if(cond, true, falseVal) => or(cond, falseVal)") {
+  test("IF(cond, true, falseVal) => OR(cond, elseVal)") {
     val originalCond = If(
       UnresolvedAttribute("i") > Literal(10),
       TrueLiteral,
@@ -104,8 +104,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-
-  test("case when cond then trueVal else false end => And(cond, trueVal)") {
+  test("CASE WHEN cond THEN trueVal ELSE false END => AND(cond, trueVal)") {
     Seq(Some(FalseLiteral), None, Some(Literal(null, BooleanType))).foreach { elseExp =>
       val originalCond = CaseWhen(
         Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
@@ -121,7 +120,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     }
   }
 
-  test("case when cond then trueVal else true end => or(not(cond), trueVal)") {
+  test("CASE WHEN cond THEN trueVal ELSE true END => OR(NOT(cond), trueVal)") {
     val originalCond = CaseWhen(
       Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
       TrueLiteral)
@@ -135,8 +134,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("case when cond then false else elseValue end => and(not(cond), elseValue)") {
-    Seq()
+  test("CASE WHEN cond THEN false ELSE elseVal END => AND(NOT(cond), elseVal)") {
     val originalCond = CaseWhen(
       Seq((UnresolvedAttribute("i") > Literal(10), FalseLiteral)),
       UnresolvedAttribute("b"))
@@ -150,7 +148,17 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("case when cond then true else elseValue end => or(cond, elseValue)") {
+  test("CASE WHEN cond THEN false END => false") {
+    val originalCond = CaseWhen(
+      Seq((UnresolvedAttribute("i") > Literal(10), FalseLiteral)))
+    testFilter(originalCond, expectedCond = FalseLiteral)
+    testJoin(originalCond, expectedCond = FalseLiteral)
+    testDelete(originalCond, expectedCond = FalseLiteral)
+    testUpdate(originalCond, expectedCond = FalseLiteral)
+    testProjection(originalCond, expectedExpr = originalCond)
+  }
+
+  test("CASE WHEN cond THEN true ELSE elseVal END  => OR(cond, elseVal)") {
     val originalCond = CaseWhen(
       Seq((UnresolvedAttribute("i") > Literal(10), TrueLiteral)),
       UnresolvedAttribute("b"))
@@ -164,7 +172,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("case when cond then true end => or(cond, null)") {
+  test("CASE WHEN cond THEN true END => cond") {
     val originalCond = CaseWhen(
       Seq((UnresolvedAttribute("i") > Literal(10), TrueLiteral)))
     val expectedCond = UnresolvedAttribute("i") > Literal(10)
@@ -189,7 +197,7 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
     testProjection(originalCond, expectedExpr = originalCond)
   }
 
-  test("Not expected type - simplifyConditional") {
+  test("Not expected type - SimplifyConditionalsInPredicate") {
     val e = intercept[AnalysisException] {
       testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
     }.getMessage

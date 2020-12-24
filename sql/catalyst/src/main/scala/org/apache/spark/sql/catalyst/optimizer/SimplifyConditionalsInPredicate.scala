@@ -39,9 +39,9 @@ import org.apache.spark.sql.types.BooleanType
  * - CASE WHEN cond THEN trueVal ELSE null END  => AND(cond, trueVal)
  * - CASE WHEN cond THEN trueVal ELSE true END  => OR(NOT(cond), trueVal)
  * - CASE WHEN cond THEN false ELSE elseVal END => AND(NOT(cond), elseVal)
- * - CASE WHEN cond THEN false END              => AND(NOT(cond), false)
+ * - CASE WHEN cond THEN false END              => false
  * - CASE WHEN cond THEN true ELSE elseVal END  => OR(cond, elseVal)
- * - CASE WHEN cond THEN true END               => OR(cond, false)
+ * - CASE WHEN cond THEN true END               => cond
  */
 object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
 
@@ -64,14 +64,18 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
       And(cond, trueValue)
     case CaseWhen(Seq((cond, trueValue)), Some(TrueLiteral)) =>
       Or(Not(cond), trueValue)
-    case CaseWhen(Seq((cond, FalseLiteral)), elseValue) =>
-      And(Not(cond), elseValue.getOrElse(FalseLiteral))
-    case CaseWhen(Seq((cond, TrueLiteral)), elseValue) =>
-      Or(cond, elseValue.getOrElse(FalseLiteral))
+    case CaseWhen(Seq((_, FalseLiteral)), Some(FalseLiteral) | None) =>
+      FalseLiteral
+    case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue)) =>
+      And(Not(cond), elseValue)
+    case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral) | None) =>
+      cond
+    case CaseWhen(Seq((cond, TrueLiteral)), Some(elseValue)) =>
+      Or(cond, elseValue)
     case e if e.dataType == BooleanType => e
     case e =>
       assert(e.dataType != BooleanType,
-      "Expected a Boolean type expression in simplifyConditional, " +
+      "Expected a Boolean type expression in SimplifyConditionalsInPredicate, " +
         s"but got the type `${e.dataType.catalogString}` in `${e.sql}`.")
       e
   }
