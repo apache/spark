@@ -69,4 +69,15 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
       .analyze
     comparePlans(optimized2, expected2)
   }
+
+  test("SPARK-32968: don't prune columns if options is not empty") {
+    val options = Map("mode" -> "failfast")
+
+    val query = testRelation
+      .select(GetStructField(CsvToStructs(schema, options, 'csv), 0))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val expected = query.analyze
+    comparePlans(optimized, expected)
+  }
 }
