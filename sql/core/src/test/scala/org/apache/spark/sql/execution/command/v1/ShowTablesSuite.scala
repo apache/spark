@@ -100,6 +100,13 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
+
+  test("no database specified") {
+    val errMsg = intercept[AnalysisException] {
+      sql(s"SHOW TABLES IN $catalog")
+    }.getMessage
+    assert(errMsg.contains("multi-part identifier cannot be empty"))
+  }
 }
 
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
