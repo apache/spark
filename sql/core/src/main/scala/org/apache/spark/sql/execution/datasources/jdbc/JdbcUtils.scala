@@ -428,10 +428,6 @@ object JdbcUtils extends Logging {
         }
       }
 
-    case IntegerType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) =>
-        row.setInt(pos, rs.getInt(pos + 1))
-
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val bytes = rs.getBytes(pos + 1)
