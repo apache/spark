@@ -226,7 +226,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => TimestampType
+      case java.sql.Types.TIME          => IntegerType
       case java.sql.Types.TIME_WITH_TIMEZONE
                                         => null
       case java.sql.Types.TIMESTAMP     => TimestampType
