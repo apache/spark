@@ -414,6 +414,9 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
+                                if (typeof row.peakMemoryMetrics == "undefined") {
+                                    return "";
+                                }
                                 if (type !== 'display')
                                     return row.peakMemoryMetrics.JVMHeapMemory;
                                 else
@@ -423,6 +426,9 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
+                                if (typeof row.peakMemoryMetrics == "undefined") {
+                                    return "";
+                                }
                                 if (type !== 'display')
                                     return row.peakMemoryMetrics.OnHeapExecutionMemory;
                                 else
@@ -432,6 +438,9 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
+                                if (typeof row.peakMemoryMetrics == "undefined") {
+                                    return "";
+                                }
                                 if (type !== 'display')
                                     return row.peakMemoryMetrics.OnHeapStorageMemory;
                                 else
@@ -441,6 +450,9 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
+                                if (typeof row.peakMemoryMetrics == "undefined") {
+                                    return "";
+                                }
                                 if (type !== 'display')
                                     return row.peakMemoryMetrics.DirectPoolMemory;
                                 else
