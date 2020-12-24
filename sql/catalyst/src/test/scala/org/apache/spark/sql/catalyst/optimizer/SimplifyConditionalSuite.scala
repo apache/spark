@@ -215,4 +215,12 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
       LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
   }
+
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
+    Seq(GreaterThan('a, 1), GreaterThan(Rand(0), 1)).foreach { condition =>
+      assertEquivalent(
+        CaseWhen((condition, Literal.create(null, IntegerType)) :: Nil, None),
+        Literal.create(null, IntegerType))
+    }
+  }
 }

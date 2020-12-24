@@ -15,20 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.annotation.DeveloperApi
 
-class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
-    }
-  }
+/**
+ * :: DeveloperApi ::
+ * A TaskContext aware iterator.
+ *
+ * As the Python evaluation consumes the parent iterator in a separate thread,
+ * it could consume more data from the parent even after the task ends and the parent is closed.
+ * If an off-heap access exists in the parent iterator, it could cause segmentation fault
+ * which crashes the executor.
+ * Thus, we should use [[ContextAwareIterator]] to stop consuming after the task ends.
+ */
+@DeveloperApi
+class ContextAwareIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+  extends Iterator[T] {
+
+  override def hasNext: Boolean =
+    !context.isCompleted() && !context.isInterrupted() && delegate.hasNext
+
+  override def next(): T = delegate.next()
 }

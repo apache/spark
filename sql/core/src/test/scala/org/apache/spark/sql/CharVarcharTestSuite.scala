@@ -356,6 +356,26 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("char type comparison: partition pruning") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 VARCHAR(5)) USING $format PARTITIONED BY (c1, c2)")
+      sql("INSERT INTO t VALUES (1, 'a', 'a')")
+      Seq(("c1 = 'a'", true),
+        ("'a' = c1", true),
+        ("c1 = 'a  '", true),
+        ("c1 > 'a'", false),
+        ("c1 IN ('a', 'b')", true),
+        ("c2 = 'a  '", false),
+        ("c2 = 'a'", true),
+        ("c2 IN ('a', 'b')", true)).foreach { case (con, res) =>
+        val df = spark.table("t")
+        withClue(con) {
+          checkAnswer(df.where(con), df.where(res.toString))
+        }
+      }
+    }
+  }
+
   test("char type comparison: join") {
     withTable("t1", "t2") {
       sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")

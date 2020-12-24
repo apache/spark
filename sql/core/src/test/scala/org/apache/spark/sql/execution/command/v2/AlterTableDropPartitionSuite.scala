@@ -36,6 +36,21 @@ class AlterTableDropPartitionSuite
     }
   }
 
+  test("purge partition data") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      try {
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+        }.getMessage
+        assert(errMsg.contains("purge is not supported"))
+      } finally {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+    }
+  }
+
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")

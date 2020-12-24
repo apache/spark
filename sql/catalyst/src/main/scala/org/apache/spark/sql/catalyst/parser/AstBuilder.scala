@@ -2161,6 +2161,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create an [[UnresolvedTable]] from a multi-part identifier context.
+   */
+  private def createUnresolvedTable(
+      ctx: MultipartIdentifierContext,
+      commandName: String): LogicalPlan = withOrigin(ctx) {
+    UnresolvedTable(visitMultipartIdentifier(ctx), commandName)
+  }
+
+  /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
@@ -3616,8 +3625,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTable(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "MSCK REPAIR TABLE"))
+    RepairTable(createUnresolvedTable(ctx.multipartIdentifier, "MSCK REPAIR TABLE"))
   }
 
   /**
@@ -3631,7 +3639,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
     LoadData(
-      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "LOAD DATA"),
+      child = createUnresolvedTable(ctx.multipartIdentifier, "LOAD DATA"),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3699,7 +3707,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
     TruncateTable(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "TRUNCATE TABLE"),
+      createUnresolvedTable(ctx.multipartIdentifier, "TRUNCATE TABLE"),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
@@ -3719,7 +3727,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
     ShowPartitions(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "SHOW PARTITIONS"),
+      createUnresolvedTable(ctx.multipartIdentifier(), "SHOW PARTITIONS"),
       partitionKeys)
   }
 
@@ -3772,8 +3780,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRecoverPartitions(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
@@ -3801,8 +3809,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(spec, location)
     }
     AlterTableAddPartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
@@ -3819,8 +3827,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenamePartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       visitNonOptionalPartitionSpec(ctx.to))
@@ -3847,8 +3855,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
@@ -3867,8 +3875,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSerDeProperties(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
@@ -4084,7 +4092,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CommentOnTable(UnresolvedTable(nameParts, "COMMENT ON TABLE"), comment)
+    CommentOnTable(createUnresolvedTable(ctx.multipartIdentifier, "COMMENT ON TABLE"), comment)
   }
 }

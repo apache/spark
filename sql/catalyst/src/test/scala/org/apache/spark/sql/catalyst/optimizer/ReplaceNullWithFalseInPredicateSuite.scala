@@ -380,6 +380,39 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
+  test("replace None of elseValue inside CaseWhen if all branches are FalseLiteral") {
+    val allFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
+      (UnresolvedAttribute("i") > Literal(40)) -> FalseLiteral)
+    val allFalseCond = CaseWhen(allFalseBranches)
+
+    val nonAllFalseBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
+      (UnresolvedAttribute("i") > Literal(40)) -> TrueLiteral)
+    val nonAllFalseCond = CaseWhen(nonAllFalseBranches, FalseLiteral)
+
+    testFilter(allFalseCond, FalseLiteral)
+    testJoin(allFalseCond, FalseLiteral)
+    testDelete(allFalseCond, FalseLiteral)
+    testUpdate(allFalseCond, FalseLiteral)
+
+    testFilter(nonAllFalseCond, nonAllFalseCond)
+    testJoin(nonAllFalseCond, nonAllFalseCond)
+    testDelete(nonAllFalseCond, nonAllFalseCond)
+    testUpdate(nonAllFalseCond, nonAllFalseCond)
+  }
+
+  test("replace None of elseValue inside CaseWhen if all branches are null") {
+    val allNullBranches = Seq(
+      (UnresolvedAttribute("i") < Literal(10)) -> Literal.create(null, BooleanType),
+      (UnresolvedAttribute("i") > Literal(40)) -> Literal.create(null, BooleanType))
+    val allFalseCond = CaseWhen(allNullBranches)
+    testFilter(allFalseCond, FalseLiteral)
+    testJoin(allFalseCond, FalseLiteral)
+    testDelete(allFalseCond, FalseLiteral)
+    testUpdate(allFalseCond, FalseLiteral)
+  }
+
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }
