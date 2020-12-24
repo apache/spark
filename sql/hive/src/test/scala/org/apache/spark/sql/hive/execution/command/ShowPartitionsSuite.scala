@@ -21,7 +21,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command.v1
 
 class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
-  test("null and empty string as partition values") {
+  test("SPARK-33904: null and empty string as partition values") {
     withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
       withNamespaceAndTable("ns", "tbl") { t =>
         createNullPartTable(t, "hive")
