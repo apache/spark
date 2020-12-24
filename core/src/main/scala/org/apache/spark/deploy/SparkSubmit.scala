@@ -1368,7 +1368,7 @@ private[spark] object SparkSubmitUtils {
   def resolveMavenCoordinates(
       coordinates: String,
       ivySettings: IvySettings,
-      transitive: Boolean = true,
+      transitive: Boolean,
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
