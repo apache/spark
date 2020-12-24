@@ -62,7 +62,7 @@ class FileFormatWriterSuite
     }
   }
 
-  test("save and insert into a table in a namespace of spark_catalog") {
+  test("SPARK-33904: save and insert into a table in a namespace of spark_catalog") {
     val ns = "spark_catalog.ns"
     withNamespace(ns) {
       spark.sql(s"CREATE NAMESPACE $ns")
