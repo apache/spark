@@ -164,7 +164,7 @@ class FrameLessOffsetWindowFunctionFrame(
   private val project = UnsafeProjection.create(Seq(IsNull(expressions.head.input)), inputSchema)
 
   /** Check if the output value of the first index is null. */
-  private val nullCheck: InternalRow => Boolean = row => project(row).getBoolean(0)
+  private def nullCheck(row: InternalRow): Boolean = project(row).getBoolean(0)
 
   /** find the offset row whose input is not null */
   private def findNextRowWithNonNullInput(): Unit = {
