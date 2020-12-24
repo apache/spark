@@ -363,7 +363,6 @@ class ResolveSessionCatalog(
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
     case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
-      assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
       }
