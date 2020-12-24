@@ -22,20 +22,13 @@ import org.apache.spark.sql.execution.command.v1
 
 class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
   test("null and empty string as partition values") {
-    import testImplicits._
     withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-      withTable("t") {
-        val df = Seq((0, ""), (1, null)).toDF("a", "part")
-        df.write
-          .partitionBy("part")
-          .format("hive")
-          .mode(SaveMode.Overwrite)
-          .saveAsTable("t")
-
+      withNamespaceAndTable("ns", "tbl") { t =>
+        createNullPartTable(t, "hive")
         runShowPartitionsSql(
-          "SHOW PARTITIONS t",
+          s"SHOW PARTITIONS $t",
           Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
-        checkAnswer(spark.table("t"),
+        checkAnswer(spark.table(t),
           Row(0, "__HIVE_DEFAULT_PARTITION__") ::
           Row(1, "__HIVE_DEFAULT_PARTITION__") :: Nil)
       }

@@ -38,13 +38,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
   test("SPARK-33889: null and empty string as partition values") {
     import testImplicits._
     withNamespaceAndTable("ns", "tbl") { t =>
-      val df = Seq((0, ""), (1, null)).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable(t)
-
+      createNullPartTable(t, "parquet")
       runShowPartitionsSql(
         s"SHOW PARTITIONS $t",
         Row("part=") ::
