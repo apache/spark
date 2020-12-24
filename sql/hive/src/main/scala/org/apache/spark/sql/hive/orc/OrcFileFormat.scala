@@ -39,11 +39,11 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, Re
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.TypeDescription
 
 import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SPARK_VERSION_METADATA_KEY
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
@@ -204,6 +204,22 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  private def checkFieldName(name: String): Unit = {
+    try {
+      TypeDescription.fromString(s"struct<`$name`:int>")
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new AnalysisException(
+          s"""Column name "$name" contains invalid character(s).
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" ").trim)
+    }
+  }
+
+  override def checkFieldNames(names: Seq[String]): Unit = {
+    names.foreach(checkFieldName)
   }
 
   // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.

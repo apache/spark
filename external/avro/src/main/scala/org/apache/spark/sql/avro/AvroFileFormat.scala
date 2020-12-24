@@ -22,7 +22,7 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
+import org.apache.avro.{Schema, SchemaParseException}
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -152,6 +152,31 @@ private[sql] class AvroFileFormat extends FileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
+
+  override def checkFieldNames(names: Seq[String]): Unit = {
+    names.foreach(checkFieldName)
+  }
+
+  private def checkFieldName(name: String): Unit = {
+    val length = name.length
+    if (length == 0) {
+      throw new SchemaParseException("Empty name")
+    } else {
+      val first = name.charAt(0)
+      if (!Character.isLetter(first) && first != '_') {
+        throw new SchemaParseException("Illegal initial character: " + name)
+      } else {
+        var i = 1
+        while (i < length) {
+          val c = name.charAt(i)
+          if (!Character.isLetterOrDigit(c) && c != '_') {
+            throw new SchemaParseException("Illegal character in: " + name)
+          }
+          i += 1
+        }
+      }
+    }
+  }
 }
 
 private[avro] object AvroFileFormat {

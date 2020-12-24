@@ -162,6 +162,8 @@ trait FileFormat {
    * By default all data types are supported.
    */
   def supportDataType(dataType: DataType): Boolean = true
+
+  def checkFieldNames(names: Seq[String]): Unit = {}
 }
 
 /**

@@ -43,22 +43,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object OrcFileFormat {
-  private def checkFieldName(name: String): Unit = {
-    try {
-      TypeDescription.fromString(s"struct<`$name`:int>")
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new AnalysisException(
-          s"""Column name "$name" contains invalid character(s).
-             |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
-    }
-  }
-
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
-  }
-
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
     case _: AtomicType => dataType.catalogString
     case StructType(fields) =>
@@ -257,5 +241,21 @@ class OrcFileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  private def checkFieldName(name: String): Unit = {
+    try {
+      TypeDescription.fromString(s"struct<`$name`:int>")
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new AnalysisException(
+          s"""Column name "$name" contains invalid character(s).
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" ").trim)
+    }
+  }
+
+  override def checkFieldNames(names: Seq[String]): Unit = {
+    names.foreach(checkFieldName)
   }
 }
