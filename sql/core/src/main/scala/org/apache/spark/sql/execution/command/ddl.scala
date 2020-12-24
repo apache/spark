@@ -921,8 +921,9 @@ object DDLUtils {
           } else if (serde == HiveSerDe.sourceToSerDe("avro").get.serde) {
             checkDataColNames("avro", colNames)
           }
-        case provider =>
+        case provider if Seq("parquet", "orc", "avro").contains(provider) =>
           checkDataColNames(provider, colNames)
+        case _ =>
       }
     }
   }
