@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
@@ -35,4 +36,16 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
 
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP PARTITION (p1 = '')")
+      }.getMessage
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec ([p1=]) contains an empty partition column value"))
+    }
+  }
+}
