@@ -612,8 +612,8 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  // TODO: Move this test to super after SPARK-33875 implements DESCRIBE COLUMN for v2
-  test("DESCRIBE COLUMN w/ char/varchar") {
+  // TODO(SPARK-33875): Move these tests to super after these statements for v2 implemented
+  test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
       checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
@@ -623,7 +623,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  test("SHOW CREATE TABLE w/ char/varchar") {
+  test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
       val rest = sql("SHOW CREATE TABLE t").head().getString(0)
