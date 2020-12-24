@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.BooleanType
 
 /**
- * A rule that converting conditional expressions to predicate expressions, if possible, in the
+ * A rule that converts conditional expressions to predicate expressions, if possible, in the
  * search condition of the WHERE/HAVING/ON(JOIN) clauses, which contain an implicit Boolean operator
  * "(search condition) = TRUE". After this converting, we can potentially push the filter down to
  * the data source.
