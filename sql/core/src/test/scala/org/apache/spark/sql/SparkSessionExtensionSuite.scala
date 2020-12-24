@@ -88,6 +88,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-33621: inject a pre CBO rule") {
+    withSession(Seq(_.injectPreCBORule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.preCBORules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))
