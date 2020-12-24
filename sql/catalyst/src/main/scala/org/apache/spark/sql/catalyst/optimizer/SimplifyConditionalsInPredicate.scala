@@ -22,9 +22,27 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.BooleanType
-import org.apache.spark.util.Utils
 
-
+/**
+ * A rule that converting conditional expressions to predicate expressions, if possible, in the
+ * search condition of the WHERE/HAVING/ON(JOIN) clauses, which contain an implicit Boolean operator
+ * "(search condition) = TRUE". After this converting, we can potentially push the filter down to
+ * the data source.
+ *
+ * Supported cases are:
+ * - IF(cond, trueVal, false)                   => AND(cond, trueVal)
+ * - IF(cond, trueVal, true)                    => OR(NOT(cond), trueVal)
+ * - IF(cond, false, falseVal)                  => AND(NOT(cond), elseVal)
+ * - IF(cond, true, falseVal)                   => OR(cond, elseVal)
+ * - CASE WHEN cond THEN trueVal ELSE false END => AND(cond, trueVal)
+ * - CASE WHEN cond THEN trueVal END            => AND(cond, trueVal)
+ * - CASE WHEN cond THEN trueVal ELSE null END  => AND(cond, trueVal)
+ * - CASE WHEN cond THEN trueVal ELSE true END  => OR(NOT(cond), trueVal)
+ * - CASE WHEN cond THEN false ELSE elseVal END => AND(NOT(cond), elseVal)
+ * - CASE WHEN cond THEN false END              => AND(NOT(cond), false)
+ * - CASE WHEN cond THEN true ELSE elseVal END  => OR(cond, elseVal)
+ * - CASE WHEN cond THEN true END               => OR(cond, false)
+ */
 object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -35,31 +53,26 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
   }
 
   private def simplifyConditional(e: Expression): Expression = e match {
-    case Literal(null, BooleanType) => FalseLiteral
     case And(left, right) => And(simplifyConditional(left), simplifyConditional(right))
     case Or(left, right) => Or(simplifyConditional(left), simplifyConditional(right))
-    case If(cond, t, FalseLiteral) => And(cond, t)
-    case If(cond, t, TrueLiteral) => Or(Not(cond), t)
-    case If(cond, FalseLiteral, f) => And(Not(cond), f)
-    case If(cond, TrueLiteral, f) => Or(cond, f)
+    case If(cond, trueValue, FalseLiteral) => And(cond, trueValue)
+    case If(cond, trueValue, TrueLiteral) => Or(Not(cond), trueValue)
+    case If(cond, FalseLiteral, falseValue) => And(Not(cond), falseValue)
+    case If(cond, TrueLiteral, falseValue) => Or(cond, falseValue)
     case CaseWhen(Seq((cond, trueValue)),
         Some(FalseLiteral) | Some(Literal(null, BooleanType)) | None) =>
       And(cond, trueValue)
     case CaseWhen(Seq((cond, trueValue)), Some(TrueLiteral)) =>
       Or(Not(cond), trueValue)
     case CaseWhen(Seq((cond, FalseLiteral)), elseValue) =>
-      And(Not(cond), elseValue.getOrElse(Literal(null, BooleanType)))
+      And(Not(cond), elseValue.getOrElse(FalseLiteral))
     case CaseWhen(Seq((cond, TrueLiteral)), elseValue) =>
-      Or(cond, elseValue.getOrElse(Literal(null, BooleanType)))
+      Or(cond, elseValue.getOrElse(FalseLiteral))
     case e if e.dataType == BooleanType => e
     case e =>
-      val message = "Expected a Boolean type expression in simplifyConditional, " +
-        s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
-      if (Utils.isTesting) {
-        throw new IllegalArgumentException(message)
-      } else {
-        logWarning(message)
-        e
-      }
+      assert(e.dataType != BooleanType,
+      "Expected a Boolean type expression in simplifyConditional, " +
+        s"but got the type `${e.dataType.catalogString}` in `${e.sql}`.")
+      e
   }
 }
