@@ -51,8 +51,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       }
   }
 
-
-  val jsonOptimization: PartialFunction[Expression, Expression] = {
+  private val jsonOptimization: PartialFunction[Expression, Expression] = {
     case c: CreateNamedStruct
         // If we create struct from various fields of the same `JsonToStructs`.
         if c.valExprs.forall { v =>
@@ -97,20 +96,20 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       child
 
     case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 =>
+        if schema.length > 1 && j.options.isEmpty =>
       val prunedSchema = StructType(Seq(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
     case g @ GetArrayStructFields(j @ JsonToStructs(schema: ArrayType, _, _, _), _, _, _, _)
-        if schema.elementType.asInstanceOf[StructType].length > 1 =>
+        if schema.elementType.asInstanceOf[StructType].length > 1 && j.options.isEmpty =>
       val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
   }
 
-  val csvOptimization: PartialFunction[Expression, Expression] = {
-    case g @ GetStructField(j @ CsvToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 =>
+  private val csvOptimization: PartialFunction[Expression, Expression] = {
+    case g @ GetStructField(j @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
+        if schema.length > 1 && j.options.isEmpty =>
       val prunedSchema = StructType(Seq(schema(ordinal)))
-      g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
+      g.copy(child = j.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
   }
 }

@@ -55,7 +55,8 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val prunedSchema1 = StructType.fromDDL("a int")
     val expected1 = testRelation
-      .select(GetStructField(CsvToStructs(prunedSchema1, options, 'csv), 0)).analyze
+      .select(GetStructField(CsvToStructs(schema, options, 'csv, None, Some(prunedSchema1)), 0))
+      .analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
@@ -64,7 +65,8 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val prunedSchema2 = StructType.fromDDL("b int")
     val expected2 = testRelation
-      .select(GetStructField(CsvToStructs(prunedSchema2, options, 'csv), 0)).analyze
+      .select(GetStructField(CsvToStructs(schema, options, 'csv, None, Some(prunedSchema2)), 0))
+      .analyze
     comparePlans(optimized2, expected2)
   }
 }
