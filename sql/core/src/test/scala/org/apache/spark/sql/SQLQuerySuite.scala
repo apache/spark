@@ -3733,27 +3733,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-33474: Support TypeConstructed partition spec value") {
-    withTable("t1", "t2", "t4") {
-      sql("CREATE TABLE t1(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
-      sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
-      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
-
-      sql("CREATE TABLE t2(name STRING, part TIMESTAMP) USING PARQUET PARTITIONED BY (part)")
-      sql("INSERT INTO t2 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
-      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t2"), Row("a", "2019-01-02 11:11:11"))
-
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
-      }.getMessage
-      assert(e.contains("Cannot use interval for partition column"))
-
-      sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
-      sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
-      checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", "Spark SQL"))
-    }
-  }
-
   test("limit partition num to 1 when distributing by foldable expressions") {
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
       Seq(1, "1, 2", null, "version()").foreach { expr =>
@@ -3791,6 +3770,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     })
+  }
+
+  test("SPARK-33474: Support TypeConstructed partition spec value") {
+    withTable("t1", "t2", "t4") {
+      sql("CREATE TABLE t1(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
+
+      sql("CREATE TABLE t2(name STRING, part TIMESTAMP) USING PARQUET PARTITIONED BY (part)")
+      sql("INSERT INTO t2 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t2"), Row("a", "2019-01-02 11:11:11"))
+
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
+      }.getMessage
+      assert(e.contains("Cannot use interval for partition column"))
+
+      sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
+      sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", "Spark SQL"))
+    }
   }
 }
 
