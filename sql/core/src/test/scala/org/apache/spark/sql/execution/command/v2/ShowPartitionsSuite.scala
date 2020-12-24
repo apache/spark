@@ -45,7 +45,13 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
         .mode(SaveMode.Overwrite)
         .saveAsTable(t)
 
-      runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=") :: Row("part=null") :: Nil)
+      runShowPartitionsSql(
+        s"SHOW PARTITIONS $t",
+        Row("part=") ::
+        Row("part=null") :: Nil)
+      checkAnswer(spark.table(t),
+        Row(0, "") ::
+        Row(1, null) :: Nil)
     }
   }
 }
