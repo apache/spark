@@ -2220,7 +2220,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       structLevel1
         .select($"a".dropFields("c").as("a"))
         .select($"a".withField("z", $"a.c")).as("a")
-    }.getMessage should include("No such struct field c in a, b;")
+    }.getMessage should include("No such struct field c in a, b")
   }
 
   test("nestedDf should generate nested DataFrames") {

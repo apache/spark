@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
@@ -37,6 +36,9 @@ import org.apache.spark.sql.types.StructType;
  *     add a partition and any data it contains to the table
  * ${@link #dropPartition}:
  *     remove a partition and any data it contains from the table
+ * ${@link #purgePartition}:
+ *     remove a partition and any data it contains from the table by skipping a trash
+ *     even if it is supported.
  * ${@link #replacePartitionMetadata}:
  *     point a partition to a new location, which will swap one location's data for the other
  *
@@ -74,15 +76,36 @@ public interface SupportsPartitionManagement extends Table {
     boolean dropPartition(InternalRow ident);
 
     /**
-     * Test whether a partition exists using an {@link InternalRow ident} from the table.
+     * Drop a partition from the table and completely remove partition data by skipping a trash
+     * even if it is supported.
      *
      * @param ident a partition identifier
+     * @return true if a partition was deleted, false if no partition exists for the identifier
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition purging is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean purgePartition(InternalRow ident)
+      throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition purge is not supported");
+    }
+
+    /**
+     * Test whether a partition exists using an {@link InternalRow ident} from the table.
+     *
+     * @param ident a partition identifier which must contain all partition fields in order
      * @return true if the partition exists, false otherwise
      */
     default boolean partitionExists(InternalRow ident) {
-        String[] partitionNames = partitionSchema().names();
-        String[] requiredNames = Arrays.copyOfRange(partitionNames, 0, ident.numFields());
-        return listPartitionIdentifiers(requiredNames, ident).length > 0;
+      String[] partitionNames = partitionSchema().names();
+      if (ident.numFields() == partitionNames.length) {
+        return listPartitionIdentifiers(partitionNames, ident).length > 0;
+      } else {
+        throw new IllegalArgumentException("The number of fields (" + ident.numFields() +
+          ") in the partition identifier is not equal to the partition schema length (" +
+          partitionNames.length + "). The identifier might not refer to one partition.");
+      }
     }
 
     /**

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -115,23 +115,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableSetLocationStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
       if (partitionSpec.nonEmpty) {
-        throw new AnalysisException(
-          "ALTER TABLE SET LOCATION does not support partition for v2 tables.")
+        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
       }
       val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterViewSetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), props) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
-
-    case AlterViewUnsetPropertiesStatement(
-         NonSessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      throw new AnalysisException(
-        s"Can not specify catalog `${catalog.name}` for view ${tbl.quoted} " +
-          s"because view support in catalog has not been implemented yet")
 
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>

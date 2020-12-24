@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
-  protected def version: String
-  protected def catalog: String
+trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
-  protected def defaultUsing: String
   case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
   protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
   // Gets the schema of `SHOW TABLES`
@@ -43,18 +37,10 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
     checkAnswer(df, getRows(expected))
   }
 
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-      (implicit pos: Position): Unit = {
-    super.test(s"SHOW TABLES $version: " + testName, testTags: _*)(testFun)
-  }
-
   test("show an existing table") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      withTable(s"$catalog.ns.table") {
-        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
-        runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
-      }
+    withNamespaceAndTable("ns", "table") { t =>
+      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
+      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
     }
   }
 
@@ -62,7 +48,7 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
     val msg = intercept[NoSuchNamespaceException] {
       runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
     }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found;"))
+    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
   }
 
   test("show tables with a pattern") {
@@ -117,20 +103,17 @@ trait ShowTablesSuiteBase extends QueryTest with SQLTestUtils {
   }
 
   test("change current catalog and namespace with USE statements") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      withTable(s"$catalog.ns.table") {
-        sql(s"CREATE TABLE $catalog.ns.table (name STRING, id INT) $defaultUsing")
+    withNamespaceAndTable("ns", "table") { t =>
+      sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
 
-        sql(s"USE $catalog")
-        // No table is matched since the current namespace is not ["ns"]
-        assert(defaultNamespace != Seq("ns"))
-        runShowTablesSql("SHOW TABLES", Seq())
+      sql(s"USE $catalog")
+      // No table is matched since the current namespace is not ["ns"]
+      assert(defaultNamespace != Seq("ns"))
+      runShowTablesSql("SHOW TABLES", Seq())
 
-        // Update the current namespace to match "ns.tbl".
-        sql(s"USE $catalog.ns")
-        runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
-      }
+      // Update the current namespace to match "ns.tbl".
+      sql(s"USE $catalog.ns")
+      runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
     }
   }
 }

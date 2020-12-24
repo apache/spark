@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project, UncacheTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
@@ -282,6 +282,20 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
+
+    case c @ CacheTable(UnresolvedCatalogRelation(tableMeta, options, false), _, _, _)
+      if DDLUtils.isDatasourceTable(tableMeta) =>
+      c.copy(table = readDataSourceTable(tableMeta, options))
+
+    case c @ CacheTable(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _) =>
+      c.copy(table = DDLUtils.readHiveTable(tableMeta))
+
+    case u @ UncacheTable(UnresolvedCatalogRelation(tableMeta, options, false), _, _)
+        if DDLUtils.isDatasourceTable(tableMeta) =>
+      u.copy(table = readDataSourceTable(tableMeta, options))
+
+    case u @ UncacheTable(UnresolvedCatalogRelation(tableMeta, _, false), _, _) =>
+      u.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
         if DDLUtils.isDatasourceTable(tableMeta) =>

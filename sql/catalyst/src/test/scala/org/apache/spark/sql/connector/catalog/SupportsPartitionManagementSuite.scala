@@ -85,6 +85,16 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(!hasPartitions(partTable))
   }
 
+  test("purgePartition") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    val errMsg = intercept[UnsupportedOperationException] {
+      partTable.purgePartition(InternalRow.apply("3"))
+    }.getMessage
+    assert(errMsg.contains("purge is not supported"))
+  }
+
   test("replacePartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
@@ -145,7 +155,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(!hasPartitions(partTable))
   }
 
-  test("listPartitionByNames") {
+  private def createMultiPartTable(): InMemoryPartitionTable = {
     val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     val table = partCatalog.createTable(
@@ -156,14 +166,20 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
         .add("part1", StringType),
       Array(LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
       util.Collections.emptyMap[String, String])
-    val partTable = table.asInstanceOf[InMemoryPartitionTable]
 
+    val partTable = table.asInstanceOf[InMemoryPartitionTable]
     Seq(
       InternalRow(0, "abc"),
       InternalRow(0, "def"),
       InternalRow(1, "abc")).foreach { partIdent =>
       partTable.createPartition(partIdent, new util.HashMap[String, String]())
     }
+
+    partTable
+  }
+
+  test("listPartitionByNames") {
+    val partTable = createMultiPartTable()
 
     Seq(
       (Array("part0", "part1"), InternalRow(0, "abc")) -> Set(InternalRow(0, "abc")),
@@ -184,5 +200,18 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     ).foreach { case (names, idents) =>
       intercept[AssertionError](partTable.listPartitionIdentifiers(names, idents))
     }
+  }
+
+  test("partitionExists") {
+    val partTable = createMultiPartTable()
+
+    assert(partTable.partitionExists(InternalRow(0, "def")))
+    assert(!partTable.partitionExists(InternalRow(-1, "def")))
+    assert(!partTable.partitionExists(InternalRow("abc", "def")))
+
+    val errMsg = intercept[IllegalArgumentException] {
+      partTable.partitionExists(InternalRow(0))
+    }.getMessage
+    assert(errMsg.contains("The identifier might not refer to one partition"))
   }
 }
