@@ -115,12 +115,13 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
+    val newTableSchema = CharVarcharUtils.restoreCharVarCharInSchema(sourceTableDesc.schema)
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
         storage = newStorage,
-        schema = sourceTableDesc.schema,
+        schema = newTableSchema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,

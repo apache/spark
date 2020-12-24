@@ -705,7 +705,7 @@ class SessionCatalog(
             schema = plan.output.toStructType)
       }.getOrElse(throw new NoSuchTableException(globalTempViewManager.database, table))
     } else {
-      getTableMetadata(name)
+      getTableRawMetadata(name)
     }
   }
 
