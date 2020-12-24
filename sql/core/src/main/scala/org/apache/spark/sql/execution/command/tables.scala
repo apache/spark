@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -631,7 +631,7 @@ case class DescribeTableCommand(
       }
       describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
-      val metadata = catalog.getTableMetadata(table)
+      val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
@@ -782,9 +782,11 @@ case class DescribeColumnCommand(
       None
     }
 
+    val dataType = CharVarcharUtils.getRawType(field.metadata)
+      .getOrElse(field.dataType).catalogString
     val buffer = ArrayBuffer[Row](
       Row("col_name", field.name),
-      Row("data_type", field.dataType.catalogString),
+      Row("data_type", dataType),
       Row("comment", comment.getOrElse("NULL"))
     )
     if (isExtended) {
@@ -1111,7 +1113,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       throw new AnalysisException(
         s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {
-      val tableMetadata = catalog.getTableMetadata(table)
+      val tableMetadata = catalog.getTableRawMetadata(table)
 
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
@@ -1262,7 +1264,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
+    val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       throw new AnalysisException(
