@@ -41,6 +41,8 @@ import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
+import java.util.concurrent.TimeUnit
+
 /**
  * Util functions for JDBC tables.
  */
@@ -407,6 +409,24 @@ object JdbcUtils extends Logging {
     case FloatType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
+
+    case IntegerType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) => {
+        val columnIdx = pos + 1
+        // SPARK-33888 - TIME type to physical int in millis
+        if (rs.getMetaData.getColumnType(columnIdx) == java.sql.Types.TIME) {
+          val rawTime = rs.getTime(columnIdx)
+          if (rawTime != null) {
+            val rawTimeInSeconds = rawTime.toLocalTime().toSecondOfDay()
+            val timeInMillis = TimeUnit.SECONDS.toMillis(rawTimeInSeconds).toInt
+            row.setInt(pos, timeInMillis)
+          } else {
+            row.update(pos, null)
+          }
+        } else {
+          row.setInt(pos, rs.getInt(columnIdx))
+        }
+      }
 
     case IntegerType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
