@@ -54,12 +54,12 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   val jsonOptimization: PartialFunction[Expression, Expression] = {
     case c: CreateNamedStruct
-      // If we create struct from various fields of the same `JsonToStructs`.
-      if c.valExprs.forall { v =>
-        v.isInstanceOf[GetStructField] &&
-          v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs] &&
-          v.children.head.semanticEquals(c.valExprs.head.children.head)
-      } =>
+        // If we create struct from various fields of the same `JsonToStructs`.
+        if c.valExprs.forall { v =>
+          v.isInstanceOf[GetStructField] &&
+            v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs] &&
+            v.children.head.semanticEquals(c.valExprs.head.children.head)
+        } =>
       val jsonToStructs = c.valExprs.map(_.children.head)
       val sameFieldName = c.names.zip(c.valExprs).forall {
         case (name, valExpr: GetStructField) =>
@@ -105,7 +105,6 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         if schema.elementType.asInstanceOf[StructType].length > 1 =>
       val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
-
   }
 
   val csvOptimization: PartialFunction[Expression, Expression] = {
