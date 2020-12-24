@@ -100,9 +100,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       runShowPartitionsSql(
         s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
-      checkAnswer(spark.table(t),
-        Row(0, null) ::
-        Row(1, null) :: Nil)
+      checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
     }
   }
 }

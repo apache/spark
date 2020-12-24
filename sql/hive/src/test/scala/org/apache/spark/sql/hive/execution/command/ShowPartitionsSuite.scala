@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command.v1
 
 class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
