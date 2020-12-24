@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -610,7 +611,13 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
+    val epochMillis = java.time.LocalTime.ofSecondOfDay(
+      TimeUnit.MILLISECONDS.toSeconds(rows(0).getAs[Int](0)))
+      .atDate(java.time.LocalDate.ofEpochDay(0))
+      .atZone(java.time.ZoneId.systemDefault())
+      .toInstant()
+      .toEpochMilli()
+    cal.setTime(new Date(epochMillis))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
     assert(cal.get(Calendar.MINUTE) === 34)
     assert(cal.get(Calendar.SECOND) === 56)
