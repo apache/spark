@@ -42,7 +42,7 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
     super.afterAll()
   }
 
-  test("SHOW CREATE TABLE AS SERDE w/ char/varchar") {
+  test("SPARK-33892: SHOW CREATE TABLE AS SERDE w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
       val rest = sql("SHOW CREATE TABLE t AS SERDE").head().getString(0)

@@ -444,7 +444,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("DESCRIBE TABLE w/ char/varchar") {
+  test("SPARK-33892: DESCRIBE TABLE w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
       checkAnswer(sql("desc t").selectExpr("data_type").where("data_type like '%char%'"),
@@ -612,7 +612,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  // TODO(SPARK-33875): Move these tests to super after these statements for v2 implemented
+  // TODO(SPARK-33875): Move these tests to super after DESCRIBE COLUMN v2 implemented
   test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
@@ -623,6 +623,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
+  // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
   test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
