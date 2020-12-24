@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, PersistedView, UnresolvedAttribute, UnresolvedFunc, UnresolvedNamespace, UnresolvedRelation, UnresolvedStar, UnresolvedTable, UnresolvedTableOrView, UnresolvedView}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, BucketSpec, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -2071,32 +2071,6 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin)
-  }
-
-  test("alter table: rename partition") {
-    val sql1 =
-      """
-        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-        |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableRenamePartition(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... RENAME TO PARTITION"),
-      UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed1, expected1)
-
-    val sql2 =
-      """
-        |ALTER TABLE a.b.c PARTITION (ds='2017-06-10')
-        |RENAME TO PARTITION (ds='2018-06-10')
-      """.stripMargin
-    val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableRenamePartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO PARTITION"),
-      UnresolvedPartitionSpec(Map("ds" -> "2017-06-10")),
-      Map("ds" -> "2018-06-10"))
-    comparePlans(parsed2, expected2)
   }
 
   test("show current namespace") {

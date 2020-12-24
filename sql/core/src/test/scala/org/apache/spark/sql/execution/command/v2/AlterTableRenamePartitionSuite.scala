@@ -15,24 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v1
+package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
-trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
-  override protected val notFullPartitionSpecErr = "The following partitions not found in table"
+class AlterTableRenamePartitionSuite
+  extends command.AlterTableRenamePartitionSuiteBase
+  with CommandSuiteBase {
 
-  test("purge partition data") {
+  // TODO(SPARK-33859): Support V2 ALTER TABLE .. RENAME PARTITION
+  test("single part partition") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id = 1)")
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP PARTITION (id = 1) PURGE")
-      checkPartitions(t) // no partitions
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables"))
     }
   }
 }
-
-class AlterTableDropPartitionSuite
-  extends AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase

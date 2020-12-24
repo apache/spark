@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v1
+package org.apache.spark
 
-import org.apache.spark.sql.execution.command
+import org.apache.spark.annotation.DeveloperApi
 
-trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
-  override protected val notFullPartitionSpecErr = "The following partitions not found in table"
+/**
+ * :: DeveloperApi ::
+ * A TaskContext aware iterator.
+ *
+ * As the Python evaluation consumes the parent iterator in a separate thread,
+ * it could consume more data from the parent even after the task ends and the parent is closed.
+ * If an off-heap access exists in the parent iterator, it could cause segmentation fault
+ * which crashes the executor.
+ * Thus, we should use [[ContextAwareIterator]] to stop consuming after the task ends.
+ */
+@DeveloperApi
+class ContextAwareIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+  extends Iterator[T] {
 
-  test("purge partition data") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id = 1)")
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP PARTITION (id = 1) PURGE")
-      checkPartitions(t) // no partitions
-    }
-  }
+  override def hasNext: Boolean =
+    !context.isCompleted() && !context.isInterrupted() && delegate.hasNext
+
+  override def next(): T = delegate.next()
 }
-
-class AlterTableDropPartitionSuite
-  extends AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase

@@ -15,24 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v1
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.execution.command.v1
 
-trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
-  override protected val notFullPartitionSpecErr = "The following partitions not found in table"
-
-  test("purge partition data") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"ALTER TABLE $t ADD PARTITION (id = 1)")
-      checkPartitions(t, Map("id" -> "1"))
-      sql(s"ALTER TABLE $t DROP PARTITION (id = 1) PURGE")
-      checkPartitions(t) // no partitions
-    }
-  }
-}
-
-class AlterTableDropPartitionSuite
-  extends AlterTableDropPartitionSuiteBase
+class AlterTableRenamePartitionSuite
+  extends v1.AlterTableRenamePartitionSuiteBase
   with CommandSuiteBase
