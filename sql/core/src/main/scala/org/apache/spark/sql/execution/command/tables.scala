@@ -746,7 +746,7 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
  *   DESCRIBE [EXTENDED|FORMATTED] table_name column_name;
  * }}}
  */
-  case class DescribeColumnCommand(
+case class DescribeColumnCommand(
     table: TableIdentifier,
     colNameParts: Seq[String],
     isExtended: Boolean)

@@ -26,9 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchem
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 import org.apache.spark.sql.types.StructType
 
-/**
- * Physical plan node for describing a column.
- */
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,

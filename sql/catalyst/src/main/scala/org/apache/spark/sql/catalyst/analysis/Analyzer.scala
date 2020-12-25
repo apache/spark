@@ -1677,7 +1677,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case d @ DescribeColumn(rt: ResolvedTable, _, _) =>
         rt.table match {
-          // References for v1 table is resolved in DescribeColumnCommand.
+          // References for v1 tables are resolved in DescribeColumnCommand.
           case _: V1Table => d
           case _ => d.mapExpressions(resolveExpressionTopDown(_, d))
         }
