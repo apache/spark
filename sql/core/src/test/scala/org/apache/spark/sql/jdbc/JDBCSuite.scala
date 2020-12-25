@@ -635,6 +635,20 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
+  test("SPARK-33888 : test TIME types") {
+    val rows = spark.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      .cache().collect()
+    val expectedTimeRaw = java.sql.Time.valueOf("12:34:56")
+    val expectedTimeMillis = java.util.concurrent.TimeUnit.SECONDS.toMillis(
+      expectedTimeRaw.toLocalTime().toSecondOfDay()
+    ).toInt
+    assert(rows(0).getAs[java.sql.Time](0) === expectedTimeMillis)
+    assert(rows(1).getAs[java.sql.Time](0) === expectedTimeMillis)
+    assert(cachedRows(0).getAs[java.sql.Time](0) === expectedTimeMillis)
+  }
+
   test("test DATE types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
