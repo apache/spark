@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
- *
+ * Reorders and combines [[HigherOrderFunction]]s on collections such that
+ * the resulting plan would have less nodes and do less operations.
  */
 object OptimizeHigherOrderFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions {
@@ -32,9 +33,9 @@ object OptimizeHigherOrderFunctions extends Rule[LogicalPlan] {
     case MapFilter(MapFilter(child, f1: LambdaFunction), f2: LambdaFunction) =>
       MapFilter(child, f1.copy(function = And(f1.function, f2.function)))
 
-    case ArrayFilter(ArraySort(grandchild, comparator), filterFunc)
+    case ArrayFilter(ArraySort(child, comparator), filterFunc)
       if filterFunc.deterministic && comparator.deterministic =>
-      ArraySort(ArrayFilter(grandchild, filterFunc), comparator)
+      ArraySort(ArrayFilter(child, filterFunc), comparator)
 
     case ArrayForAll(ArraySort(child, comparator), filterFunc)
       if filterFunc.deterministic && comparator.deterministic =>
