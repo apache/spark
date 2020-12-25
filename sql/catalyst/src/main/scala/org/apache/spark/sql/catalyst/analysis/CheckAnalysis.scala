@@ -149,9 +149,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
         failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
-      case DescribeColumn(_: ResolvedTable, UnresolvedAttribute(colNameParts), _) =>
-        failAnalysis(s"Column not found: ${colNameParts.quoted}")
-
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
         // If the arguments of the higher-order functions are resolved but the type check fails,

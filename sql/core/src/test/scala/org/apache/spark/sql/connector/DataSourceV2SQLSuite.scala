@@ -176,7 +176,8 @@ class DataSourceV2SQLSuite
       val e = intercept[AnalysisException] {
         sql(s"DESCRIBE $t invalid_col")
       }
-      assert(e.getMessage.contains("Column not found: invalid_col"))
+      assert(e.getMessage.contains(
+        "cannot resolve '`invalid_col`' given input columns: [data, id]"))
     }
   }
 
