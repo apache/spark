@@ -32,12 +32,12 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
+import org.apache.hadoop.mapred.{FileInputFormat, FileSplit, InputFormat => oldInputClass, JobConf, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.{EmptyRDD, HadoopPartition, HadoopRDD, NewHadoopRDD, RDD, UnionRDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.CastSupport
@@ -122,6 +122,10 @@ class HadoopTableReader(
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
+    val skipHeaderLineCount = tableDesc.getProperties
+      .getProperty("skip.header.line.count", "0").toInt
+    val isTextInputFormatTable = classOf[TextInputFormat]
+      .isAssignableFrom(hiveTable.getInputFormatClass)
 
     // logDebug("Table input: %s".format(tablePath))
     val hadoopRDD = createHadoopRDD(localTableDesc, inputPathStr)
@@ -129,11 +133,23 @@ class HadoopTableReader(
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
-    val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
+    val deserializedHadoopRDD = hadoopRDD.mapPartitionsWithIndex { (index, iter) =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.getConstructor().newInstance()
       DeserializerLock.synchronized {
         deserializer.initialize(hconf, localTableDesc.getProperties)
+      }
+      if (skipHeaderLineCount > 0 && isTextInputFormatTable) {
+        hadoopRDD.partitions(index) match {
+          case partition: HadoopPartition =>
+            if (partition.inputSplit.t.asInstanceOf[FileSplit].getStart() == 0) {
+              var i = 0
+              while (i < skipHeaderLineCount && iter.hasNext) {
+                i += 1
+                iter.next()
+              }
+            }
+        }
       }
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
     }

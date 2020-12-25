@@ -2558,6 +2558,56 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
+  test("SPARK-11374 Support skip.header.line.count option in Hive table") {
+    withTable("skip_table_0", "skip_table_1", "skip_table_2", "skip_table_3", "skip_table_4") {
+      withTempDir { dir =>
+        dir.delete()
+        val path = dir.getCanonicalPath
+        spark.range(0, 3).map(x => (x, s"c$x")).repartition(1).write.csv(path)
+        spark.range(3, 6).map(x => (x, s"c$x")).repartition(1).write.mode(SaveMode.Append).csv(path)
+        for (i <- 0 to 4) {
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE skip_table_$i (id INT, b VARCHAR(10))
+               |ROW FORMAT DELIMITED
+               |FIELDS TERMINATED BY ','
+               |STORED AS TEXTFILE LOCATION '$path'
+               |${if (i == 0) "" else s"TBLPROPERTIES('skip.header.line.count'='$i')"}
+            """.stripMargin)
+          val result = if (i == 0) {
+            Seq(Row(0, "c0"), Row(1, "c1"), Row(2, "c2"), Row(3, "c3"), Row(4, "c4"), Row(5, "c5"))
+          } else if (i == 1) {
+            Seq(Row(1, "c1"), Row(2, "c2"), Row(4, "c4"), Row(5, "c5"))
+          } else if (i == 2) {
+            Seq(Row(2, "c2"), Row(5, "c5"))
+          } else {
+            Seq.empty[Row]
+          }
+          checkAnswer(sql(s"SELECT * FROM skip_table_$i"), result)
+        }
+      }
+    }
+
+    // Since the default value of fs.local.block.size is 32MB (32 * 1024 * 1024),
+    // the following creates a file with three input splits.
+    withTable("skip_table_5") {
+      withTempDir { dir =>
+        dir.delete()
+        val path = dir.getCanonicalPath
+        spark.range(0, 3 * 1024 * 1024).map(x => "c" * 32).repartition(1).write.csv(path)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE skip_table_5 (id INT, b VARCHAR(10))
+             |ROW FORMAT DELIMITED
+             |FIELDS TERMINATED BY ','
+             |STORED AS TEXTFILE LOCATION '$path'
+             |TBLPROPERTIES('skip.header.line.count'='1')
+          """.stripMargin)
+        checkAnswer(sql(s"SELECT count(*) FROM skip_table_5"), Row(3 * 1024 * 1024 - 1) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
     withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
       sql(
