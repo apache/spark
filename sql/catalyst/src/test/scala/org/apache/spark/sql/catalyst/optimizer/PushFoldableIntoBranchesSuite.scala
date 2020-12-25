@@ -68,8 +68,7 @@ class PushFoldableIntoBranchesSuite
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
       GreaterThanOrEqual(Rand(1), Literal(0.5)))
-    assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
-      If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, FalseLiteral))
+    assertEquivalent(EqualTo(nonDeterministic, Literal(3)), FalseLiteral)
 
     // Handle Null values.
     assertEquivalent(
@@ -141,9 +140,8 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(Literal(2)))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(TrueLiteral)))
-    assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(FalseLiteral)))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
+    assertEquivalent(EqualTo(nonDeterministic, Literal(3)), FalseLiteral)
 
     // Handle Null values.
     assertEquivalent(
