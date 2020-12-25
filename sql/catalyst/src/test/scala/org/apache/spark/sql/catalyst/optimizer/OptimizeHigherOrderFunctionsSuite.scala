@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionEvalHelper, HigherOrderFunctionsHelper}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -36,7 +36,11 @@ class OptimizeHigherOrderFunctionsSuite
       OptimizeHigherOrderFunctions) :: Nil
   }
 
-  val testRelation = LocalRelation('a.array(IntegerType))
+  val rel = LocalRelation(
+    'a.array(IntegerType),
+    'b.int,
+    'm.map(IntegerType, IntegerType)
+  )
 
   private def col(tr: LocalRelation, columnName: String): Expression =
     col(tr.analyze, columnName)
@@ -44,16 +48,153 @@ class OptimizeHigherOrderFunctionsSuite
   private def col(plan: LogicalPlan, columnName: String): Expression =
     plan.resolveQuoted(columnName, caseInsensitiveResolution).get
 
-  test("Combine array filters") {
-    val plan = testRelation
-      .select(filter(filter(col(testRelation, "a"), x => x > 0), x => x < 10) as "a")
-      .analyze
+  private def validate(plan: LogicalPlan): Unit = {
+    val higherOrderFunctions = plan.collect {
+      case lp: LogicalPlan => lp.expressions collect {
+          case e => e collect {
+            case f: HigherOrderFunction => f.bind(validateBinding)
+          }
+        }
+    }.flatten.flatten
 
-    val actual = Optimize.execute(plan)
-    val correctAnswer = testRelation
-      .select(filter(col(testRelation, "a"), x => x > 0 && x < 10) as "a")
-      .analyze
-    comparePlans(actual, correctAnswer)
+    assert(higherOrderFunctions.nonEmpty)
   }
 
+  test("Combine array filters - column ref in outer") {
+    val plan = rel
+      .select(filter(filter(col(rel, "a"), x => x > 0), x => x < 'b) as "a")
+      .analyze
+
+    val correctAnswer = rel
+      .select(filter(col(rel, "a"), x => x > 0 && x < 'b) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Combine array filters - column ref in inner") {
+    val plan = rel
+      .select(filter(filter(col(rel, "a"), x => x < 'b), x => x > 0) as "a")
+      .analyze
+
+    val correctAnswer = rel
+      .select(filter(col(rel, "a"), x => x < 'b && x > 0) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Combine map filters - column ref in outer") {
+    val plan = rel
+      .select(mapFilter(mapFilter(col(rel, "m"), (k, _) => k > 0), (_, v) => v < 'b) as "m")
+      .analyze
+
+    val correctAnswer = rel
+      .select(mapFilter(col(rel, "m"), (k, v) => k > 0 && v < 'b) as "m")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Combine map filters - column ref in inner") {
+    val plan = rel
+      .select(mapFilter(mapFilter(col(rel, "m"), (k, _) => k < 'b), (_, v) => v > 0) as "m")
+      .analyze
+
+    val correctAnswer = rel
+      .select(mapFilter(col(rel, "m"), (k, v) => k < 'b && v > 0) as "m")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Swap array filter and sort") {
+    val plan = rel
+      .select(filter(arraySort(col(rel, "a")), x => x < 'b) as "a")
+      .analyze
+
+    val correctAnswer = rel
+      .select(arraySort(filter(col(rel, "a"), x => x < 'b)) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Do not swap non-deterministic array filter and sort") {
+    val plan = rel
+      .select(filter(arraySort(col(rel, "a")), x => x < rand(0)) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, plan)
+    validate(optimized)
+  }
+
+  test("Remove sort before forAll") {
+    val plan = rel
+      .select(forall(arraySort(col(rel, "a")), x => x < 'b) as "a")
+      .analyze
+
+    val correctAnswer = rel
+      .select(forall(col(rel, "a"), x => x < 'b) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Do not remove sort before non-deterministic forAll") {
+    val plan = rel
+      .select(forall(arraySort(col(rel, "a")), x => x < rand(0)) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, plan)
+    validate(optimized)
+  }
+
+  test("Remove sort before exists") {
+    val plan = rel
+      .select(exists(arraySort(col(rel, "a")), x => x < 'b) as "a")
+      .analyze
+
+    val correctAnswer = rel
+      .select(exists(col(rel, "a"), x => x < 'b) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, correctAnswer)
+    validate(optimized)
+  }
+
+  test("Do not remove sort before non-deterministic exists") {
+    val plan = rel
+      .select(exists(arraySort(col(rel, "a")), x => x < rand(0)) as "a")
+      .analyze
+
+    val optimized = Optimize.execute(plan)
+
+    comparePlans(optimized, plan)
+    validate(optimized)
+  }
 }

@@ -111,10 +111,6 @@ class HigherOrderFunctionsSuite
   }
 
   test("MapFilter") {
-    def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
-      val MapType(kt, vt, vcn) = expr.dataType
-      MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
-    }
     val mii0 = Literal.create(Map(1 -> 0, 2 -> 10, 3 -> -1),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val mii1 = Literal.create(Map(1 -> null, 2 -> 10, 3 -> null),
@@ -259,11 +255,6 @@ class HigherOrderFunctionsSuite
   }
 
   test("ArrayForAll") {
-    def forall(expr: Expression, f: Expression => Expression): Expression = {
-      val ArrayType(et, cn) = expr.dataType
-      ArrayForAll(expr, createLambda(et, cn, f)).bind(validateBinding)
-    }
-
     val ai0 = Literal.create(Seq(2, 4, 8), ArrayType(IntegerType, containsNull = false))
     val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
     val ai2 = Literal.create(Seq[Integer](2, null, 8), ArrayType(IntegerType, containsNull = true))

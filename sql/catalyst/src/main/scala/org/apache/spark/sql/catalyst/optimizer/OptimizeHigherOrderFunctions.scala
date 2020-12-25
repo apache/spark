@@ -21,33 +21,27 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
+/**
+ *
+ */
 object OptimizeHigherOrderFunctions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions {
-    case ArrayFilter(ArrayFilter(grandchild, filterFunc1), filterFunc2) =>
-      ArrayFilter(grandchild, And(filterFunc1, filterFunc2))
+    case ArrayFilter(ArrayFilter(child, f1: LambdaFunction), f2: LambdaFunction) =>
+      ArrayFilter(child, f1.copy(function = And(f1.function, f2.function)))
 
-    case MapFilter(MapFilter(grandchild, filterFunc1), filterFunc2) =>
-      MapFilter(grandchild, And(filterFunc1, filterFunc2))
-
-    case ArrayTransform(ArrayTransform(grandchild, transformFunc1), transformFunc2) =>
-      ArrayTransform(grandchild, transformFunc2.withNewChildren(transformFunc1 :: Nil))
-
-    case TransformKeys(TransformKeys(grandchild, transformFunc1), transformFunc2) =>
-      TransformKeys(grandchild, transformFunc2.withNewChildren(transformFunc1 :: Nil))
-
-    case TransformValues(TransformValues(grandchild, transformFunc1), transformFunc2) =>
-      TransformValues(grandchild, transformFunc2.withNewChildren(transformFunc1 :: Nil))
+    case MapFilter(MapFilter(child, f1: LambdaFunction), f2: LambdaFunction) =>
+      MapFilter(child, f1.copy(function = And(f1.function, f2.function)))
 
     case ArrayFilter(ArraySort(grandchild, comparator), filterFunc)
       if filterFunc.deterministic && comparator.deterministic =>
       ArraySort(ArrayFilter(grandchild, filterFunc), comparator)
 
-    case ArrayForAll(ArraySort(grandchild, comparator), filterFunc)
+    case ArrayForAll(ArraySort(child, comparator), filterFunc)
       if filterFunc.deterministic && comparator.deterministic =>
-      ArrayForAll(grandchild, filterFunc)
+      ArrayForAll(child, filterFunc)
 
-    case ArrayExists(ArraySort(grandchild, comparator), filterFunc, followThreeValuedLogic)
+    case ArrayExists(ArraySort(child, comparator), filterFunc, followThreeValuedLogic)
       if filterFunc.deterministic && comparator.deterministic =>
-      ArrayExists(grandchild, filterFunc, followThreeValuedLogic)
+      ArrayExists(child, filterFunc, followThreeValuedLogic)
   }
 }

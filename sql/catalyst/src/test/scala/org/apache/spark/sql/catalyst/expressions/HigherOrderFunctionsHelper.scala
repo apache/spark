@@ -107,6 +107,15 @@ trait HigherOrderFunctionsHelper {
     ArrayFilter(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
   }
 
+  protected def mapFilter(
+    expr: Expression,
+    f: (Expression, Expression) => Expression): Expression = {
+
+    val MapType(kt, vt, vcn) = expr.dataType
+    MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
+
+
   protected def transformKeys(
     expr: Expression,
     f: (Expression, Expression) => Expression): Expression = {
@@ -143,6 +152,16 @@ trait HigherOrderFunctionsHelper {
 
     val MapType(kt, vt, vcn) = expr.dataType
     TransformValues(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
+
+  protected def forall(expr: Expression, f: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayForAll(expr, createLambda(et, cn, f)).bind(validateBinding)
+  }
+
+  protected def exists(expr: Expression, f: Expression => Expression): Expression = {
+    val ArrayType(et, cn) = expr.dataType
+    ArrayExists(expr, createLambda(et, cn, f)).bind(validateBinding)
   }
 
 }

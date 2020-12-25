@@ -115,7 +115,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
         OptimizeJsonExprs,
-        CombineConcats) ++
+        CombineConcats,
+        OptimizeHigherOrderFunctions) ++
         extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = {
