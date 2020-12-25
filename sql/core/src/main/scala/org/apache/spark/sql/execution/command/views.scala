@@ -220,7 +220,7 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
-    val aliasedSchema = CharVarcharUtils.restoreCharVarCharInSchema(
+    val aliasedSchema = CharVarcharUtils.getRawSchema(
       aliasPlan(session, analyzedPlan).schema)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
@@ -295,7 +295,7 @@ case class AlterViewAsCommand(
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
-    val newSchema = CharVarcharUtils.restoreCharVarCharInSchema(analyzedPlan.schema)
+    val newSchema = CharVarcharUtils.getRawSchema(analyzedPlan.schema)
     val updatedViewMeta = viewMeta.copy(
       schema = newSchema,
       properties = newProperties,

@@ -129,7 +129,7 @@ object CharVarcharUtils extends Logging {
   /**
    * Re-construct the original schema from the type string in the given metadata of each field.
    */
-  def restoreCharVarCharInSchema(schema: StructType): StructType = {
+  def getRawSchema(schema: StructType): StructType = {
     val fields = schema.map { field =>
       getRawType(field.metadata).map(dt => field.copy(dataType = dt)).getOrElse(field)
     }

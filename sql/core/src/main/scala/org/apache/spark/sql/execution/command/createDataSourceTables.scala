@@ -175,7 +175,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
       val result = saveDataIntoTable(
         sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
-      val tableSchema = CharVarcharUtils.restoreCharVarCharInSchema(result.schema)
+      val tableSchema = CharVarcharUtils.getRawSchema(result.schema)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
