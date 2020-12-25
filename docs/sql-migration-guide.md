@@ -28,6 +28,11 @@ license: |
 
   - In Spark 3.2, the meta-characters `\n` and `\t` are escaped in the `show()` action. In Spark 3.1 or earlier, the two metacharacters are output as it is.
 
+  - In Spark 3.2, `AnalysisException` is replaced by its sub-classes that thrown for tables from Hive external catalog in the following situations:
+    * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
+    * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+    * `ALTER TABLE .. RENAME TO PARTITION` throws `PartitionAlreadyExistsException` when the target partition already exists
+
 ## Upgrading from Spark SQL 3.0 to 3.1
 
   - In Spark 3.1, statistical aggregation function includes `std`, `stddev`, `stddev_samp`, `variance`, `var_samp`, `skewness`, `kurtosis`, `covar_samp`, `corr` will return `NULL` instead of `Double.NaN` when `DivideByZero` occurs during expression evaluation, for example, when `stddev_samp` applied on a single element set. In Spark version 3.0 and earlier, it will return `Double.NaN` in such case. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.statisticalAggregate` to `true`.
