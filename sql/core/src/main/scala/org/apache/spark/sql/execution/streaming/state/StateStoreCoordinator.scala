@@ -31,11 +31,19 @@ import org.apache.spark.util.RpcUtils
 private sealed trait StateStoreCoordinatorMessage extends Serializable
 
 /** Classes representing messages */
+
+/**
+ * This message is used to report active instance of a state store provider
+ * to [[StateStoreCoordinator]]. This message also carries other loaded state
+ * store providers on the same executor. [[StateStoreCoordinator]] will check
+ * if these providers are inactive now. Inactive providers will be returned
+ * back to the sender of the message for unloading.
+ */
 private case class ReportActiveInstance(
     storeId: StateStoreProviderId,
     host: String,
     executorId: String,
-    otherProviderIds: Seq[StateStoreProviderId])
+    providerIdsToCheck: Seq[StateStoreProviderId])
   extends StateStoreCoordinatorMessage
 
 private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
@@ -126,13 +134,13 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
   private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ReportActiveInstance(id, host, executorId, otherProviderIds) =>
+    case ReportActiveInstance(id, host, executorId, providerIdsToCheck) =>
       logDebug(s"Reported state store $id is active at $executorId")
       val taskLocation = ExecutorCacheTaskLocation(host, executorId)
       instances.put(id, taskLocation)
 
       // Check if any loaded provider id is already loaded in other executor.
-      val providerIdsToUnload = otherProviderIds.filter { providerId =>
+      val providerIdsToUnload = providerIdsToCheck.filter { providerId =>
         val providerLoc = instances.get(providerId)
         // This provider is is already loaded in other executor. Marked it to unload.
         providerLoc.map(_ != taskLocation).getOrElse(false)
