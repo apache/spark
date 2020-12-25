@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -40,8 +41,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
-
-import java.util.concurrent.TimeUnit
 
 /**
  * Util functions for JDBC tables.
