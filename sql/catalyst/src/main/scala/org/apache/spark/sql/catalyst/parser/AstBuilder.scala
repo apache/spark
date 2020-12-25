@@ -743,8 +743,33 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     selectClause.hints.asScala.foldRight(withWindow)(withHints)
   }
 
+  // Script Transform's input/output format.
+  type ScriptIOFormat =
+    (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
+
+  protected def getRowFormatDelimited(ctx: RowFormatDelimitedContext): ScriptIOFormat = {
+    // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
+    // expects a seq of pairs in which the old parsers' token names are used as keys.
+    // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
+    // retrieving the key value pairs ourselves.
+    val entries = entry("TOK_TABLEROWFORMATFIELD", ctx.fieldsTerminatedBy) ++
+      entry("TOK_TABLEROWFORMATCOLLITEMS", ctx.collectionItemsTerminatedBy) ++
+      entry("TOK_TABLEROWFORMATMAPKEYS", ctx.keysTerminatedBy) ++
+      entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs) ++
+      Option(ctx.linesSeparatedBy).toSeq.map { token =>
+        val value = string(token)
+        validate(
+          value == "\n",
+          s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+          ctx)
+        "TOK_TABLEROWFORMATLINES" -> value
+      }
+
+    (entries, None, Seq.empty, None)
+  }
+
   /**
-   * Create a (Hive based) [[ScriptInputOutputSchema]].
+   * Create a [[ScriptInputOutputSchema]].
    */
   protected def withScriptIOSchema(
       ctx: ParserRuleContext,
@@ -753,7 +778,30 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       outRowFormat: RowFormatContext,
       recordReader: Token,
       schemaLess: Boolean): ScriptInputOutputSchema = {
-    throw new ParseException("Script Transform is not supported", ctx)
+
+    def format(fmt: RowFormatContext): ScriptIOFormat = fmt match {
+      case c: RowFormatDelimitedContext =>
+        getRowFormatDelimited(c)
+
+      case c: RowFormatSerdeContext =>
+        throw new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
+
+      // SPARK-32106: When there is no definition about format, we return empty result
+      // to use a built-in default Serde in SparkScriptTransformationExec.
+      case null =>
+        (Nil, None, Seq.empty, None)
+    }
+
+    val (inFormat, inSerdeClass, inSerdeProps, reader) = format(inRowFormat)
+
+    val (outFormat, outSerdeClass, outSerdeProps, writer) = format(outRowFormat)
+
+    ScriptInputOutputSchema(
+      inFormat, outFormat,
+      inSerdeClass, outSerdeClass,
+      inSerdeProps, outSerdeProps,
+      reader, writer,
+      schemaLess)
   }
 
   /**
@@ -2110,6 +2158,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       ctx.STRING().asScala.map(string).mkString
     }
+  }
+
+  /**
+   * Create an [[UnresolvedTable]] from a multi-part identifier context.
+   */
+  private def createUnresolvedTable(
+      ctx: MultipartIdentifierContext,
+      commandName: String): LogicalPlan = withOrigin(ctx) {
+    UnresolvedTable(visitMultipartIdentifier(ctx), commandName)
   }
 
   /**
@@ -3568,8 +3625,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTable(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "MSCK REPAIR TABLE"))
+    RepairTable(createUnresolvedTable(ctx.multipartIdentifier, "MSCK REPAIR TABLE"))
   }
 
   /**
@@ -3583,7 +3639,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
     LoadData(
-      child = UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "LOAD DATA"),
+      child = createUnresolvedTable(ctx.multipartIdentifier, "LOAD DATA"),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
       isOverwrite = ctx.OVERWRITE != null,
@@ -3651,7 +3707,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
     TruncateTable(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier), "TRUNCATE TABLE"),
+      createUnresolvedTable(ctx.multipartIdentifier, "TRUNCATE TABLE"),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
@@ -3671,7 +3727,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
     ShowPartitions(
-      UnresolvedTable(visitMultipartIdentifier(ctx.multipartIdentifier()), "SHOW PARTITIONS"),
+      createUnresolvedTable(ctx.multipartIdentifier(), "SHOW PARTITIONS"),
       partitionKeys)
   }
 
@@ -3724,8 +3780,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRecoverPartitions(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... RECOVER PARTITIONS"))
   }
 
@@ -3753,8 +3809,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       UnresolvedPartitionSpec(spec, location)
     }
     AlterTableAddPartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... ADD PARTITION ..."),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
@@ -3771,8 +3827,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenamePartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... RENAME TO PARTITION"),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       visitNonOptionalPartitionSpec(ctx.to))
@@ -3799,8 +3855,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
     AlterTableDropPartition(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... DROP PARTITION ..."),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
@@ -3819,8 +3875,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSerDeProperties(
-      UnresolvedTable(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
@@ -4036,7 +4092,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case SqlBaseParser.NULL => ""
       case _ => string(ctx.STRING)
     }
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
-    CommentOnTable(UnresolvedTable(nameParts, "COMMENT ON TABLE"), comment)
+    CommentOnTable(createUnresolvedTable(ctx.multipartIdentifier, "COMMENT ON TABLE"), comment)
   }
 }

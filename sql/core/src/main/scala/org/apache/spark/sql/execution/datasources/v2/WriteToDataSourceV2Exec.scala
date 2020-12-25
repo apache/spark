@@ -33,9 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -216,14 +215,8 @@ case class AppendDataExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
-
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV2(newWriteBuilder().buildForBatch())
-    refreshCache()
-    writtenRows
-  }
-}
+    refreshCache: () => Unit,
+    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
 
 /**
  * Physical plan node for overwrite into a v2 table.
@@ -237,31 +230,10 @@ case class AppendDataExec(
  */
 case class OverwriteByExpressionExec(
     table: SupportsWrite,
-    deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
-
-  private def isTruncate(filters: Array[Filter]): Boolean = {
-    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
-  }
-
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = newWriteBuilder() match {
-      case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV2(builder.truncate().buildForBatch())
-
-      case builder: SupportsOverwrite =>
-        writeWithV2(builder.overwrite(deleteWhere).buildForBatch())
-
-      case _ =>
-        throw new SparkException(s"Table does not support overwrite by expression: $table")
-    }
-    refreshCache()
-    writtenRows
-  }
-}
-
+    refreshCache: () => Unit,
+    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -276,20 +248,8 @@ case class OverwritePartitionsDynamicExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
     query: SparkPlan,
-    refreshCache: () => Unit) extends V2TableWriteExec with BatchWriteHelper {
-
-  override protected def run(): Seq[InternalRow] = {
-    val writtenRows = newWriteBuilder() match {
-      case builder: SupportsDynamicOverwrite =>
-        writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
-
-      case _ =>
-        throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
-    }
-    refreshCache()
-    writtenRows
-  }
-}
+    refreshCache: () => Unit,
+    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
@@ -316,6 +276,17 @@ trait BatchWriteHelper {
       query.schema,
       writeOptions)
     table.newWriteBuilder(info)
+  }
+}
+
+trait V2ExistingTableWriteExec extends V2TableWriteExec {
+  def refreshCache: () => Unit
+  def write: Write
+
+  override protected def run(): Seq[InternalRow] = {
+    val writtenRows = writeWithV2(write.toBatch)
+    refreshCache()
+    writtenRows
   }
 }
 
@@ -477,9 +448,10 @@ private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1W
             writeOptions)
           val writeBuilder = table.newWriteBuilder(info)
 
-          val writtenRows = writeBuilder match {
-            case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
-            case v2 => writeWithV2(v2.buildForBatch())
+          val write = writeBuilder.build()
+          val writtenRows = write match {
+            case v1: V1Write => writeWithV1(v1.toInsertableRelation)
+            case v2 => writeWithV2(v2.toBatch)
           }
 
           table match {

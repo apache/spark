@@ -88,9 +88,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-33621: inject data source rewrite rule") {
-    withSession(Seq(_.injectDataSourceRewriteRule(MyRule))) { session =>
-      assert(session.sessionState.optimizer.dataSourceRewriteRules.contains(MyRule(session)))
+  test("SPARK-33621: inject a pre CBO rule") {
+    withSession(Seq(_.injectPreCBORule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.preCBORules.contains(MyRule(session)))
     }
   }
 

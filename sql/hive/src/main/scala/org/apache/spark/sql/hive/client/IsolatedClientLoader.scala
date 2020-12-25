@@ -124,6 +124,7 @@ private[hive] object IsolatedClientLoader extends Logging {
         SparkSubmitUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
+        transitive = true,
         exclusions = version.exclusions)
     }
     val allFiles = classpath.split(",").map(new File(_)).toSet
