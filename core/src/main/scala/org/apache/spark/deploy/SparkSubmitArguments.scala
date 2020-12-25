@@ -60,11 +60,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
-  var packages: String = null
-  var repositories: String = null
-  var ivyRepoPath: String = null
+  var packages: Option[String] = None
+  var repositories: Option[String] = None
+  var ivyRepoPath: Option[String] = None
   var ivySettingsPath: Option[String] = None
-  var packagesExclusions: String = null
+  var packagesExclusions: Option[String] = None
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -185,13 +185,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     files = Option(files).orElse(sparkProperties.get(config.FILES.key)).orNull
     archives = Option(archives).orElse(sparkProperties.get(config.ARCHIVES.key)).orNull
     pyFiles = Option(pyFiles).orElse(sparkProperties.get(config.SUBMIT_PYTHON_FILES.key)).orNull
-    ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
+    ivyRepoPath = sparkProperties.get("spark.jars.ivy")
     ivySettingsPath = sparkProperties.get("spark.jars.ivySettings")
-    packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
-    packagesExclusions = Option(packagesExclusions)
-      .orElse(sparkProperties.get("spark.jars.excludes")).orNull
-    repositories = Option(repositories)
-      .orElse(sparkProperties.get("spark.jars.repositories")).orNull
+    packages = packages.orElse(sparkProperties.get("spark.jars.packages"))
+    packagesExclusions = packagesExclusions.orElse(sparkProperties.get("spark.jars.excludes"))
+    repositories = repositories.orElse(sparkProperties.get("spark.jars.repositories"))
     deployMode = Option(deployMode)
       .orElse(sparkProperties.get(config.SUBMIT_DEPLOY_MODE.key))
       .orElse(env.get("DEPLOY_MODE"))
@@ -409,13 +407,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         jars = Utils.resolveURIs(value)
 
       case PACKAGES =>
-        packages = value
+        packages = Some(value)
 
       case PACKAGES_EXCLUDE =>
-        packagesExclusions = value
+        packagesExclusions = Some(value)
 
       case REPOSITORIES =>
-        repositories = value
+        repositories = Some(value)
 
       case CONF =>
         val (confName, confValue) = SparkSubmitUtils.parseSparkConfProperty(value)

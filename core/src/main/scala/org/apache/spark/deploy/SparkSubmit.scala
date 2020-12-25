@@ -1483,6 +1483,17 @@ private case class OptionAssigner(
     confKey: String = null,
     mergeFn: Option[(String, String) => String] = None)
 
+private object OptionAssigner {
+  def apply(
+      value: Option[String],
+      clusterManager: Int,
+      deployMode: Int,
+      clOption: String = null,
+      confKey: String = null,
+      mergeFn: Option[(String, String) => String] = None): OptionAssigner =
+    new OptionAssigner(value.get, clusterManager, deployMode, clOption, confKey, mergeFn)
+}
+
 private[spark] trait SparkSubmitOperation {
 
   def kill(submissionId: String, conf: SparkConf): Unit

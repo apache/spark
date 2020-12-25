@@ -29,11 +29,11 @@ import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 
 case class IvyProperties(
-    packagesExclusions: String,
-    packages: String,
-    repositories: String,
-    ivyRepoPath: String,
-    ivySettingsPath: String)
+    packagesExclusions: Option[String],
+    packages: Option[String],
+    repositories: Option[String],
+    ivyRepoPath: Option[String],
+    ivySettingsPath: Option[String])
 
 private[spark] object DependencyUtils extends Logging {
 
@@ -44,7 +44,7 @@ private[spark] object DependencyUtils extends Logging {
       "spark.jars.repositories",
       "spark.jars.ivy",
       "spark.jars.ivySettings"
-    ).map(sys.props.get(_).orNull)
+    ).map(sys.props.get(_))
     IvyProperties(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath)
   }
 
@@ -69,10 +69,10 @@ private[spark] object DependencyUtils extends Logging {
    *            Example: Input:  excludeorg.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http
    *            Output:  [org.mortbay.jetty:jetty,org.eclipse.jetty:jetty-http]
    */
-  private def parseQueryParams(uri: URI): (Boolean, String) = {
+  private def parseQueryParams(uri: URI): (Boolean, Option[String]) = {
     val uriQuery = uri.getQuery
     if (uriQuery == null) {
-      (false, "")
+      (false, None)
     } else {
       val mapTokens = uriQuery.split("&").map(_.split("="))
       if (mapTokens.exists(isInvalidQueryString)) {
@@ -103,7 +103,7 @@ private[spark] object DependencyUtils extends Logging {
           }
           excludes
         }.mkString(",")
-      }.getOrElse("")
+      }
 
       val validParams = Set("transitive", "exclude")
       val invalidParams = groupedParams.keys.filterNot(validParams.contains).toSeq
@@ -150,36 +150,36 @@ private[spark] object DependencyUtils extends Logging {
     resolveMavenDependencies(
       transitive,
       exclusionList,
-      authority,
+      Some(authority),
       ivyProperties.repositories,
       ivyProperties.ivyRepoPath,
-      Option(ivyProperties.ivySettingsPath)
+      ivyProperties.ivySettingsPath
     ).split(",")
   }
 
   def resolveMavenDependencies(
       packagesTransitive: Boolean,
-      packagesExclusions: String,
-      packages: String,
-      repositories: String,
-      ivyRepoPath: String,
+      packagesExclusions: Option[String],
+      packages: Option[String],
+      repositories: Option[String],
+      ivyRepoPath: Option[String],
       ivySettingsPath: Option[String]): String = {
     val exclusions: Seq[String] =
-      if (!StringUtils.isBlank(packagesExclusions)) {
-        packagesExclusions.split(",")
+      if (packagesExclusions.nonEmpty) {
+        packagesExclusions.map(_.split(",")).get
       } else {
         Nil
       }
     // Create the IvySettings, either load from file or build defaults
     val ivySettings = ivySettingsPath match {
       case Some(path) =>
-        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+        SparkSubmitUtils.loadIvySettings(path, repositories, ivyRepoPath)
 
       case None =>
-        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+        SparkSubmitUtils.buildIvySettings(repositories, ivyRepoPath)
     }
 
-    SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings,
+    SparkSubmitUtils.resolveMavenCoordinates(packages.get, ivySettings,
       transitive = packagesTransitive, exclusions = exclusions)
   }
 
