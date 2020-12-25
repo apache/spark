@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, InsertIntoDir, InsertIntoStatement, LogicalPlan, ScriptTransformation, Statistics, UncacheTable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -227,8 +226,7 @@ case class RelationConversions(
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
             SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
         // validation is required to be done here before relation conversion.
-        val tableSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(query.schema)
-        DDLUtils.checkDataColNames(tableDesc.copy(schema = tableSchema))
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
         // This is for CREATE TABLE .. STORED AS PARQUET/ORC AS SELECT null
         assertNoNullTypeInSchema(query.schema)
         OptimizedCreateHiveTableAsSelectCommand(
