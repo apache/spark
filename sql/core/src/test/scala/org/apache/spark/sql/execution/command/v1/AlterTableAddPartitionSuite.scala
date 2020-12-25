@@ -21,6 +21,16 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. ADD PARTITION` command that
+ * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog:
+ *     [[org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite]]
+ *   - V1 Hive External catalog:
+ *     [[org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite]]
+ */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
   override protected def checkLocation(
       t: String,

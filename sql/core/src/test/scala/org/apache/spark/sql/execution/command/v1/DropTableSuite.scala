@@ -19,6 +19,14 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `DROP TABLE` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.DropTableSuite]]
+ *   - V1 Hive External catalog: [[org.apache.spark.sql.hive.execution.command.DropTableSuite]]
+ */
 trait DropTableSuiteBase extends command.DropTableSuiteBase {
   test("purge option") {
     withNamespace(s"$catalog.ns") {
