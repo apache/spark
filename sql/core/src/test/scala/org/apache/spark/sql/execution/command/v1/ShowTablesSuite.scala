@@ -110,6 +110,9 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 }
 
+/**
+ * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
+ */
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._

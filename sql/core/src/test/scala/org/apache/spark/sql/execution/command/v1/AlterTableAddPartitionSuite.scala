@@ -59,4 +59,8 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
   }
 }
 
+/**
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
+ * V1 In-Memory table catalog.
+ */
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase

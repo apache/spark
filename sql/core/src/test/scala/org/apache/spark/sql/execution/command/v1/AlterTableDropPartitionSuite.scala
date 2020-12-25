@@ -44,6 +44,10 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
   }
 }
 
+/**
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
+ * V1 In-Memory table catalog.
+ */
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {

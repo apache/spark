@@ -71,6 +71,9 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   }
 }
 
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V1 In-Memory table catalog.
+ */
 class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
   // The test is placed here because it fails with `USING HIVE`:
   // org.apache.spark.sql.AnalysisException:
