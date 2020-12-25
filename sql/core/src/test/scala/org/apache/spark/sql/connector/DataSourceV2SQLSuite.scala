@@ -185,7 +185,7 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
       assertAnalysisError(
         s"describe $t d.a",
-        "DESC TABLE COLUMN command does not support nested data types")
+        "DESC TABLE COLUMN command does not support nested fields")
     }
   }
 
