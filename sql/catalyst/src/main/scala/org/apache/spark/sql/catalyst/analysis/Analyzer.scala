@@ -245,7 +245,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
-      ResolveAttribute(resolver) ::
       AddMetadataColumns ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
@@ -990,12 +989,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
@@ -1167,7 +1166,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
               ResolvedView(ident, isTemp = false)
             case table =>
-              ResolvedTable(catalog.asTableCatalog, ident, table)
+              ResolvedTable.create(catalog.asTableCatalog, ident, table)
           }
         case _ => None
       }
@@ -1675,6 +1674,13 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
+
+      case d @ DescribeColumn(rt: ResolvedTable, _, _) =>
+        rt.table match {
+          // References for v1 table is resolved in DescribeColumnCommand.
+          case _: V1Table => d
+          case _ => d.mapExpressions(resolveExpressionTopDown(_, d))
+        }
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")

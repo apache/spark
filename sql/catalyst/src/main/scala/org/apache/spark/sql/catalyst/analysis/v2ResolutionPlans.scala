@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
 
 /**
@@ -97,9 +98,21 @@ case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
 /**
  * A plan containing resolved table.
  */
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
-  extends LeafNode {
-  override def output: Seq[Attribute] = Nil
+case class ResolvedTable(
+    catalog: TableCatalog,
+    identifier: Identifier,
+    table: Table,
+    override val output: Seq[Attribute])
+  extends LeafNode
+
+object ResolvedTable {
+  def create(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      table: Table): ResolvedTable = {
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+  }
 }
 
 case class ResolvedPartitionSpec(

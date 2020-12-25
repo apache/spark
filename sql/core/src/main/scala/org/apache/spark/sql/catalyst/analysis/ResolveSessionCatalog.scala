@@ -680,7 +680,7 @@ class ResolveSessionCatalog(
 
   object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
-      case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case ResolvedTable(catalog, ident, _: V1Table, _) if isSessionCatalog(catalog) => Some(ident)
       case _ => None
     }
   }

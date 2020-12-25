@@ -274,7 +274,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
         throw new AnalysisException(
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
@@ -301,7 +301,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
+    case CommentOnTable(ResolvedTable(catalog, identifier, _, _), comment) =>
       val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
       AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
 
@@ -333,12 +333,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
       AlterTableAddPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfNotExists, _) =>
       AlterTableDropPartitionExec(
         table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
 
@@ -367,7 +367,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")
 
     case r @ ShowPartitions(
-        ResolvedTable(catalog, _, table: SupportsPartitionManagement),
+        ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),
         pattern @ (None | Some(_: ResolvedPartitionSpec))) =>
       ShowPartitionsExec(
         r.output,

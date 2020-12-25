@@ -348,7 +348,6 @@ case class DescribeColumn(
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
-  override lazy val references: AttributeSet = AttributeSet.empty
 }
 
 /**
