@@ -133,7 +133,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         SparkSubmitUtils.buildIvySettings(Option(repo), Some(tempIvyPath)),
         transitive = true,
         isTest = true)
-      assert(jarPath.forall(_.indexOf(tempIvyPath) >=0), "should use non-default ivy path")
+      assert(jarPath.forall(_.indexOf(tempIvyPath) >= 0), "should use non-default ivy path")
     }
   }
 
@@ -172,7 +172,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         SparkSubmitUtils.buildIvySettings(None, Some(tempIvyPath)),
         transitive = true,
         isTest = true)
-      assert(jarPath.exists(_.indexOf("mylib") >=0), "should find artifact")
+      assert(jarPath.exists(_.indexOf("mylib") >= 0), "should find artifact")
       assert(jarPath.forall(_.indexOf(tempIvyPath) >= 0), "should be in new ivy path")
       assert(jarPath.exists(_.indexOf("mydep") >= 0), "should find dependency")
     }

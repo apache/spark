@@ -1373,7 +1373,7 @@ private[spark] object SparkSubmitUtils {
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
-      Seq.empty[String]
+      Nil
     } else {
       val sysOut = System.out
       // Default configuration name for ivy
