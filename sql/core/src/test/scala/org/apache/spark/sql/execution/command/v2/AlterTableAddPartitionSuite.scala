@@ -24,6 +24,10 @@ import org.apache.spark.sql.connector.InMemoryPartitionTable
 import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.command
 
+/**
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command
+ * to check V2 table catalogs.
+ */
 class AlterTableAddPartitionSuite
   extends command.AlterTableAddPartitionSuiteBase
   with CommandSuiteBase {
