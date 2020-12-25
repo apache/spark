@@ -58,6 +58,16 @@ license: |
 
   - Since Spark 3.1, CHAR/CHARACTER and VARCHAR types are supported in the table schema. Table scan/insertion will respect the char/varchar semantic. If char/varchar is used in places other than table schema, an exception will be thrown (CAST is an exception that simply treats char/varchar as string like before). To restore the behavior before Spark 3.1, which treats them as STRING types and ignores a length parameter, e.g. `CHAR(4)`, you can set `spark.sql.legacy.charVarcharAsString` to `true`.
 
+  - In Spark 3.1, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
+    * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
+    * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+
+## Upgrading from Spark SQL 3.0.1 to 3.0.2
+
+  - In Spark 3.0.2, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
+    * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
+    * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
@@ -251,6 +261,12 @@ license: |
 
     * The decimal string representation can be different between Hive 1.2 and Hive 2.3 when using `TRANSFORM` operator in SQL for script transformation, which depends on hive's behavior. In Hive 1.2, the string representation omits trailing zeroes. But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
 
+## Upgrading from Spark SQL 2.4.7 to 2.4.8
+
+  - In Spark 2.4.8, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
+    * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
+    * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+    
 ## Upgrading from Spark SQL 2.4.5 to 2.4.6
 
   - In Spark 2.4.6, the `RESET` command does not reset the static SQL configuration values to the default. It only clears the runtime SQL configuration values.
