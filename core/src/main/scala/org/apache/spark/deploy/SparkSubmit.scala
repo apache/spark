@@ -1363,7 +1363,7 @@ private[spark] object SparkSubmitUtils {
    * @param ivySettings An IvySettings containing resolvers to use
    * @param transitive Whether resolving transitive dependencies, default is true
    * @param exclusions Exclusions to apply when resolving transitive dependencies
-   * @return The comma-delimited path to the jars of the given maven artifacts including their
+   * @return Seq of path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   def resolveMavenCoordinates(
