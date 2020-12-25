@@ -414,50 +414,74 @@ $(document).ready(function () {
                         },
                         {
                             data: function (row, type) {
-                                if (typeof row.peakMemoryMetrics == "undefined") {
-                                    return "";
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.JVMHeapMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return 'N/A';
+                                    }
                                 }
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.JVMHeapMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.JVMOffHeapMemory, type));
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (typeof row.peakMemoryMetrics == "undefined") {
-                                    return "";
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapExecutionMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return 'N/A';
+                                    }
                                 }
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.OnHeapExecutionMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.OffHeapExecutionMemory, type));
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (typeof row.peakMemoryMetrics == "undefined") {
-                                    return "";
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapStorageMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapStorageMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return 'N/A';
+                                    }
                                 }
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.OnHeapStorageMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.OffHeapStorageMemory, type));
                             }
                         },
                         {
                             data: function (row, type) {
-                                if (typeof row.peakMemoryMetrics == "undefined") {
-                                    return "";
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.DirectPoolMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.MappedPoolMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return 'N/A';
+                                    }
                                 }
-                                if (type !== 'display')
-                                    return row.peakMemoryMetrics.DirectPoolMemory;
-                                else
-                                    return (formatBytes(row.peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
-                                        formatBytes(row.peakMemoryMetrics.MappedPoolMemory, type));
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
