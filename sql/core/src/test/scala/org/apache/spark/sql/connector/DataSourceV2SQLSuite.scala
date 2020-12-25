@@ -157,15 +157,15 @@ class DataSourceV2SQLSuite
   test("Describe column for v2 catalog") {
     val t = "testcat.tbl"
     withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
-      val df1 = spark.sql(s"DESCRIBE $t id")
+      sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val df1 = sql(s"DESCRIBE $t id")
       assert(df1.schema.map(field => (field.name, field.dataType))
         === Seq(("info_name", StringType), ("info_value", StringType)))
       assert(df1.collect === Seq(
         Row("col_name", "id"),
         Row("data_type", "bigint"),
         Row("comment", "NULL")))
-      val df2 = spark.sql(s"DESCRIBE $t data")
+      val df2 = sql(s"DESCRIBE $t data")
       assert(df2.schema.map(field => (field.name, field.dataType))
         === Seq(("info_name", StringType), ("info_value", StringType)))
       assert(df2.collect === Seq(
@@ -173,11 +173,19 @@ class DataSourceV2SQLSuite
         Row("data_type", "string"),
         Row("comment", "hello")))
 
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE $t invalid_col")
-      }
-      assert(e.getMessage.contains(
-        "cannot resolve '`invalid_col`' given input columns: [data, id]"))
+      assertAnalysisError(
+        s"DESCRIBE $t invalid_col",
+        "cannot resolve '`invalid_col`' given input columns: [data, id]")
+    }
+  }
+
+  test("Describing nested column for v2 catalog is not supported") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
+      assertAnalysisError(
+        s"describe $t d.a",
+        "DESC TABLE COLUMN command does not support nested data types")
     }
   }
 

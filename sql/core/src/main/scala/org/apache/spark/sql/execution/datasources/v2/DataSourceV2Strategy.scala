@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, GetStructField, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, TableCapability, TableCatalog, TableChange}
@@ -263,7 +263,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
     case desc @ DescribeColumn(_: ResolvedTable, column, isExtended) =>
-      DescribeColumnExec(desc.output, column, isExtended) :: Nil
+      column match {
+        case c: Attribute =>
+          DescribeColumnExec(desc.output, c, isExtended) :: Nil
+        case c: GetStructField =>
+          throw new AnalysisException(
+            "DESC TABLE COLUMN command does not support nested data types.")
+      }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
       DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
