@@ -270,16 +270,9 @@ class PushFoldableIntoBranchesSuite
     }
   }
 
-  test("SPARK-33884: simplify CaseWhen when one clause is null and another is boolean") {
-    val p = IsNull('a)
-    val nullLiteral = Literal(null, BooleanType)
+  test("SPARK-33884: simplify conditional if all branches are foldable boolean type") {
     assertEquivalent(EqualTo(
-      CaseWhen(Seq((p, Literal.create(null, IntegerType))), Literal(1)),
-      Literal(2)),
-      And(p, nullLiteral))
-    assertEquivalent(EqualTo(
-      CaseWhen(Seq((p, Literal("str"))), Literal("1")).cast(IntegerType),
-      Literal(2)),
-      And(p, nullLiteral))
+      CaseWhen(Seq((IsNull('a), Literal(0)), (IsNull('b), Literal(1))), Literal(2)), Literal(3)),
+      FalseLiteral)
   }
 }

@@ -207,6 +207,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assertEquivalent(
       If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
       IsNull(UnresolvedAttribute("a")))
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, TrueLiteral), TrueLiteral)
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, FalseLiteral), FalseLiteral)
 
     assertEquivalent(
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
@@ -224,51 +228,23 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
   }
 
-  test("SPARK-33884: simplify CaseWhen when one clause is null and another is boolean") {
-    val p = IsNull('a)
-    val nullLiteral = Literal(null, BooleanType)
-    assertEquivalent(CaseWhen(Seq((p, nullLiteral)), FalseLiteral), And(p, nullLiteral))
-    assertEquivalent(CaseWhen(Seq((p, nullLiteral)), TrueLiteral), Or(IsNotNull('a), nullLiteral))
-    assertEquivalent(CaseWhen(Seq((p, FalseLiteral)), nullLiteral), And(IsNotNull('a), nullLiteral))
-    assertEquivalent(CaseWhen(Seq((p, FalseLiteral)), None), And(IsNotNull('a), nullLiteral))
-    assertEquivalent(CaseWhen(Seq((p, TrueLiteral)), nullLiteral), Or(p, nullLiteral))
-    assertEquivalent(CaseWhen(Seq((p, TrueLiteral)), None), Or(p, nullLiteral))
-
-    // the rule should not apply to nullable predicate
-    Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), nullLiteral)), b),
-        CaseWhen(Seq((GreaterThan('a, 42), nullLiteral)), b))
-      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), b)), nullLiteral),
-        CaseWhen(Seq((GreaterThan('a, 42), b)), nullLiteral))
-      assertEquivalent(CaseWhen(Seq((GreaterThan('a, 42), b)), None),
-        CaseWhen(Seq((GreaterThan('a, 42), b)), None))
+  test("SPARK-33884: simplify conditional if all branches are foldable boolean type") {
+    Seq(IsNull('a), GreaterThan(Rand(0), 1)).foreach { condition =>
+      assertEquivalent(CaseWhen(Seq((condition, FalseLiteral)), FalseLiteral), FalseLiteral)
+      assertEquivalent(CaseWhen(Seq((condition, TrueLiteral)), TrueLiteral), TrueLiteral)
+      assertEquivalent(
+        CaseWhen(Seq((condition, FalseLiteral), (IsNull('b), FalseLiteral)), FalseLiteral),
+        FalseLiteral)
+      assertEquivalent(
+        CaseWhen(Seq((condition, TrueLiteral), (IsNull('b), TrueLiteral)), TrueLiteral),
+        TrueLiteral)
     }
 
-    // check evaluation also
-    Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      checkEvaluation(CaseWhen(Seq((b, nullLiteral)), FalseLiteral),
-        And(b, nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((b, nullLiteral)), TrueLiteral),
-        Or(Not(b), nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((b, FalseLiteral)), nullLiteral),
-        And(Not(b), nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((b, FalseLiteral)), None),
-        And(Not(b), nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((b, TrueLiteral)), nullLiteral),
-        Or(b, nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((b, TrueLiteral)), None),
-        Or(b, nullLiteral).eval(EmptyRow))
-    }
-
-    // should have no effect on expressions with nullable if condition
-    assert((Factorial(5) > 100L).nullable)
-    Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, nullLiteral)), b),
-        CaseWhen(Seq((Factorial(5) > 100L, nullLiteral)), b).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, b)), nullLiteral),
-        CaseWhen(Seq((Factorial(5) > 100L, b)), nullLiteral).eval(EmptyRow))
-      checkEvaluation(CaseWhen(Seq((Factorial(5) > 100L, b)), None),
-        CaseWhen(Seq((Factorial(5) > 100L, b)), None).eval(EmptyRow))
-    }
+    assertEquivalent(CaseWhen(Seq((IsNull('a), TrueLiteral)), FalseLiteral), IsNull('a))
+    assertEquivalent(CaseWhen(Seq((GreaterThan(Rand(0), 1.0), TrueLiteral)), FalseLiteral),
+      GreaterThan(Rand(0), 1.0))
+    assertEquivalent(CaseWhen(Seq((IsNull('a), FalseLiteral)), TrueLiteral), IsNotNull('a))
+    assertEquivalent(CaseWhen(Seq((GreaterThan(Rand(0), 1.0), FalseLiteral)), TrueLiteral),
+      LessThanOrEqual(Rand(0), 1.0))
   }
 }
