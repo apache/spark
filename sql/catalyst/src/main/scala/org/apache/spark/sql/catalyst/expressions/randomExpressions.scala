@@ -46,8 +46,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
   override def seedExpression: Expression = child
 
   @transient protected lazy val seed: Long = seedExpression match {
-    case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType) => s.asInstanceOf[Long]
+    case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
+    case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
   }
 
   override def nullable: Boolean = false
