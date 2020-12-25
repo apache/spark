@@ -412,7 +412,10 @@ object JdbcUtils extends Logging {
     case IntegerType =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
         val columnIdx = pos + 1
-        // SPARK-33888 - TIME type to physical int in millis
+        // SPARK-33888 - sql TIME type represents as physical int in millis
+        // Represents a time of day, with no reference to a particular calendar,
+        // time zone or date, with a precision of one millisecond.
+        // It stores the number of milliseconds after midnight, 00:00:00.000.
         if (rs.getMetaData.getColumnType(columnIdx) == java.sql.Types.TIME) {
           val rawTime = rs.getTime(columnIdx)
           if (rawTime != null) {
