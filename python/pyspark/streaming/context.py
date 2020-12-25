@@ -36,6 +36,14 @@ class StreamingContext(object):
     be started and stopped using `context.start()` and `context.stop()`,
     respectively. `context.awaitTermination()` allows the current thread
     to wait for the termination of the context by `stop()` or by an exception.
+
+    Parameters
+    ----------
+    sparkContext : :class:`SparkContext`
+        SparkContext object.
+    batchDuration : int, optional
+        the time interval (in seconds) at which streaming
+        data will be divided into batches
     """
     _transformerSerializer = None
 
@@ -43,13 +51,6 @@ class StreamingContext(object):
     _activeContext = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
-        """
-        Create a new StreamingContext.
-
-        :param sparkContext: :class:`SparkContext` object.
-        :param batchDuration: the time interval (in seconds) at which streaming
-                              data will be divided into batches
-        """
 
         self._sc = sparkContext
         self._jvm = self._sc._jvm
@@ -90,8 +91,12 @@ class StreamingContext(object):
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
         will be used to create a new context.
 
-        :param checkpointPath: Checkpoint directory used in an earlier streaming program
-        :param setupFunc:      Function to create a new context and setup DStreams
+        Parameters
+        ----------
+        checkpointPath : str
+            Checkpoint directory used in an earlier streaming program
+        setupFunc : function
+            Function to create a new context and setup DStreams
         """
         cls._ensure_initialized()
         gw = SparkContext._gateway
@@ -147,10 +152,14 @@ class StreamingContext(object):
         valid checkpoint data, then setupFunc will be called to create a new context and setup
         DStreams.
 
-        :param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
-                               None if the intention is to always create a new context when there
-                               is no active context.
-        :param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        Parameters
+        ----------
+        checkpointPath : str
+            Checkpoint directory used in an earlier streaming program. Can be
+            None if the intention is to always create a new context when there
+            is no active context.
+        setupFunc : function
+            Function to create a new JavaStreamingContext and setup DStreams
         """
 
         if setupFunc is None:
@@ -181,7 +190,10 @@ class StreamingContext(object):
         """
         Wait for the execution to stop.
 
-        :param timeout: time to wait in seconds
+        Parameters
+        ----------
+        timeout : int, optional
+            time to wait in seconds
         """
         if timeout is None:
             self._jssc.awaitTermination()
@@ -194,7 +206,10 @@ class StreamingContext(object):
         throw the reported error during the execution; or `false` if the
         waiting time elapsed before returning from the method.
 
-        :param timeout: time to wait in seconds
+        Parameters
+        ----------
+        timeout : int
+            time to wait in seconds
         """
         return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
@@ -203,9 +218,13 @@ class StreamingContext(object):
         Stop the execution of the streams, with option of ensuring all
         received data has been processed.
 
-        :param stopSparkContext: Stop the associated SparkContext or not
-        :param stopGracefully: Stop gracefully by waiting for the processing
-                              of all received data to be completed
+        Parameters
+        ----------
+        stopSparkContext : bool, optional
+            Stop the associated SparkContext or not
+        stopGracefully : bool, optional
+            Stop gracefully by waiting for the processing of all received
+            data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
         StreamingContext._activeContext = None
@@ -221,8 +240,10 @@ class StreamingContext(object):
         the RDDs (if the developer wishes to query old data outside the
         DStream computation).
 
-        :param duration: Minimum duration (in seconds) that each DStream
-                        should remember its RDDs
+        Parameters
+        ----------
+        duration : int
+            Minimum duration (in seconds) that each DStream should remember its RDDs
         """
         self._jssc.remember(self._jduration(duration))
 
@@ -231,8 +252,10 @@ class StreamingContext(object):
         Sets the context to periodically checkpoint the DStream operations for master
         fault-tolerance. The graph will be checkpointed every batch interval.
 
-        :param directory: HDFS-compatible directory where the checkpoint data
-                         will be reliably stored
+        Parameters
+        ----------
+        directory : str
+            HDFS-compatible directory where the checkpoint data will be reliably stored
         """
         self._jssc.checkpoint(directory)
 
@@ -242,9 +265,14 @@ class StreamingContext(object):
         a TCP socket and receive byte is interpreted as UTF8 encoded ``\\n`` delimited
         lines.
 
-        :param hostname:      Hostname to connect to for receiving data
-        :param port:          Port to connect to for receiving data
-        :param storageLevel:  Storage level to use for storing the received objects
+        Parameters
+        ----------
+        hostname : str
+            Hostname to connect to for receiving data
+        port : int
+            Port to connect to for receiving data
+        storageLevel : :class:`pyspark.StorageLevel`, optional
+            Storage level to use for storing the received objects
         """
         jlevel = self._sc._getJavaStorageLevel(storageLevel)
         return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
@@ -253,7 +281,7 @@ class StreamingContext(object):
     def textFileStream(self, directory):
         """
         Create an input stream that monitors a Hadoop-compatible file system
-        for new files and reads them as text files. Files must be wrriten to the
+        for new files and reads them as text files. Files must be written to the
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
         The text files must be encoded as UTF-8.
@@ -268,8 +296,12 @@ class StreamingContext(object):
         them from another location within the same file system.
         File names starting with . are ignored.
 
-        :param directory:       Directory to load data from
-        :param recordLength:    Length of each record in bytes
+        Parameters
+        ----------
+        directory : str
+            Directory to load data from
+        recordLength : int
+            Length of each record in bytes
         """
         return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
                        NoOpSerializer())
@@ -286,11 +318,18 @@ class StreamingContext(object):
         Create an input stream from a queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
-        .. note:: Changes to the queue after the stream is created will not be recognized.
+        Parameters
+        ----------
+        rdds : list
+            Queue of RDDs
+        oneAtATime : bool, optional
+            pick one rdd each time or pick all of them once.
+        default : :class:`pyspark.RDD`, optional
+            The default rdd if no more in rdds
 
-        :param rdds:       Queue of RDDs
-        :param oneAtATime: pick one rdd each time or pick all of them once.
-        :param default:    The default rdd if no more in rdds
+        Notes
+        -----
+        Changes to the queue after the stream is created will not be recognized.
         """
         if default and not isinstance(default, RDD):
             default = self._sc.parallelize(default)

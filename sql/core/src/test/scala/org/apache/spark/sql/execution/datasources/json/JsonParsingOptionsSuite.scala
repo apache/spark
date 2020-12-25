@@ -18,12 +18,11 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.json.JSONOptions
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
- * Test cases for various [[JSONOptions]].
+ * Test cases for various [[org.apache.spark.sql.catalyst.json.JSONOptions]].
  */
 class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._

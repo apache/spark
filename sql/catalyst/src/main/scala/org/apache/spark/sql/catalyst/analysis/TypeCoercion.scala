@@ -47,16 +47,16 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    InConversion(conf) ::
+  def typeCoercionRules: List[Rule[LogicalPlan]] =
+    InConversion ::
       WidenSetOperationTypes ::
-      PromoteStrings(conf) ::
+      PromoteStrings ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
-      ConcatCoercion(conf) ::
+      ConcatCoercion ::
       MapZipWithCoercion ::
-      EltCoercion(conf) ::
+      EltCoercion ::
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
@@ -414,7 +414,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
+  object PromoteStrings extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -450,14 +450,20 @@ object TypeCoercion {
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
-      case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
+      case s @ StddevPop(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ StddevSamp(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case m @ UnaryMinus(e @ StringType(), _) => m.withNewChildren(Seq(Cast(e, DoubleType)))
       case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
-      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
-      case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
-      case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+      case v @ VariancePop(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case v @ VarianceSamp(e @ StringType(), _) =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ Skewness(e @ StringType(), _) =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case k @ Kurtosis(e @ StringType(), _) =>
+        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 
@@ -475,7 +481,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
+  object InConversion extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who's children have not been resolved yet.
@@ -692,8 +698,8 @@ object TypeCoercion {
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-      case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+      case d @ Divide(left, right, _) if isNumericOrNull(left) && isNumericOrNull(right) =>
+        d.withNewChildren(Seq(Cast(left, DoubleType), Cast(right, DoubleType)))
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {
@@ -709,8 +715,8 @@ object TypeCoercion {
   object IntegralDivision extends TypeCoercionRule {
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case e if !e.childrenResolved => e
-      case d @ IntegralDivide(left, right) =>
-        IntegralDivide(mayCastToLong(left), mayCastToLong(right))
+      case d @ IntegralDivide(left, right, _) =>
+        d.withNewChildren(Seq(mayCastToLong(left), mayCastToLong(right)))
     }
 
     private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
@@ -780,7 +786,7 @@ object TypeCoercion {
    * If `spark.sql.function.concatBinaryAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  case class ConcatCoercion(conf: SQLConf) extends TypeCoercionRule {
+  object ConcatCoercion extends TypeCoercionRule {
 
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
       plan resolveOperators { case p =>
@@ -828,14 +834,14 @@ object TypeCoercion {
    * If `spark.sql.function.eltOutputAsString` is false and all children types are binary,
    * the expected types are binary. Otherwise, the expected ones are strings.
    */
-  case class EltCoercion(conf: SQLConf) extends TypeCoercionRule {
+  object EltCoercion extends TypeCoercionRule {
 
     override protected def coerceTypes(plan: LogicalPlan): LogicalPlan = {
       plan resolveOperators { case p =>
         p transformExpressionsUp {
           // Skip nodes if unresolved or not enough children
-          case c @ Elt(children) if !c.childrenResolved || children.size < 2 => c
-          case c @ Elt(children) =>
+          case c @ Elt(children, _) if !c.childrenResolved || children.size < 2 => c
+          case c @ Elt(children, _) =>
             val index = children.head
             val newIndex = ImplicitTypeCasts.implicitCast(index, IntegerType).getOrElse(index)
             val newInputs = if (conf.eltOutputAsString ||

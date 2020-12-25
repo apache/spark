@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -805,7 +805,7 @@ class DataFrameSuite extends QueryTest
     assert(df2.drop("`a.b`").columns.size == 2)
   }
 
-  test("drop(name: String) search and drop all top level columns that matchs the name") {
+  test("drop(name: String) search and drop all top level columns that matches the name") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((3, 4)).toDF("a", "b")
     checkAnswer(df1.crossJoin(df2), Row(1, 2, 3, 4))
@@ -1233,6 +1233,44 @@ class DataFrameSuite extends QueryTest
                          " _1  | 2   \n" +
                          " _2  | 2   \n"
     assert(df.showString(10, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-33690: showString: escape meta-characters") {
+    val df1 = Seq("aaa\nbbb\tccc").toDF("value")
+    assert(df1.showString(1, truncate = 0) ===
+      """+-------------+
+        ||value        |
+        |+-------------+
+        ||aaa\nbbb\tccc|
+        |+-------------+
+        |""".stripMargin)
+
+    val df2 = Seq(Seq("aaa\nbbb\tccc")).toDF("value")
+    assert(df2.showString(1, truncate = 0) ===
+      """+---------------+
+        ||value          |
+        |+---------------+
+        ||[aaa\nbbb\tccc]|
+        |+---------------+
+        |""".stripMargin)
+
+    val df3 = Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc")).toDF("value")
+    assert(df3.showString(1, truncate = 0) ===
+      """+--------------------------------+
+        ||value                           |
+        |+--------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc}|
+        |+--------------------------------+
+        |""".stripMargin)
+
+    val df4 = Seq("aaa\nbbb\tccc").toDF("value").selectExpr("named_struct('v', value)")
+    assert(df4.showString(1, truncate = 0) ===
+      """+----------------------+
+        ||named_struct(v, value)|
+        |+----------------------+
+        ||{aaa\nbbb\tccc}       |
+        |+----------------------+
+        |""".stripMargin)
   }
 
   test("SPARK-7319 showString") {
@@ -2448,6 +2486,14 @@ class DataFrameSuite extends QueryTest
     "it refers to non-existent table with same name") {
     val e = intercept[AnalysisException] {
       sql("WITH t AS (SELECT 1 FROM nonexist.t) SELECT * FROM t")
+    }
+    assert(e.getMessage.contains("Table or view not found:"))
+  }
+
+  test("SPARK-32680: Don't analyze CTAS with unresolved query") {
+    val v2Source = classOf[FakeV2Provider].getName
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE t USING $v2Source AS SELECT * from nonexist")
     }
     assert(e.getMessage.contains("Table or view not found:"))
   }

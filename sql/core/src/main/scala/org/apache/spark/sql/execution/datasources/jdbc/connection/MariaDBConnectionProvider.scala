@@ -24,6 +24,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 private[jdbc] class MariaDBConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "org.mariadb.jdbc.Driver"
 
+  override val name: String = "mariadb"
+
   override def appEntry(driver: Driver, options: JDBCOptions): String =
     "Krb5ConnectorContext"
 

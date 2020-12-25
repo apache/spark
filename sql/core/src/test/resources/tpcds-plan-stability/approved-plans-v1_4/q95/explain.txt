@@ -1,5 +1,5 @@
 == Physical Plan ==
-TakeOrderedAndProject (56)
+* Sort (56)
 +- * HashAggregate (55)
    +- Exchange (54)
       +- * HashAggregate (53)
@@ -312,7 +312,7 @@ Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#5)), sum(UnscaledValue(ws_net
 Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#5))#27, sum(UnscaledValue(ws_net_profit#6))#28, count(ws_order_number#4)#32]
 Results [3]: [count(ws_order_number#4)#32 AS order count #35, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#5))#27,17,2) AS total shipping cost #36, MakeDecimal(sum(UnscaledValue(ws_net_profit#6))#28,17,2) AS total net profit #37]
 
-(56) TakeOrderedAndProject
+(56) Sort [codegen id : 11]
 Input [3]: [order count #35, total shipping cost #36, total net profit #37]
-Arguments: 100, [order count #35 ASC NULLS FIRST], [order count #35, total shipping cost #36, total net profit #37]
+Arguments: [order count #35 ASC NULLS FIRST], true, 0
 

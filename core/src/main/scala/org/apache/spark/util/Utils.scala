@@ -28,7 +28,7 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Arrays, Locale, Properties, Random, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.GZIPInputStream
@@ -50,9 +50,10 @@ import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FileUtil, Path, Trash}
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
@@ -270,29 +271,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Move data to trash if 'spark.sql.truncate.trash.enabled' is true, else
-   * delete the data permanently. If move data to trash failed fallback to hard deletion.
-   */
-  def moveToTrashOrDelete(
-      fs: FileSystem,
-      partitionPath: Path,
-      isTrashEnabled: Boolean,
-      hadoopConf: Configuration): Boolean = {
-    if (isTrashEnabled) {
-      logDebug(s"Try to move data ${partitionPath.toString} to trash")
-      val isSuccess = Trash.moveToAppropriateTrash(fs, partitionPath, hadoopConf)
-      if (!isSuccess) {
-        logWarning(s"Failed to move data ${partitionPath.toString} to trash. " +
-          "Fallback to hard deletion")
-        return fs.delete(partitionPath, true)
-      }
-      isSuccess
-    } else {
-      fs.delete(partitionPath, true)
-    }
-  }
-
-  /**
    * Create a directory given the abstract pathname
    * @return true, if the directory is successfully created; otherwise, return false.
    */
@@ -399,7 +377,7 @@ private[spark] object Utils extends Logging {
    * This returns a new InputStream which contains the same data as the original input stream.
    * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
    * continue to read from the original stream. The only real use of this is if the original input
-   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * stream will potentially detect corruption while the data is being read (e.g. from compression).
    * This allows for an eager check of corruption in the first maxSize bytes of data.
    *
    * @return An InputStream which includes all data from the original stream (combining buffered
@@ -509,6 +487,10 @@ private[spark] object Utils extends Logging {
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
+   *
+   * If `shouldUntar` is true, it untars the given url if it is a tar.gz or tgz into `targetDir`.
+   * This is a legacy behavior, and users should better use `spark.archives` configuration or
+   * `SparkContext.addArchive`
    */
   def fetchFile(
       url: String,
@@ -517,7 +499,8 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean): File = {
+      useCache: Boolean,
+      shouldUntar: Boolean = true): File = {
     val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
@@ -558,13 +541,23 @@ private[spark] object Utils extends Logging {
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
 
-    // Decompress the file if it's a .tar or .tar.gz
-    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
-    } else if (fileName.endsWith(".tar")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+    if (shouldUntar) {
+      // Decompress the file if it's a .tar or .tar.gz
+      if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
+      } else if (fileName.endsWith(".tar")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+      }
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
@@ -576,6 +569,26 @@ private[spark] object Utils extends Logging {
     }
 
     targetFile
+  }
+
+  /**
+   * Unpacks an archive file into the specified directory. It expects .jar, .zip, .tar.gz, .tgz
+   * and .tar files. This behaves same as Hadoop's archive in distributed cache. This method is
+   * basically copied from `org.apache.hadoop.yarn.util.FSDownload.unpack`.
+   */
+  def unpack(source: File, dest: File): Unit = {
+    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    if (lowerSrc.endsWith(".jar")) {
+      RunJar.unJar(source, dest, RunJar.MATCH_ANY)
+    } else if (lowerSrc.endsWith(".zip")) {
+      FileUtil.unZip(source, dest)
+    } else if (
+      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
+      FileUtil.unTar(source, dest)
+    } else {
+      logWarning(s"Cannot unpack $source, just copying it to $dest.")
+      copyRecursive(source, dest)
+    }
   }
 
   /** Records the duration of running `body`. */
@@ -1090,20 +1103,20 @@ private[spark] object Utils extends Logging {
     }
     // checks if the hostport contains IPV6 ip and parses the host, port
     if (hostPort != null && hostPort.split(":").length > 2) {
-      val indx: Int = hostPort.lastIndexOf("]:")
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf("]:")
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 2).trim()
-      val retval = (hostPort.substring(0, indx + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 2).trim()
+      val retval = (hostPort.substring(0, index + 1).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     } else {
-      val indx: Int = hostPort.lastIndexOf(':')
-      if (-1 == indx) {
+      val index: Int = hostPort.lastIndexOf(':')
+      if (-1 == index) {
         return setDefaultPortValue
       }
-      val port = hostPort.substring(indx + 1).trim()
-      val retval = (hostPort.substring(0, indx).trim(), if (port.isEmpty) 0 else port.toInt)
+      val port = hostPort.substring(index + 1).trim()
+      val retval = (hostPort.substring(0, index).trim(), if (port.isEmpty) 0 else port.toInt)
       hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
@@ -2542,6 +2555,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
@@ -2869,11 +2890,11 @@ private[spark] object Utils extends Logging {
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
       if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an intepreter
+        // The name does not have dollar sign or is not an interpreter
         // generated class, so we should return the full string
         s
       } else {
-        // The class name is intepreter generated,
+        // The class name is interpreter generated,
         // return the part after the last dollar sign
         // This is the same behavior as getClass.getSimpleName
         s.substring(lastDollarIndex + 1)
@@ -2970,6 +2991,27 @@ private[spark] object Utils extends Logging {
     }
     metadata.append("]")
     metadata.toString
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
+    }
   }
 }
 

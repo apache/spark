@@ -142,4 +142,32 @@ class CanonicalizeSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-33421: Support Greatest and Least in Expression Canonicalize") {
+    Seq(Least(_), Greatest(_)).foreach { f =>
+      // test deterministic expr
+      val expr1 = f(Seq(Literal(1), Literal(2), Literal(3)))
+      val expr2 = f(Seq(Literal(3), Literal(1), Literal(2)))
+      val expr3 = f(Seq(Literal(1), Literal(1), Literal(1)))
+      assert(expr1.canonicalized == expr2.canonicalized)
+      assert(expr1.canonicalized != expr3.canonicalized)
+      assert(expr2.canonicalized != expr3.canonicalized)
+
+      // test non-deterministic expr
+      val randExpr1 = f(Seq(Literal(1), rand(1)))
+      val randExpr2 = f(Seq(rand(1), Literal(1)))
+      val randExpr3 = f(Seq(Literal(1), rand(2)))
+      assert(randExpr1.canonicalized == randExpr2.canonicalized)
+      assert(randExpr1.canonicalized != randExpr3.canonicalized)
+      assert(randExpr2.canonicalized != randExpr3.canonicalized)
+
+      // test nested expr
+      val nestedExpr1 = f(Seq(Literal(1), f(Seq(Literal(2), Literal(3)))))
+      val nestedExpr2 = f(Seq(f(Seq(Literal(2), Literal(3))), Literal(1)))
+      val nestedExpr3 = f(Seq(f(Seq(Literal(1), Literal(1))), Literal(1)))
+      assert(nestedExpr1.canonicalized == nestedExpr2.canonicalized)
+      assert(nestedExpr1.canonicalized != nestedExpr3.canonicalized)
+      assert(nestedExpr2.canonicalized != nestedExpr3.canonicalized)
+    }
+  }
 }

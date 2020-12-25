@@ -182,8 +182,7 @@ if [[ "$1" == "package" ]]; then
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
+  shasum -a 512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
   ZINC_PORT=3035
@@ -453,7 +452,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-    echo "Uplading files to $nexus_upload"
+    echo "Uploading files to $nexus_upload"
     for file in $(find . -type f)
     do
       # strip leading ./

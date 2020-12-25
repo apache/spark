@@ -228,11 +228,17 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     While this process is generally guaranteed to converge, it is not guaranteed
     to find a global optimum.
 
-    .. note:: For high-dimensional data (with many features), this algorithm may perform poorly.
-          This is due to high-dimensional data (a) making it difficult to cluster at all
-          (based on statistical/theoretical arguments) and (b) numerical issues with
-          Gaussian distributions.
+    .. versionadded:: 2.0.0
 
+    Notes
+    -----
+    For high-dimensional data (with many features), this algorithm may perform poorly.
+    This is due to high-dimensional data (a) making it difficult to cluster at all
+    (based on statistical/theoretical arguments) and (b) numerical issues with
+    Gaussian distributions.
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
 
     >>> data = [(Vectors.dense([-0.1, -0.05 ]),),
@@ -329,8 +335,6 @@ class GaussianMixture(JavaEstimator, _GaussianMixtureParams, JavaMLWritable, Jav
     True
     >>> gm2.setWeightCol("weight")
     GaussianMixture...
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -579,6 +583,10 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
 
+    .. versionadded:: 1.5.0
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]), 2.0), (Vectors.dense([1.0, 1.0]), 2.0),
     ...         (Vectors.dense([9.0, 8.0]), 2.0), (Vectors.dense([8.0, 9.0]), 2.0)]
@@ -634,8 +642,6 @@ class KMeans(JavaEstimator, _KMeansParams, JavaMLWritable, JavaMLReadable):
     array([ True,  True], dtype=bool)
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
-
-    .. versionadded:: 1.5.0
     """
 
     @keyword_only
@@ -809,9 +815,9 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         Computes the sum of squared distances between the input points
         and their corresponding cluster centers.
 
-        .. note:: Deprecated in 3.0.0. It will be removed in future versions. Use
-           ClusteringEvaluator instead. You can also get the cost on the training dataset in the
-           summary.
+        .. deprecated:: 3.0.0
+            It will be removed in future versions. Use :py:class:`ClusteringEvaluator` instead.
+            You can also get the cost on the training dataset in the summary.
         """
         warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
                       "ClusteringEvaluator instead. You can also get the cost on the training "
@@ -851,6 +857,10 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     If bisecting all divisible clusters on the bottom level would result more than `k` leaf
     clusters, larger clusters get higher priority.
 
+    .. versionadded:: 2.0.0
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]), 2.0), (Vectors.dense([1.0, 1.0]), 2.0),
     ...         (Vectors.dense([9.0, 8.0]), 2.0), (Vectors.dense([8.0, 9.0]), 2.0)]
@@ -913,8 +923,6 @@ class BisectingKMeans(JavaEstimator, _BisectingKMeansParams, JavaMLWritable, Jav
     array([ True,  True], dtype=bool)
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -1199,9 +1207,10 @@ class LDAModel(JavaModel, _LDAParams):
         This is a matrix of size vocabSize x k, where each column is a topic.
         No guarantees are given about the ordering of the topics.
 
-        WARNING: If this model is actually a :py:class:`DistributedLDAModel` instance produced by
-        the Expectation-Maximization ("em") `optimizer`, then this method could involve
-        collecting a large amount of data to the driver (on the order of vocabSize x k).
+        .. warning:: If this model is actually a :py:class:`DistributedLDAModel`
+            instance produced by the Expectation-Maximization ("em") `optimizer`,
+            then this method could involve collecting a large amount of data
+            to the driver (on the order of vocabSize x k).
         """
         return self._call_java("topicsMatrix")
 
@@ -1211,9 +1220,9 @@ class LDAModel(JavaModel, _LDAParams):
         Calculates a lower bound on the log likelihood of the entire corpus.
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
-        :py:attr:`optimizer` is set to "em"), this involves collecting a large
-        :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
+        .. warning:: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
+            :py:attr:`optimizer` is set to "em"), this involves collecting a large
+            :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
         """
         return self._call_java("logLikelihood", dataset)
 
@@ -1223,9 +1232,9 @@ class LDAModel(JavaModel, _LDAParams):
         Calculate an upper bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
-        :py:attr:`optimizer` is set to "em"), this involves collecting a large
-        :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
+        .. warning:: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
+            :py:attr:`optimizer` is set to "em"), this involves collecting a large
+            :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
         """
         return self._call_java("logPerplexity", dataset)
 
@@ -1264,7 +1273,7 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         Convert this distributed model to a local representation.  This discards info about the
         training dataset.
 
-        WARNING: This involves collecting a large :py:func:`topicsMatrix` to the driver.
+        .. warning:: This involves collecting a large :py:func:`topicsMatrix` to the driver.
         """
         model = LocalLDAModel(self._call_java("toLocal"))
 
@@ -1281,11 +1290,12 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         given the current parameter estimates:
         log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
 
-        Notes:
-          - This excludes the prior; for that, use :py:func:`logPrior`.
-          - Even with :py:func:`logPrior`, this is NOT the same as the data log likelihood given
+        Notes
+        -----
+        - This excludes the prior; for that, use :py:func:`logPrior`.
+        - Even with :py:func:`logPrior`, this is NOT the same as the data log likelihood given
             the hyperparameters.
-          - This is computed from the topic distributions computed during training. If you call
+        - This is computed from the topic distributions computed during training. If you call
             :py:func:`logLikelihood` on the same training dataset, the topic distributions
             will be computed again, possibly giving different results.
         """
@@ -1299,17 +1309,23 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         """
         return self._call_java("logPrior")
 
-    @since("2.0.0")
     def getCheckpointFiles(self):
         """
         If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
         be saved checkpoint files.  This method is provided so that users can manage those files.
 
-        .. note:: Removing the checkpoints can cause failures if a partition is lost and is needed
-            by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up
-            the checkpoints when this model and derivative data go out of scope.
+        .. versionadded:: 2.0.0
 
-        :return  List of checkpoint files from training
+        Returns
+        -------
+        list
+            List of checkpoint files from training
+
+        Notes
+        -----
+        Removing the checkpoints can cause failures if a partition is lost and is needed
+        by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up
+        the checkpoints when this model and derivative data go out of scope.
         """
         return self._call_java("getCheckpointFiles")
 
@@ -1347,6 +1363,10 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     :py:class:`pyspark.ml.feature.Tokenizer` and :py:class:`pyspark.ml.feature.CountVectorizer`
     can be useful for converting text to word count vectors.
 
+    .. versionadded:: 2.0.0
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors, SparseVector
     >>> from pyspark.ml.clustering import LDA
     >>> df = spark.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
@@ -1390,8 +1410,6 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
     >>> sameLocalModel = LocalLDAModel.load(local_model_path)
     >>> model.transform(df).take(1) == sameLocalModel.transform(df).take(1)
     True
-
-    .. versionadded:: 2.0.0
     """
 
     @keyword_only
@@ -1468,6 +1486,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         Sets the value of :py:attr:`optimizer`.
         Currently only support 'em' and 'online'.
 
+        Examples
+        --------
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()
         'em'
@@ -1479,6 +1499,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`learningOffset`.
 
+        Examples
+        --------
         >>> algo = LDA().setLearningOffset(100)
         >>> algo.getLearningOffset()
         100.0
@@ -1490,6 +1512,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`learningDecay`.
 
+        Examples
+        --------
         >>> algo = LDA().setLearningDecay(0.1)
         >>> algo.getLearningDecay()
         0.1...
@@ -1501,6 +1525,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`subsamplingRate`.
 
+        Examples
+        --------
         >>> algo = LDA().setSubsamplingRate(0.1)
         >>> algo.getSubsamplingRate()
         0.1...
@@ -1512,6 +1538,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`optimizeDocConcentration`.
 
+        Examples
+        --------
         >>> algo = LDA().setOptimizeDocConcentration(True)
         >>> algo.getOptimizeDocConcentration()
         True
@@ -1523,6 +1551,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`docConcentration`.
 
+        Examples
+        --------
         >>> algo = LDA().setDocConcentration([0.1, 0.2])
         >>> algo.getDocConcentration()
         [0.1..., 0.2...]
@@ -1534,6 +1564,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`topicConcentration`.
 
+        Examples
+        --------
         >>> algo = LDA().setTopicConcentration(0.5)
         >>> algo.getTopicConcentration()
         0.5...
@@ -1545,6 +1577,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`topicDistributionCol`.
 
+        Examples
+        --------
         >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
         >>> algo.getTopicDistributionCol()
         'topicDistributionCol'
@@ -1556,6 +1590,8 @@ class LDA(JavaEstimator, _LDAParams, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`keepLastCheckpoint`.
 
+        Examples
+        --------
         >>> algo = LDA().setKeepLastCheckpoint(False)
         >>> algo.getKeepLastCheckpoint()
         False
@@ -1646,9 +1682,14 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     This class is not yet an Estimator/Transformer, use :py:func:`assignClusters` method
     to run the PowerIterationClustering algorithm.
 
-    .. seealso:: `Wikipedia on Spectral clustering
-        <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+    .. versionadded:: 2.4.0
 
+    Notes
+    -----
+    See `Wikipedia on Spectral clustering <http://en.wikipedia.org/wiki/Spectral_clustering>`_
+
+    Examples
+    --------
     >>> data = [(1, 0, 0.5),
     ...         (2, 0, 0.5), (2, 1, 0.7),
     ...         (3, 0, 0.5), (3, 1, 0.7), (3, 2, 0.9),
@@ -1680,8 +1721,6 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
     40
     >>> pic2.assignClusters(df).take(6) == assignments.take(6)
     True
-
-    .. versionadded:: 2.4.0
     """
 
     @keyword_only
@@ -1756,7 +1795,9 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
         """
         Run the PIC algorithm and returns a cluster assignment for each input vertex.
 
-        :param dataset:
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.sql.DataFrame`
           A dataset with columns src, dst, weight representing the affinity matrix,
           which is the matrix A in the PIC paper. Suppose the src column value is i,
           the dst column value is j, the weight column value is similarity s,,ij,,
@@ -1765,13 +1806,13 @@ class PowerIterationClustering(_PowerIterationClusteringParams, JavaParams, Java
           either (i, j, s,,ij,,) or (j, i, s,,ji,,) in the input. Rows with i = j are
           ignored, because we assume s,,ij,, = 0.0.
 
-        :return:
-          A dataset that contains columns of vertex id and the corresponding cluster for
-          the id. The schema of it will be:
-          - id: Long
-          - cluster: Int
-
-        .. versionadded:: 2.4.0
+        Returns
+        -------
+        :py:class:`pyspark.sql.DataFrame`
+            A dataset that contains columns of vertex id and the corresponding cluster for
+            the id. The schema of it will be:
+            - id: Long
+            - cluster: Int
         """
         self._transfer_params_to_java()
         jdf = self._java_obj.assignClusters(dataset._jdf)

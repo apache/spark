@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 
@@ -445,10 +445,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     stringConcat.toString
   }
 
-  override def sql: String = {
-    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
-    s"STRUCT<${fieldTypes.mkString(", ")}>"
-  }
+  override def sql: String = s"STRUCT<${fields.map(_.sql).mkString(", ")}>"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -640,5 +637,40 @@ object StructType extends AbstractDataType {
     map.sizeHint(fields.length)
     fields.foreach(s => map.put(s.name, s))
     map
+  }
+
+  /**
+   * Returns a `StructType` that contains missing fields recursively from `source` to `target`.
+   * Note that this doesn't support looking into array type and map type recursively.
+   */
+  def findMissingFields(
+      source: StructType,
+      target: StructType,
+      resolver: Resolver): Option[StructType] = {
+    def bothStructType(dt1: DataType, dt2: DataType): Boolean =
+      dt1.isInstanceOf[StructType] && dt2.isInstanceOf[StructType]
+
+    val newFields = mutable.ArrayBuffer.empty[StructField]
+
+    target.fields.foreach { field =>
+      val found = source.fields.find(f => resolver(field.name, f.name))
+      if (found.isEmpty) {
+        // Found a missing field in `source`.
+        newFields += field
+      } else if (bothStructType(found.get.dataType, field.dataType) &&
+          !found.get.dataType.sameType(field.dataType)) {
+        // Found a field with same name, but different data type.
+        findMissingFields(found.get.dataType.asInstanceOf[StructType],
+          field.dataType.asInstanceOf[StructType], resolver).map { missingType =>
+          newFields += found.get.copy(dataType = missingType)
+        }
+      }
+    }
+
+    if (newFields.isEmpty) {
+      None
+    } else {
+      Some(StructType(newFields.toSeq))
+    }
   }
 }

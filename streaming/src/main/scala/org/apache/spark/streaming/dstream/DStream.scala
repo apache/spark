@@ -960,7 +960,7 @@ object DStream {
   /** Get the creation site of a DStream from the stack trace of when the DStream is created. */
   private[streaming] def getCreationSite(): CallSite = {
     /** Filtering function that excludes non-user classes for a streaming application */
-    def streamingExclustionFunction(className: String): Boolean = {
+    def streamingExclusionFunction(className: String): Boolean = {
       def doesMatch(r: Regex): Boolean = r.findFirstIn(className).isDefined
       val isSparkClass = doesMatch(SPARK_CLASS_REGEX)
       val isSparkExampleClass = doesMatch(SPARK_EXAMPLES_CLASS_REGEX)
@@ -972,6 +972,6 @@ object DStream {
       // non-Spark and non-Scala class, as the rest would streaming application classes.
       (isSparkClass || isScalaClass) && !isSparkExampleClass && !isSparkStreamingTestClass
     }
-    org.apache.spark.util.Utils.getCallSite(streamingExclustionFunction)
+    org.apache.spark.util.Utils.getCallSite(streamingExclusionFunction)
   }
 }

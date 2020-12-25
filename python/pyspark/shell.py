@@ -32,10 +32,10 @@ from pyspark.sql import SparkSession
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-SparkContext._ensure_initialized()
+SparkContext._ensure_initialized()  # type: ignore
 
 try:
-    spark = SparkSession._create_shell_session()
+    spark = SparkSession._create_shell_session()  # type: ignore
 except Exception:
     import sys
     import traceback
@@ -62,6 +62,8 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
+print("Spark context Web UI available at %s" % (sc.uiWebUrl))
+print("Spark context available as 'sc' (master = %s, app id = %s)." % (sc.master, sc.applicationId))
 print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,

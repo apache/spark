@@ -61,7 +61,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
@@ -75,7 +75,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):
@@ -84,7 +84,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         df = self.spark.range(10)
         actual = df.repartition(1).mapInPandas(func, 'a long').collect()
-        self.assertEquals(set((r.a for r in actual)), set(range(100)))
+        self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -110,7 +110,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":

@@ -20,14 +20,27 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+/**
+ * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
+ * For example, UDFs, [[AssertTrue]], etc can throw an exception when they are executed.
+ * In such case, it is necessary to call [[Expression.eval]], and the optimization rule should
+ * not ignore it.
+ *
+ * This trait can be used in an optimization rule such as
+ * [[org.apache.spark.sql.catalyst.optimizer.ConstantFolding]] to fold the expressions that
+ * do not need to execute, for example, `size(array(c0, c1, c2))`.
+ */
+trait NoThrow
 
 /**
  * Returns an Array containing the evaluation of all children expressions.
@@ -39,9 +52,10 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """,
-  since = "1.1.0")
+  since = "1.1.0",
+  group = "array_funcs")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression {
+  extends Expression with NoThrow {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -157,9 +171,10 @@ private [sql] object GenArrayData {
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "map_funcs")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
-  extends Expression {
+  extends Expression with NoThrow {
 
   def this(children: Seq[Expression]) = {
     this(children, SQLConf.get.getConf(SQLConf.LEGACY_CREATE_EMPTY_COLLECTION_USING_STRING_TYPE))
@@ -258,7 +273,8 @@ object CreateMap {
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -356,7 +372,7 @@ object CreateStruct {
         |       {"col1":1,"col2":2,"col3":3}
         |  """.stripMargin,
       "",
-      "",
+      "struct_funcs",
       "1.4.0",
       "")
     ("struct", (info, this.create))
@@ -376,9 +392,10 @@ object CreateStruct {
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "struct_funcs")
 // scalastyle:on line.size.limit
-case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
+case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
     case Seq(name, value) => (name, value)
   }.toList.unzip
@@ -482,7 +499,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_('a');
        {"a":null}
   """,
-  since = "2.0.1")
+  since = "2.0.1",
+  group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -658,6 +676,55 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
       If(IsNull(structExpr), Literal(null, dataType), createNamedStructExpr)
     } else {
       createNamedStructExpr
+    }
+  }
+}
+
+object UpdateFields {
+  private def nameParts(fieldName: String): Seq[String] = {
+    require(fieldName != null, "fieldName cannot be null")
+
+    if (fieldName.isEmpty) {
+      fieldName :: Nil
+    } else {
+      CatalystSqlParser.parseMultipartIdentifier(fieldName)
+    }
+  }
+
+  /**
+   * Adds/replaces field of `StructType` into `col` expression by name.
+   */
+  def apply(col: Expression, fieldName: String, expr: Expression): UpdateFields = {
+    updateFieldsHelper(col, nameParts(fieldName), name => WithField(name, expr))
+  }
+
+  /**
+   * Drops fields of `StructType` in `col` expression by name.
+   */
+  def apply(col: Expression, fieldName: String): UpdateFields = {
+    updateFieldsHelper(col, nameParts(fieldName), name => DropField(name))
+  }
+
+  private def updateFieldsHelper(
+      structExpr: Expression,
+      namePartsRemaining: Seq[String],
+      valueFunc: String => StructFieldsOperation) : UpdateFields = {
+    val fieldName = namePartsRemaining.head
+    if (namePartsRemaining.length == 1) {
+      UpdateFields(structExpr, valueFunc(fieldName) :: Nil)
+    } else {
+      val newStruct = if (structExpr.resolved) {
+        val resolver = SQLConf.get.resolver
+        ExtractValue(structExpr, Literal(fieldName), resolver)
+      } else {
+        UnresolvedExtractValue(structExpr, Literal(fieldName))
+      }
+
+      val newValue = updateFieldsHelper(
+        structExpr = newStruct,
+        namePartsRemaining = namePartsRemaining.tail,
+        valueFunc = valueFunc)
+      UpdateFields(structExpr, WithField(fieldName, newValue) :: Nil)
     }
   }
 }

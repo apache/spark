@@ -35,6 +35,12 @@ import org.apache.spark.annotation.{DeveloperApi, Unstable}
 @Unstable
 abstract class JdbcConnectionProvider {
   /**
+   * Name of the service to provide JDBC connections. This name should be unique. Spark will
+   * internally use this name to differentiate JDBC connection providers.
+   */
+  val name: String
+
+  /**
    * Checks if this connection provider instance can handle the connection initiated by the driver.
    * There must be exactly one active connection provider which can handle the connection for a
    * specific driver. If this requirement doesn't met then `IllegalArgumentException`

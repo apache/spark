@@ -28,14 +28,14 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveS
 object ExplainUtils extends AdaptiveSparkPlanHelper {
   /**
    * Given a input physical plan, performs the following tasks.
-   *   1. Computes the operator id for current operator and records it in the operaror
+   *   1. Computes the operator id for current operator and records it in the operator
    *      by setting a tag.
    *   2. Computes the whole stage codegen id for current operator and records it in the
    *      operator by setting a tag.
    *   3. Generate the two part explain output for this plan.
    *      1. First part explains the operator tree with each operator tagged with an unique
    *         identifier.
-   *      2. Second part explans each operator in a verbose manner.
+   *      2. Second part explains each operator in a verbose manner.
    *
    * Note : This function skips over subqueries. They are handled by its caller.
    *
@@ -117,7 +117,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Traverses the supplied input plan in a bottem-up fashion does the following :
+   * Traverses the supplied input plan in a bottom-up fashion does the following :
    *    1. produces a map : operator identifier -> operator
    *    2. Records the operator id via setting a tag in the operator.
    * Note :
@@ -210,7 +210,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
 
   /**
    * Given a input plan, returns an array of tuples comprising of :
-   *  1. Hosting opeator id.
+   *  1. Hosting operator id.
    *  2. Hosting expression
    *  3. Subquery plan
    */
@@ -218,6 +218,8 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       plan: => QueryPlan[_],
       subqueries: ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)]): Unit = {
     plan.foreach {
+      case a: AdaptiveSparkPlanExec =>
+        getSubqueries(a.executedPlan, subqueries)
       case p: SparkPlan =>
         p.expressions.foreach (_.collect {
           case e: PlanExpression[_] =>
