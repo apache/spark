@@ -42,24 +42,6 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
   }
 
-  protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (
-      |  price int, qty int,
-      |  year int, month int, hour int, minute int, sec int, extra int)
-      |$defaultUsing
-      |PARTITIONED BY (year, month, hour, minute, sec, extra)
-      |""".stripMargin)
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      |""".stripMargin)
-    sql(s"""
-      |ALTER TABLE $table
-      |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
-      |""".stripMargin)
-  }
-
   test("show partitions of non-partitioned table") {
     withNamespaceAndTable("ns", "not_partitioned_table") { t =>
       sql(s"CREATE TABLE $t (col1 int) $defaultUsing")

@@ -116,7 +116,8 @@ abstract class StringRegexExpression extends BinaryExpression
   note = """
     Use RLIKE to match with standard regular expressions.
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
@@ -358,7 +359,8 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
   note = """
     Use LIKE to match with simple string pattern.
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
@@ -436,7 +438,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
        ["one","twoBthreeC"]
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -494,7 +497,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -687,7 +691,8 @@ abstract class RegExpExtractBase
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -787,7 +792,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
        ["100","300"]
   """,
-  since = "3.1.0")
+  since = "3.1.0",
+  group = "string_funcs")
 case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))

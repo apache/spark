@@ -239,7 +239,8 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
       > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
        [1,3,5]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
@@ -309,7 +310,8 @@ case class ArrayTransform(
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
        ["a","b","c","d",null]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ArraySort(
     argument: Expression,
@@ -403,7 +405,8 @@ object ArraySort {
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
        {1:0,3:-1}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class MapFilter(
     argument: Expression,
     function: Expression)
@@ -458,6 +461,7 @@ case class MapFilter(
        [0,2,3]
   """,
   since = "2.4.0",
+  group = "lambda_funcs",
   note = """
     The inner function may use the index argument since 3.0.0.
   """)
@@ -525,7 +529,8 @@ case class ArrayFilter(
       > SELECT _FUNC_(array(1, 2, 3), x -> x IS NULL);
        false
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayExists(
     argument: Expression,
     function: Expression,
@@ -609,7 +614,8 @@ object ArrayExists {
       > SELECT _FUNC_(array(2, null, 8), x -> x % 2 == 0);
        NULL
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class ArrayForAll(
     argument: Expression,
     function: Expression)
@@ -679,7 +685,8 @@ case class ArrayForAll(
       > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x, acc -> acc * 10);
        60
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayAggregate(
     argument: Expression,
     zero: Expression,
@@ -766,7 +773,8 @@ case class ArrayAggregate(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {2:1,4:2,6:3}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class TransformKeys(
     argument: Expression,
     function: Expression)
@@ -818,7 +826,8 @@ case class TransformKeys(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {1:2,2:4,3:6}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class TransformValues(
     argument: Expression,
     function: Expression)
@@ -869,7 +878,8 @@ case class TransformValues(
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
        {1:"ax",2:"by"}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
@@ -1047,7 +1057,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
       > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
        ["ad","be","cf"]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {

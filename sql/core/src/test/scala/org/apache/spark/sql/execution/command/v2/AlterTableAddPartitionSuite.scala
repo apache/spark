@@ -59,4 +59,12 @@ class AlterTableAddPartitionSuite
       assert(errMsg.contains(s"Table $t can not alter partitions"))
     }
   }
+
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+      checkPartitions(t, Map("p1" -> ""))
+    }
+  }
 }

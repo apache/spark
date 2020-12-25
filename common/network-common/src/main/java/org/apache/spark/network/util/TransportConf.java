@@ -398,4 +398,14 @@ public class TransportConf {
     return JavaUtils.byteStringAsBytes(
       conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
   }
+
+  /**
+   * The threshold for number of IOExceptions while merging shuffle blocks to a shuffle partition.
+   * When the number of IOExceptions while writing to merged shuffle data/index/meta file exceed
+   * this threshold then the shuffle server will respond back to client to stop pushing shuffle
+   * blocks for this shuffle partition.
+   */
+  public int ioExceptionsThresholdDuringMerge() {
+    return conf.getInt("spark.shuffle.server.ioExceptionsThresholdDuringMerge", 4);
+  }
 }
