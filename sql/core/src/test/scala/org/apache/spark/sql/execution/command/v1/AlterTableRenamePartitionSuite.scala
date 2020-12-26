@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V1 In-Memory catalog:
  *     [[org.apache.spark.sql.execution.command.v1.AlterTableRenamePartitionSuite]]
  *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableRenamePartitionSuite`
+ *     [[org.apache.spark.sql.hive.execution.command.AlterTableRenamePartitionSuite]]
  */
 trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
   protected def createSinglePartTable(t: String): Unit = {

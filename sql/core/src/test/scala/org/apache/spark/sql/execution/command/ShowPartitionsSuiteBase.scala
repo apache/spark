@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
  *   - V1 table catalog tests: [[org.apache.spark.sql.execution.command.v1.ShowPartitionsSuiteBase]]
  *     - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite]]
  *     - V1 Hive External catalog:
- *       `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ *       [[org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite]]
  */
 trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW PARTITIONS"

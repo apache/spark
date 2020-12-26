@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.command
  * specific test suites:
  *
  *   - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite]]
- *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ *   - V1 Hive External catalog: [[org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite]]
  */
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   test("show everything in the default database") {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog:
  *     [[org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite]]
  *   - V1 Hive External catalog:
- *     `org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite`
+ *     [[org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite]]
  */
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
