@@ -23,23 +23,6 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
-  protected def createSinglePartTable(t: String): Unit = {
-    sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-    sql(s"INSERT INTO $t PARTITION (id = 1) SELECT 'abc'")
-  }
-
-  test("rename without explicitly specifying database") {
-    val t = "tbl"
-    withTable(t) {
-      createSinglePartTable(t)
-      checkPartitions(t, Map("id" -> "1"))
-
-      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      checkPartitions(t, Map("id" -> "2"))
-      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
-    }
-  }
-
   test("table to alter does not exist") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")

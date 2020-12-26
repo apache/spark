@@ -17,8 +17,24 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 
 trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. RENAME PARTITION"
+
+  protected def createSinglePartTable(t: String): Unit = {
+    sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+    sql(s"INSERT INTO $t PARTITION (id = 1) SELECT 'abc'")
+  }
+
+  test("rename without explicitly specifying database") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+
+      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      checkPartitions(t, Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+    }
+  }
 }

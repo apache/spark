@@ -17,21 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 class AlterTableRenamePartitionSuite
   extends command.AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase {
-
-  // TODO(SPARK-33859): Support V2 ALTER TABLE .. RENAME PARTITION
-  test("single part partition") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables"))
-    }
-  }
-}
+  with CommandSuiteBase
