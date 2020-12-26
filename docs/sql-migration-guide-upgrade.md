@@ -7,6 +7,12 @@ displayTitle: Spark SQL Upgrading Guide
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 2.4.7 to 2.4.8
+
+  - In Spark 2.4.8, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
+    * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
+    * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+
 ## Upgrading from Spark SQL 2.4.5 to 2.4.6
 
  - In Spark 2.4.6, the `RESET` command does not reset the static SQL configuration values to the default. It only clears the runtime SQL configuration values.
