@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.internal.SQLConf
 
 trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. RENAME PARTITION"
@@ -35,6 +37,129 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
       checkPartitions(t, Map("id" -> "2"))
       checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+    }
+  }
+
+  test("table to alter does not exist") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("Table not found"))
+    }
+  }
+
+  test("partition to rename does not exist") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+      val errMsg = intercept[NoSuchPartitionException] {
+        sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
+      }.getMessage
+      assert(errMsg.contains("Partition not found in table"))
+    }
+  }
+
+  test("target partition exists") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      val errMsg = intercept[PartitionAlreadyExistsException] {
+        sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      }.getMessage
+      assert(errMsg.contains("Partition already exists"))
+    }
+  }
+
+  test("single part partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+
+      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      checkPartitions(t, Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+    }
+  }
+
+  test("multi part partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createWideTable(t)
+      checkPartitions(t,
+        Map(
+          "year" -> "2016",
+          "month" -> "3",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"),
+        Map(
+          "year" -> "2016",
+          "month" -> "4",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"))
+
+      sql(s"""
+        |ALTER TABLE $t
+        |PARTITION (
+        |  year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1
+        |) RENAME TO PARTITION (
+        |  year = 2016, month = 3, hour = 10, minute = 10, sec = 123, extra = 1
+        |)""".stripMargin)
+      checkPartitions(t,
+        Map(
+          "year" -> "2016",
+          "month" -> "3",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "123",
+          "extra" -> "1"),
+        Map(
+          "year" -> "2016",
+          "month" -> "4",
+          "hour" -> "10",
+          "minute" -> "10",
+          "sec" -> "10",
+          "extra" -> "1"))
+      checkAnswer(sql(s"SELECT month, sec, price FROM $t"), Row(3, 123, 3))
+    }
+  }
+
+  test("with location") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 2) LOCATION 'loc1'")
+      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+
+      sql(s"ALTER TABLE $t PARTITION (id = 2) RENAME TO PARTITION (id = 3)")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "3"))
+      checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
+    }
+  }
+
+  test("partition spec in RENAME PARTITION should be case insensitive") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      checkPartitions(t, Map("id" -> "1"))
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
+        }.getMessage
+        assert(errMsg.contains("ID is not a valid partition column"))
+        checkPartitions(t, Map("id" -> "1"))
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
+        checkPartitions(t, Map("id" -> "2"))
+        checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+      }
     }
   }
 }
