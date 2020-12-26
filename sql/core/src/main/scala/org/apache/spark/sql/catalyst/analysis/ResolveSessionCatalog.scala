@@ -446,11 +446,10 @@ class ResolveSessionCatalog(
         ifNotExists)
 
     case AlterTableRenamePartition(
-        ResolvedV1TableIdentifier(ident), UnresolvedPartitionSpec(from, _), to) =>
-      AlterTableRenamePartitionCommand(
-        ident.asTableIdentifier,
-        from,
-        to)
+        ResolvedV1TableIdentifier(ident),
+        UnresolvedPartitionSpec(from, _),
+        UnresolvedPartitionSpec(to, _)) =>
+      AlterTableRenamePartitionCommand(ident.asTableIdentifier, from, to)
 
     case AlterTableDropPartition(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
