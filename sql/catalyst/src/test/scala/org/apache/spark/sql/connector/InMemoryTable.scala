@@ -169,10 +169,7 @@ class InMemoryTable(
       partitionSchema: StructType,
       from: Seq[Any],
       to: Seq[Any]): Boolean = {
-    val rows = dataMap.remove(from).getOrElse {
-      throw new IllegalStateException(
-        s"The ${from.mkString("[", ", ", "]")} partition doesn't exist")
-    }
+    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from.mkString("/")))
     val newRows = new BufferedRows(to.mkString("/"))
     rows.rows.foreach { r =>
       val newRow = new GenericInternalRow(r.numFields)
