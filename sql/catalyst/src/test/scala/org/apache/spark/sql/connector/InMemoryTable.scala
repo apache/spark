@@ -165,6 +165,25 @@ class InMemoryTable(
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
 
+  protected def renamePartitionKey(from: Seq[Any], to: Seq[Any]): Boolean = {
+    val rows = dataMap.remove(from).getOrElse {
+      throw new IllegalStateException(
+        s"The ${from.mkString("[", ", ", "]")} partition doesn't exist")
+    }
+    val newRows = new BufferedRows(to.mkString("/"))
+    rows.rows.foreach { r =>
+      val newRow = new GenericInternalRow(schema.length)
+      for (i <- 0 until to.length) newRow.update(i, to(i))
+      for (i <- to.length until schema.length) newRow.update(i, r.get(i, schema(i).dataType))
+      newRows.withRow(newRow)
+    }
+    dataMap.put(to, newRows).foreach { _ =>
+      throw new IllegalStateException(
+        s"The ${to.mkString("[", ", ", "]")} partition exists already")
+    }
+    true
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
