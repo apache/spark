@@ -165,16 +165,22 @@ class InMemoryTable(
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
 
-  protected def renamePartitionKey(from: Seq[Any], to: Seq[Any]): Boolean = {
+  protected def renamePartitionKey(
+      partitionSchema: StructType,
+      from: Seq[Any],
+      to: Seq[Any]): Boolean = {
     val rows = dataMap.remove(from).getOrElse {
       throw new IllegalStateException(
         s"The ${from.mkString("[", ", ", "]")} partition doesn't exist")
     }
     val newRows = new BufferedRows(to.mkString("/"))
     rows.rows.foreach { r =>
-      val newRow = new GenericInternalRow(schema.length)
-      for (i <- 0 until to.length) newRow.update(i, to(i))
-      for (i <- to.length until schema.length) newRow.update(i, r.get(i, schema(i).dataType))
+      val newRow = new GenericInternalRow(r.numFields)
+      for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+      for (i <- 0 until partitionSchema.length) {
+        val j = schema.fieldIndex(partitionSchema(i).name)
+        newRow.update(j, to(i))
+      }
       newRows.withRow(newRow)
     }
     dataMap.put(to, newRows).foreach { _ =>

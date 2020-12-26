@@ -117,7 +117,7 @@ class InMemoryPartitionTable(
         throw new NoSuchPartitionException(name, from, partitionSchema)
       }
       memoryTablePartitions.put(to, partValue) == null &&
-      renamePartitionKey(from.toSeq(schema), to.toSeq(schema))
+      renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
     }
   }
 }
