@@ -228,7 +228,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  Seq("lz4", "snappy", "zstd").foreach { codec =>
+  Seq("lz4", "lzf", "snappy", "zstd").foreach { codec =>
     test(s"$codec - Newly added executors should access old data from remote storage") {
       sc = new SparkContext(getSparkConf(2, 0).set(IO_COMPRESSION_CODEC, codec))
       withSpark(sc) { sc =>
