@@ -159,10 +159,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testChangeColumn(isDatasourceTable = false)
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
-
   test("alter datasource table add columns - orc") {
     testAddColumn("orc")
   }

@@ -47,14 +47,13 @@ INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
 
 * **column_list**
 
-    An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table.
+    An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table. Spark will reorder the columns of the input query to match the table schema according to the specified column list.
 
     **Note**
 
     The current behaviour has some limitations:
     - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
     - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
-    - The order of the column list is alterable and determines how the data from `VALUES` clause or query to be inserted by position.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 

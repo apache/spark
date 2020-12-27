@@ -525,6 +525,10 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case e @ CaseWhen(branches, None)
+          if branches.forall(_._2.semanticEquals(Literal(null, e.dataType))) =>
+        Literal(null, e.dataType)
     }
   }
 }

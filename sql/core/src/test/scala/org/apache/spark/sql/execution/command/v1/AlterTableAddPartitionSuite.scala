@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.command
 
@@ -34,6 +35,17 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       .first().getString(0)
     val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
     assert(location.endsWith(expected))
+  }
+
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+      }.getMessage
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec ([p1=]) contains an empty partition column value"))
+    }
   }
 }
 

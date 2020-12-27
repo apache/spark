@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SPARK_REVISION, SPARK_VERSION_SHORT}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
@@ -186,6 +187,8 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Sta
     with ExpressionWithRandomSeed {
 
   def this() = this(None)
+
+  override def seedExpression: Expression = randomSeed.map(Literal.apply).getOrElse(UnresolvedSeed)
 
   override def withNewSeed(seed: Long): Uuid = Uuid(Some(seed))
 

@@ -33,8 +33,18 @@ ADD JAR file_name
 
 * **file_name**
 
-    The name of the JAR file to be added. It could be either on a local file system or a distributed file system.
+    The name of the JAR file to be added. It could be either on a local file system or a distributed file system or an Ivy URI.
+    Apache Ivy is a popular dependency manager focusing on flexibility and simplicity. Now we support two parameter in URI query string:
 
+     * transitive: whether to download dependent jars related to your ivy URL. It is case-sensitive and only take last one if multiple transitive parameters are specified.
+     * exclude: exclusion list during downloading Ivy URI jar and dependent jars.
+
+    User can write Ivy URI such as:
+
+      ivy://group:module:version
+      ivy://group:module:version?transitive=[true|false]
+      ivy://group:module:version?transitive=[true|false]&exclude=group:module,group:module
+        
 ### Examples
 
 ```sql
@@ -42,6 +52,10 @@ ADD JAR /tmp/test.jar;
 ADD JAR "/path/to/some.jar";
 ADD JAR '/some/other.jar';
 ADD JAR "/path with space/abc.jar";
+ADD JAR "ivy://group:module:version";
+ADD JAR "ivy://group:module:version?transitive=false"
+ADD JAR "ivy://group:module:version?transitive=true"
+ADD JAR "ivy://group:module:version?exclude=group:module&transitive=true"
 ```
 
 ### Related Statements
