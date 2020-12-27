@@ -588,7 +588,7 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
-      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
+      OptionAssignerWrapper(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         confKey = DRIVER_MEMORY.key),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -604,13 +604,13 @@ private[spark] class SparkSubmit extends Logging {
       OptionAssigner(args.pyFiles, ALL_CLUSTER_MGRS, CLUSTER, confKey = SUBMIT_PYTHON_FILES.key),
 
       // Propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, STANDALONE | MESOS | KUBERNETES,
+      OptionAssignerWrapper(args.packages, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.packages"),
-      OptionAssigner(args.repositories, STANDALONE | MESOS | KUBERNETES,
+      OptionAssignerWrapper(args.repositories, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.repositories"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
+      OptionAssignerWrapper(args.ivyRepoPath, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.ivy"),
-      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,
+      OptionAssignerWrapper(args.packagesExclusions, STANDALONE | MESOS | KUBERNETES,
         CLUSTER, confKey = "spark.jars.excludes"),
 
       // Yarn only
@@ -646,7 +646,7 @@ private[spark] class SparkSubmit extends Logging {
         confKey = DRIVER_CORES.key),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         confKey = DRIVER_SUPERVISE.key),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
+      OptionAssignerWrapper(args.ivyRepoPath, STANDALONE, CLUSTER, confKey = "spark.jars.ivy"),
 
       // An internal option used only for spark-shell to add user jars to repl's classloader,
       // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
@@ -1483,7 +1483,7 @@ private case class OptionAssigner(
     confKey: String = null,
     mergeFn: Option[(String, String) => String] = None)
 
-private object OptionAssigner {
+private object OptionAssignerWrapper {
   def apply(
       value: Option[String],
       clusterManager: Int,
