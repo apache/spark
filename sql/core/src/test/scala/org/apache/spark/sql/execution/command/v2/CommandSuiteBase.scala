@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * The trait contains settings and utility functions. It can be mixed to the test suites for
  * datasource v2 catalogs (in-memory test catalogs). This trait complements the trait
- * [[org.apache.spark.sql.execution.command.DDLCommandTestUtils]] with common utility functions
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with common utility functions
  * for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends SharedSparkSession {

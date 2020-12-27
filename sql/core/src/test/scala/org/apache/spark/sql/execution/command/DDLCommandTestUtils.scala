@@ -28,9 +28,9 @@ import org.apache.spark.sql.test.SQLTestUtils
  * The common settings and utility functions for all v1 and v2 test suites. When a function
  * is not applicable to all supported catalogs, it should be placed to a specific trait:
  *
- *   - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.CommandSuiteBase]]
- *   - V1 Hive External catalog: [[org.apache.spark.sql.hive.execution.command.CommandSuiteBase]]
- *   - V2 In-Memory catalog: [[org.apache.spark.sql.execution.command.v2.CommandSuiteBase]]
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.CommandSuiteBase`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.CommandSuiteBase`
+ *   - V2 In-Memory catalog: `org.apache.spark.sql.execution.command.v2.CommandSuiteBase`
  */
 trait DDLCommandTestUtils extends SQLTestUtils {
   // The version of the catalog under testing such as "V1", "V2", "Hive V1".
