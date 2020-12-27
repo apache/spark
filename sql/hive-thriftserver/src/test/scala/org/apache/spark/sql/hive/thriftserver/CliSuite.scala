@@ -587,7 +587,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
-    val testTablePath = Utils.createTempDir()
+    val testHintTablePath = Utils.createTempDir()
     runCliWithin(
       3.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
@@ -597,26 +597,26 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       s"""LOAD DATA LOCAL INPATH '$dataFilePath'
         |OVERWRITE INTO TABLE test;""".stripMargin
         -> "",
-      s"""CREATE TABLE testHints(key string, val string) USING parquet
-        |LOCATION '$testTablePath';""".stripMargin
+      s"""CREATE TABLE testHint(key string, val string) USING parquet
+        |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
         -> "",
-      "INSERT OVERWRITE TABLE testHints SELECT /*+ REPARTITION(3) */ * FROM test;"
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ REPARTITION(3) */ * FROM test;"
         -> ""
     )
 
-    val parquetFiles = testTablePath.listFiles().filterNot{ file =>
+    val dataFiles = testHintTablePath.listFiles().filterNot{ file =>
       file.getName.startsWith(".") || file.getName.startsWith("_")
     }
-    assert(parquetFiles.size == 3)
+    assert(dataFiles.size == 3)
 
     runCliWithin(
       2.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       "DROP TABLE test;"
         -> "",
-      "DROP TABLE testHints;"
+      "DROP TABLE testHint;"
         -> ""
     )
-    Utils.deleteRecursively(testTablePath)
+    Utils.deleteRecursively(testHintTablePath)
   }
 }
