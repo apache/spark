@@ -1263,19 +1263,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowNamespaces: show root namespaces with default v2 catalog") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq())
-
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
-    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
-  }
-
   test("ShowNamespaces: show namespaces with v2 catalog") {
     spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")

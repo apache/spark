@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
 trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
@@ -27,5 +28,30 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val df = spark.sql(sqlText)
     assert(df.schema === new StructType().add("namespace", StringType, false))
     checkAnswer(df, expected.map(Row(_)))
+  }
+
+  protected def topNamespaces(ns: Seq[String]): Seq[String]
+
+  test("at the top level") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE DATABASE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
+
+      runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq("ns1", "ns2")))
+    }
+  }
+
+  test("show root namespaces with the default catalog") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
+      runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq.empty))
+
+      withNamespace("ns1", "ns2") {
+        sql(s"CREATE NAMESPACE ns1")
+        sql(s"CREATE NAMESPACE ns2")
+
+        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns1", "ns2")))
+        runShowNamespacesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
+      }
+    }
   }
 }
