@@ -19,6 +19,14 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands
+ * that check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowNamespacesSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowNamespacesSuite`
+ */
 trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   override protected def topNamespaces(ns: Seq[String]): Seq[String] = {
     ns :+ "default"

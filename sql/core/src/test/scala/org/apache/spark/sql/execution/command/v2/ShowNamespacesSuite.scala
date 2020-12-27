@@ -23,6 +23,9 @@ import org.apache.spark.sql.connector.BasicInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * The class contains tests for the `SHOW NAMESPACES` command to check V2 table catalogs.
+ */
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
   override protected def topNamespaces(ns: Seq[String]): Seq[String] = ns
 
