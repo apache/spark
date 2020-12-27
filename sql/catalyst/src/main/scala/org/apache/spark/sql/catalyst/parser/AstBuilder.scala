@@ -139,21 +139,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     With(plan, ctes.toSeq)
   }
 
-  private def withUnresolvedTable(
-      ctx: MultipartIdentifierContext,
-      commandName: String): LogicalPlan = withOrigin(ctx) {
-    UnresolvedTable(visitMultipartIdentifier(ctx), commandName)
-  }
-
-
-  private def withUnresolvedView(
-      ctx: MultipartIdentifierContext,
-      commandName: String,
-      allowTemp: Boolean = true,
-      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
-    UnresolvedView(visitMultipartIdentifier(ctx), commandName, allowTemp, relationTypeMismatchHint)
-  }
-
   /**
    * Create a logical query plan for a hive-style FROM statement body.
    */
@@ -2185,6 +2170,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create an [[UnresolvedView]] from a multi-part identifier context.
+   */
+  private def createUnresolvedView(
+      ctx: MultipartIdentifierContext,
+      commandName: String,
+      allowTemp: Boolean = true,
+      relationTypeMismatchHint: Option[String] = None): LogicalPlan = withOrigin(ctx) {
+    UnresolvedView(visitMultipartIdentifier(ctx), commandName, allowTemp, relationTypeMismatchHint)
+  }
+
+  /**
    * Create a [[CalendarInterval]] literal expression. Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
    * - from-to unit, for instance: interval '1-2' year to month.
@@ -3230,7 +3226,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitDropView(ctx: DropViewContext): AnyRef = withOrigin(ctx) {
     DropView(
-      withUnresolvedView(
+      createUnresolvedView(
         ctx.multipartIdentifier(),
         commandName = "DROP VIEW",
         allowTemp = true,
@@ -3485,7 +3481,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
       AlterViewSetProperties(
-        withUnresolvedView(
+        createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
@@ -3515,7 +3511,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
       AlterViewUnsetProperties(
-        withUnresolvedView(
+        createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
@@ -3968,7 +3964,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     AlterViewAs(
-      withUnresolvedView(ctx.multipartIdentifier, "ALTER VIEW ... AS"),
+      createUnresolvedView(ctx.multipartIdentifier, "ALTER VIEW ... AS"),
       originalText = source(ctx.query),
       query = plan(ctx.query))
   }
