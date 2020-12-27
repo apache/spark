@@ -583,6 +583,42 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("/*$meta chars{^\\;}*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*\nmulti-line\n*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*/* multi-level bracketed*/ SELECT 'test';" -> "test")
-    runCliWithin(1.minute)("SELECT /*+ COALESCE(3) */ * FROM (SELECT 'test')t;" -> "test")
+
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
+    val testTablePath = Utils.createTempDir()
+    runCliWithin(
+      3.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      """CREATE TABLE test(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
+        -> "",
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
+        |OVERWRITE INTO TABLE testHint;""".stripMargin
+        -> "",
+      s"""CREATE TABLE testHint(key string, val string) using parquet
+        |location '$testTablePath';""".stripMargin
+        -> "",
+      s"""set spark.sql.shuffle.partitions=100"""
+        -> "100",
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ COALESCE(3) */ * FROM test distributed by key;"
+        -> ""
+    )
+
+    val parquetFiles = testTablePath.listFiles().filterNot{ file =>
+      file.getName.startsWith(".") || file.getName.startsWith("_")
+    }
+    assert(parquetFiles.size == 3)
+
+    runCliWithin(
+      2.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "DROP TABLE test;"
+        -> "",
+      "DROP TABLE testHint;"
+        -> ""
+    )
+    Utils.deleteRecursively(testTablePath)
   }
 }
