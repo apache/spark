@@ -28,13 +28,4 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
     assert(df.schema === new StructType().add("namespace", StringType, false))
     checkAnswer(df, expected.map(Row(_)))
   }
-
-  test("at top level") {
-    withNamespace("ns1", "ns2") {
-      sql("CREATE DATABASE ns1")
-      sql("CREATE NAMESPACE ns2")
-
-      runShowNamespacesSql("SHOW NAMESPACES", Seq("default", "ns1", "ns2"))
-    }
-  }
 }

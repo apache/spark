@@ -19,4 +19,13 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
 
-class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase
+class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
+  test("at the top level") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE DATABASE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
+
+      runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", Seq("ns1", "ns2"))
+    }
+  }
+}
