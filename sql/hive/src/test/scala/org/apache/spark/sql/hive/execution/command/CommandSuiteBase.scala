@@ -23,7 +23,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 /**
  * The trait contains settings and utility functions. It can be mixed to the test suites for
  * datasource v1 Hive external catalog. This trait complements the common trait
- * [[org.apache.spark.sql.execution.command.DDLCommandTestUtils]] with utility functions and
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with utility functions and
  * settings for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends TestHiveSingleton {
