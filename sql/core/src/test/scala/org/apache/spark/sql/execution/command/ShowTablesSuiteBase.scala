@@ -28,10 +28,10 @@ import org.apache.spark.sql.types.StructType
  * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
- *   - V2 table catalog tests: [[org.apache.spark.sql.execution.command.v2.ShowTablesSuite]]
- *   - V1 table catalog tests: [[org.apache.spark.sql.execution.command.v1.ShowTablesSuiteBase]]
- *     - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.ShowTablesSuite]]
- *     - V1 Hive External catalog: [[org.apache.spark.sql.hive.execution.command.ShowTablesSuite]]
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowTablesSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.ShowTablesSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
  */
 trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TABLES"

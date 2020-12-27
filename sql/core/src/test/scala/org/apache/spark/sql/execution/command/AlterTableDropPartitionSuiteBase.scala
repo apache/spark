@@ -27,13 +27,13 @@ import org.apache.spark.sql.internal.SQLConf
  * located in more specific test suites:
  *
  *   - V2 table catalog tests:
- *     [[org.apache.spark.sql.execution.command.v2.AlterTableDropPartitionSuite]]
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableDropPartitionSuite`
  *   - V1 table catalog tests:
- *     [[org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuiteBase]]
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuiteBase`
  *     - V1 In-Memory catalog:
- *       [[org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite]]
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite`
  *     - V1 Hive External catalog:
- *       [[org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite]]
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite`
  */
 trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. DROP PARTITION"

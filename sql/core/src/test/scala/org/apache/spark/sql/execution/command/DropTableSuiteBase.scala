@@ -24,10 +24,10 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
  * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
- *   - V2 table catalog tests: [[org.apache.spark.sql.execution.command.v2.DropTableSuite]]
- *   - V1 table catalog tests: [[org.apache.spark.sql.execution.command.v1.DropTableSuiteBase]]
- *     - V1 In-Memory catalog: [[org.apache.spark.sql.execution.command.v1.DropTableSuite]]
- *     - V1 Hive External catalog: [[org.apache.spark.sql.hive.execution.command.DropTableSuite]]
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DropTableSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DropTableSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropTableSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
  */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DROP TABLE"

@@ -28,13 +28,13 @@ import org.apache.spark.sql.internal.SQLConf
  * located in more specific test suites:
  *
  *   - V2 table catalog tests:
- *     [[org.apache.spark.sql.execution.command.v2.AlterTableAddPartitionSuite]]
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableAddPartitionSuite`
  *   - V1 table catalog tests:
- *     [[org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuiteBase]]
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuiteBase`
  *     - V1 In-Memory catalog:
- *       [[org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite]]
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite`
  *     - V1 Hive External catalog:
- *       [[org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite]]
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
  */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"

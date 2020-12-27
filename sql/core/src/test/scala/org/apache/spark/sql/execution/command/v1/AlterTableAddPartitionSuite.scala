@@ -27,9 +27,9 @@ import org.apache.spark.sql.execution.command
  * specific test suites:
  *
  *   - V1 In-Memory catalog:
- *     [[org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite]]
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite`
  *   - V1 Hive External catalog:
- *     [[org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite]]
+ *     `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
  */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
   override protected def checkLocation(
