@@ -597,12 +597,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       s"""LOAD DATA LOCAL INPATH '$dataFilePath'
         |OVERWRITE INTO TABLE testHint;""".stripMargin
         -> "",
-      s"""CREATE TABLE testHint(key string, val string) using parquet
-        |location '$testTablePath';""".stripMargin
+      s"""CREATE TABLE testHint(key string, val string) USING parquet
+        |LOCATION '$testTablePath';""".stripMargin
         -> "",
-      s"""set spark.sql.shuffle.partitions=100"""
+      s"""set spark.sql.shuffle.partitions=100;"""
         -> "100",
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ COALESCE(3) */ * FROM test distributed by key;"
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ COALESCE(3) */ * FROM test DISTRIBUTE BY key;"
         -> ""
     )
 
