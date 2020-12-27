@@ -597,12 +597,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       s"""LOAD DATA LOCAL INPATH '$dataFilePath'
         |OVERWRITE INTO TABLE test;""".stripMargin
         -> "",
-      s"""CREATE TABLE testHint(key string, val string) USING parquet
+      s"""CREATE TABLE testHints(key string, val string) USING parquet
         |LOCATION '$testTablePath';""".stripMargin
         -> "",
-      s"""set spark.sql.shuffle.partitions=100;"""
-        -> "100",
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ COALESCE(3) */ * FROM test DISTRIBUTE BY key;"
+      "INSERT OVERWRITE TABLE testHints SELECT /*+ REPARTITION(3) */ * FROM test;"
         -> ""
     )
 
@@ -616,7 +614,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       "DROP TABLE test;"
         -> "",
-      "DROP TABLE testHint;"
+      "DROP TABLE testHints;"
         -> ""
     )
     Utils.deleteRecursively(testTablePath)
