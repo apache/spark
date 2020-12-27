@@ -595,7 +595,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
         -> "",
       s"""LOAD DATA LOCAL INPATH '$dataFilePath'
-        |OVERWRITE INTO TABLE testHint;""".stripMargin
+        |OVERWRITE INTO TABLE test;""".stripMargin
         -> "",
       s"""CREATE TABLE testHint(key string, val string) USING parquet
         |LOCATION '$testTablePath';""".stripMargin
