@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -31,6 +31,20 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   protected def topNamespaces(ns: Seq[String]): Seq[String]
+
+  test("a namespace doesn't exist") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in dummy")
+    }.getMessage
+    assert(errMsg.contains("Namespace 'dummy' not found"))
+  }
+
+  test("default namespace") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
+      runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq.empty))
+    }
+    runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq.empty))
+  }
 
   test("at the top level") {
     withNamespace(s"$catalog.ns1", s"$catalog.ns2") {

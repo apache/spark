@@ -17,8 +17,31 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.connector.BasicInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
   override protected def topNamespaces(ns: Seq[String]): Seq[String] = ns
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)
+
+  test("default v2 catalog doesn't support namespace") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key-> "testcat_no_namespace") {
+      val errMsg = intercept[AnalysisException] {
+        sql("SHOW NAMESPACES")
+      }.getMessage
+      assert(errMsg.contains("does not support namespaces"))
+    }
+  }
+
+  test("v2 catalog doesn't support namespace") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in testcat_no_namespace")
+    }.getMessage
+    assert(errMsg.contains("does not support namespaces"))
+  }
 }
