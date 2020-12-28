@@ -118,7 +118,7 @@ private[sql] object CatalogV2Implicits {
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
     if (parts.isEmpty) {
-      throw new AnalysisException("multi-part identifier cannot be empty.")
+      throw new AnalysisException("Namespaces in V1 catalog can have only a single name part.")
     }
 
     def asIdentifier: Identifier = Identifier.of(parts.init.toArray, parts.last)
