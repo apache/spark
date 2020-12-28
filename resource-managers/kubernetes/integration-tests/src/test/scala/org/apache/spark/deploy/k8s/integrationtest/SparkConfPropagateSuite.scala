@@ -60,40 +60,4 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
       new File(logConfFilePath).delete()
     }
   }
-
-  test("Verify large files and unsupported binary/non-utf8 encoded files are skipped.",
-    k8sTestTag) {
-    val loggingConfigFileName = "log-config-test-log4j.properties"
-    val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
-    assert(loggingConfURL != null, "Logging configuration file not available.")
-
-    val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
-    val sparkConfDirPath = s"${sparkHomeDir.toFile}/conf"
-    val filesToGenerateBinary =
-      Seq("test.jar", "non-utf8.txt", "test.zip", "some-random-binary-file")
-    val binaryContent: Array[Byte] = (1 to 10000).map(_.toByte).toArray
-    val someValidFiles = Seq("config.xml", "log4j.properties", "utf8.txt")
-    try {
-      filesToGenerateBinary.foreach(f =>
-        Files.write(new File(s"$sparkConfDirPath/$f").toPath, binaryContent))
-
-      someValidFiles.foreach(f =>
-        Files.write(new File(s"$sparkConfDirPath/$f").toPath, content.getBytes))
-
-      val expectedLogMessages =
-        Seq(s"Spark configuration files loaded from Some(/opt/spark/conf)") ++ someValidFiles
-      runSparkApplicationAndVerifyCompletion(
-        appResource = containerLocalSparkDistroExamplesJar,
-        mainClass = SPARK_PI_MAIN_CLASS,
-        expectedDriverLogOnCompletion = expectedLogMessages,
-        appArgs = Array.empty[String],
-        driverPodChecker = doBasicDriverPodCheck,
-        executorPodChecker = doBasicExecutorPodCheck,
-        appLocator = appLocator,
-        isJVM = true)
-    } finally {
-      (filesToGenerateBinary ++ someValidFiles)
-        .foreach(f => new File(s"$sparkConfDirPath/$f").delete())
-    }
-  }
 }
