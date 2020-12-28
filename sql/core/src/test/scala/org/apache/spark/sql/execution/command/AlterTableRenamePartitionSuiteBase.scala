@@ -44,13 +44,13 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
   }
 
   test("rename without explicitly specifying database") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createSinglePartTable(t)
-      checkPartitions(t, Map("id" -> "1"))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
+      createSinglePartTable("t")
+      checkPartitions("t", Map("id" -> "1"))
 
-      sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      checkPartitions(t, Map("id" -> "2"))
-      checkAnswer(sql(s"SELECT id, data FROM $t"), Row(2, "abc"))
+      sql(s"ALTER TABLE t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
+      checkPartitions("t", Map("id" -> "2"))
+      checkAnswer(sql(s"SELECT id, data FROM t"), Row(2, "abc"))
     }
   }
 
