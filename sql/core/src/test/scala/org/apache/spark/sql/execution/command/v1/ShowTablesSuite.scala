@@ -116,7 +116,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       val errMsg = intercept[AnalysisException] {
         sql(showTableCmd)
       }.getMessage
-      assert(errMsg.contains("multi-part identifier cannot be empty"))
+      assert(errMsg.contains("Namespaces in V1 catalog can have only a single name part"))
     }
   }
 }
