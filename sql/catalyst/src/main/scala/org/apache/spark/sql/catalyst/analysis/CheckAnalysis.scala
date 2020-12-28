@@ -218,7 +218,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             failAnalysis(
-              s"Input argument to ${e.prettyName} must be an integer, long or null literal.")
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {

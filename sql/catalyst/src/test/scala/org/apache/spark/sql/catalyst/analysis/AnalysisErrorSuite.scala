@@ -705,7 +705,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
       val plan = Project(Seq(r.as("r")), testRelation)
       assertAnalysisError(plan,
-        s"Input argument to ${r.prettyName} must be an integer, long or null literal." :: Nil)
+        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
     }
   }
 }
