@@ -586,36 +586,39 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
-    val hiveContribJar = HiveTestJars.getHiveHcatalogCoreJar().getCanonicalPath
     val testHintTablePath = Utils.createTempDir()
-    runCliWithin(
-      3.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      """CREATE TABLE test(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';""".stripMargin
+
+    runCliWithin(3.minute)(
+      "CREATE TABLE test(key INT, val STRING) USING hive;"
         -> "",
-      s"""LOAD DATA LOCAL INPATH '$dataFilePath'
-        |OVERWRITE INTO TABLE test;""".stripMargin
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test;""".stripMargin
         -> "",
-      s"""CREATE TABLE testHint(key string, val string) USING parquet
-        |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
-        -> "",
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ REPARTITION(3) */ * FROM test;"
+      s"""CREATE TABLE testHint(key string, val string) USING hive
+         |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
         -> ""
     )
 
-    val dataFiles = testHintTablePath.listFiles().filterNot{ file =>
+    runCliWithin(2.minutes)(
+      "INSERT OVERWRITE TABLE testHint SELECT key, val FROM test;"
+        -> ""
+    )
+    var dataFiles = testHintTablePath.listFiles().filterNot{ file =>
+      file.getName.startsWith(".") || file.getName.startsWith("_")
+    }
+    assert(dataFiles.size == 1)
+
+    runCliWithin(2.minutes)(
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ REPARTITION(3) */ key, val FROM test;"
+        -> ""
+    )
+    dataFiles = testHintTablePath.listFiles().filterNot{ file =>
       file.getName.startsWith(".") || file.getName.startsWith("_")
     }
     assert(dataFiles.size == 3)
 
-    runCliWithin(
-      2.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      "DROP TABLE test;"
-        -> "",
-      "DROP TABLE testHint;"
-        -> ""
+    runCliWithin(2.minute)(
+      "DROP TABLE test;" -> "",
+      "DROP TABLE testHint;" -> ""
     )
     Utils.deleteRecursively(testHintTablePath)
   }
