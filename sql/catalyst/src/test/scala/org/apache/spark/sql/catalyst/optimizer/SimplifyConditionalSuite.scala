@@ -207,10 +207,6 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     assertEquivalent(
       If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
       IsNull(UnresolvedAttribute("a")))
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, TrueLiteral), TrueLiteral)
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, FalseLiteral), FalseLiteral)
 
     assertEquivalent(
       If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
@@ -228,21 +224,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
     }
   }
 
-  test("SPARK-33884: simplify conditional if all branches are foldable boolean type") {
-    Seq(IsNull('a), GreaterThan(Rand(0), 1)).foreach { condition =>
-      assertEquivalent(CaseWhen(Seq((condition, FalseLiteral)), FalseLiteral), FalseLiteral)
-      assertEquivalent(CaseWhen(Seq((condition, TrueLiteral)), TrueLiteral), TrueLiteral)
-      assertEquivalent(
-        CaseWhen(Seq((condition, FalseLiteral), (IsNull('b), FalseLiteral)), FalseLiteral),
-        FalseLiteral)
-      assertEquivalent(
-        CaseWhen(Seq((condition, TrueLiteral), (IsNull('b), TrueLiteral)), TrueLiteral),
-        TrueLiteral)
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    Seq(IsNull('a), GreaterThan(Rand(0), 1.0)).foreach { cond =>
+      assertEquivalent(CaseWhen(Seq((cond, TrueLiteral)), FalseLiteral), cond)
     }
-
-    assertEquivalent(CaseWhen(Seq((IsNull('a), TrueLiteral)), FalseLiteral), IsNull('a))
-    assertEquivalent(CaseWhen(Seq((GreaterThan(Rand(0), 1.0), TrueLiteral)), FalseLiteral),
-      GreaterThan(Rand(0), 1.0))
     assertEquivalent(CaseWhen(Seq((IsNull('a), FalseLiteral)), TrueLiteral), IsNotNull('a))
     assertEquivalent(CaseWhen(Seq((GreaterThan(Rand(0), 1.0), FalseLiteral)), TrueLiteral),
       LessThanOrEqual(Rand(0), 1.0))

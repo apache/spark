@@ -475,8 +475,6 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
-      case If(_, TrueLiteral, TrueLiteral) => TrueLiteral
-      case If(_, FalseLiteral, FalseLiteral) => FalseLiteral
       case If(cond, TrueLiteral, FalseLiteral) => cond
       case If(cond, FalseLiteral, TrueLiteral) => Not(cond)
       case If(cond, trueValue, falseValue)
@@ -486,10 +484,6 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
       case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
 
-      case CaseWhen(branches, Some(TrueLiteral))
-          if branches.forall(_._2 == TrueLiteral) => TrueLiteral
-      case CaseWhen(branches, Some(FalseLiteral))
-          if branches.forall(_._2 == FalseLiteral) => FalseLiteral
       case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral)) => cond
       case CaseWhen(Seq((cond, FalseLiteral)), Some(TrueLiteral)) => Not(cond)
 

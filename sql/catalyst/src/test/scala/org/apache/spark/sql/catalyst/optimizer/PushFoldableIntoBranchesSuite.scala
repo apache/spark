@@ -68,7 +68,8 @@ class PushFoldableIntoBranchesSuite
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
       GreaterThanOrEqual(Rand(1), Literal(0.5)))
-    assertEquivalent(EqualTo(nonDeterministic, Literal(3)), FalseLiteral)
+    assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
+      If(LessThan(Rand(1), Literal(0.5)), FalseLiteral, FalseLiteral))
 
     // Handle Null values.
     assertEquivalent(
@@ -141,7 +142,8 @@ class PushFoldableIntoBranchesSuite
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
       GreaterThanOrEqual(Rand(1), Literal(0.5)))
-    assertEquivalent(EqualTo(nonDeterministic, Literal(3)), FalseLiteral)
+    assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
+      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(FalseLiteral)))
 
     // Handle Null values.
     assertEquivalent(
@@ -268,9 +270,10 @@ class PushFoldableIntoBranchesSuite
     }
   }
 
-  test("SPARK-33884: simplify conditional if all branches are foldable boolean type") {
-    assertEquivalent(EqualTo(
-      CaseWhen(Seq((IsNull('a), Literal(0)), (IsNull('b), Literal(1))), Literal(2)), Literal(3)),
-      FalseLiteral)
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)), 'a > 10)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)), 'a <= 10)
   }
 }
