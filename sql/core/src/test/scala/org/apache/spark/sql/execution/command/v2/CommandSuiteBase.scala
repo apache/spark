@@ -21,11 +21,18 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * The trait contains settings and utility functions. It can be mixed to the test suites for
+ * datasource v2 catalogs (in-memory test catalogs). This trait complements the trait
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with common utility functions
+ * for all unified datasource V1 and V2 test suites.
+ */
 trait CommandSuiteBase extends SharedSparkSession {
-  def version: String = "V2"
-  def catalog: String = "test_catalog"
-  def defaultUsing: String = "USING _"
+  def version: String = "V2" // The prefix is added to test names
+  def catalog: String = "test_catalog" // The default V2 catalog for testing
+  def defaultUsing: String = "USING _" // The clause is used in creating v2 tables under testing
 
+  // V2 catalogs created and used especially for testing
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
