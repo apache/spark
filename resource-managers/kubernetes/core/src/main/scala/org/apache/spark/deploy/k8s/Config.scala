@@ -28,7 +28,7 @@ private[spark] object Config extends Logging {
   val DECOMMISSION_SCRIPT =
     ConfigBuilder("spark.kubernetes.decommission.script")
       .doc("The location of the script to use for graceful decommissioning")
-      .version("3.1.0")
+      .version("3.2.0")
       .stringConf
       .createWithDefault("/opt/decom.sh")
 
@@ -103,7 +103,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.configMap.maxSize")
       .doc("Max size limit for a config map. This is configurable as per" +
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
-      .version("3.2.0")
+      .version("3.1.0")
       .longConf
       .createWithDefault(1573000) // 1.5 MiB
 
