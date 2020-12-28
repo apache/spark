@@ -425,7 +425,7 @@ $(document).ready(function () {
                                     if (type !== 'display') {
                                         return 0;
                                     } else {
-                                        return 'N/A';
+                                        return '0.0 B / 0.0 B';
                                     }
                                 }
                             }
@@ -443,7 +443,7 @@ $(document).ready(function () {
                                     if (type !== 'display') {
                                         return 0;
                                     } else {
-                                        return 'N/A';
+                                        return '0.0 B / 0.0 B';
                                     }
                                 }
                             }
@@ -461,7 +461,7 @@ $(document).ready(function () {
                                     if (type !== 'display') {
                                         return 0;
                                     } else {
-                                        return 'N/A';
+                                        return '0.0 B / 0.0 B';
                                     }
                                 }
                             }
@@ -479,7 +479,7 @@ $(document).ready(function () {
                                     if (type !== 'display') {
                                         return 0;
                                     } else {
-                                        return 'N/A';
+                                        return '0.0 B / 0.0 B';
                                     }
                                 }
                             }
