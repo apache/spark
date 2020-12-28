@@ -28,7 +28,7 @@ private[spark] object Config extends Logging {
   val DECOMMISSION_SCRIPT =
     ConfigBuilder("spark.kubernetes.decommission.script")
       .doc("The location of the script to use for graceful decommissioning")
-      .version("3.2.0")
+      .version("3.1.0")
       .stringConf
       .createWithDefault("/opt/decom.sh")
 
