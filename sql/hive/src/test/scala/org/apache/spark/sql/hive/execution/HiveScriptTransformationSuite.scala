@@ -501,4 +501,28 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       """.stripMargin)
     checkAnswer(query4, identity, Row(null) :: Nil)
   }
+
+  test("SPARK-32684: Script transform hive serde mode null value keep same with hive as '\\N'") {
+    val query1 = sql(
+      """
+        |SELECT TRANSFORM(null, null, null)
+        |USING 'cat'
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+      """.stripMargin)
+    checkAnswer(query1, identity, Row(null, "\\N\t\\N") :: Nil)
+
+    val query2 = sql(
+      """
+        |SELECT TRANSFORM(null, null, null)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+      """.stripMargin)
+    checkAnswer(query2, identity, Row(null, "\\N\t\\N") :: Nil)
+
+  }
 }
