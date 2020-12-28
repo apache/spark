@@ -505,8 +505,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           } else {
             None
           }
-          val finalProps = props ++ Seq("field.delim" -> props.getOrElse("field.delim", "\t"),
-            "serialization.null.format" -> props.getOrElse("serialization.null.format", "\\N"))
+          val finalProps = props ++ Seq("field.delim" -> props.getOrElse("field.delim", "\t"))
           (Seq.empty, Option(name), finalProps.toSeq, recordHandler)
 
         case null =>
@@ -515,7 +514,6 @@ class SparkSqlAstBuilder extends AstBuilder {
             "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
           val props = Seq(
             "field.delim" -> "\t",
-            "serialization.null.format" -> "\\N",
             "serialization.last.column.takes.rest" -> "true")
           val recordHandler = Option(conf.getConfString(configKey, defaultConfigValue))
           (Nil, Option(name), props, recordHandler)

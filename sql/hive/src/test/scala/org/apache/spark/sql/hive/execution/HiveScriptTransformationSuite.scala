@@ -502,7 +502,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     checkAnswer(query4, identity, Row(null) :: Nil)
   }
 
-  test("SPARK-32684: Script transform hive serde mode null value keep same with hive as '\\N'") {
+  test("SPARK-32684: Script transform hive serde mode null format is same with hive as '\\N'") {
     val query1 = sql(
       """
         |SELECT TRANSFORM(null, null, null)
