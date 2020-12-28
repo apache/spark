@@ -112,6 +112,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       // `ParquetFileFormat.buildReaderWithPartitionValues` and
       // `ParquetPartitionReaderFactory.buildReaderBase` method,
       // and the `rowGroupOffsets` in `ParquetInputSplit` set to null explicitly.
+      // We didn't delete this branch because PARQUET-131 wanted to move this to the
+      // parquet-mr project.
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
       Set<Long> offsets = new HashSet<>();
