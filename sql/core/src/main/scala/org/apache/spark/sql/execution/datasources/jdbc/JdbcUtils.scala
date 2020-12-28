@@ -304,11 +304,23 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder()
+      // SPARK-33888
+      // - include scale in metadata for only DECIMAL & NUMERIC
+      // - include TIME type metadata
+      // - always build the metadata
+      dataType match {
+        // scalastyle:off
+        case java.sql.Types.NUMERIC => metadata.putLong("scale", fieldScale)
+        case java.sql.Types.DECIMAL => metadata.putLong("scale", fieldScale)
+        case java.sql.Types.TIME    => metadata.putBoolean("logicaltimetype", true)
+        case _                      =>
+        // scalastyle:on
+      }
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable)
+      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
     new StructType(fields)
