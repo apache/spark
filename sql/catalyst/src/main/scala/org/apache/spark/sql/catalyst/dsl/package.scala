@@ -248,6 +248,9 @@ package object dsl {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
+    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = attr.name
+    }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
@@ -456,6 +459,16 @@ package object dsl {
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): LogicalPlan = {
+        Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
+      }
+
+      def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
     }
   }
 }

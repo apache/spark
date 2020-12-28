@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -135,7 +136,8 @@ object ExternalCatalogUtils {
     if (predicates.isEmpty) {
       inputPartitions
     } else {
-      val partitionSchema = catalogTable.partitionSchema
+      val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+        catalogTable.partitionSchema)
       val partitionColumnNames = catalogTable.partitionColumnNames.toSet
 
       val nonPartitionPruningPredicates = predicates.filterNot {

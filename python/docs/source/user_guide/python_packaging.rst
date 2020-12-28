@@ -101,11 +101,11 @@ In the case of a ``spark-submit`` script, you can use it as follows:
 
 .. code-block:: bash
 
-    export PYSPARK_DRIVER_PYTHON=python
+    export PYSPARK_DRIVER_PYTHON=python # Do not set in cluster modes.
     export PYSPARK_PYTHON=./environment/bin/python
     spark-submit --archives pyspark_conda_env.tar.gz#environment app.py
 
-Note that ``PYSPARK_DRIVER_PYTHON`` above is not required for cluster modes in YARN or Kubernetes.
+Note that ``PYSPARK_DRIVER_PYTHON`` above should not be set for cluster modes in YARN or Kubernetes.
 
 If you’re on a regular Python shell or notebook, you can try it as shown below:
 
@@ -155,11 +155,11 @@ You can directly pass/unpack the archive file and enable the environment on exec
 the ``--archives`` option or ``spark.archives`` configuration (``spark.yarn.dist.archives`` in YARN).
 
 For ``spark-submit``, you can use it by running the command as follows. Also, notice that
-``PYSPARK_DRIVER_PYTHON`` is not necessary in Kubernetes or YARN cluster modes.
+``PYSPARK_DRIVER_PYTHON`` has to be unset in Kubernetes or YARN cluster modes.
 
 .. code-block:: bash
 
-    export PYSPARK_DRIVER_PYTHON=python
+    export PYSPARK_DRIVER_PYTHON=python # Do not set in cluster modes.
     export PYSPARK_PYTHON=./environment/bin/python
     spark-submit --archives pyspark_venv.tar.gz#environment app.py
 
@@ -216,13 +216,11 @@ In order to transfer and use the ``.pex`` file in a cluster, you should ship it 
 of directories or archive files.
 
 For application submission, you run the commands as shown below.
-Note that ``PYSPARK_DRIVER_PYTHON`` is not needed for cluster modes in YARN or Kubernetes,
-and you may also need to set ``PYSPARK_PYTHON`` environment variable on
-the AppMaster ``--conf spark.yarn.appMasterEnv.PYSPARK_PYTHON=./myarchive.pex`` in YARN cluster mode.
+Note that ``PYSPARK_DRIVER_PYTHON`` should not be set for cluster modes in YARN or Kubernetes.
 
 .. code-block:: bash
 
-    export PYSPARK_DRIVER_PYTHON=python
+    export PYSPARK_DRIVER_PYTHON=python  # Do not set in cluster modes.
     export PYSPARK_PYTHON=./pyspark_pex_env.pex
     spark-submit --files pyspark_pex_env.pex app.py
 
