@@ -92,8 +92,7 @@ object DriverWrapper extends Logging {
         jarsProp
       }
     }
-    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf,
-      secMgr)
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
     DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }
