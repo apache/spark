@@ -17,11 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.hadoop.io.Writable
-
 /**
  * Provides several RDD implementations. See [[org.apache.spark.rdd.RDD]].
  */
-package object rdd {
-  type IsWritable[A] = A => Writable
-}
+package object rdd
