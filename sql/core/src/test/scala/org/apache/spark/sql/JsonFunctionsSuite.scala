@@ -824,7 +824,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-32968: json pruning optimization with corrupt record field") {
+  test("SPARK-33907: json pruning optimization with corrupt record field") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
         val schema = new StructType()
