@@ -1697,8 +1697,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         expressions
     }
     val filter = Option(ctx.where).map(expression(_))
+    val ignoreNulls =
+      Option(ctx.nullsOption).map(_.getType).getOrElse(SqlBaseParser.RESPECT) match {
+        case SqlBaseParser.RESPECT => false
+        case SqlBaseParser.IGNORE => true
+    }
     val function = UnresolvedFunction(
-      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter)
+      getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {

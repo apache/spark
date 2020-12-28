@@ -268,6 +268,11 @@ object QueryCompilationErrors {
       s"but $prettyName is not an aggregate function")
   }
 
+  def ignoreNullsWithUnsupportedFunctionError(prettyName: String): Throwable = {
+    new AnalysisException("IGNORE NULLS specified, " +
+      s"but $prettyName is not first, last or an offset window function")
+  }
+
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")
