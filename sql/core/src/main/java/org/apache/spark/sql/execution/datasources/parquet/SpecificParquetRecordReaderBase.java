@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +33,7 @@ import java.util.Set;
 import scala.Option;
 
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
+import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.range;
 import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
@@ -58,8 +60,6 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
-import com.google.common.base.Preconditions;
-
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
@@ -93,17 +93,53 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       throws IOException, InterruptedException {
     Configuration configuration = taskAttemptContext.getConfiguration();
     ParquetInputSplit split = (ParquetInputSplit)inputSplit;
-    Preconditions.checkState(split.getRowGroupOffsets() == null,
-            "rowGroupOffsets in ParquetInputSplit should be null.");
     this.file = split.getPath();
+    long[] rowGroupOffsets = split.getRowGroupOffsets();
 
-    // then we need to apply the predicate push down filter
-    ParquetMetadata footer =
-        readFooter(configuration, file, range(split.getStart(), split.getEnd()));
-    MessageType fileSchema = footer.getFileMetaData().getSchema();
-    FilterCompat.Filter filter = getFilter(configuration);
-    List<BlockMetaData> blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+    ParquetMetadata footer;
+    List<BlockMetaData> blocks;
 
+    // if task.side.metadata is set, rowGroupOffsets is null
+    if (rowGroupOffsets == null) {
+      // then we need to apply the predicate push down filter
+      footer = readFooter(configuration, file, range(split.getStart(), split.getEnd()));
+      MessageType fileSchema = footer.getFileMetaData().getSchema();
+      FilterCompat.Filter filter = getFilter(configuration);
+      blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
+    } else {
+      // SPARK-33532: After SPARK-13883 and SPARK-13989, the parquet read process will
+      // no longer enter this branch because `ParquetInputSplit` only be constructed in
+      // `ParquetFileFormat.buildReaderWithPartitionValues` and
+      // `ParquetPartitionReaderFactory.buildReaderBase` method,
+      // and the `rowGroupOffsets` in `ParquetInputSplit` set to null explicitly.
+      // otherwise we find the row groups that were selected on the client
+      footer = readFooter(configuration, file, NO_FILTER);
+      Set<Long> offsets = new HashSet<>();
+      for (long offset : rowGroupOffsets) {
+        offsets.add(offset);
+      }
+      blocks = new ArrayList<>();
+      for (BlockMetaData block : footer.getBlocks()) {
+        if (offsets.contains(block.getStartingPos())) {
+          blocks.add(block);
+        }
+      }
+      // verify we found them all
+      if (blocks.size() != rowGroupOffsets.length) {
+        long[] foundRowGroupOffsets = new long[footer.getBlocks().size()];
+        for (int i = 0; i < foundRowGroupOffsets.length; i++) {
+          foundRowGroupOffsets[i] = footer.getBlocks().get(i).getStartingPos();
+        }
+        // this should never happen.
+        // provide a good error message in case there's a bug
+        throw new IllegalStateException(
+            "All the offsets listed in the split should be found in the file."
+                + " expected: " + Arrays.toString(rowGroupOffsets)
+                + " found: " + blocks
+                + " out of: " + Arrays.toString(foundRowGroupOffsets)
+                + " in range " + split.getStart() + ", " + split.getEnd());
+      }
+    }
     this.fileSchema = footer.getFileMetaData().getSchema();
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
