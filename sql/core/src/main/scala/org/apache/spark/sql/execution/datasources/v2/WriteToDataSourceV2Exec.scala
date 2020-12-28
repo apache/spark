@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
@@ -78,7 +79,8 @@ case class CreateTableAsSelectExec(
       throw new TableAlreadyExistsException(ident)
     }
 
-    val table = catalog.createTable(ident, query.schema.asNullable,
+    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
+    val table = catalog.createTable(ident, schema,
       partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident)
   }
@@ -111,8 +113,9 @@ case class AtomicCreateTableAsSelectExec(
 
       throw new TableAlreadyExistsException(ident)
     }
+    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
     val stagedTable = catalog.stageCreate(
-      ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
+      ident, schema, partitioning.toArray, properties.asJava)
     writeToTable(catalog, stagedTable, writeOptions, ident)
   }
 }
@@ -154,8 +157,9 @@ case class ReplaceTableAsSelectExec(
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
     }
+    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
     val table = catalog.createTable(
-      ident, query.schema.asNullable, partitioning.toArray, properties.asJava)
+      ident, schema, partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident)
   }
 }
@@ -184,7 +188,7 @@ case class AtomicReplaceTableAsSelectExec(
     orCreate: Boolean) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
-    val schema = query.schema.asNullable
+    val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
       uncacheTable(session, catalog, table, ident)
