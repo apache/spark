@@ -421,26 +421,26 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
 
-    case IntegerType =>
+
+    // SPARK-33888 - sql TIME type represents as physical int in millis
+    // Represents a time of day, with no reference to a particular calendar,
+    // time zone or date, with a precision of one millisecond.
+    // It stores the number of milliseconds after midnight, 00:00:00.000.
+    case IntegerType if metadata.contains("logicaltimetype") =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
-        val columnIdx = pos + 1
-        // SPARK-33888 - sql TIME type represents as physical int in millis
-        // Represents a time of day, with no reference to a particular calendar,
-        // time zone or date, with a precision of one millisecond.
-        // It stores the number of milliseconds after midnight, 00:00:00.000.
-        if (rs.getMetaData.getColumnType(columnIdx) == java.sql.Types.TIME) {
-          val rawTime = rs.getTime(columnIdx)
-          if (rawTime != null) {
-            val rawTimeInSeconds = rawTime.toLocalTime().toSecondOfDay()
-            val timeInMillis = TimeUnit.SECONDS.toMillis(rawTimeInSeconds).toInt
-            row.setInt(pos, timeInMillis)
-          } else {
-            row.update(pos, null)
-          }
+        val rawTime = rs.getTime(pos + 1)
+        if (rawTime != null) {
+          val rawTimeInSeconds = rawTime.toLocalTime().toSecondOfDay()
+          val timeInMillis = TimeUnit.SECONDS.toMillis(rawTimeInSeconds).toInt
+          row.setInt(pos, timeInMillis)
         } else {
-          row.setInt(pos, rs.getInt(columnIdx))
+          row.update(pos, null)
         }
       }
+
+    case IntegerType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.setInt(pos, rs.getInt(pos + 1))
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
