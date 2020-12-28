@@ -3119,6 +3119,19 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
   }
+
+  test("SPARK-33899: invalid multi-part identifier of namespaces") {
+    Seq(
+      "SHOW TABLES IN spark_catalog" -> "multi-part identifier cannot be empty",
+      "SHOW VIEWS IN spark_catalog" -> "multi-part identifier cannot be empty",
+      "SHOW TABLE EXTENDED IN spark_catalog LIKE '*tbl'" -> "Database 'spark_catalog' not found"
+    ).foreach { case (sqlCmd, expectedError) =>
+      val errMsg = intercept[AnalysisException] {
+        sql(sqlCmd)
+      }.getMessage
+      assert(errMsg.contains(expectedError))
+    }
+  }
 }
 
 object FakeLocalFsFileSystem {
