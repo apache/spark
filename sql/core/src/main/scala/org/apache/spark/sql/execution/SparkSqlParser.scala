@@ -505,7 +505,12 @@ class SparkSqlAstBuilder extends AstBuilder {
           } else {
             None
           }
-          (Seq.empty, Option(name), props.toSeq, recordHandler)
+          val finalProps = if (!props.contains("field.delim")) {
+            props.toSeq ++ Seq("field.delim" -> "\t")
+          } else {
+            props.toSeq
+          }
+          (Seq.empty, Option(name), finalProps, recordHandler)
 
         case null =>
           // Use default (serde) format.
