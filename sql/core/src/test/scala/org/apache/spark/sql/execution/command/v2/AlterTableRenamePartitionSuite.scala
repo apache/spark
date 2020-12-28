@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
 
+/**
+ * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command
+ * to check V2 table catalogs.
+ */
 class AlterTableRenamePartitionSuite
   extends command.AlterTableRenamePartitionSuiteBase
   with CommandSuiteBase {

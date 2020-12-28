@@ -20,6 +20,16 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. DROP PARTITION` command that
+ * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite`
+ *   - V1 Hive External catalog:
+ *     `org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite`
+ */
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
 
@@ -34,6 +44,10 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
   }
 }
 
+/**
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
+ * V1 In-Memory table catalog.
+ */
 class AlterTableDropPartitionSuite
   extends AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {

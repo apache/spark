@@ -20,6 +20,16 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. RENAME PARTITION` command that
+ * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableRenamePartitionSuite`
+ *   - V1 Hive External catalog:
+ *     `org.apache.spark.sql.hive.execution.command.AlterTableRenamePartitionSuite`
+ */
 trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
   test("with location") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -38,6 +48,10 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
   }
 }
 
+/**
+ * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command to check
+ * V1 In-Memory table catalog.
+ */
 class AlterTableRenamePartitionSuite
   extends AlterTableRenamePartitionSuiteBase
   with CommandSuiteBase

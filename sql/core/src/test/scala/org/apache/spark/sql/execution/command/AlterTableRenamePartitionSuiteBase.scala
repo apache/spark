@@ -21,6 +21,20 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. RENAME PARTITION` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
+ *
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableRenamePartitionSuite`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableRenamePartitionSuiteBase`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableRenamePartitionSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableRenamePartitionSuite`
+ */
 trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. RENAME PARTITION"
 
