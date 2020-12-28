@@ -1597,6 +1597,19 @@ object SQLConf {
        .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
        .booleanConf
        .createWithDefault(false)
+
+  val DROP_EXIST_PARTITION = buildConf("spark.sql.drop.exist.partition")
+    .internal()
+    .doc("This is a switch for drop partition.This is a configuration for " +
+      "deleting a partition. The current method is that if you do not add if exist, " +
+      "it will not judge whether it exists. If it does not exist, " +
+      "an error will be reported directly. For hive SQL migration, " +
+      "the syntax of hive SQL should be consistent with that of hive SQL. " +
+      "When deleting a partition, if the configuration is true, its effect " +
+      "is the same as adding if exist.")
+    .booleanConf
+    .createWithDefault(true)
+
 }
 
 /**
@@ -1775,6 +1788,9 @@ class SQLConf extends Serializable with Logging {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def dropExistPartition: Boolean = getConf(DROP_EXIST_PARTITION)
+
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

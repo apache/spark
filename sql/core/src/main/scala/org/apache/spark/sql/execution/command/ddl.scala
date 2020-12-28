@@ -544,8 +544,9 @@ case class AlterTableDropPartitionCommand(
     }
 
     catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
-      retainData = retainData)
+      table.identifier, normalizedSpecs,
+      ignoreIfNotExists = conf.dropExistPartition || ifExists,
+      purge = purge, retainData = retainData)
 
     CommandUtils.updateTableStats(sparkSession, table)
 
