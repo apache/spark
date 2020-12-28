@@ -127,6 +127,16 @@ object CharVarcharUtils extends Logging {
   }
 
   /**
+   * Re-construct the original schema from the type string in the given metadata of each field.
+   */
+  def getRawSchema(schema: StructType): StructType = {
+    val fields = schema.map { field =>
+      getRawType(field.metadata).map(dt => field.copy(dataType = dt)).getOrElse(field)
+    }
+    StructType(fields)
+  }
+
+  /**
    * Returns expressions to apply read-side char type padding for the given attributes.
    *
    * For a CHAR(N) column/field and the length of string value is M
