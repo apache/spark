@@ -756,14 +756,17 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  protected def doEval(input: InternalRow, srcString: UTF8String): Any
+  protected def doEval(srcString: UTF8String): Any
+  protected def doEval(srcString: UTF8String, trimString: UTF8String): Any
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
     if (srcString == null) {
       null
+    } else if (trimStr.isDefined) {
+      doEval(srcString, trimStr.get.eval(input).asInstanceOf[UTF8String])
     } else {
-      doEval(input, srcString)
+      doEval(srcString)
     }
   }
 
@@ -774,31 +777,32 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.$trimMethod();
-        }""")
+      ev.copy(code =
+        code"""
+              |${evals.map(_.code)}
+              |boolean ${ev.isNull} = false;
+              |UTF8String ${ev.value} = null;
+              |if (${srcString.isNull}) {
+              |  ${ev.isNull} = true;
+              |} else {
+              |  ${ev.value} = ${srcString.value}.$trimMethod();
+              |}
+            """)
     } else {
       val trimString = evals(1)
-      val getTrimFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimFunction
-        }""")
+      ev.copy(code =
+        code"""
+              |${evals.map(_.code)}
+              |boolean ${ev.isNull} = false;
+              |UTF8String ${ev.value} = null;
+              |if (${srcString.isNull}) {
+              |  ${ev.isNull} = true;
+              |} else if (${trimString.isNull}) {
+              |  ${ev.isNull} = true;
+              |} else {
+              |  ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+              |}
+          """)
     }
   }
 
@@ -890,13 +894,10 @@ case class StringTrim(
 
   override protected def direction: String = "BOTH"
 
-  override def doEval(input: InternalRow, srcString: UTF8String): Any = {
-    if (trimStr.isDefined) {
-      srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
-    } else {
-      srcString.trim()
-    }
-  }
+  override def doEval(srcString: UTF8String): Any = srcString.trim()
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+    srcString.trim(trimString)
 
   override val trimMethod: String = "trim"
 }
@@ -947,13 +948,10 @@ case class StringTrimLeft(
 
   override protected def direction: String = "LEADING"
 
-  override def doEval(input: InternalRow, srcString: UTF8String): Any = {
-    if (trimStr.isDefined) {
-      srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
-    } else {
-      srcString.trimLeft()
-    }
-  }
+  override def doEval(srcString: UTF8String): Any = srcString.trimLeft()
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+    srcString.trimLeft(trimString)
 
   override val trimMethod: String = "trimLeft"
 }
@@ -1006,13 +1004,10 @@ case class StringTrimRight(
 
   override protected def direction: String = "TRAILING"
 
-  override def doEval(input: InternalRow, srcString: UTF8String): Any = {
-    if (trimStr.isDefined) {
-      srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
-    } else {
-      srcString.trimRight()
-    }
-  }
+  override def doEval(srcString: UTF8String): Any = srcString.trimRight()
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+    srcString.trimRight(trimString)
 
   override val trimMethod: String = "trimRight"
 }
