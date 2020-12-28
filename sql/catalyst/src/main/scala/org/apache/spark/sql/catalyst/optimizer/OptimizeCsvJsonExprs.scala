@@ -36,6 +36,8 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  * 4. Prune unnecessary columns from GetStructField + CsvToStructs.
  */
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
+  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p =>
       val optimized = if (SQLConf.get.jsonExpressionOptimization) {
@@ -108,7 +110,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {
     case g @ GetStructField(j @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty =>
+        if schema.length > 1 && j.options.isEmpty && schema(ordinal).name != nameOfCorruptRecord =>
       val prunedSchema = StructType(Seq(schema(ordinal)))
       g.copy(child = j.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
   }

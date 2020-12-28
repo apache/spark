@@ -286,4 +286,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-32968: csv pruning optimization with corrupt record field") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val df = sparkContext.parallelize(Seq("a,b,c,d")).toDF("csv")
+          .selectExpr("from_csv(csv, 'a string, b string, _corrupt_record string') as parsed")
+          .selectExpr("parsed._corrupt_record")
+
+        checkAnswer(df, Seq(Row("a,b,c,d")))
+      }
+    }
+  }
 }
