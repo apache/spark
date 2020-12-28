@@ -453,7 +453,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
 
     val query2 = sql(
       """
-        |select split(value, "\t") FROM (
+        |SELECT split(value, "\t") FROM (
         |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |USING 'cat'
@@ -465,5 +465,40 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         |) temp;
       """.stripMargin)
     checkAnswer(query2, identity, Row(Seq("2", "3")) :: Nil)
+
+    val query3 = sql(
+      """
+        |SELECT split(value, "&") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'field.delim' = '&'
+        |  )
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true',
+        |   'field.delim' = '&'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query3, identity, Row(Seq("2", "3")) :: Nil)
+
+    val query4 = sql(
+      """
+        |SELECT split(value, "&") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true',
+        |   'field.delim' = '&'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query4, identity, Row(null) :: Nil)
   }
 }
