@@ -307,7 +307,7 @@ private[spark] class SparkSubmit extends Logging {
         packagesTransitive = true, args.packagesExclusions, args.packages,
         args.repositories, args.ivyRepoPath, args.ivySettingsPath)
 
-      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+      if (resolvedMavenCoordinates.nonEmpty) {
         // In K8s client mode, when in the driver, add resolved jars early as we might need
         // them at the submit time for artifact downloading.
         // For example we might use the dependencies for downloading
@@ -315,17 +315,18 @@ private[spark] class SparkSubmit extends Logging {
         // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
         if (isKubernetesClusterModeDriver) {
           val loader = getSubmitClassLoader(sparkConf)
-          for (jar <- resolvedMavenCoordinates.split(",")) {
+          for (jar <- resolvedMavenCoordinates) {
             addJarToClasspath(jar, loader)
           }
         } else if (isKubernetesCluster) {
           // We need this in K8s cluster mode so that we can upload local deps
           // via the k8s application, like in cluster mode driver
-          childClasspath ++= resolvedMavenCoordinates.split(",")
+          childClasspath ++= resolvedMavenCoordinates
         } else {
-          args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
+          args.jars = mergeFileLists(args.jars, mergeFileLists(resolvedMavenCoordinates: _*))
           if (args.isPython || isInternal(args.primaryResource)) {
-            args.pyFiles = mergeFileLists(args.pyFiles, resolvedMavenCoordinates)
+            args.pyFiles = mergeFileLists(args.pyFiles,
+              mergeFileLists(resolvedMavenCoordinates: _*))
           }
         }
       }
@@ -1201,7 +1202,7 @@ private[spark] object SparkSubmitUtils {
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
-      cacheDirectory: File): String = {
+      cacheDirectory: File): Seq[String] = {
     artifacts.map { artifactInfo =>
       val artifact = artifactInfo.asInstanceOf[Artifact].getModuleRevisionId
       val extraAttrs = artifactInfo.asInstanceOf[Artifact].getExtraAttributes
@@ -1212,7 +1213,7 @@ private[spark] object SparkSubmitUtils {
       }
       cacheDirectory.getAbsolutePath + File.separator +
         s"${artifact.getOrganisation}_${artifact.getName}-${artifact.getRevision}$classifier.jar"
-    }.mkString(",")
+    }
   }
 
   /** Adds the given maven coordinates to Ivy's module descriptor. */
@@ -1362,7 +1363,7 @@ private[spark] object SparkSubmitUtils {
    * @param ivySettings An IvySettings containing resolvers to use
    * @param transitive Whether resolving transitive dependencies, default is true
    * @param exclusions Exclusions to apply when resolving transitive dependencies
-   * @return The comma-delimited path to the jars of the given maven artifacts including their
+   * @return Seq of path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   def resolveMavenCoordinates(
@@ -1370,9 +1371,9 @@ private[spark] object SparkSubmitUtils {
       ivySettings: IvySettings,
       transitive: Boolean,
       exclusions: Seq[String] = Nil,
-      isTest: Boolean = false): String = {
+      isTest: Boolean = false): Seq[String] = {
     if (coordinates == null || coordinates.trim.isEmpty) {
-      ""
+      Nil
     } else {
       val sysOut = System.out
       // Default configuration name for ivy

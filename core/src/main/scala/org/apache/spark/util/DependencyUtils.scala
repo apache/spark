@@ -154,7 +154,7 @@ private[spark] object DependencyUtils extends Logging {
       ivyProperties.repositories,
       ivyProperties.ivyRepoPath,
       ivyProperties.ivySettingsPath
-    ).split(",")
+    )
   }
 
   def resolveMavenDependencies(
@@ -163,7 +163,7 @@ private[spark] object DependencyUtils extends Logging {
       packages: Option[String],
       repositories: Option[String],
       ivyRepoPath: Option[String],
-      ivySettingsPath: Option[String]): String = {
+      ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
       if (packagesExclusions.nonEmpty) {
         packagesExclusions.map(_.split(",")).get
