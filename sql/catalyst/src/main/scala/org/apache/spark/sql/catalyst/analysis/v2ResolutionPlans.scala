@@ -102,8 +102,13 @@ case class ResolvedTable(
     catalog: TableCatalog,
     identifier: Identifier,
     table: Table,
-    override val output: Seq[Attribute])
-  extends LeafNode
+    outputAttributes: Seq[Attribute])
+  extends LeafNode {
+  override def output: Seq[Attribute] = {
+    val qualifier = catalog.name +: identifier.namespace :+ identifier.name
+    outputAttributes.map(_.withQualifier(qualifier))
+  }
+}
 
 object ResolvedTable {
   def create(

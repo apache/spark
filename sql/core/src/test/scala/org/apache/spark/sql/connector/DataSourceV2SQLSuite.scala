@@ -179,6 +179,22 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("Describe column for v2 catalog should work with qualified columns") {
+    val t = "testcat.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING foo")
+      Seq("testcat.ns.tbl.id", "ns.tbl.id", "tbl.id", "id").foreach { col =>
+        val df = sql(s"DESCRIBE $t $col")
+        assert(df.schema.map(field => (field.name, field.dataType))
+          === Seq(("info_name", StringType), ("info_value", StringType)))
+        assert(df.collect === Seq(
+          Row("col_name", "id"),
+          Row("data_type", "bigint"),
+          Row("comment", "NULL")))
+      }
+    }
+  }
+
   test("Describing nested column for v2 catalog is not supported") {
     val t = "testcat.tbl"
     withTable(t) {
