@@ -17,9 +17,26 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
-trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase
+trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartitionSuiteBase {
+  test("with location") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 2) LOCATION 'loc1'")
+      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      checkLocation(t, Map("id" -> "2"), "loc1")
+
+      sql(s"ALTER TABLE $t PARTITION (id = 2) RENAME TO PARTITION (id = 3)")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "3"))
+      // V1 catalogs rename the partition location of managed tables
+      checkLocation(t, Map("id" -> "3"), "id=3")
+      checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
+    }
+  }
+}
 
 class AlterTableRenamePartitionSuite
   extends AlterTableRenamePartitionSuiteBase

@@ -129,19 +129,6 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
-  test("with location") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createSinglePartTable(t)
-      sql(s"ALTER TABLE $t ADD PARTITION (id = 2) LOCATION 'loc1'")
-      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-
-      sql(s"ALTER TABLE $t PARTITION (id = 2) RENAME TO PARTITION (id = 3)")
-      checkPartitions(t, Map("id" -> "1"), Map("id" -> "3"))
-      checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
-    }
-  }
-
   test("partition spec in RENAME PARTITION should be case insensitive") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)

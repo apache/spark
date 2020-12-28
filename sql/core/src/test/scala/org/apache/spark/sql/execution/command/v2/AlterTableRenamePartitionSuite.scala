@@ -21,4 +21,25 @@ import org.apache.spark.sql.execution.command
 
 class AlterTableRenamePartitionSuite
   extends command.AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("with location") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createSinglePartTable(t)
+      val loc = "location1"
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 2) LOCATION '$loc'")
+      checkLocation(t, Map("id" -> "2"), loc)
+      // TODO(SPARK-33924): INSERT INTO changes partition location
+      // sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      // checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      // checkLocation(t, Map("id" -> "2"), loc)
+
+      sql(s"ALTER TABLE $t PARTITION (id = 2) RENAME TO PARTITION (id = 3)")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "3"))
+      // `InMemoryPartitionTableCatalog` should keep the original location
+      checkLocation(t, Map("id" -> "3"), loc)
+      // TODO(SPARK-33924): Uncomment this after a fix
+      // checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
+    }
+  }
+}

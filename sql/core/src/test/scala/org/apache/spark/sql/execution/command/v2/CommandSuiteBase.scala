@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait CommandSuiteBase extends SharedSparkSession {
@@ -29,4 +32,26 @@ trait CommandSuiteBase extends SharedSparkSession {
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
     .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
+    import CatalogV2Implicits._
+
+    val tablePath = t.split('.')
+    val catalogName = tablePath.head
+    val namespaceWithTable = tablePath.tail
+    val namespaces = namespaceWithTable.init
+    val tableName = namespaceWithTable.last
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalogName)
+    val partTable = catalogPlugin.asTableCatalog
+      .loadTable(Identifier.of(namespaces, tableName))
+      .asInstanceOf[InMemoryPartitionTable]
+    val ident = ResolvePartitionSpec.convertToPartIdent(spec, partTable.partitionSchema.fields)
+    val partMetadata = partTable.loadPartitionMetadata(ident)
+
+    assert(partMetadata.containsKey("location"))
+    assert(partMetadata.get("location") === expected)
+  }
 }
