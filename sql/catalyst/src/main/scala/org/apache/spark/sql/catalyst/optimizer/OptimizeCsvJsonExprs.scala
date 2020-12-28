@@ -109,9 +109,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   }
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {
-    case g @ GetStructField(j @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty && schema(ordinal).name != nameOfCorruptRecord =>
+    case g @ GetStructField(c @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
+        if schema.length > 1 && c.options.isEmpty && schema(ordinal).name != nameOfCorruptRecord =>
       val prunedSchema = StructType(Seq(schema(ordinal)))
-      g.copy(child = j.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
+      g.copy(child = c.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
   }
 }
