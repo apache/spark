@@ -245,4 +245,40 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       CaseWhen((GreaterThan(Rand(0), 0.5), Literal.create(null, IntegerType)) :: Nil, None),
       CaseWhen((GreaterThan(Rand(0), 0.5), Literal.create(null, IntegerType)) :: Nil, None))
   }
+
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    // verify the boolean equivalence of all transformations involved
+    val fields = Seq(
+      'cond.boolean.notNull,
+      'cond_nullable.boolean,
+      'a.boolean,
+      'b.boolean
+    )
+    val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
+
+    val exprs = Seq(
+      // actual expressions of the transformations: original -> transformed
+      CaseWhen(Seq((cond, TrueLiteral)), FalseLiteral) -> cond,
+      CaseWhen(Seq((cond, FalseLiteral)), TrueLiteral) -> !cond,
+      CaseWhen(Seq((cond_nullable, TrueLiteral)), FalseLiteral) -> (cond_nullable <=> true),
+      CaseWhen(Seq((cond_nullable, FalseLiteral)), TrueLiteral) -> (!(cond_nullable <=> true)))
+
+    // check plans
+    for ((originalExpr, expectedExpr) <- exprs) {
+      assertEquivalent(originalExpr, expectedExpr)
+    }
+
+    // check evaluation
+    val binaryBooleanValues = Seq(true, false)
+    val ternaryBooleanValues = Seq(true, false, null)
+    for (condVal <- binaryBooleanValues;
+         condNullableVal <- ternaryBooleanValues;
+         aVal <- ternaryBooleanValues;
+         bVal <- ternaryBooleanValues;
+         (originalExpr, expectedExpr) <- exprs) {
+      val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
+      val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
+      checkEvaluation(originalExpr, optimizedVal, inputRow)
+    }
+  }
 }
