@@ -201,19 +201,39 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   }
 
   test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
-      IsNotNull(UnresolvedAttribute("a")))
-    assertEquivalent(
-      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
-      IsNull(UnresolvedAttribute("a")))
+    // verify the boolean equivalence of all transformations involved
+    val fields = Seq(
+      'cond.boolean.notNull,
+      'cond_nullable.boolean,
+      'a.boolean,
+      'b.boolean
+    )
+    val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
-    assertEquivalent(
-      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
-      GreaterThan(Rand(0), UnresolvedAttribute("a")))
-    assertEquivalent(
-      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
-      LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
+    val exprs = Seq(
+      // actual expressions of the transformations: original -> transformed
+      If(cond, true, false) -> cond,
+      If(cond, false, true) -> !cond,
+      If(cond_nullable, true, false) -> (cond_nullable <=> true),
+      If(cond_nullable, false, true) -> (!(cond_nullable <=> true)))
+
+    // check plans
+    for ((originalExpr, expectedExpr) <- exprs) {
+      assertEquivalent(originalExpr, expectedExpr)
+    }
+
+    // check evaluation
+    val binaryBooleanValues = Seq(true, false)
+    val ternaryBooleanValues = Seq(true, false, null)
+    for (condVal <- binaryBooleanValues;
+         condNullableVal <- ternaryBooleanValues;
+         aVal <- ternaryBooleanValues;
+         bVal <- ternaryBooleanValues;
+         (originalExpr, expectedExpr) <- exprs) {
+      val inputRow = create_row(condVal, condNullableVal, aVal, bVal)
+      val optimizedVal = evaluateWithoutCodegen(expectedExpr, inputRow)
+      checkEvaluation(originalExpr, optimizedVal, inputRow)
+    }
   }
 
   test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {

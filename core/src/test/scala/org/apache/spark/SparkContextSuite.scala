@@ -1034,6 +1034,122 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
+
+  test("SPARK-33084: Add jar support Ivy URI -- default transitive = false") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- invalid transitive use default false") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=foo")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("org.slf4j_slf4j-api-1.7.10.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- transitive=true will download dependency jars") {
+    val logAppender = new LogAppender("transitive=true will download dependency jars")
+    withLogAppender(logAppender) {
+      sc = new SparkContext(
+        new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+      val dependencyJars = Array(
+        "org.apache.hive_hive-storage-api-2.7.0.jar",
+        "org.slf4j_slf4j-api-1.7.10.jar",
+        "commons-lang_commons-lang-2.6.jar")
+
+      dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
+
+      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
+        "Added dependency jars of Ivy URI" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+
+      // test dependency jars exist
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+      assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
+        "The dependency jars of Ivy URI" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+      val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
+        "The dependency jars of Ivy URI" +
+          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+        .head.getRenderedMessage
+      dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
+    }
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test exclude param when transitive=true") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0" +
+      "?exclude=commons-lang:commons-lang&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("org.slf4j_slf4j-api-1.7.10.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test different version") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.6.0")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.6.0.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test invalid param") {
+    val logAppender = new LogAppender("test log when have invalid parameter")
+    withLogAppender(logAppender) {
+      sc = new SparkContext(
+        new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+      sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
+        "invalidParam1=foo&invalidParam2=boo")
+      assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+      assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
+        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query" +
+          " `invalidParam1=foo&invalidParam2=boo`.")))
+    }
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test multiple transitive params") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    // transitive=invalidValue will win and treated as false
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
+      "transitive=true&transitive=invalidValue")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+
+    // transitive=true will win
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?" +
+      "transitive=false&transitive=invalidValue&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test param key case sensitive") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case sensitive") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=TRUE")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
 }
 
 object SparkContextSuite {

@@ -22,6 +22,14 @@ import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
+/**
+ * This base suite contains unified tests for the `SHOW TABLES` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
+ */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
   override def showSchema: StructType = {
@@ -100,8 +108,22 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
+
+  test("no database specified") {
+    Seq(
+      s"SHOW TABLES IN $catalog",
+      s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach { showTableCmd =>
+      val errMsg = intercept[AnalysisException] {
+        sql(showTableCmd)
+      }.getMessage
+      assert(errMsg.contains("multi-part identifier cannot be empty"))
+    }
+  }
 }
 
+/**
+ * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
+ */
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._

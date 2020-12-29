@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -55,4 +56,7 @@ abstract class V2CommandExec extends SparkPlan {
   }
 
   override def children: Seq[SparkPlan] = Nil
+
+  override def producedAttributes: AttributeSet = outputSet
+
 }

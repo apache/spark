@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, LessThanOrEqual, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -237,8 +237,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       TrueLiteral,
       FalseLiteral)
     val condition = CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue))
-    val expectedCond =
-      CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) -> (Literal(2) === nestedCaseWhen)))
+    val expectedCond = CaseWhen(Seq(
+      (UnresolvedAttribute("i") > Literal(10), (Literal(2) === nestedCaseWhen) <=> TrueLiteral)))
     testFilter(originalCond = condition, expectedCond = expectedCond)
     testJoin(originalCond = condition, expectedCond = expectedCond)
     testDelete(originalCond = condition, expectedCond = expectedCond)
@@ -253,10 +253,10 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
         Literal(3)),
       TrueLiteral,
       FalseLiteral)
-    val expectedCond = Literal(5) > If(
+    val expectedCond = (Literal(5) > If(
       UnresolvedAttribute("i") === Literal(15),
       Literal(null, IntegerType),
-      Literal(3))
+      Literal(3))) <=> TrueLiteral
     testFilter(originalCond = condition, expectedCond = expectedCond)
     testJoin(originalCond = condition, expectedCond = expectedCond)
     testDelete(originalCond = condition, expectedCond = expectedCond)
@@ -443,9 +443,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val lambda1 = LambdaFunction(
       function = If(cond, Literal(null, BooleanType), TrueLiteral),
       arguments = lambdaArgs)
-    // the optimized lambda body is: if(arg > 0, false, true) => arg <= 0
+    // the optimized lambda body is: if(arg > 0, false, true) => !((arg > 0) <=> true)
     val lambda2 = LambdaFunction(
-      function = LessThanOrEqual(condArg, Literal(0)),
+      function = !(cond <=> TrueLiteral),
       arguments = lambdaArgs)
     testProjection(
       originalExpr = createExpr(argument, lambda1) as 'x,
