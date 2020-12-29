@@ -359,6 +359,8 @@ jobs:
     - name: Run documentation build
       run: |
         cd docs
+        export LC_ALL=C.UTF-8
+        export LANG=C.UTF-8
         jekyll build
 
   java-11:
