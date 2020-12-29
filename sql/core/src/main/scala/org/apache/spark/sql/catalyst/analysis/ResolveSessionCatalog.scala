@@ -363,7 +363,6 @@ class ResolveSessionCatalog(
       DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
 
     case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
-      assert(ns.nonEmpty)
       if (ns.length != 1) {
           throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
       }
@@ -373,7 +372,6 @@ class ResolveSessionCatalog(
         SessionCatalogAndNamespace(_, ns),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
-      assert(ns.nonEmpty)
       if (ns.length != 1) {
         throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
       }
@@ -502,7 +500,6 @@ class ResolveSessionCatalog(
       resolved match {
         case SessionCatalogAndNamespace(_, ns) =>
           // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
-          assert(ns.nonEmpty)
           if (ns.length != 1) {
             throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
           }

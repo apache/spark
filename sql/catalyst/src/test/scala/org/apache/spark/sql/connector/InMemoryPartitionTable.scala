@@ -84,7 +84,7 @@ class InMemoryPartitionTable(
   }
 
   override protected def addPartitionKey(key: Seq[Any]): Unit = {
-    memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
+    memoryTablePartitions.putIfAbsent(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
   }
 
   override def listPartitionIdentifiers(

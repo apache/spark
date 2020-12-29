@@ -475,14 +475,21 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
-      case If(cond, TrueLiteral, FalseLiteral) => cond
-      case If(cond, FalseLiteral, TrueLiteral) => Not(cond)
+      case If(cond, TrueLiteral, FalseLiteral) =>
+        if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
+      case If(cond, FalseLiteral, TrueLiteral) =>
+        if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
       case If(cond, l @ Literal(null, _), TrueLiteral) if !cond.nullable => Or(Not(cond), l)
       case If(cond, FalseLiteral, l @ Literal(null, _)) if !cond.nullable => And(Not(cond), l)
       case If(cond, TrueLiteral, l @ Literal(null, _)) if !cond.nullable => Or(cond, l)
+
+      case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral)) =>
+        if (cond.nullable) EqualNullSafe(cond, TrueLiteral) else cond
+      case CaseWhen(Seq((cond, FalseLiteral)), Some(TrueLiteral)) =>
+        if (cond.nullable) Not(EqualNullSafe(cond, TrueLiteral)) else Not(cond)
 
       case e @ CaseWhen(branches, elseValue) if branches.exists(x => falseOrNullLiteral(x._1)) =>
         // If there are branches that are always false, remove them.
