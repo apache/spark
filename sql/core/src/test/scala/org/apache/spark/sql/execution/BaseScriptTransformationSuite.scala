@@ -448,7 +448,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         (1, 2, 3),
         (2, 3, 4),
         (3, 4, 5)
-      ).toDF("a", "b", "c") // Note column d's data type is Decimal(38, 18)
+      ).toDF("a", "b", "c")
       df.createTempView("v")
 
       checkAnswer(
