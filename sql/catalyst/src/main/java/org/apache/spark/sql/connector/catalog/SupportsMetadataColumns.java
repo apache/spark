@@ -37,6 +37,8 @@ import org.apache.spark.sql.types.StructType;
  * If a table column and a metadata column have the same name, the metadata column will never be
  * requested. It is recommended that Table implementations reject data column name that conflict
  * with metadata column names.
+ *
+ * @since 3.1.0
  */
 @Evolving
 public interface SupportsMetadataColumns extends Table {
