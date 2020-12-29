@@ -326,7 +326,7 @@ jobs:
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
-        python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx numpydoc
+        python3.6 -m pip install flake8 'sphinx<3.1.0' numpy pydata_sphinx_theme ipython nbsphinx mypy numpydoc
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
