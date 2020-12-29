@@ -163,5 +163,4 @@ public class Expressions {
   public static Transform hours(String column) {
     return LogicalExpressions.hours(Expressions.column(column));
   }
-
 }
