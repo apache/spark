@@ -884,9 +884,7 @@ object StringTrim {
        SSparkSQ
   """,
   since = "1.5.0")
-case class StringTrim(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -938,9 +936,7 @@ object StringTrimLeft {
        SparkSQL
   """,
   since = "1.5.0")
-case class StringTrimLeft(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -994,9 +990,7 @@ object StringTrimRight {
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class StringTrimRight(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
