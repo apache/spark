@@ -1675,13 +1675,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Skip the having clause here, this will be handled in ResolveAggregateFunctions.
       case h: UnresolvedHaving => h
 
-      case d @ DescribeColumn(rt: ResolvedTable, _, _) =>
-        rt.table match {
-          // References for v1 tables are resolved in DescribeColumnCommand.
-          case _: V1Table => d
-          case _ => d.mapExpressions(resolveExpressionTopDown(_, d))
-        }
-
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
         q.mapExpressions(resolveExpressionTopDown(_, q))

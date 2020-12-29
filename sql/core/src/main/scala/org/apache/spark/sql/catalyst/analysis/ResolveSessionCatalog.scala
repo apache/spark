@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
@@ -235,11 +236,17 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(
-        ResolvedV1TableOrViewIdentifier(ident),
-        UnresolvedAttribute(colNameParts),
-        isExtended) =>
-      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
+    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), column, isExtended) =>
+      column match {
+        case u: UnresolvedAttribute =>
+          // For views, the column will not be resolved by `ResolveReferences` because
+          // `ResolvedView` stores only the identifier.
+          DescribeColumnCommand(ident.asTableIdentifier, u.nameParts, isExtended)
+        case a: Attribute =>
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+        case nested =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError("DESC TABLE COLUMN")
+      }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.

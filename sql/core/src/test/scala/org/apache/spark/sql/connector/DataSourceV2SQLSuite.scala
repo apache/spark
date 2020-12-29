@@ -175,7 +175,7 @@ class DataSourceV2SQLSuite
 
       assertAnalysisError(
         s"DESCRIBE $t invalid_col",
-        "cannot resolve '`invalid_col`' given input columns: [data, id]")
+        "cannot resolve '`invalid_col`' given input columns: [testcat.tbl.data, testcat.tbl.id]")
     }
   }
 
@@ -201,7 +201,7 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
       assertAnalysisError(
         s"describe $t d.a",
-        "DESC TABLE COLUMN command does not support nested fields")
+        "DESC TABLE COLUMN does not support nested column")
     }
   }
 

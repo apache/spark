@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -277,8 +278,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         case c: Attribute =>
           DescribeColumnExec(desc.output, c, isExtended) :: Nil
         case _ =>
-          throw new AnalysisException(
-            "DESC TABLE COLUMN command does not support nested fields.")
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError("DESC TABLE COLUMN")
       }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
