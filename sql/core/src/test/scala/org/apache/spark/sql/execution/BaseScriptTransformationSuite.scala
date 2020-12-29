@@ -448,58 +448,83 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-31936: Script transform support Array/MapType/StructType (no serde)") {
-      assume(TestUtils.testCommandAvailable("python"))
-      withTempView("v") {
-        val df = Seq(
-          (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
-            Map("a" -> 1), Map("b" -> Array("a", "b"))),
-          (Array(3, 4, 5), Array(Array(3, 4), Array(5)),
-            Map("b" -> 2), Map("c" -> Array("c", "d"))),
-          (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
-            Map("c" -> 3), Map("d" -> Array("e", "f")))
-        ).toDF("a", "b", "c", "d")
-          .select('a, 'b, 'c, 'd,
-            struct('a, 'b).as("e"),
-            struct('a, 'd).as("f"),
-            struct(struct('a, 'b), struct('a, 'd)).as("g")
-          )
+  test("SPARK-33930: Script Transform default FIELD DELIMIT should be \u0001 (no serde)") {
+    withTempView("v") {
+      val df = Seq(
+        (1, 2, 3),
+        (2, 3, 4),
+        (3, 4, 5)
+      ).toDF("a", "b", "c")
+      df.createTempView("v")
 
-        checkAnswer(
-          df,
-          (child: SparkPlan) => createScriptTransformationExec(
-            input = Seq(
-              df.col("a").expr,
-              df.col("b").expr,
-              df.col("c").expr,
-              df.col("d").expr,
-              df.col("e").expr,
-              df.col("f").expr,
-              df.col("g").expr),
-            script = "cat",
-            output = Seq(
-              AttributeReference("a", ArrayType(IntegerType))(),
-              AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
-              AttributeReference("c", MapType(StringType, IntegerType))(),
-              AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
-              AttributeReference("e", StructType(
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c)
+             |  ROW FORMAT DELIMITED
+             |  USING 'cat' AS (a)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |FROM v
+        """.stripMargin), identity,
+        Row("1\u00012\u00013") ::
+          Row("2\u00013\u00014") ::
+          Row("3\u00014\u00015") :: Nil)
+    }
+  }
+
+  test("SPARK-31936: Script transform support ArrayType/MapType/StructType (no serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
+    withTempView("v") {
+      val df = Seq(
+        (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
+          Map("a" -> 1), Map("b" -> Array("a", "b"))),
+        (Array(3, 4, 5), Array(Array(3, 4), Array(5)),
+          Map("b" -> 2), Map("c" -> Array("c", "d"))),
+        (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
+          Map("c" -> 3), Map("d" -> Array("e", "f")))
+      ).toDF("a", "b", "c", "d")
+        .select('a, 'b, 'c, 'd,
+          struct('a, 'b).as("e"),
+          struct('a, 'd).as("f"),
+          struct(struct('a, 'b), struct('a, 'd)).as("g")
+        )
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr,
+            df.col("f").expr,
+            df.col("g").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", ArrayType(IntegerType))(),
+            AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
+            AttributeReference("e", StructType(
+              Array(StructField("col1", ArrayType(IntegerType)),
+                StructField("col2", ArrayType(ArrayType(IntegerType))))))(),
+            AttributeReference("f", StructType(
+              Array(StructField("col1", ArrayType(IntegerType)),
+                StructField("col2", MapType(StringType, ArrayType(StringType))))))(),
+            AttributeReference("g", StructType(
+              Array(StructField("col1", StructType(
                 Array(StructField("col1", ArrayType(IntegerType)),
-                  StructField("col2", ArrayType(ArrayType(IntegerType))))))(),
-              AttributeReference("f", StructType(
-                Array(StructField("col1", ArrayType(IntegerType)),
-                  StructField("col2", MapType(StringType, ArrayType(StringType))))))(),
-              AttributeReference("g", StructType(
-                Array(StructField("col1", StructType(
+                  StructField("col2", ArrayType(ArrayType(IntegerType)))))),
+                StructField("col2", StructType(
                   Array(StructField("col1", ArrayType(IntegerType)),
-                    StructField("col2", ArrayType(ArrayType(IntegerType)))))),
-                  StructField("col2", StructType(
-                    Array(StructField("col1", ArrayType(IntegerType)),
-                      StructField("col2", MapType(StringType, ArrayType(StringType)))))))))()),
-            child = child,
-            ioschema = defaultIOSchema
-          ),
-          df.select('a, 'b, 'c, 'd, 'e, 'f, 'g).collect())
-      }
+                    StructField("col2", MapType(StringType, ArrayType(StringType)))))))))()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select('a, 'b, 'c, 'd, 'e, 'f, 'g).collect())
+    }
   }
 
   test("SPARK-31936: Script transform support 7 level nested complex type (no serde)") {
@@ -543,28 +568,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       }.getMessage
       assert(e.contains("Number of levels of nesting supported for Spark SQL" +
         " script transform is 7 Unable to work with level 8"))
-  test("SPARK-33930: Script Transform default FIELD DELIMIT should be \u0001 (no serde)") {
-    withTempView("v") {
-      val df = Seq(
-        (1, 2, 3),
-        (2, 3, 4),
-        (3, 4, 5)
-      ).toDF("a", "b", "c")
-      df.createTempView("v")
-
-      checkAnswer(
-        sql(
-          s"""
-             |SELECT TRANSFORM(a, b, c)
-             |  ROW FORMAT DELIMITED
-             |  USING 'cat' AS (a)
-             |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY '&'
-             |FROM v
-        """.stripMargin), identity,
-        Row("1\u00012\u00013") ::
-          Row("2\u00013\u00014") ::
-          Row("3\u00014\u00015") :: Nil)
     }
   }
 }
