@@ -22,6 +22,9 @@ import org.apache.spark.sql.connector.InMemoryTableSessionCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 
+/**
+ * The class contains tests for the `DROP TABLE` command to check V2 table catalogs.
+ */
 class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
   test("purge option") {
     withNamespaceAndTable("ns", "tbl") { t =>
@@ -29,8 +32,8 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       val errMsg = intercept[UnsupportedOperationException] {
         sql(s"DROP TABLE $catalog.ns.tbl PURGE")
       }.getMessage
-      // The default TableCatalog.dropTable implementation doesn't support the purge option.
-      assert(errMsg.contains("Purge option is not supported"))
+      // The default TableCatalog.purgeTable implementation throws an exception.
+      assert(errMsg.contains("Purge table is not supported"))
     }
   }
 
@@ -47,28 +50,6 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
       checkAnswer(
         sql("SHOW TABLES IN spark_catalog.default").select("tableName"),
         Seq.empty)
-    }
-  }
-
-  test("SPARK-33305: DROP TABLE should also invalidate cache") {
-    val t = s"$catalog.ns.tbl"
-    val view = "view"
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      withTempView(view, "source") {
-        val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-        df.createOrReplaceTempView("source")
-        sql(s"CREATE TABLE $t $defaultUsing AS SELECT id, data FROM source")
-        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
-        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source").collect())
-        checkAnswer(
-          sql(s"SELECT * FROM $view"),
-          spark.table("source").select("id").collect())
-
-        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
-        sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
-      }
     }
   }
 }
