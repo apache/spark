@@ -548,17 +548,29 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     foldables.nonEmpty && others.length < 2
   }
 
+  // Not all UnaryExpression support push into (if / case) branches, e.g. Alias.
+  private def supportedUnaryExpression(u: UnaryExpression): Boolean = u match {
+    case IsNull(_) | IsNotNull(_) => true
+    case _: UnaryMathExpression | Abs(_) | Bin(_) | Factorial(_) | Hex(_) => true
+    case _: String2StringExpression | Ascii(_) | Base64(_) | BitLength(_) | Chr(_) | Length(_) =>
+      true
+    case _: CastBase => true
+    case _: GetDateField | LastDay(_) => true
+    case _: ExtractIntervalPart => true
+    case _: ArraySetLike => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case a: Alias => a // Skip an alias.
       case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
-          if atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+          if supportedUnaryExpression(u) && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = u.withNewChildren(Array(trueValue)),
           falseValue = u.withNewChildren(Array(falseValue)))
 
       case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
-          if atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+          if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           elseValue.map(e => u.withNewChildren(Array(e))))
