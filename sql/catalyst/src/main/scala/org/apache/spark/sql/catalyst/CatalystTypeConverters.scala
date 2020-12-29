@@ -174,8 +174,9 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
+        case g: GenericArrayData => new GenericArrayData(g.array.map(elementConverter.toCatalyst))
         case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          s"AAAThe value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
             + s"cannot be converted to an array of ${elementType.catalogString}")
       }
     }
@@ -213,6 +214,9 @@ object CatalystTypeConverters {
       scalaValue match {
         case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
         case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
+        case map: ArrayBasedMapData =>
+          ArrayBasedMapData(map.keyArray.array.zip(map.valueArray.array).toMap,
+            keyFunction, valueFunction)
         case other => throw new IllegalArgumentException(
           s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
             + "cannot be converted to a map type with "
@@ -260,6 +264,15 @@ object CatalystTypeConverters {
         var idx = 0
         while (idx < structType.size) {
           ar(idx) = converters(idx).toCatalyst(iter.next())
+          idx += 1
+        }
+        new GenericInternalRow(ar)
+      case g: GenericInternalRow =>
+        val ar = new Array[Any](structType.size)
+        val values = g.values
+        var idx = 0
+        while (idx < structType.size) {
+          ar(idx) = converters(idx).toCatalyst(values(idx))
           idx += 1
         }
         new GenericInternalRow(ar)

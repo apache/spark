@@ -440,6 +440,104 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       }
     }
   }
+
+  test("SPARK-31936: Script transform support Array/MapType/StructType (no serde)") {
+      assume(TestUtils.testCommandAvailable("python"))
+      withTempView("v") {
+        val df = Seq(
+          (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
+            Map("a" -> 1), Map("b" -> Array("a", "b"))),
+          (Array(3, 4, 5), Array(Array(3, 4), Array(5)),
+            Map("b" -> 2), Map("c" -> Array("c", "d"))),
+          (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
+            Map("c" -> 3), Map("d" -> Array("e", "f")))
+        ).toDF("a", "b", "c", "d")
+          .select('a, 'b, 'c, 'd,
+            struct('a, 'b).as("e"),
+            struct('a, 'd).as("f"),
+            struct(struct('a, 'b), struct('a, 'd)).as("g")
+          )
+
+        checkAnswer(
+          df,
+          (child: SparkPlan) => createScriptTransformationExec(
+            input = Seq(
+              df.col("a").expr,
+              df.col("b").expr,
+              df.col("c").expr,
+              df.col("d").expr,
+              df.col("e").expr,
+              df.col("f").expr,
+              df.col("g").expr),
+            script = "cat",
+            output = Seq(
+              AttributeReference("a", ArrayType(IntegerType))(),
+              AttributeReference("b", ArrayType(ArrayType(IntegerType)))(),
+              AttributeReference("c", MapType(StringType, IntegerType))(),
+              AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
+              AttributeReference("e", StructType(
+                Array(StructField("col1", ArrayType(IntegerType)),
+                  StructField("col2", ArrayType(ArrayType(IntegerType))))))(),
+              AttributeReference("f", StructType(
+                Array(StructField("col1", ArrayType(IntegerType)),
+                  StructField("col2", MapType(StringType, ArrayType(StringType))))))(),
+              AttributeReference("g", StructType(
+                Array(StructField("col1", StructType(
+                  Array(StructField("col1", ArrayType(IntegerType)),
+                    StructField("col2", ArrayType(ArrayType(IntegerType)))))),
+                  StructField("col2", StructType(
+                    Array(StructField("col1", ArrayType(IntegerType)),
+                      StructField("col2", MapType(StringType, ArrayType(StringType)))))))))()),
+            child = child,
+            ioschema = defaultIOSchema
+          ),
+          df.select('a, 'b, 'c, 'd, 'e, 'f, 'g).collect())
+      }
+  }
+
+  test("SPARK-31936: Script transform support 7 level nested complex type (no serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
+    withTempView("v") {
+      val df = Seq(
+        Array(1)
+      ).toDF("a").select('a,
+        array(array(array(array(array(array('a)))))).as("level_7"),
+        array(array(array(array(array(array(array('a))))))).as("level_8")
+      )
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("level_7").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
+              ArrayType(ArrayType(IntegerType))))))))()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select('level_7).collect())
+
+      val e = intercept[RuntimeException] {
+        checkAnswer(
+          df,
+          (child: SparkPlan) => createScriptTransformationExec(
+            input = Seq(
+              df.col("level_8").expr),
+            script = "cat",
+            output = Seq(
+              AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
+                ArrayType(ArrayType(IntegerType)))))))))()),
+            child = child,
+            ioschema = defaultIOSchema
+          ),
+          df.select('level_8).collect())
+      }.getMessage
+      assert(e.contains("Number of levels of nesting supported for Spark SQL" +
+        " script transform is 7 Unable to work with level 8"))
+    }
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
