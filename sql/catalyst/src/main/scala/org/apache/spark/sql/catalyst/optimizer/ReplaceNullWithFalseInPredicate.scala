@@ -98,12 +98,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       val newBranches = cw.branches.map { case (cond, value) =>
         replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
       }
-      if (newBranches.forall(_._2 == FalseLiteral) && cw.elseValue.isEmpty) {
-        FalseLiteral
-      } else {
-        val newElseValue = cw.elseValue.map(replaceNullWithFalse)
-        CaseWhen(newBranches, newElseValue)
-      }
+      val newElseValue = cw.elseValue.map(replaceNullWithFalse).getOrElse(FalseLiteral)
+      CaseWhen(newBranches, newElseValue)
     case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
       If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
     case e if e.dataType == BooleanType =>
