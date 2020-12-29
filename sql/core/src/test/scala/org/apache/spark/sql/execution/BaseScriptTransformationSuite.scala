@@ -124,7 +124,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         s"""
            |SELECT
            |TRANSFORM(a, b, c, d, e)
-           |USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
+           |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
            |FROM v
         """.stripMargin)
 
