@@ -599,13 +599,15 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           falseValue = b.withNewChildren(Array(left, falseValue)))
 
       case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
-          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+          if supportedBinaryExpression(b) && right.foldable &&
+            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
           elseValue.map(e => b.withNewChildren(Array(e, right))))
 
       case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
-          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+          if supportedBinaryExpression(b) && left.foldable &&
+            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           elseValue.map(e => b.withNewChildren(Array(left, e))))
