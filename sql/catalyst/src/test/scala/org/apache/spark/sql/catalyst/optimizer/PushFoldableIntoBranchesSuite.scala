@@ -141,7 +141,7 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(Literal(2)))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(TrueLiteral)))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
     assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(FalseLiteral)))
 
@@ -268,5 +268,14 @@ class PushFoldableIntoBranchesSuite
         EqualTo(CaseWhen(Seq((condition, Literal("str")))).cast(IntegerType), Literal(2)),
         Literal.create(null, BooleanType))
     }
+  }
+
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
+      'a > 10 <=> TrueLiteral)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not('a > 10 <=> TrueLiteral))
   }
 }
