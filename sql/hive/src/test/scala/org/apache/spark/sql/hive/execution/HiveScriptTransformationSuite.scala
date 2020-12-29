@@ -507,7 +507,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       """
         |SELECT TRANSFORM(null, null, null)
         |USING 'cat'
-        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |FROM (SELECT 1 AS a) t
       """.stripMargin)
     checkAnswer(query1, identity, Row(null, "\\N\t\\N") :: Nil)
 
@@ -515,14 +515,17 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       """
         |SELECT TRANSFORM(null, null, null)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-        |USING 'cat'
+        |  WITH SERDEPROPERTIES (
+        |   'field.delim' = ','
+        |  )
+        |USING 'cat' AS (a)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |  WITH SERDEPROPERTIES (
-        |   'serialization.last.column.takes.rest' = 'true'
+        |   'field.delim' = '&'
         |  )
-        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |FROM (SELECT 1 AS a) t
       """.stripMargin)
-    checkAnswer(query2, identity, Row(null, "\\N\t\\N") :: Nil)
+    checkAnswer(query2, identity, Row("\\N,\\N,\\N") :: Nil)
 
   }
 }
