@@ -21,6 +21,7 @@ import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -88,4 +89,6 @@ trait DDLCommandTestUtils extends SQLTestUtils {
       |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
       |""".stripMargin)
   }
+
+  protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 }
