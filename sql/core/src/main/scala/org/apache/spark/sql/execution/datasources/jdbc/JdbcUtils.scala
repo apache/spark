@@ -430,8 +430,8 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) => {
         val rawTime = rs.getTime(pos + 1)
         if (rawTime != null) {
-          val rawTimeInSeconds = rawTime.toLocalTime().toSecondOfDay()
-          val timeInMillis = TimeUnit.SECONDS.toMillis(rawTimeInSeconds).toInt
+          val rawTimeInNano = rawTime.toLocalTime().toNanoOfDay()
+          val timeInMillis = TimeUnit.NANOSECONDS.toMillis(rawTimeInNano).toInt
           row.setInt(pos, timeInMillis)
         } else {
           row.update(pos, null)
