@@ -700,4 +700,17 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
     assertAnalysisError(plan, "Table or view not found:" :: Nil)
   }
+
+  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
+    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    }
+    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+    }
+  }
 }
