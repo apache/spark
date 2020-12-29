@@ -53,7 +53,7 @@ class PushFoldableIntoBranchesSuite
 
   test("Push down EqualTo through If") {
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a))
+    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a <=> TrueLiteral))
 
     // Push down at most one not foldable expressions.
     assertEquivalent(
@@ -102,7 +102,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(Remainder(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
     assertEquivalent(Divide(If(a, Literal(2.0), Literal(3.0)), Literal(1.0)),
       If(a, Literal(2.0), Literal(3.0)))
-    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a))
+    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a <=> TrueLiteral))
     assertEquivalent(Or(If(a, FalseLiteral, TrueLiteral), TrueLiteral), TrueLiteral)
   }
 
