@@ -421,6 +421,29 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
       assert(e.getMessage.contains(s"Could not execute broadcast in $timeout secs."))
     }
   }
+
+  test("SPARK-33933: AQE broadcast should not timeout with slow map tasks") {
+    val broadcastTimeoutInSec = 5
+    val df = spark.sparkContext.parallelize(Range(0, 1000), 1000)
+      .flatMap(x => {
+        Thread.sleep(20)
+        for (i <- Range(0, 100)) yield (x % 26, x % 10)
+      }).toDF("index", "pv")
+    val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
+      .toDF("index", "name")
+    val testDf = df.groupBy("index")
+      .agg(sum($"pv").alias("pv"))
+      .join(dim, Seq("index"))
+    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> broadcastTimeoutInSec.toString,
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val startTime = System.currentTimeMillis()
+      val result = testDf.collect()
+      val queryTime = System.currentTimeMillis() - startTime
+      assert(result.length == 26)
+      // make sure the execution time is large enough
+      assert(queryTime > (broadcastTimeoutInSec + 1) * 1000)
+    }
+  }
 }
 
 class BroadcastJoinSuite extends BroadcastJoinSuiteBase with DisableAdaptiveExecutionSuite
