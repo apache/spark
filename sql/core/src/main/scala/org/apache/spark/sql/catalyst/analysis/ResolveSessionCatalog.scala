@@ -680,21 +680,15 @@ class ResolveSessionCatalog(
   }
 
   private object DatabaseInSessionCatalog {
-    def unapply(resolved: ResolvedNamespace): Option[String] = {
-      if (isSessionCatalog(resolved.catalog)) {
-        val len = resolved.namespace.length
-        if (len == 0) {
-          throw new AnalysisException("Database from v1 session catalog is not specified")
-        } else if (len > 1) {
-          val quotedNames = resolved.namespace.map(quoteIfNeeded).mkString(".")
-          throw new AnalysisException(
-            s"Nested databases are not supported by v1 session catalog: $quotedNames")
-        } else {
-          Some(resolved.namespace(0))
-        }
-      } else {
-        None
-      }
+    def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
+      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq()) =>
+        throw new AnalysisException("Database from v1 session catalog is not specified")
+      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case _ =>
+        assert(resolved.namespace.length > 1)
+        throw new AnalysisException("Nested databases are not supported by " +
+          s"v1 session catalog: ${resolved.namespace.map(quoteIfNeeded).mkString(".")}")
     }
   }
 }
