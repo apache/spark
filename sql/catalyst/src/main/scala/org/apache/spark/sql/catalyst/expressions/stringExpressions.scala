@@ -756,8 +756,8 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
-  protected def doEval(srcString: UTF8String): Any
-  protected def doEval(srcString: UTF8String, trimString: UTF8String): Any
+  protected def doEval(srcString: UTF8String): UTF8String
+  protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -892,9 +892,9 @@ case class StringTrim(
 
   override protected def direction: String = "BOTH"
 
-  override def doEval(srcString: UTF8String): Any = srcString.trim()
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
 
-  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trim(trimString)
 
   override val trimMethod: String = "trim"
@@ -946,9 +946,9 @@ case class StringTrimLeft(
 
   override protected def direction: String = "LEADING"
 
-  override def doEval(srcString: UTF8String): Any = srcString.trimLeft()
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
 
-  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trimLeft(trimString)
 
   override val trimMethod: String = "trimLeft"
@@ -1002,9 +1002,9 @@ case class StringTrimRight(
 
   override protected def direction: String = "TRAILING"
 
-  override def doEval(srcString: UTF8String): Any = srcString.trimRight()
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
 
-  override def doEval(srcString: UTF8String, trimString: UTF8String): Any =
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trimRight(trimString)
 
   override val trimMethod: String = "trimRight"
