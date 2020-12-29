@@ -149,6 +149,8 @@ public interface SupportsPartitionManagement extends Table {
      * @throws UnsupportedOperationException If partition renaming is not supported
      * @throws PartitionAlreadyExistsException If the `to` partition exists already
      * @throws NoSuchPartitionException If the `from` partition does not exist
+     *
+     * @since 3.2.0
      */
     default boolean renamePartition(InternalRow from, InternalRow to)
         throws UnsupportedOperationException,
