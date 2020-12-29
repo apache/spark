@@ -272,8 +272,10 @@ class PushFoldableIntoBranchesSuite
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)), 'a > 10)
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
+      'a > 10 <=> TrueLiteral)
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)), 'a <= 10)
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not('a > 10 <=> TrueLiteral))
   }
 }
