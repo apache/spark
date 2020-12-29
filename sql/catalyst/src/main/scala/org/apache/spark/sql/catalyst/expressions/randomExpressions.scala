@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
@@ -47,10 +46,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
   override def seedExpression: Expression = child
 
   @transient protected lazy val seed: Long = seedExpression match {
-    case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType) => s.asInstanceOf[Long]
-    case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer, long or null literal.")
+    case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
+    case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
   }
 
   override def nullable: Boolean = false
@@ -64,7 +61,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
  * Represents the behavior of expressions which have a random seed and can renew the seed.
  * Usually the random seed needs to be renewed at each execution under streaming queries.
  */
-trait ExpressionWithRandomSeed {
+trait ExpressionWithRandomSeed extends Expression {
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
 }

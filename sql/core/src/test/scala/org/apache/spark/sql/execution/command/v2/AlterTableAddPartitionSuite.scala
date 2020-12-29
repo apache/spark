@@ -18,10 +18,6 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.InMemoryPartitionTable
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -31,29 +27,6 @@ import org.apache.spark.sql.execution.command
 class AlterTableAddPartitionSuite
   extends command.AlterTableAddPartitionSuiteBase
   with CommandSuiteBase {
-
-  import CatalogV2Implicits._
-
-  override protected def checkLocation(
-      t: String,
-      spec: TablePartitionSpec,
-      expected: String): Unit = {
-    val tablePath = t.split('.')
-    val catalogName = tablePath.head
-    val namespaceWithTable = tablePath.tail
-    val namespaces = namespaceWithTable.init
-    val tableName = namespaceWithTable.last
-    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalogName)
-    val partTable = catalogPlugin.asTableCatalog
-      .loadTable(Identifier.of(namespaces, tableName))
-      .asInstanceOf[InMemoryPartitionTable]
-    val ident = ResolvePartitionSpec.convertToPartIdent(spec, partTable.partitionSchema.fields)
-    val partMetadata = partTable.loadPartitionMetadata(ident)
-
-    assert(partMetadata.containsKey("location"))
-    assert(partMetadata.get("location") === expected)
-  }
-
   test("SPARK-33650: add partition into a table which doesn't support partition management") {
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
