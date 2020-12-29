@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from pyspark.install import install_spark, DEFAULT_HADOOP, DEFAULT_HIVE, \
-    UNSUPPORTED_COMBINATIONS, checked_versions, checked_package_name
+    UNSUPPORTED_COMBINATIONS, checked_versions, checked_package_name, convert_old_hadoop_version
 
 
 class SparkInstallationTestCase(unittest.TestCase):
@@ -42,20 +42,20 @@ class SparkInstallationTestCase(unittest.TestCase):
 
     def test_package_name(self):
         self.assertEqual(
-            "spark-3.0.0-bin-hadoop3.2",
-            checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3"))
+            "spark-3.0.0-bin-hadoop3",
+            checked_package_name("spark-3.0.0", "hadoop3", "hive2.3"))
 
     def test_checked_versions(self):
         test_version = "3.0.1"  # Just pick one version to test.
 
         # Positive test cases
         self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"),
-            checked_versions("spark-3.0.0", "hadoop2.7", "hive2.3"))
+            ("spark-3.0.0", "hadoop2", "hive2.3"),
+            checked_versions("spark-3.0.0", "hadoop2", "hive2.3"))
 
         self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"),
-            checked_versions("3.0.0", "2.7", "2.3"))
+            ("spark-3.0.0", "hadoop2", "hive2.3"),
+            checked_versions("3.0.0", "2", "2.3"))
 
         self.assertEqual(
             ("spark-2.4.1", "without-hadoop", "hive2.3"),
@@ -94,9 +94,16 @@ class SparkInstallationTestCase(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Spark distribution of hive1.2 is not supported"):
             checked_versions(
                 spark_version=test_version,
-                hadoop_version="hadoop3.2",
+                hadoop_version="hadoop3",
                 hive_version="hive1.2")
 
+    def test_convert_old_hadoop_version(self):
+        self.assertEqual("hadoop3.2", convert_old_hadoop_version("spark-2.4.7", "hadoop3"))
+        self.assertEqual("hadoop2.7", convert_old_hadoop_version("spark-2.4.7", "hadoop2"))
+        self.assertEqual("hadoop3.2", convert_old_hadoop_version("spark-3.0.0", "hadoop3"))
+        self.assertEqual("hadoop2.7", convert_old_hadoop_version("spark-3.0.0", "hadoop2"))
+        self.assertEqual("hadoop3", convert_old_hadoop_version("spark-3.2.0", "hadoop3"))
+        self.assertEqual("hadoop2", convert_old_hadoop_version("spark-3.2.0", "hadoop2"))
 
 if __name__ == "__main__":
     from pyspark.tests.test_install_spark import *  # noqa: F401

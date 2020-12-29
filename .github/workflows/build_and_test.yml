@@ -25,7 +25,7 @@ jobs:
         java:
           - 8
         hadoop:
-          - hadoop3.2
+          - hadoop3
         hive:
           - hive2.3
         # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
@@ -50,26 +50,26 @@ jobs:
           # Hive tests
           - modules: hive
             java: 8
-            hadoop: hadoop3.2
+            hadoop: hadoop3
             hive: hive2.3
             included-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- slow tests"
           - modules: hive
             java: 8
-            hadoop: hadoop3.2
+            hadoop: hadoop3
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.SlowHiveTest
             comment: "- other tests"
           # SQL tests
           - modules: sql
             java: 8
-            hadoop: hadoop3.2
+            hadoop: hadoop3
             hive: hive2.3
             included-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- slow tests"
           - modules: sql
             java: 8
-            hadoop: hadoop3.2
+            hadoop: hadoop3
             hive: hive2.3
             excluded-tags: org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
@@ -164,7 +164,7 @@ jobs:
             pyspark-core, pyspark-streaming, pyspark-ml
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      HADOOP_PROFILE: hadoop3.2
+      HADOOP_PROFILE: hadoop3
       HIVE_PROFILE: hive2.3
       # GitHub Actions' default miniconda to use in pip packaging test.
       CONDA_PREFIX: /usr/share/miniconda
@@ -219,13 +219,13 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-${{ matrix.modules }}--8-hadoop3.2-hive2.3
+        name: test-results-${{ matrix.modules }}--8-hadoop3-hive2.3
         path: "**/target/test-reports/*.xml"
     - name: Upload unit tests log files
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: unit-tests-log-${{ matrix.modules }}--8-hadoop3.2-hive2.3
+        name: unit-tests-log-${{ matrix.modules }}--8-hadoop3-hive2.3
         path: "**/target/unit-tests.log"
 
   sparkr:
@@ -234,7 +234,7 @@ jobs:
     container:
       image: dongjoon/apache-spark-github-action-image:20201025
     env:
-      HADOOP_PROFILE: hadoop3.2
+      HADOOP_PROFILE: hadoop3
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
@@ -278,7 +278,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v2
       with:
-        name: test-results-sparkr--8-hadoop3.2-hive2.3
+        name: test-results-sparkr--8-hadoop3-hive2.3
         path: "**/target/test-reports/*.xml"
 
   # Static analysis, and documentation build
