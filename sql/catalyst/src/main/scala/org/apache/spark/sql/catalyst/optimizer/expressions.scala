@@ -548,7 +548,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     foldables.nonEmpty && others.length < 2
   }
 
-  // Not all UnaryExpression support push into (if / case) branches, e.g. Alias.
+  // Not all UnaryExpression can be pushed into (if / case) branches, e.g. Alias.
   private def supportedUnaryExpression(e: UnaryExpression): Boolean = e match {
     case _: IsNull | _: IsNotNull => true
     case _: UnaryMathExpression | _: Abs | _: Bin | _: Factorial | _: Hex => true
@@ -558,9 +558,11 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: GetDateField | _: LastDay => true
     case _: ExtractIntervalPart => true
     case _: ArraySetLike => true
+    case _: ExtractValue => true
     case _ => false
   }
 
+  // Not all BinaryExpression can be pushed into (if / case) branches.
   private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
     case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
     case _: BinaryArithmetic => true
