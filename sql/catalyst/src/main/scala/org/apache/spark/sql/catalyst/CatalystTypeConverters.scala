@@ -176,7 +176,7 @@ object CatalystTypeConverters {
           new GenericArrayData(convertedIterable.toArray)
         case g: GenericArrayData => new GenericArrayData(g.array.map(elementConverter.toCatalyst))
         case other => throw new IllegalArgumentException(
-          s"AAAThe value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
+          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
             + s"cannot be converted to an array of ${elementType.catalogString}")
       }
     }
