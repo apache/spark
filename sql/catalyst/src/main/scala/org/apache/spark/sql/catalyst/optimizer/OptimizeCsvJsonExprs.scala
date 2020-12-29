@@ -111,6 +111,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private val csvOptimization: PartialFunction[Expression, Expression] = {
     case g @ GetStructField(c @ CsvToStructs(schema: StructType, _, _, _, None), ordinal, _)
         if schema.length > 1 && c.options.isEmpty && schema(ordinal).name != nameOfCorruptRecord =>
+        // When the parse mode is permissive, and corrupt column is not selected, we can prune here
+        // from `GetStructField`. To be more conservative, it does not optimize when any option
+        // is set.
       val prunedSchema = StructType(Seq(schema(ordinal)))
       g.copy(child = c.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
   }
