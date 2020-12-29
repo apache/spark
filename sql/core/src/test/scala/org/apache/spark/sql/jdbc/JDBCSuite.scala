@@ -611,8 +611,8 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    val epochMillis = java.time.LocalTime.ofSecondOfDay(
-      TimeUnit.MILLISECONDS.toSeconds(rows(0).getAs[Int](0)))
+    val epochMillis = java.time.LocalTime.ofNanoOfDay(
+      TimeUnit.MILLISECONDS.toNanos(rows(0).getAs[Int](0)))
       .atDate(java.time.LocalDate.ofEpochDay(0))
       .atZone(java.time.ZoneId.systemDefault())
       .toInstant()
@@ -632,6 +632,7 @@ class JDBCSuite extends QueryTest
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
+    assert(cal.get(Calendar.MILLISECOND) === 543)
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
