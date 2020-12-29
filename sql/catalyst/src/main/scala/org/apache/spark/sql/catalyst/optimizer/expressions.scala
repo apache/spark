@@ -549,15 +549,24 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Not all UnaryExpression support push into (if / case) branches, e.g. Alias.
-  private def supportedUnaryExpression(u: UnaryExpression): Boolean = u match {
-    case IsNull(_) | IsNotNull(_) => true
-    case _: UnaryMathExpression | Abs(_) | Bin(_) | Factorial(_) | Hex(_) => true
-    case _: String2StringExpression | Ascii(_) | Base64(_) | BitLength(_) | Chr(_) | Length(_) =>
+  private def supportedUnaryExpression(e: UnaryExpression): Boolean = e match {
+    case _: IsNull | _: IsNotNull => true
+    case _: UnaryMathExpression | _: Abs | _: Bin | _: Factorial | _: Hex => true
+    case _: String2StringExpression | _: Ascii | _: Base64 | _: BitLength | _: Chr | _: Length =>
       true
     case _: CastBase => true
-    case _: GetDateField | LastDay(_) => true
+    case _: GetDateField | _: LastDay => true
     case _: ExtractIntervalPart => true
     case _: ArraySetLike => true
+    case _ => false
+  }
+
+  private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
+    case _: BinaryArithmetic => true
+    case _: BinaryMathExpression => true
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub => true
+    case _: FindInSet | _: RoundBase => true
     case _ => false
   }
 
@@ -576,13 +585,15 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           elseValue.map(e => u.withNewChildren(Array(e))))
 
       case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
-          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+          if supportedBinaryExpression(b) && right.foldable &&
+            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(trueValue, right)),
           falseValue = b.withNewChildren(Array(falseValue, right)))
 
       case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
-          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+          if supportedBinaryExpression(b) && left.foldable &&
+            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(left, trueValue)),
           falseValue = b.withNewChildren(Array(left, falseValue)))
