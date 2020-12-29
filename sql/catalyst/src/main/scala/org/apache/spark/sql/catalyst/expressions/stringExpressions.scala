@@ -777,8 +777,9 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(code = evals.map(_.code) :+
+      ev.copy(code =
         code"""
+              |${srcString.code}
               |boolean ${ev.isNull} = false;
               |UTF8String ${ev.value} = null;
               |if (${srcString.isNull}) {
@@ -789,16 +790,20 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
             """)
     } else {
       val trimString = evals(1)
-      ev.copy(code = evals.map(_.code) :+
+      ev.copy(code =
         code"""
+              |${srcString.code}
               |boolean ${ev.isNull} = false;
               |UTF8String ${ev.value} = null;
               |if (${srcString.isNull}) {
               |  ${ev.isNull} = true;
-              |} else if (${trimString.isNull}) {
-              |  ${ev.isNull} = true;
               |} else {
-              |  ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+              |  ${trimString.code}
+              |  if (${trimString.isNull}) {
+              |    ${ev.isNull} = true;
+              |  } else {
+              |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+              |  }
               |}
           """)
     }
