@@ -297,9 +297,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           script = "cat",
           output = Seq(
             AttributeReference("a", CalendarIntervalType)(),
-            AttributeReference("b", StringType)(),
-            AttributeReference("c", StringType)(),
-            AttributeReference("d", StringType)(),
+            AttributeReference("b", ArrayType(IntegerType))(),
+            AttributeReference("c", MapType(StringType, IntegerType))(),
+            AttributeReference("d", StructType(
+              Array(StructField("col1", IntegerType),
+                StructField("col2", IntegerType))))(),
             AttributeReference("e", new SimpleTupleUDT)()),
           child = child,
           ioschema = defaultIOSchema
