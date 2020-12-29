@@ -6,26 +6,26 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
           WholeStageCodegen (3)
             HashAggregate [s_store_name,s_store_id,d_day_name,ss_sales_price] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
               Project [d_day_name,ss_sales_price,s_store_id,s_store_name]
-                BroadcastHashJoin [ss_store_sk,s_store_sk]
-                  Project [d_day_name,ss_store_sk,ss_sales_price]
-                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                      InputAdapter
-                        BroadcastExchange #2
-                          WholeStageCodegen (1)
-                            Project [d_date_sk,d_day_name]
-                              Filter [d_year,d_date_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.date_dim [d_date_sk,d_year,d_day_name]
+                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                  Project [ss_sold_date_sk,ss_sales_price,s_store_id,s_store_name]
+                    BroadcastHashJoin [ss_store_sk,s_store_sk]
                       Filter [ss_sold_date_sk,ss_store_sk]
                         ColumnarToRow
                           InputAdapter
                             Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_sales_price]
+                      InputAdapter
+                        BroadcastExchange #2
+                          WholeStageCodegen (1)
+                            Project [s_store_sk,s_store_id,s_store_name]
+                              Filter [s_gmt_offset,s_store_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store [s_store_sk,s_store_id,s_store_name,s_gmt_offset]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)
-                        Project [s_store_sk,s_store_id,s_store_name]
-                          Filter [s_gmt_offset,s_store_sk]
+                        Project [d_date_sk,d_day_name]
+                          Filter [d_year,d_date_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.store [s_store_sk,s_store_id,s_store_name,s_gmt_offset]
+                                Scan parquet default.date_dim [d_date_sk,d_year,d_day_name]

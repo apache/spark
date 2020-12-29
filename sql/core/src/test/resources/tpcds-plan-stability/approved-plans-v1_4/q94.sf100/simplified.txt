@@ -11,11 +11,11 @@ WholeStageCodegen (14)
                     WholeStageCodegen (12)
                       HashAggregate [ws_order_number,ws_ext_ship_cost,ws_net_profit] [sum(UnscaledValue(ws_ext_ship_cost)),sum(UnscaledValue(ws_net_profit)),sum,sum,sum,sum]
                         Project [ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                          BroadcastHashJoin [ws_ship_date_sk,d_date_sk]
-                            Project [ws_ship_date_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                          BroadcastHashJoin [ws_ship_addr_sk,ca_address_sk]
+                            Project [ws_ship_addr_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
                               BroadcastHashJoin [ws_web_site_sk,web_site_sk]
-                                Project [ws_ship_date_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                                  BroadcastHashJoin [ws_ship_addr_sk,ca_address_sk]
+                                Project [ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
+                                  BroadcastHashJoin [ws_ship_date_sk,d_date_sk]
                                     InputAdapter
                                       SortMergeJoin [ws_order_number,wr_order_number]
                                         WholeStageCodegen (6)
@@ -55,11 +55,11 @@ WholeStageCodegen (14)
                                     InputAdapter
                                       BroadcastExchange #7
                                         WholeStageCodegen (9)
-                                          Project [ca_address_sk]
-                                            Filter [ca_state,ca_address_sk]
+                                          Project [d_date_sk]
+                                            Filter [d_date,d_date_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                                  Scan parquet default.date_dim [d_date_sk,d_date]
                                 InputAdapter
                                   BroadcastExchange #8
                                     WholeStageCodegen (10)
@@ -71,8 +71,8 @@ WholeStageCodegen (14)
                             InputAdapter
                               BroadcastExchange #9
                                 WholeStageCodegen (11)
-                                  Project [d_date_sk]
-                                    Filter [d_date,d_date_sk]
+                                  Project [ca_address_sk]
+                                    Filter [ca_state,ca_address_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.date_dim [d_date_sk,d_date]
+                                          Scan parquet default.customer_address [ca_address_sk,ca_state]

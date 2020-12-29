@@ -12,11 +12,11 @@ BroadcastNestedLoopJoin
                       WholeStageCodegen (4)
                         HashAggregate [count,count]
                           Project
-                            BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                              Project [ss_hdemo_sk]
+                            BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                              Project [ss_sold_time_sk]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                  Project [ss_hdemo_sk,ss_store_sk]
-                                    BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                                  Project [ss_sold_time_sk,ss_store_sk]
+                                    BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                       Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                         ColumnarToRow
                                           InputAdapter
@@ -24,11 +24,11 @@ BroadcastNestedLoopJoin
                                       InputAdapter
                                         BroadcastExchange #2
                                           WholeStageCodegen (1)
-                                            Project [t_time_sk]
-                                              Filter [t_hour,t_minute,t_time_sk]
+                                            Project [hd_demo_sk]
+                                              Filter [hd_dep_count,hd_vehicle_count,hd_demo_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                                    Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count,hd_vehicle_count]
                                   InputAdapter
                                     BroadcastExchange #3
                                       WholeStageCodegen (2)
@@ -40,11 +40,11 @@ BroadcastNestedLoopJoin
                               InputAdapter
                                 BroadcastExchange #4
                                   WholeStageCodegen (3)
-                                    Project [hd_demo_sk]
-                                      Filter [hd_dep_count,hd_vehicle_count,hd_demo_sk]
+                                    Project [t_time_sk]
+                                      Filter [t_hour,t_minute,t_time_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count,hd_vehicle_count]
+                                            Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
               BroadcastExchange #5
                 WholeStageCodegen (10)
                   HashAggregate [count] [count(1),h9_to_9_30,count]
@@ -53,27 +53,27 @@ BroadcastNestedLoopJoin
                         WholeStageCodegen (9)
                           HashAggregate [count,count]
                             Project
-                              BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                                Project [ss_hdemo_sk]
+                              BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                                Project [ss_sold_time_sk]
                                   BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                    Project [ss_hdemo_sk,ss_store_sk]
-                                      BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                                    Project [ss_sold_time_sk,ss_store_sk]
+                                      BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                         Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                                         InputAdapter
-                                          BroadcastExchange #7
-                                            WholeStageCodegen (6)
-                                              Project [t_time_sk]
-                                                Filter [t_hour,t_minute,t_time_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                          ReusedExchange [hd_demo_sk] #2
                                     InputAdapter
                                       ReusedExchange [s_store_sk] #3
                                 InputAdapter
-                                  ReusedExchange [hd_demo_sk] #4
+                                  BroadcastExchange #7
+                                    WholeStageCodegen (8)
+                                      Project [t_time_sk]
+                                        Filter [t_hour,t_minute,t_time_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
             BroadcastExchange #8
               WholeStageCodegen (15)
                 HashAggregate [count] [count(1),h9_30_to_10,count]
@@ -82,27 +82,27 @@ BroadcastNestedLoopJoin
                       WholeStageCodegen (14)
                         HashAggregate [count,count]
                           Project
-                            BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                              Project [ss_hdemo_sk]
+                            BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                              Project [ss_sold_time_sk]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                  Project [ss_hdemo_sk,ss_store_sk]
-                                    BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                                  Project [ss_sold_time_sk,ss_store_sk]
+                                    BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                       Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                                       InputAdapter
-                                        BroadcastExchange #10
-                                          WholeStageCodegen (11)
-                                            Project [t_time_sk]
-                                              Filter [t_hour,t_minute,t_time_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                        ReusedExchange [hd_demo_sk] #2
                                   InputAdapter
                                     ReusedExchange [s_store_sk] #3
                               InputAdapter
-                                ReusedExchange [hd_demo_sk] #4
+                                BroadcastExchange #10
+                                  WholeStageCodegen (13)
+                                    Project [t_time_sk]
+                                      Filter [t_hour,t_minute,t_time_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
           BroadcastExchange #11
             WholeStageCodegen (20)
               HashAggregate [count] [count(1),h10_to_10_30,count]
@@ -111,27 +111,27 @@ BroadcastNestedLoopJoin
                     WholeStageCodegen (19)
                       HashAggregate [count,count]
                         Project
-                          BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                            Project [ss_hdemo_sk]
+                          BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                            Project [ss_sold_time_sk]
                               BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                Project [ss_hdemo_sk,ss_store_sk]
-                                  BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                                Project [ss_sold_time_sk,ss_store_sk]
+                                  BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                     Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                                     InputAdapter
-                                      BroadcastExchange #13
-                                        WholeStageCodegen (16)
-                                          Project [t_time_sk]
-                                            Filter [t_hour,t_minute,t_time_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                      ReusedExchange [hd_demo_sk] #2
                                 InputAdapter
                                   ReusedExchange [s_store_sk] #3
                             InputAdapter
-                              ReusedExchange [hd_demo_sk] #4
+                              BroadcastExchange #13
+                                WholeStageCodegen (18)
+                                  Project [t_time_sk]
+                                    Filter [t_hour,t_minute,t_time_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
         BroadcastExchange #14
           WholeStageCodegen (25)
             HashAggregate [count] [count(1),h10_30_to_11,count]
@@ -140,27 +140,27 @@ BroadcastNestedLoopJoin
                   WholeStageCodegen (24)
                     HashAggregate [count,count]
                       Project
-                        BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                          Project [ss_hdemo_sk]
+                        BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                          Project [ss_sold_time_sk]
                             BroadcastHashJoin [ss_store_sk,s_store_sk]
-                              Project [ss_hdemo_sk,ss_store_sk]
-                                BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                              Project [ss_sold_time_sk,ss_store_sk]
+                                BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                   Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                                   InputAdapter
-                                    BroadcastExchange #16
-                                      WholeStageCodegen (21)
-                                        Project [t_time_sk]
-                                          Filter [t_hour,t_minute,t_time_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                    ReusedExchange [hd_demo_sk] #2
                               InputAdapter
                                 ReusedExchange [s_store_sk] #3
                           InputAdapter
-                            ReusedExchange [hd_demo_sk] #4
+                            BroadcastExchange #16
+                              WholeStageCodegen (23)
+                                Project [t_time_sk]
+                                  Filter [t_hour,t_minute,t_time_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
       BroadcastExchange #17
         WholeStageCodegen (30)
           HashAggregate [count] [count(1),h11_to_11_30,count]
@@ -169,27 +169,27 @@ BroadcastNestedLoopJoin
                 WholeStageCodegen (29)
                   HashAggregate [count,count]
                     Project
-                      BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                        Project [ss_hdemo_sk]
+                      BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                        Project [ss_sold_time_sk]
                           BroadcastHashJoin [ss_store_sk,s_store_sk]
-                            Project [ss_hdemo_sk,ss_store_sk]
-                              BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                            Project [ss_sold_time_sk,ss_store_sk]
+                              BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                                 Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                                 InputAdapter
-                                  BroadcastExchange #19
-                                    WholeStageCodegen (26)
-                                      Project [t_time_sk]
-                                        Filter [t_hour,t_minute,t_time_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                  ReusedExchange [hd_demo_sk] #2
                             InputAdapter
                               ReusedExchange [s_store_sk] #3
                         InputAdapter
-                          ReusedExchange [hd_demo_sk] #4
+                          BroadcastExchange #19
+                            WholeStageCodegen (28)
+                              Project [t_time_sk]
+                                Filter [t_hour,t_minute,t_time_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
     BroadcastExchange #20
       WholeStageCodegen (35)
         HashAggregate [count] [count(1),h11_30_to_12,count]
@@ -198,27 +198,27 @@ BroadcastNestedLoopJoin
               WholeStageCodegen (34)
                 HashAggregate [count,count]
                   Project
-                    BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                      Project [ss_hdemo_sk]
+                    BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                      Project [ss_sold_time_sk]
                         BroadcastHashJoin [ss_store_sk,s_store_sk]
-                          Project [ss_hdemo_sk,ss_store_sk]
-                            BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                          Project [ss_sold_time_sk,ss_store_sk]
+                            BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                               Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                               InputAdapter
-                                BroadcastExchange #22
-                                  WholeStageCodegen (31)
-                                    Project [t_time_sk]
-                                      Filter [t_hour,t_minute,t_time_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                                ReusedExchange [hd_demo_sk] #2
                           InputAdapter
                             ReusedExchange [s_store_sk] #3
                       InputAdapter
-                        ReusedExchange [hd_demo_sk] #4
+                        BroadcastExchange #22
+                          WholeStageCodegen (33)
+                            Project [t_time_sk]
+                              Filter [t_hour,t_minute,t_time_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
   BroadcastExchange #23
     WholeStageCodegen (40)
       HashAggregate [count] [count(1),h12_to_12_30,count]
@@ -227,24 +227,24 @@ BroadcastNestedLoopJoin
             WholeStageCodegen (39)
               HashAggregate [count,count]
                 Project
-                  BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                    Project [ss_hdemo_sk]
+                  BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                    Project [ss_sold_time_sk]
                       BroadcastHashJoin [ss_store_sk,s_store_sk]
-                        Project [ss_hdemo_sk,ss_store_sk]
-                          BroadcastHashJoin [ss_sold_time_sk,t_time_sk]
+                        Project [ss_sold_time_sk,ss_store_sk]
+                          BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
                             Filter [ss_hdemo_sk,ss_sold_time_sk,ss_store_sk]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet default.store_sales [ss_sold_time_sk,ss_hdemo_sk,ss_store_sk]
                             InputAdapter
-                              BroadcastExchange #25
-                                WholeStageCodegen (36)
-                                  Project [t_time_sk]
-                                    Filter [t_hour,t_minute,t_time_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
+                              ReusedExchange [hd_demo_sk] #2
                         InputAdapter
                           ReusedExchange [s_store_sk] #3
                     InputAdapter
-                      ReusedExchange [hd_demo_sk] #4
+                      BroadcastExchange #25
+                        WholeStageCodegen (38)
+                          Project [t_time_sk]
+                            Filter [t_hour,t_minute,t_time_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
