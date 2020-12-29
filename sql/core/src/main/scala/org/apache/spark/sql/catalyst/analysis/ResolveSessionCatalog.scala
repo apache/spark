@@ -211,13 +211,13 @@ class ResolveSessionCatalog(
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
-      DescribeDatabaseCommand(db.name, d.extended)
+      DescribeDatabaseCommand(db, d.extended)
 
     case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
-      AlterDatabasePropertiesCommand(db.name, properties)
+      AlterDatabasePropertiesCommand(db, properties)
 
     case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
-      AlterDatabaseSetLocationCommand(db.name, location)
+      AlterDatabaseSetLocationCommand(db, location)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
@@ -348,17 +348,17 @@ class ResolveSessionCatalog(
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
-      DropDatabaseCommand(db.name, d.ifExists, d.cascade)
+      DropDatabaseCommand(db, d.ifExists, d.cascade)
 
     case ShowTables(DatabaseInSessionCatalog(db), pattern) =>
-      ShowTablesCommand(Some(db.name), pattern)
+      ShowTablesCommand(Some(db), pattern)
 
     case ShowTableExtended(
         DatabaseInSessionCatalog(db),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowTablesCommand(
-        databaseName = Some(db.name),
+        databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
         isExtended = true,
         partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
@@ -481,7 +481,7 @@ class ResolveSessionCatalog(
 
     case ShowViews(resolved: ResolvedNamespace, pattern) =>
       resolved match {
-        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db.name, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
@@ -679,25 +679,19 @@ class ResolveSessionCatalog(
     }
   }
 
-  private class DatabaseInSessionCatalog(namespace: Seq[String]) {
-    def name: String = {
-      val len = namespace.length
-      if (len == 0) {
-        throw new AnalysisException("Database from v1 session catalog is not specified")
-      } else if (len > 1) {
-        val quotedNames = namespace.map(quoteIfNeeded).mkString(".")
-        throw new AnalysisException(
-          s"Nested databases are not supported by v1 session catalog: $quotedNames")
-      } else {
-        namespace(0)
-      }
-    }
-  }
-
   private object DatabaseInSessionCatalog {
-    def unapply(resolved: ResolvedNamespace): Option[DatabaseInSessionCatalog] = {
+    def unapply(resolved: ResolvedNamespace): Option[String] = {
       if (isSessionCatalog(resolved.catalog)) {
-        Some(new DatabaseInSessionCatalog(resolved.namespace))
+        val len = resolved.namespace.length
+        if (len == 0) {
+          throw new AnalysisException("Database from v1 session catalog is not specified")
+        } else if (len > 1) {
+          val quotedNames = resolved.namespace.map(quoteIfNeeded).mkString(".")
+          throw new AnalysisException(
+            s"Nested databases are not supported by v1 session catalog: $quotedNames")
+        } else {
+          Some(resolved.namespace(0))
+        }
       } else {
         None
       }
