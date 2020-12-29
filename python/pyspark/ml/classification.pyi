@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Type
 from pyspark.ml._typing import JM, M, P, T, ParamMap
 
 import abc
@@ -53,7 +53,8 @@ from pyspark.ml.tree import (
     _TreeClassifierParams,
     _TreeEnsembleModel,
 )
-from pyspark.ml.util import HasTrainingSummary, JavaMLReadable, JavaMLWritable
+from pyspark.ml.util import HasTrainingSummary, JavaMLReadable, JavaMLWritable, \
+    MLReader, MLReadable, MLWriter, MLWritable
 from pyspark.ml.wrapper import JavaPredictionModel, JavaPredictor, JavaWrapper
 
 from pyspark.ml.linalg import Matrix, Vector
@@ -107,7 +108,7 @@ class _JavaProbabilisticClassifier(
 class _JavaProbabilisticClassificationModel(
     ProbabilisticClassificationModel, _JavaClassificationModel[T]
 ):
-    def predictProbability(self, value: Any): ...
+    def predictProbability(self, value: Vector) -> Vector: ...
 
 class _ClassificationSummary(JavaWrapper):
     @property
@@ -543,7 +544,7 @@ class RandomForestClassificationModel(
     @property
     def trees(self) -> List[DecisionTreeClassificationModel]: ...
     def summary(self) -> RandomForestClassificationTrainingSummary: ...
-    def evaluate(self, dataset) -> RandomForestClassificationSummary: ...
+    def evaluate(self, dataset: DataFrame) -> RandomForestClassificationSummary: ...
 
 class RandomForestClassificationSummary(_ClassificationSummary): ...
 class RandomForestClassificationTrainingSummary(
@@ -797,8 +798,8 @@ class OneVsRest(
     Estimator[OneVsRestModel],
     _OneVsRestParams,
     HasParallelism,
-    JavaMLReadable[OneVsRest],
-    JavaMLWritable,
+    MLReadable[OneVsRest],
+    MLWritable,
 ):
     def __init__(
         self,
@@ -832,7 +833,7 @@ class OneVsRest(
     def copy(self, extra: Optional[ParamMap] = ...) -> OneVsRest: ...
 
 class OneVsRestModel(
-    Model, _OneVsRestParams, JavaMLReadable[OneVsRestModel], JavaMLWritable
+    Model, _OneVsRestParams, MLReadable[OneVsRestModel], MLWritable
 ):
     models: List[Transformer]
     def __init__(self, models: List[Transformer]) -> None: ...
@@ -840,6 +841,26 @@ class OneVsRestModel(
     def setPredictionCol(self, value: str) -> OneVsRestModel: ...
     def setRawPredictionCol(self, value: str) -> OneVsRestModel: ...
     def copy(self, extra: Optional[ParamMap] = ...) -> OneVsRestModel: ...
+
+class OneVsRestWriter(MLWriter):
+    instance: OneVsRest
+    def __init__(self, instance: OneVsRest) -> None: ...
+    def saveImpl(self, path: str) -> None: ...
+
+class OneVsRestReader(MLReader[OneVsRest]):
+    cls: Type[OneVsRest]
+    def __init__(self, cls: Type[OneVsRest]) -> None: ...
+    def load(self, path: str) -> OneVsRest: ...
+
+class OneVsRestModelWriter(MLWriter):
+    instance: OneVsRestModel
+    def __init__(self, instance: OneVsRestModel) -> None: ...
+    def saveImpl(self, path: str) -> None: ...
+
+class OneVsRestModelReader(MLReader[OneVsRestModel]):
+    cls: Type[OneVsRestModel]
+    def __init__(self, cls: Type[OneVsRestModel]) -> None: ...
+    def load(self, path: str) -> OneVsRestModel: ...
 
 class FMClassifier(
     _JavaProbabilisticClassifier[FMClassificationModel],
@@ -891,7 +912,7 @@ class FMClassifier(
         solver: str = ...,
         thresholds: Optional[Any] = ...,
         seed: Optional[Any] = ...,
-    ): ...
+    ) -> FMClassifier: ...
     def setFactorSize(self, value: int) -> FMClassifier: ...
     def setFitLinear(self, value: bool) -> FMClassifier: ...
     def setMiniBatchFraction(self, value: float) -> FMClassifier: ...

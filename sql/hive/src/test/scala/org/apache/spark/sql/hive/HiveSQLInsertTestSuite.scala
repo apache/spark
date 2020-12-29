@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.SQLInsertTestSuite
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
+class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
 
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+  private val originalPartitionMode = spark.conf.getOption("hive.exec.dynamic.partition.mode")
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set("hive.exec.dynamic.partition.mode", "nonstrict")
   }
+
+  override protected def afterAll(): Unit = {
+    originalPartitionMode
+      .map(v => spark.conf.set("hive.exec.dynamic.partition.mode", v))
+      .getOrElse(spark.conf.unset("hive.exec.dynamic.partition.mode"))
+    super.afterAll()
+  }
+
+  override def format: String = "hive OPTIONS(fileFormat='parquet')"
 }

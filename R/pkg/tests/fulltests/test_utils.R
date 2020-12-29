@@ -116,7 +116,7 @@ test_that("cleanClosure on R functions", {
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
 
-  # Test for combination for nested and sequenctial functions in a closure
+  # Test for combination for nested and sequential functions in a closure
   f1 <- function(x) x + 1
   f2 <- function(x) f1(x) + 2
   userFunc <- function(x) { f1(x); f2(x) }

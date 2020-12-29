@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, Res
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.connector.write.Write
+import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -45,9 +47,10 @@ trait V2WriteCommand extends Command {
     table.skipSchemaResolution || (query.output.size == table.output.size &&
       query.output.zip(table.output).forall {
         case (inAttr, outAttr) =>
+          val outType = CharVarcharUtils.getRawType(outAttr.metadata).getOrElse(outAttr.dataType)
           // names and types must match, nullability must be compatible
           inAttr.name == outAttr.name &&
-            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outType) &&
             (outAttr.nullable || !inAttr.nullable)
       })
   }
@@ -63,7 +66,8 @@ case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
 }
@@ -92,7 +96,8 @@ case class OverwriteByExpression(
     deleteExpr: Expression,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -130,7 +135,8 @@ case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
@@ -408,6 +414,14 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
 
 /**
  * The logical plan of the DROP TABLE command.
+ *
+ * If the `PURGE` option is set, the table catalog must remove table data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     DROP TABLE [IF EXISTS] table [PURGE];
+ * }}}
  */
 case class DropTable(
     child: LogicalPlan,
@@ -417,9 +431,11 @@ case class DropTable(
 }
 
 /**
- * The logical plan for handling non-existing table for DROP TABLE command.
+ * The logical plan for no-op command handling non-existing table.
  */
-case class NoopDropTable(multipartIdentifier: Seq[String]) extends Command
+case class NoopCommand(
+    commandName: String,
+    multipartIdentifier: Seq[String]) extends Command
 
 /**
  * The logical plan of the ALTER TABLE command.
@@ -454,15 +470,17 @@ case class AlterTable(
 }
 
 /**
- * The logical plan of the ALTER TABLE RENAME command.
+ * The logical plan of the ALTER [TABLE|VIEW] ... RENAME TO command.
  */
 case class RenameTable(
-    catalog: TableCatalog,
-    oldIdent: Identifier,
-    newIdent: Identifier) extends Command
+    child: LogicalPlan,
+    newName: Seq[String],
+    isView: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
 
 /**
- * The logical plan of the SHOW TABLE command.
+ * The logical plan of the SHOW TABLES command.
  */
 case class ShowTables(
     namespace: LogicalPlan,
@@ -472,6 +490,22 @@ case class ShowTables(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TABLE EXTENDED command.
+ */
+case class ShowTableExtended(
+    namespace: LogicalPlan,
+    pattern: String,
+    partitionSpec: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = namespace :: Nil
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)(),
+    AttributeReference("information", StringType, nullable = false)())
 }
 
 /**
@@ -635,20 +669,42 @@ case class AlterTableAddPartition(
  * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
+ * If the `PURGE` option is set, the table catalog must remove partition data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
 case class AlterTableDropPartition(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean,
-    retainData: Boolean) extends Command {
+    purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
 
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
+ */
+case class AlterTableRenamePartition(
+    child: LogicalPlan,
+    from: PartitionSpec,
+    to: TablePartitionSpec) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved && from.isInstanceOf[ResolvedPartitionSpec]
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
+ */
+case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -670,3 +726,118 @@ case class LoadData(
 case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
+
+/**
+ * The logical plan of the SHOW COLUMN command.
+ */
+case class ShowColumns(
+    child: LogicalPlan,
+    namespace: Option[Seq[String]]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the TRUNCATE TABLE command.
+ */
+case class TruncateTable(
+    child: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the SHOW PARTITIONS command.
+ */
+case class ShowPartitions(
+    child: LogicalPlan,
+    pattern: Option[PartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+
+  override lazy val resolved: Boolean =
+    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("partition", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the DROP VIEW command.
+ */
+case class DropView(
+    child: LogicalPlan,
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the MSCK REPAIR TABLE command.
+ */
+case class RepairTable(child: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... AS command.
+ */
+case class AlterViewAs(
+    child: LogicalPlan,
+    originalText: String,
+    query: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
+ */
+case class AlterViewSetProperties(
+    child: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
+ */
+case class AlterViewUnsetProperties(
+    child: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] command.
+ */
+case class AlterTableSerDeProperties(
+    child: LogicalPlan,
+    serdeClassName: Option[String],
+    serdeProperties: Option[Map[String, String]],
+    partitionSpec: Option[TablePartitionSpec]) extends Command {
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the CACHE TABLE command.
+ */
+case class CacheTable(
+    table: LogicalPlan,
+    multipartIdentifier: Seq[String],
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the CACHE TABLE ... AS SELECT command.
+ */
+case class CacheTableAsSelect(
+    tempViewName: String,
+    plan: LogicalPlan,
+    isLazy: Boolean,
+    options: Map[String, String]) extends Command
+
+/**
+ * The logical plan of the UNCACHE TABLE command.
+ */
+case class UncacheTable(
+    table: LogicalPlan,
+    ifExists: Boolean,
+    isTempView: Boolean = false) extends Command

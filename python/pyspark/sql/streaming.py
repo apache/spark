@@ -761,7 +761,7 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None, unescapedQuoteHandling=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -900,6 +900,26 @@ class DataStreamReader(OptionUtils):
         recursiveFileLookup : str or bool, optional
             recursively scan a directory for files. Using this option disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        unescapedQuoteHandling : str, optional
+            defines how the CsvParser will handle values with unescaped quotes. If None is
+            set, it uses the default value, ``STOP_AT_DELIMITER``.
+
+            * ``STOP_AT_CLOSING_QUOTE``: If unescaped quotes are found in the input, accumulate
+              the quote character and proceed parsing the value as a quoted value, until a closing
+              quote is found.
+            * ``BACK_TO_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters of the current
+              parsed value until the delimiter is found. If no delimiter is found in the value, the
+              parser will continue accumulating characters from the input until a delimiter or line
+              ending is found.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters until the
+              delimiter or a line ending is found in the input.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, the content parsed
+              for the given value will be skipped and the value set in nullValue will be produced
+              instead.
+            * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException
+              will be thrown.
 
         .. versionadded:: 2.0.0
 
@@ -926,11 +946,40 @@ class DataStreamReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            unescapedQuoteHandling=unescapedQuoteHandling)
         if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
             raise TypeError("path can be only a single string")
+
+    def table(self, tableName):
+        """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+        support streaming mode.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+
+        Returns
+        --------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> spark.readStream.table('input_table') # doctest: +SKIP
+        """
+        if isinstance(tableName, str):
+            return self._df(self._jreader.table(tableName))
+        else:
+            raise TypeError("tableName can be only a single string")
 
 
 class DataStreamWriter(object):
@@ -966,7 +1015,7 @@ class DataStreamWriter(object):
         * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
         * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
-           every time these is some updates
+           every time these are some updates
         * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
@@ -1395,7 +1444,7 @@ class DataStreamWriter(object):
             * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
             * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
-              sink every time these is some updates
+              sink every time these are some updates
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
@@ -1442,6 +1491,76 @@ class DataStreamWriter(object):
             return self._sq(self._jwrite.start())
         else:
             return self._sq(self._jwrite.start(path))
+
+    def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
+                **options):
+        """
+        Starts the execution of the streaming query, which will continually output results to the
+        given table as new data arrives.
+
+        The returned :class:`StreamingQuery` object can be used to interact with the stream.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+        format : str, optional
+            the format used to save.
+        outputMode : str, optional
+            specifies how data of a streaming DataFrame/Dataset is written to a
+            streaming sink.
+
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
+              sink
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these are some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
+              written to the sink every time there are some updates. If the query doesn't contain
+              aggregations, it will be equivalent to `append` mode.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        queryName : str, optional
+            unique name for the query
+        **options : dict
+            All other string options. You may want to provide a `checkpointLocation`.
+
+        Notes
+        -----
+        This API is evolving.
+
+        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
+        the table exists or not. A new table will be created if the table not exists.
+
+        For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
+        be respected only if the v2 table does not exist. Besides, the v2 table created by this API
+        lacks some functionalities (e.g., customized properties, options, and serde info). If you
+        need them, please create the v2 table manually before the execution to avoid creating a
+        table with incomplete information.
+
+        Examples
+        --------
+        >>> sdf.writeStream.format('parquet').queryName('query').toTable('output_table')
+        ... # doctest: +SKIP
+
+        >>> sdf.writeStream.trigger(processingTime='5 seconds').toTable(
+        ...     'output_table',
+        ...     queryName='that_query',
+        ...     outputMode="append",
+        ...     format='parquet',
+        ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
+        """
+        self.options(**options)
+        if outputMode is not None:
+            self.outputMode(outputMode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        if format is not None:
+            self.format(format)
+        if queryName is not None:
+            self.queryName(queryName)
+        return self._sq(self._jwrite.toTable(tableName))
 
 
 def _test():

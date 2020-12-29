@@ -1712,12 +1712,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
     val port = store.blockTransferService.port
     val rack = Some("rack")
-    val blockManagerWithTopolgyInfo = BlockManagerId(
+    val blockManagerWithTopologyInfo = BlockManagerId(
       store.blockManagerId.executorId,
       store.blockManagerId.host,
       store.blockManagerId.port,
       rack)
-    store.blockManagerId = blockManagerWithTopolgyInfo
+    store.blockManagerId = blockManagerWithTopologyInfo
     val locations = Seq(
       BlockManagerId("executor4", otherHost, externalShuffleServicePort, rack),
       BlockManagerId("executor3", otherHost, port, rack),

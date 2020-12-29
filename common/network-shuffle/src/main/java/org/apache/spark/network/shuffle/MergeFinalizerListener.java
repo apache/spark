@@ -15,19 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.network.shuffle;
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, LogicalPlan, NoopDropTable}
-import org.apache.spark.sql.catalyst.rules.Rule
+import java.util.EventListener;
+
+import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 
 /**
- * A rule for handling [[DropTable]] logical plan when the table or temp view is not resolved.
- * If "ifExists" flag is set to true, the plan is resolved to [[NoopDropTable]],
- * which is a no-op command.
+ * :: DeveloperApi ::
+ *
+ * Listener providing a callback function to invoke when driver receives the response for the
+ * finalize shuffle merge request sent to remote shuffle service.
+ *
+ * @since 3.1.0
  */
-object ResolveNoopDropTable extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case DropTable(u: UnresolvedTableOrView, ifExists, _) if ifExists =>
-      NoopDropTable(u.multipartIdentifier)
-  }
+public interface MergeFinalizerListener extends EventListener {
+  /**
+   * Called once upon successful response on finalize shuffle merge on a remote shuffle service.
+   * The returned {@link MergeStatuses} is passed to the listener for further processing
+   */
+  void onShuffleMergeSuccess(MergeStatuses statuses);
+
+  /**
+   * Called once upon failure response on finalize shuffle merge on a remote shuffle service.
+   */
+  void onShuffleMergeFailure(Throwable e);
 }

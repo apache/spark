@@ -17,40 +17,44 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.InMemoryTableCatalog
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with SharedSparkSession {
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
-  override def defaultNamespace: Seq[String] = Nil
-  override def defaultUsing: String = "USING _"
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryTableCatalog].getName)
-
-  // TODO(SPARK-33452): Create a V2 SHOW PARTITIONS execution node
-  test("not supported SHOW PARTITIONS") {
-    def testV1Command(sqlCommand: String, sqlParams: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(s"$sqlCommand $sqlParams")
-      }
-      assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V2 table catalogs.
+ */
+class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
+  test("a table does not support partitioning") {
+    val table = s"non_part_$catalog.tab1"
+    withTable(table) {
+      sql(s"""
+        |CREATE TABLE $table (price int, qty int, year int, month int)
+        |$defaultUsing""".stripMargin)
+      val errMsg = intercept[AnalysisException] {
+        sql(s"SHOW PARTITIONS $table")
+      }.getMessage
+      assert(errMsg.contains(
+        "SHOW PARTITIONS cannot run for a table which does not support partitioning"))
     }
-    val t = s"$catalog.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |$defaultUsing
-           |PARTITIONED BY (id)
-         """.stripMargin)
+  }
 
-      testV1Command("SHOW PARTITIONS", t)
-      testV1Command("SHOW PARTITIONS", s"$t PARTITION(id='1')")
+  test("SPARK-33889: null and empty string as partition values") {
+    import testImplicits._
+    withNamespaceAndTable("ns", "tbl") { t =>
+      val df = Seq((0, ""), (1, null)).toDF("a", "part")
+      df.write
+        .partitionBy("part")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable(t)
+
+      runShowPartitionsSql(
+        s"SHOW PARTITIONS $t",
+        Row("part=") ::
+        Row("part=null") :: Nil)
+      checkAnswer(spark.table(t),
+        Row(0, "") ::
+        Row(1, null) :: Nil)
     }
   }
 }

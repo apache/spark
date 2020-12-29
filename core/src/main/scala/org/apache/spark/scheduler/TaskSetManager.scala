@@ -63,6 +63,7 @@ private[spark] class TaskSetManager(
   // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
   private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
   private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
+  private val addedArchives = HashMap[String, Long](sched.sc.addedArchives.toSeq: _*)
 
   val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
 
@@ -216,7 +217,7 @@ private[spark] class TaskSetManager(
   /**
    * Track the set of locality levels which are valid given the tasks locality preferences and
    * the set of currently available executors.  This is updated as executors are added and removed.
-   * This allows a performance optimization, of skipping levels that aren't relevant (eg., skip
+   * This allows a performance optimization, of skipping levels that aren't relevant (e.g., skip
    * PROCESS_LOCAL if no tasks could be run PROCESS_LOCAL for the current set of executors).
    */
   private[scheduler] var myLocalityLevels = computeValidLocalityLevels()
@@ -493,6 +494,7 @@ private[spark] class TaskSetManager(
           task.partitionId,
           addedFiles,
           addedJars,
+          addedArchives,
           task.localProperties,
           taskResourceAssignments,
           serializedTask)

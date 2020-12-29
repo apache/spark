@@ -71,6 +71,15 @@ public interface ErrorHandler {
     public static final String BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX =
       "Couldn't find an opportunity to write block";
 
+    /**
+     * String constant used for generating exception messages indicating the server encountered
+     * IOExceptions multiple times, greater than the configured threshold, while trying to merged
+     * shuffle blocks of the same shuffle partition. When the client receives this this response,
+     * it will stop pushing any more blocks for the same shuffle partition.
+     */
+    public static final String IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX =
+      "IOExceptions exceeded the threshold";
+
     @Override
     public boolean shouldRetryError(Throwable t) {
       // If it is a connection time out or a connection closed exception, no need to retry.

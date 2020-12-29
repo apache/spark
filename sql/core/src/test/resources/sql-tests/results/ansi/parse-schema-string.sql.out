@@ -21,7 +21,7 @@ no viable alternative at input 'create'(line 1, pos 0)
 == SQL ==
 create INT
 ^^^
-;; line 1 pos 7
+; line 1 pos 7
 
 
 -- !query
@@ -51,7 +51,7 @@ no viable alternative at input 'create'(line 1, pos 0)
 == SQL ==
 create INT
 ^^^
-;; line 1 pos 7
+; line 1 pos 7
 
 
 -- !query

@@ -71,6 +71,9 @@ trait WindowExecBase extends UnaryExecNode {
       case (RowFrame, IntegerLiteral(offset)) =>
         RowBoundOrdering(offset)
 
+      case (RowFrame, _) =>
+        sys.error(s"Unhandled bound in windows expressions: $bound")
+
       case (RangeFrame, CurrentRow) =>
         val ordering = RowOrdering.create(orderSpec, child.output)
         RangeBoundOrdering(ordering, IdentityProjection, IdentityProjection)
@@ -116,13 +119,21 @@ trait WindowExecBase extends UnaryExecNode {
    * [[WindowExpression]]s and factory function for the [[WindowFrameFunction]].
    */
   protected lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Expression, Expression)
+    type FrameKey = (String, FrameType, Expression, Expression, Seq[Expression])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
-      val key = (tpe, fr.frameType, fr.lower, fr.upper)
+      val key = fn match {
+        // This branch is used for Lead/Lag to support ignoring null.
+        // All window frames move in rows. If there are multiple Leads or Lags acting on a row
+        // and operating on different input expressions, they should not be moved uniformly
+        // by row. Therefore, we put these functions in different window frames.
+        case f: FrameLessOffsetWindowFunction if f.ignoreNulls =>
+          (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
+        case _ => (tpe, fr.frameType, fr.lower, fr.upper, Nil)
+      }
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
@@ -180,7 +191,7 @@ trait WindowExecBase extends UnaryExecNode {
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
           // Frameless offset Frame
-          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("FRAME_LESS_OFFSET", _, IntegerLiteral(offset), _, expr) =>
             target: InternalRow =>
               new FrameLessOffsetWindowFunctionFrame(
                 target,
@@ -190,8 +201,9 @@ trait WindowExecBase extends UnaryExecNode {
                 child.output,
                 (expressions, schema) =>
                   MutableProjection.create(expressions, schema),
-                offset)
-          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _) =>
+                offset,
+                expr.nonEmpty)
+          case ("UNBOUNDED_OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow => {
               new UnboundedOffsetWindowFunctionFrame(
                 target,
@@ -203,7 +215,7 @@ trait WindowExecBase extends UnaryExecNode {
                   MutableProjection.create(expressions, schema),
                 offset)
             }
-          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _) =>
+          case ("UNBOUNDED_PRECEDING_OFFSET", _, IntegerLiteral(offset), _, _) =>
             target: InternalRow => {
               new UnboundedPrecedingOffsetWindowFunctionFrame(
                 target,
@@ -217,13 +229,13 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Entire Partition Frame.
-          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing) =>
+          case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
             }
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, UnboundedPreceding, upper) =>
+          case ("AGGREGATE", frameType, UnboundedPreceding, upper, _) =>
             target: InternalRow => {
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
@@ -232,7 +244,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, lower, UnboundedFollowing) =>
+          case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
             target: InternalRow => {
               new UnboundedFollowingWindowFunctionFrame(
                 target,
@@ -241,7 +253,7 @@ trait WindowExecBase extends UnaryExecNode {
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, lower, upper) =>
+          case ("AGGREGATE", frameType, lower, upper, _) =>
             target: InternalRow => {
               new SlidingWindowFunctionFrame(
                 target,
@@ -249,6 +261,9 @@ trait WindowExecBase extends UnaryExecNode {
                 createBoundOrdering(frameType, lower, timeZone),
                 createBoundOrdering(frameType, upper, timeZone))
             }
+
+          case _ =>
+            sys.error(s"Unsupported factory: $key")
         }
 
         // Keep track of the number of expressions. This is a side-effect in a map...

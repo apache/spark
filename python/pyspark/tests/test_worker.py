@@ -165,7 +165,7 @@ class WorkerTests(ReusedPySparkTestCase):
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:
-            self.assertRegexpMatches(str(e), "exception with 中")
+            self.assertRegex(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):
