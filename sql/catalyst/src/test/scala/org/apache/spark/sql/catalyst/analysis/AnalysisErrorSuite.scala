@@ -707,5 +707,10 @@ class AnalysisErrorSuite extends AnalysisTest {
       assertAnalysisError(plan,
         s"Input argument to ${r.prettyName} must be a constant." :: Nil)
     }
+    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+    }
   }
 }
