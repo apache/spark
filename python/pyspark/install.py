@@ -44,7 +44,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     spark_version : str
         Spark version. It should be X.X.X such as '3.0.0' or spark-3.0.0.
     hadoop_version : str
-        Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
+        Hadoop version. It should be X such as '2' or 'hadoop2'.
         'without' and 'without-hadoop' are supported as special keywords for Hadoop free
         distribution.
     hive_version : str
@@ -65,7 +65,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
 
     if hadoop_version == "without":
         hadoop_version = "without-hadoop"
-    elif re.match("^[0-9]+\\.[0-9]+$", hadoop_version):
+    elif re.match("^[0-9]+$", hadoop_version):
         hadoop_version = "hadoop%s" % hadoop_version
 
     if hadoop_version not in SUPPORTED_HADOOP_VERSIONS:
