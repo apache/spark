@@ -304,7 +304,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b.cast("string"), 'c.cast("string"), 'd.cast("string"), 'e).collect())
+        df.select('a, 'b, 'c, 'd, 'e).collect())
     }
   }
 
