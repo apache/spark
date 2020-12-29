@@ -48,7 +48,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
     input.map { in: Expression =>
       in.dataType match {
-        case ArrayType(_, _) | MapType(_, _, _) | StructType(_) => in
+        case _: ArrayType | _: MapType | _: StructType => in
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
