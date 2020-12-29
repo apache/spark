@@ -910,7 +910,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         // GROUP BY .... GROUPING SETS (...)
         val selectedGroupByExprs =
           ctx.groupingSet.asScala.map(_.expression.asScala.map(e => expression(e)).toSeq)
-        Aggregate(Seq(GroupingSets(selectedGroupByExprs, groupByExpressions)),
+        Aggregate(Seq(GroupingSets(selectedGroupByExprs.toSeq, groupByExpressions)),
           selectExpressions, query)
       } else {
         // GROUP BY .... (WITH CUBE | WITH ROLLUP)?
@@ -937,24 +937,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                   throw new ParseException("Empty set in CUBE grouping sets is not supported.",
                     groupingAnalytics)
                 }
-                Cube(selectedGroupByExprs)
+                Cube(selectedGroupByExprs.toSeq)
               } else if (groupingAnalytics.ROLLUP != null) {
                 // ROLLUP(A, B, (A, B), ()) is not supported.
                 if (selectedGroupByExprs.exists(_.isEmpty)) {
                   throw new ParseException("Empty set in ROLLUP grouping sets is not supported.",
                     groupingAnalytics)
                 }
-                Rollup(selectedGroupByExprs)
+                Rollup(selectedGroupByExprs.toSeq)
               } else {
                 assert(groupingAnalytics.GROUPING != null && groupingAnalytics.SETS != null)
-                GroupingSets(selectedGroupByExprs, selectedGroupByExprs.flatten.distinct)
+                GroupingSets(selectedGroupByExprs.toSeq, selectedGroupByExprs.flatten.distinct)
               }
             } else {
               expression(groupByExpr.expression)
             }
           })
 
-      Aggregate(groupByExpressions, selectExpressions, query)
+      Aggregate(groupByExpressions.toSeq, selectExpressions, query)
     }
   }
 
