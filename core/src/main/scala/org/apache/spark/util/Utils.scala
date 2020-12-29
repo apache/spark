@@ -496,7 +496,6 @@ private[spark] object Utils extends Logging {
       url: String,
       targetDir: File,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
       useCache: Boolean,
@@ -525,7 +524,7 @@ private[spark] object Utils extends Logging {
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+          doFetchFile(url, localDir, cachedFileName, conf, hadoopConf)
         }
       } finally {
         lock.release()
@@ -538,7 +537,7 @@ private[spark] object Utils extends Logging {
         conf.getBoolean("spark.files.overwrite", false)
       )
     } else {
-      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, fileName, conf, hadoopConf)
     }
 
     if (shouldUntar) {
@@ -741,7 +740,6 @@ private[spark] object Utils extends Logging {
       targetDir: File,
       filename: String,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)

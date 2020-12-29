@@ -686,7 +686,7 @@ private[hive] object HiveTestJars {
     val fileName = urlString.split("/").last
     val targetFile = new File(hiveTestJarsDir, fileName)
     if (!targetFile.exists()) {
-      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null)
     }
     targetFile
   }
