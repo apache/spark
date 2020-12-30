@@ -386,4 +386,19 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(spark2.conf.get(custom) === "c2")
 
   }
+
+  private val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
+
+  test(msg) {
+    val logAppender = new LogAppender(msg)
+
+    withLogAppender(logAppender) {
+      SparkSession.builder()
+        .master("local")
+        .config("hive.metastore.warehouse.dir", "any")
+        .getOrCreate()
+        .sharedState
+    }
+    assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+  }
 }
