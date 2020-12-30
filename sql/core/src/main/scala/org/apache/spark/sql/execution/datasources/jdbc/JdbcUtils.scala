@@ -313,7 +313,7 @@ object JdbcUtils extends Logging {
         // scalastyle:off
         case java.sql.Types.NUMERIC => metadata.putLong("scale", fieldScale)
         case java.sql.Types.DECIMAL => metadata.putLong("scale", fieldScale)
-        case java.sql.Types.TIME    => metadata.putBoolean("logicaltimetype", true)
+        case java.sql.Types.TIME    => metadata.putBoolean("logical_time_type", true)
         case _                      =>
         // scalastyle:on
       }
@@ -426,7 +426,7 @@ object JdbcUtils extends Logging {
     // Represents a time of day, with no reference to a particular calendar,
     // time zone or date, with a precision of one millisecond.
     // It stores the number of milliseconds after midnight, 00:00:00.000.
-    case IntegerType if metadata.contains("logicaltimetype") =>
+    case IntegerType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) => {
         val rawTime = rs.getTime(pos + 1)
         if (rawTime != null) {
