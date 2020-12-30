@@ -169,13 +169,6 @@ class Column(val expr: Expression) extends Logging {
    * Returns the expression for this column either with an existing or auto assigned name.
    */
   private[sql] def named: NamedExpression = expr match {
-    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-    // make it a NamedExpression.
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
-
-    case u: UnresolvedExtractValue => UnresolvedAlias(u)
-
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
@@ -191,16 +184,13 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case _ => Alias(expr, toPrettySQL(expr))()
+        case _ => UnresolvedAlias(expr)
       }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
 
-    // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStruct => UnresolvedAlias(struct)
-
-    case expr: Expression => Alias(expr, toPrettySQL(expr))()
+    case expr: Expression => UnresolvedAlias(expr)
   }
 
   /**
