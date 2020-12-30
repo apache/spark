@@ -218,7 +218,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema)
       SparkPlanTest.executePlan(plan, spark.sqlContext)
     }
-    assert(e.getMessage.contains("Subprocess exited with status"))
+    assert(e.getMessage.contains("No such file or directory"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
