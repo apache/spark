@@ -1927,7 +1927,6 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
-
   private[spark] val EXECUTOR_DECOMMISSION_SIGNAL =
     ConfigBuilder("spark.executor.decommission.signal")
       .doc("The signal that used to trigger the executor to start decommission.")
