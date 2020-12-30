@@ -6,13 +6,13 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
           WholeStageCodegen (5)
             HashAggregate [i_item_id,ss_quantity,ss_list_price,ss_coupon_amt,ss_sales_price] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
               Project [ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,i_item_id]
-                BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
-                  Project [ss_cdemo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,i_item_id]
+                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                  Project [ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                      Project [ss_sold_date_sk,ss_cdemo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,i_item_id]
+                      Project [ss_sold_date_sk,ss_item_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                         BroadcastHashJoin [ss_promo_sk,p_promo_sk]
-                          Project [ss_sold_date_sk,ss_cdemo_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,i_item_id]
-                            BroadcastHashJoin [ss_item_sk,i_item_sk]
+                          Project [ss_sold_date_sk,ss_item_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                            BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk]
                               Filter [ss_cdemo_sk,ss_sold_date_sk,ss_item_sk,ss_promo_sk]
                                 ColumnarToRow
                                   InputAdapter
@@ -20,10 +20,11 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
-                                    Filter [i_item_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.item [i_item_sk,i_item_id]
+                                    Project [cd_demo_sk]
+                                      Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
@@ -43,8 +44,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                   InputAdapter
                     BroadcastExchange #5
                       WholeStageCodegen (4)
-                        Project [cd_demo_sk]
-                          Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
+                        Filter [i_item_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.item [i_item_sk,i_item_id]

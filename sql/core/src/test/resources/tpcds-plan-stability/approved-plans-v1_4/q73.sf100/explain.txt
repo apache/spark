@@ -22,17 +22,17 @@
          :                       :     :        +- * Project (7)
          :                       :     :           +- * Filter (6)
          :                       :     :              +- * ColumnarToRow (5)
-         :                       :     :                 +- Scan parquet default.store (4)
+         :                       :     :                 +- Scan parquet default.date_dim (4)
          :                       :     +- BroadcastExchange (15)
          :                       :        +- * Project (14)
          :                       :           +- * Filter (13)
          :                       :              +- * ColumnarToRow (12)
-         :                       :                 +- Scan parquet default.household_demographics (11)
+         :                       :                 +- Scan parquet default.store (11)
          :                       +- BroadcastExchange (22)
          :                          +- * Project (21)
          :                             +- * Filter (20)
          :                                +- * ColumnarToRow (19)
-         :                                   +- Scan parquet default.date_dim (18)
+         :                                   +- Scan parquet default.household_demographics (18)
          +- * Sort (35)
             +- Exchange (34)
                +- * Filter (33)
@@ -54,98 +54,98 @@ Input [5]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, s
 Input [5]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, ss_ticket_number#5]
 Condition : (((isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_hdemo_sk#3)) AND isnotnull(ss_customer_sk#2))
 
-(4) Scan parquet default.store
-Output [2]: [s_store_sk#6, s_county#7]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_county, [Williamson County,Franklin Parish,Bronx County,Orange County]), IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_county:string>
-
-(5) ColumnarToRow [codegen id : 1]
-Input [2]: [s_store_sk#6, s_county#7]
-
-(6) Filter [codegen id : 1]
-Input [2]: [s_store_sk#6, s_county#7]
-Condition : (s_county#7 IN (Williamson County,Franklin Parish,Bronx County,Orange County) AND isnotnull(s_store_sk#6))
-
-(7) Project [codegen id : 1]
-Output [1]: [s_store_sk#6]
-Input [2]: [s_store_sk#6, s_county#7]
-
-(8) BroadcastExchange
-Input [1]: [s_store_sk#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
-
-(9) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_store_sk#4]
-Right keys [1]: [s_store_sk#6]
-Join condition: None
-
-(10) Project [codegen id : 4]
-Output [4]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_ticket_number#5]
-Input [6]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, ss_ticket_number#5, s_store_sk#6]
-
-(11) Scan parquet default.household_demographics
-Output [4]: [hd_demo_sk#9, hd_buy_potential#10, hd_dep_count#11, hd_vehicle_count#12]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000),EqualTo(hd_buy_potential,unknown)), GreaterThan(hd_vehicle_count,0), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
-
-(12) ColumnarToRow [codegen id : 2]
-Input [4]: [hd_demo_sk#9, hd_buy_potential#10, hd_dep_count#11, hd_vehicle_count#12]
-
-(13) Filter [codegen id : 2]
-Input [4]: [hd_demo_sk#9, hd_buy_potential#10, hd_dep_count#11, hd_vehicle_count#12]
-Condition : (((((isnotnull(hd_vehicle_count#12) AND isnotnull(hd_dep_count#11)) AND ((hd_buy_potential#10 = >10000) OR (hd_buy_potential#10 = unknown))) AND (hd_vehicle_count#12 > 0)) AND ((cast(hd_dep_count#11 as double) / cast(hd_vehicle_count#12 as double)) > 1.0)) AND isnotnull(hd_demo_sk#9))
-
-(14) Project [codegen id : 2]
-Output [1]: [hd_demo_sk#9]
-Input [4]: [hd_demo_sk#9, hd_buy_potential#10, hd_dep_count#11, hd_vehicle_count#12]
-
-(15) BroadcastExchange
-Input [1]: [hd_demo_sk#9]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
-
-(16) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_hdemo_sk#3]
-Right keys [1]: [hd_demo_sk#9]
-Join condition: None
-
-(17) Project [codegen id : 4]
-Output [3]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_ticket_number#5]
-Input [5]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_ticket_number#5, hd_demo_sk#9]
-
-(18) Scan parquet default.date_dim
-Output [3]: [d_date_sk#14, d_year#15, d_dom#16]
+(4) Scan parquet default.date_dim
+Output [3]: [d_date_sk#6, d_year#7, d_dom#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
+(5) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#6, d_year#7, d_dom#8]
+
+(6) Filter [codegen id : 1]
+Input [3]: [d_date_sk#6, d_year#7, d_dom#8]
+Condition : ((((isnotnull(d_dom#8) AND (d_dom#8 >= 1)) AND (d_dom#8 <= 2)) AND d_year#7 IN (1999,2000,2001)) AND isnotnull(d_date_sk#6))
+
+(7) Project [codegen id : 1]
+Output [1]: [d_date_sk#6]
+Input [3]: [d_date_sk#6, d_year#7, d_dom#8]
+
+(8) BroadcastExchange
+Input [1]: [d_date_sk#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
+
+(9) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#6]
+Join condition: None
+
+(10) Project [codegen id : 4]
+Output [4]: [ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Input [6]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, ss_ticket_number#5, d_date_sk#6]
+
+(11) Scan parquet default.store
+Output [2]: [s_store_sk#10, s_county#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [In(s_county, [Williamson County,Franklin Parish,Bronx County,Orange County]), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_county:string>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [2]: [s_store_sk#10, s_county#11]
+
+(13) Filter [codegen id : 2]
+Input [2]: [s_store_sk#10, s_county#11]
+Condition : (s_county#11 IN (Williamson County,Franklin Parish,Bronx County,Orange County) AND isnotnull(s_store_sk#10))
+
+(14) Project [codegen id : 2]
+Output [1]: [s_store_sk#10]
+Input [2]: [s_store_sk#10, s_county#11]
+
+(15) BroadcastExchange
+Input [1]: [s_store_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+
+(16) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_store_sk#4]
+Right keys [1]: [s_store_sk#10]
+Join condition: None
+
+(17) Project [codegen id : 4]
+Output [3]: [ss_customer_sk#2, ss_hdemo_sk#3, ss_ticket_number#5]
+Input [5]: [ss_customer_sk#2, ss_hdemo_sk#3, ss_store_sk#4, ss_ticket_number#5, s_store_sk#10]
+
+(18) Scan parquet default.household_demographics
+Output [4]: [hd_demo_sk#13, hd_buy_potential#14, hd_dep_count#15, hd_vehicle_count#16]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000),EqualTo(hd_buy_potential,unknown)), GreaterThan(hd_vehicle_count,0), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
+
 (19) ColumnarToRow [codegen id : 3]
-Input [3]: [d_date_sk#14, d_year#15, d_dom#16]
+Input [4]: [hd_demo_sk#13, hd_buy_potential#14, hd_dep_count#15, hd_vehicle_count#16]
 
 (20) Filter [codegen id : 3]
-Input [3]: [d_date_sk#14, d_year#15, d_dom#16]
-Condition : ((((isnotnull(d_dom#16) AND (d_dom#16 >= 1)) AND (d_dom#16 <= 2)) AND d_year#15 IN (1999,2000,2001)) AND isnotnull(d_date_sk#14))
+Input [4]: [hd_demo_sk#13, hd_buy_potential#14, hd_dep_count#15, hd_vehicle_count#16]
+Condition : (((((isnotnull(hd_vehicle_count#16) AND isnotnull(hd_dep_count#15)) AND ((hd_buy_potential#14 = >10000) OR (hd_buy_potential#14 = unknown))) AND (hd_vehicle_count#16 > 0)) AND ((cast(hd_dep_count#15 as double) / cast(hd_vehicle_count#16 as double)) > 1.0)) AND isnotnull(hd_demo_sk#13))
 
 (21) Project [codegen id : 3]
-Output [1]: [d_date_sk#14]
-Input [3]: [d_date_sk#14, d_year#15, d_dom#16]
+Output [1]: [hd_demo_sk#13]
+Input [4]: [hd_demo_sk#13, hd_buy_potential#14, hd_dep_count#15, hd_vehicle_count#16]
 
 (22) BroadcastExchange
-Input [1]: [d_date_sk#14]
+Input [1]: [hd_demo_sk#13]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#17]
 
 (23) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_sold_date_sk#1]
-Right keys [1]: [d_date_sk#14]
+Left keys [1]: [ss_hdemo_sk#3]
+Right keys [1]: [hd_demo_sk#13]
 Join condition: None
 
 (24) Project [codegen id : 4]
 Output [2]: [ss_customer_sk#2, ss_ticket_number#5]
-Input [4]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_ticket_number#5, d_date_sk#14]
+Input [4]: [ss_customer_sk#2, ss_hdemo_sk#3, ss_ticket_number#5, hd_demo_sk#13]
 
 (25) HashAggregate [codegen id : 4]
 Input [2]: [ss_customer_sk#2, ss_ticket_number#5]

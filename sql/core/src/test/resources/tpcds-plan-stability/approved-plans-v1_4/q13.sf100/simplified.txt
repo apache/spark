@@ -5,15 +5,15 @@ WholeStageCodegen (7)
         WholeStageCodegen (6)
           HashAggregate [ss_quantity,ss_ext_sales_price,ss_ext_wholesale_cost] [sum,count,sum,count,sum,count,sum,sum,count,sum,count,sum,count,sum]
             Project [ss_quantity,ss_ext_sales_price,ss_ext_wholesale_cost]
-              BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price,hd_dep_count]
-                Project [ss_cdemo_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,hd_dep_count]
-                  BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
-                    Project [ss_cdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,hd_dep_count]
-                      BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                        Project [ss_sold_date_sk,ss_cdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,hd_dep_count]
-                          BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk]
-                            Project [ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit]
-                              BroadcastHashJoin [ss_store_sk,s_store_sk]
+              BroadcastHashJoin [ss_store_sk,s_store_sk]
+                Project [ss_store_sk,ss_quantity,ss_ext_sales_price,ss_ext_wholesale_cost]
+                  BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                    Project [ss_sold_date_sk,ss_store_sk,ss_quantity,ss_ext_sales_price,ss_ext_wholesale_cost]
+                      BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
+                        Project [ss_sold_date_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit]
+                          BroadcastHashJoin [ss_hdemo_sk,hd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price,hd_dep_count]
+                            Project [ss_sold_date_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,cd_marital_status,cd_education_status]
+                              BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price]
                                 Filter [ss_store_sk,ss_addr_sk,ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price]
                                   ColumnarToRow
                                     InputAdapter
@@ -21,10 +21,10 @@ WholeStageCodegen (7)
                                 InputAdapter
                                   BroadcastExchange #2
                                     WholeStageCodegen (1)
-                                      Filter [s_store_sk]
+                                      Filter [cd_demo_sk,cd_marital_status,cd_education_status]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.store [s_store_sk]
+                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                             InputAdapter
                               BroadcastExchange #3
                                 WholeStageCodegen (2)
@@ -35,23 +35,23 @@ WholeStageCodegen (7)
                         InputAdapter
                           BroadcastExchange #4
                             WholeStageCodegen (3)
-                              Project [d_date_sk]
-                                Filter [d_year,d_date_sk]
+                              Project [ca_address_sk,ca_state]
+                                Filter [ca_country,ca_address_sk,ca_state]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.date_dim [d_date_sk,d_year]
+                                      Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
                     InputAdapter
                       BroadcastExchange #5
                         WholeStageCodegen (4)
-                          Project [ca_address_sk,ca_state]
-                            Filter [ca_country,ca_address_sk,ca_state]
+                          Project [d_date_sk]
+                            Filter [d_year,d_date_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                                  Scan parquet default.date_dim [d_date_sk,d_year]
                 InputAdapter
                   BroadcastExchange #6
                     WholeStageCodegen (5)
-                      Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                      Filter [s_store_sk]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                            Scan parquet default.store [s_store_sk]

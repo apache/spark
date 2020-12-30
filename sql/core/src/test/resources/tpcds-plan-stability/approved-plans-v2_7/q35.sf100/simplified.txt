@@ -6,20 +6,20 @@ TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_
           WholeStageCodegen (20)
             HashAggregate [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count] [count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum,count,sum,count,max,sum,sum,count,max,sum,sum,count,max,sum]
               Project [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
-                SortMergeJoin [c_current_addr_sk,ca_address_sk]
+                SortMergeJoin [c_current_cdemo_sk,cd_demo_sk]
                   InputAdapter
                     WholeStageCodegen (17)
-                      Sort [c_current_addr_sk]
+                      Sort [c_current_cdemo_sk]
                         InputAdapter
-                          Exchange [c_current_addr_sk] #2
+                          Exchange [c_current_cdemo_sk] #2
                             WholeStageCodegen (16)
-                              Project [c_current_addr_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
-                                SortMergeJoin [c_current_cdemo_sk,cd_demo_sk]
+                              Project [c_current_cdemo_sk,ca_state]
+                                SortMergeJoin [c_current_addr_sk,ca_address_sk]
                                   InputAdapter
                                     WholeStageCodegen (13)
-                                      Sort [c_current_cdemo_sk]
+                                      Sort [c_current_addr_sk]
                                         InputAdapter
-                                          Exchange [c_current_cdemo_sk] #3
+                                          Exchange [c_current_addr_sk] #3
                                             WholeStageCodegen (12)
                                               Project [c_current_cdemo_sk,c_current_addr_sk]
                                                 Filter [exists,exists]
@@ -83,21 +83,21 @@ TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_
                                                                       ReusedExchange [d_date_sk] #6
                                   InputAdapter
                                     WholeStageCodegen (15)
-                                      Sort [cd_demo_sk]
+                                      Sort [ca_address_sk]
                                         InputAdapter
-                                          Exchange [cd_demo_sk] #9
+                                          Exchange [ca_address_sk] #9
                                             WholeStageCodegen (14)
-                                              Filter [cd_demo_sk]
+                                              Filter [ca_address_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                                                    Scan parquet default.customer_address [ca_address_sk,ca_state]
                   InputAdapter
                     WholeStageCodegen (19)
-                      Sort [ca_address_sk]
+                      Sort [cd_demo_sk]
                         InputAdapter
-                          Exchange [ca_address_sk] #10
+                          Exchange [cd_demo_sk] #10
                             WholeStageCodegen (18)
-                              Filter [ca_address_sk]
+                              Filter [cd_demo_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]

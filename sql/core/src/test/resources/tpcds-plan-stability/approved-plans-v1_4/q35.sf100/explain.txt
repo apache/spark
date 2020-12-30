@@ -53,12 +53,12 @@ TakeOrderedAndProject (60)
                :              +- Exchange (44)
                :                 +- * Filter (43)
                :                    +- * ColumnarToRow (42)
-               :                       +- Scan parquet default.customer_demographics (41)
+               :                       +- Scan parquet default.customer_address (41)
                +- * Sort (54)
                   +- Exchange (53)
                      +- * Filter (52)
                         +- * ColumnarToRow (51)
-                           +- Scan parquet default.customer_address (50)
+                           +- Scan parquet default.customer_demographics (50)
 
 
 (1) Scan parquet default.customer
@@ -229,101 +229,101 @@ Input [5]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5, exists#2
 
 (39) Exchange
 Input [2]: [c_current_cdemo_sk#4, c_current_addr_sk#5]
-Arguments: hashpartitioning(c_current_cdemo_sk#4, 5), ENSURE_REQUIREMENTS, [id=#20]
+Arguments: hashpartitioning(c_current_addr_sk#5, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (40) Sort [codegen id : 13]
 Input [2]: [c_current_cdemo_sk#4, c_current_addr_sk#5]
-Arguments: [c_current_cdemo_sk#4 ASC NULLS FIRST], false, 0
-
-(41) Scan parquet default.customer_demographics
-Output [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_demo_sk)]
-ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
-
-(42) ColumnarToRow [codegen id : 14]
-Input [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-
-(43) Filter [codegen id : 14]
-Input [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Condition : isnotnull(cd_demo_sk#21)
-
-(44) Exchange
-Input [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Arguments: hashpartitioning(cd_demo_sk#21, 5), ENSURE_REQUIREMENTS, [id=#27]
-
-(45) Sort [codegen id : 15]
-Input [6]: [cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Arguments: [cd_demo_sk#21 ASC NULLS FIRST], false, 0
-
-(46) SortMergeJoin [codegen id : 16]
-Left keys [1]: [c_current_cdemo_sk#4]
-Right keys [1]: [cd_demo_sk#21]
-Join condition: None
-
-(47) Project [codegen id : 16]
-Output [6]: [c_current_addr_sk#5, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Input [8]: [c_current_cdemo_sk#4, c_current_addr_sk#5, cd_demo_sk#21, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-
-(48) Exchange
-Input [6]: [c_current_addr_sk#5, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Arguments: hashpartitioning(c_current_addr_sk#5, 5), ENSURE_REQUIREMENTS, [id=#28]
-
-(49) Sort [codegen id : 17]
-Input [6]: [c_current_addr_sk#5, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
 Arguments: [c_current_addr_sk#5 ASC NULLS FIRST], false, 0
 
-(50) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#29, ca_state#30]
+(41) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#21, ca_state#22]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
+(42) ColumnarToRow [codegen id : 14]
+Input [2]: [ca_address_sk#21, ca_state#22]
+
+(43) Filter [codegen id : 14]
+Input [2]: [ca_address_sk#21, ca_state#22]
+Condition : isnotnull(ca_address_sk#21)
+
+(44) Exchange
+Input [2]: [ca_address_sk#21, ca_state#22]
+Arguments: hashpartitioning(ca_address_sk#21, 5), ENSURE_REQUIREMENTS, [id=#23]
+
+(45) Sort [codegen id : 15]
+Input [2]: [ca_address_sk#21, ca_state#22]
+Arguments: [ca_address_sk#21 ASC NULLS FIRST], false, 0
+
+(46) SortMergeJoin [codegen id : 16]
+Left keys [1]: [c_current_addr_sk#5]
+Right keys [1]: [ca_address_sk#21]
+Join condition: None
+
+(47) Project [codegen id : 16]
+Output [2]: [c_current_cdemo_sk#4, ca_state#22]
+Input [4]: [c_current_cdemo_sk#4, c_current_addr_sk#5, ca_address_sk#21, ca_state#22]
+
+(48) Exchange
+Input [2]: [c_current_cdemo_sk#4, ca_state#22]
+Arguments: hashpartitioning(c_current_cdemo_sk#4, 5), ENSURE_REQUIREMENTS, [id=#24]
+
+(49) Sort [codegen id : 17]
+Input [2]: [c_current_cdemo_sk#4, ca_state#22]
+Arguments: [c_current_cdemo_sk#4 ASC NULLS FIRST], false, 0
+
+(50) Scan parquet default.customer_demographics
+Output [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk)]
+ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
+
 (51) ColumnarToRow [codegen id : 18]
-Input [2]: [ca_address_sk#29, ca_state#30]
+Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 
 (52) Filter [codegen id : 18]
-Input [2]: [ca_address_sk#29, ca_state#30]
-Condition : isnotnull(ca_address_sk#29)
+Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Condition : isnotnull(cd_demo_sk#25)
 
 (53) Exchange
-Input [2]: [ca_address_sk#29, ca_state#30]
-Arguments: hashpartitioning(ca_address_sk#29, 5), ENSURE_REQUIREMENTS, [id=#31]
+Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Arguments: hashpartitioning(cd_demo_sk#25, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (54) Sort [codegen id : 19]
-Input [2]: [ca_address_sk#29, ca_state#30]
-Arguments: [ca_address_sk#29 ASC NULLS FIRST], false, 0
+Input [6]: [cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Arguments: [cd_demo_sk#25 ASC NULLS FIRST], false, 0
 
 (55) SortMergeJoin [codegen id : 20]
-Left keys [1]: [c_current_addr_sk#5]
-Right keys [1]: [ca_address_sk#29]
+Left keys [1]: [c_current_cdemo_sk#4]
+Right keys [1]: [cd_demo_sk#25]
 Join condition: None
 
 (56) Project [codegen id : 20]
-Output [6]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Input [8]: [c_current_addr_sk#5, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26, ca_address_sk#29, ca_state#30]
+Output [6]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Input [8]: [c_current_cdemo_sk#4, ca_state#22, cd_demo_sk#25, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 
 (57) HashAggregate [codegen id : 20]
-Input [6]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Keys [6]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Functions [10]: [partial_count(1), partial_min(cd_dep_count#24), partial_max(cd_dep_count#24), partial_avg(cast(cd_dep_count#24 as bigint)), partial_min(cd_dep_employed_count#25), partial_max(cd_dep_employed_count#25), partial_avg(cast(cd_dep_employed_count#25 as bigint)), partial_min(cd_dep_college_count#26), partial_max(cd_dep_college_count#26), partial_avg(cast(cd_dep_college_count#26 as bigint))]
+Input [6]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Keys [6]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Functions [10]: [partial_count(1), partial_min(cd_dep_count#28), partial_max(cd_dep_count#28), partial_avg(cast(cd_dep_count#28 as bigint)), partial_min(cd_dep_employed_count#29), partial_max(cd_dep_employed_count#29), partial_avg(cast(cd_dep_employed_count#29 as bigint)), partial_min(cd_dep_college_count#30), partial_max(cd_dep_college_count#30), partial_avg(cast(cd_dep_college_count#30 as bigint))]
 Aggregate Attributes [13]: [count#32, min#33, max#34, sum#35, count#36, min#37, max#38, sum#39, count#40, min#41, max#42, sum#43, count#44]
-Results [19]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
+Results [19]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
 
 (58) Exchange
-Input [19]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
-Arguments: hashpartitioning(ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26, 5), ENSURE_REQUIREMENTS, [id=#58]
+Input [19]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
+Arguments: hashpartitioning(ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, 5), ENSURE_REQUIREMENTS, [id=#58]
 
 (59) HashAggregate [codegen id : 21]
-Input [19]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
-Keys [6]: [ca_state#30, cd_gender#22, cd_marital_status#23, cd_dep_count#24, cd_dep_employed_count#25, cd_dep_college_count#26]
-Functions [10]: [count(1), min(cd_dep_count#24), max(cd_dep_count#24), avg(cast(cd_dep_count#24 as bigint)), min(cd_dep_employed_count#25), max(cd_dep_employed_count#25), avg(cast(cd_dep_employed_count#25 as bigint)), min(cd_dep_college_count#26), max(cd_dep_college_count#26), avg(cast(cd_dep_college_count#26 as bigint))]
-Aggregate Attributes [10]: [count(1)#59, min(cd_dep_count#24)#60, max(cd_dep_count#24)#61, avg(cast(cd_dep_count#24 as bigint))#62, min(cd_dep_employed_count#25)#63, max(cd_dep_employed_count#25)#64, avg(cast(cd_dep_employed_count#25 as bigint))#65, min(cd_dep_college_count#26)#66, max(cd_dep_college_count#26)#67, avg(cast(cd_dep_college_count#26 as bigint))#68]
-Results [18]: [ca_state#30, cd_gender#22, cd_marital_status#23, count(1)#59 AS cnt1#69, min(cd_dep_count#24)#60 AS min(cd_dep_count)#70, max(cd_dep_count#24)#61 AS max(cd_dep_count)#71, avg(cast(cd_dep_count#24 as bigint))#62 AS avg(cd_dep_count)#72, cd_dep_employed_count#25, count(1)#59 AS cnt2#73, min(cd_dep_employed_count#25)#63 AS min(cd_dep_employed_count)#74, max(cd_dep_employed_count#25)#64 AS max(cd_dep_employed_count)#75, avg(cast(cd_dep_employed_count#25 as bigint))#65 AS avg(cd_dep_employed_count)#76, cd_dep_college_count#26, count(1)#59 AS cnt3#77, min(cd_dep_college_count#26)#66 AS min(cd_dep_college_count)#78, max(cd_dep_college_count#26)#67 AS max(cd_dep_college_count)#79, avg(cast(cd_dep_college_count#26 as bigint))#68 AS avg(cd_dep_college_count)#80, cd_dep_count#24 AS aggOrder#81]
+Input [19]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#45, min#46, max#47, sum#48, count#49, min#50, max#51, sum#52, count#53, min#54, max#55, sum#56, count#57]
+Keys [6]: [ca_state#22, cd_gender#26, cd_marital_status#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Functions [10]: [count(1), min(cd_dep_count#28), max(cd_dep_count#28), avg(cast(cd_dep_count#28 as bigint)), min(cd_dep_employed_count#29), max(cd_dep_employed_count#29), avg(cast(cd_dep_employed_count#29 as bigint)), min(cd_dep_college_count#30), max(cd_dep_college_count#30), avg(cast(cd_dep_college_count#30 as bigint))]
+Aggregate Attributes [10]: [count(1)#59, min(cd_dep_count#28)#60, max(cd_dep_count#28)#61, avg(cast(cd_dep_count#28 as bigint))#62, min(cd_dep_employed_count#29)#63, max(cd_dep_employed_count#29)#64, avg(cast(cd_dep_employed_count#29 as bigint))#65, min(cd_dep_college_count#30)#66, max(cd_dep_college_count#30)#67, avg(cast(cd_dep_college_count#30 as bigint))#68]
+Results [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, count(1)#59 AS cnt1#69, min(cd_dep_count#28)#60 AS min(cd_dep_count)#70, max(cd_dep_count#28)#61 AS max(cd_dep_count)#71, avg(cast(cd_dep_count#28 as bigint))#62 AS avg(cd_dep_count)#72, cd_dep_employed_count#29, count(1)#59 AS cnt2#73, min(cd_dep_employed_count#29)#63 AS min(cd_dep_employed_count)#74, max(cd_dep_employed_count#29)#64 AS max(cd_dep_employed_count)#75, avg(cast(cd_dep_employed_count#29 as bigint))#65 AS avg(cd_dep_employed_count)#76, cd_dep_college_count#30, count(1)#59 AS cnt3#77, min(cd_dep_college_count#30)#66 AS min(cd_dep_college_count)#78, max(cd_dep_college_count#30)#67 AS max(cd_dep_college_count)#79, avg(cast(cd_dep_college_count#30 as bigint))#68 AS avg(cd_dep_college_count)#80, cd_dep_count#28 AS aggOrder#81]
 
 (60) TakeOrderedAndProject
-Input [18]: [ca_state#30, cd_gender#22, cd_marital_status#23, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#25, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#26, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80, aggOrder#81]
-Arguments: 100, [ca_state#30 ASC NULLS FIRST, cd_gender#22 ASC NULLS FIRST, cd_marital_status#23 ASC NULLS FIRST, aggOrder#81 ASC NULLS FIRST, cd_dep_employed_count#25 ASC NULLS FIRST, cd_dep_college_count#26 ASC NULLS FIRST], [ca_state#30, cd_gender#22, cd_marital_status#23, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#25, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#26, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80]
+Input [18]: [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80, aggOrder#81]
+Arguments: 100, [ca_state#22 ASC NULLS FIRST, cd_gender#26 ASC NULLS FIRST, cd_marital_status#27 ASC NULLS FIRST, aggOrder#81 ASC NULLS FIRST, cd_dep_employed_count#29 ASC NULLS FIRST, cd_dep_college_count#30 ASC NULLS FIRST], [ca_state#22, cd_gender#26, cd_marital_status#27, cnt1#69, min(cd_dep_count)#70, max(cd_dep_count)#71, avg(cd_dep_count)#72, cd_dep_employed_count#29, cnt2#73, min(cd_dep_employed_count)#74, max(cd_dep_employed_count)#75, avg(cd_dep_employed_count)#76, cd_dep_college_count#30, cnt3#77, min(cd_dep_college_count)#78, max(cd_dep_college_count)#79, avg(cd_dep_college_count)#80]
 
