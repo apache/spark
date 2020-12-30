@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
@@ -51,6 +51,16 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"INSERT INTO $table PARTITION(year = 2015, month = 2) SELECT 2, 2")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 2)")
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
+  }
+
+  protected def createNullPartTable(table: String, format: String): Unit = {
+    import testImplicits._
+    val df = Seq((0, ""), (1, null)).toDF("a", "part")
+    df.write
+      .partitionBy("part")
+      .format(format)
+      .mode(SaveMode.Overwrite)
+      .saveAsTable(table)
   }
 
   test("show partitions of non-partitioned table") {
