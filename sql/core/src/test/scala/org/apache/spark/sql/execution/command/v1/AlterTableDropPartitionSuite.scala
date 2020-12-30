@@ -42,6 +42,18 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
       checkPartitions(t) // no partitions
     }
   }
+
+  test("SPARK-33941: invalidate cache after partition dropping") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      val df = spark.table(t)
+      df.cache()
+      assert(!df.isEmpty)
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      assert(df.isEmpty)
+    }
+  }
 }
 
 /**
