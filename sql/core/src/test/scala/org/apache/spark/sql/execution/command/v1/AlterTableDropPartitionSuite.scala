@@ -51,6 +51,7 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
       df.cache()
       assert(!df.isEmpty)
       sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      assert(spark.sharedState.cacheManager.lookupCachedData(df).isDefined)
       assert(df.isEmpty)
     }
   }
