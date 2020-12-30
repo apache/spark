@@ -56,8 +56,23 @@ private[sql] class SharedState(
   private[sql] val (conf, hadoopConf) = {
     // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
     // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
-    SharedState.loadHiveConfFile(
+    val initialConfigsWithoutWarehouse = SharedState.loadHiveConfFile(
       sparkContext.conf, sparkContext.hadoopConfiguration, initialConfigs)
+
+    val confClone = sparkContext.conf.clone()
+    val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
+    // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
+    // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
+    // `SharedState` instance. This will be done only once then shared across `SparkSession`s
+    initialConfigsWithoutWarehouse.foreach {
+      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+        logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
+        confClone.set(k, v)
+      case (k, v) =>
+        logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
+        hadoopConfClone.set(k, v)
+    }
+    (confClone, hadoopConfClone)
   }
 
   /**
@@ -211,8 +226,8 @@ object SharedState extends Logging {
   def loadHiveConfFile(
       sparkConf: SparkConf,
       hadoopConf: Configuration,
-      initialConfigs: scala.collection.Map[String, String] = Map.empty):
-    (SparkConf, Configuration) = {
+      initialConfigs: scala.collection.Map[String, String] = Map.empty)
+    : scala.collection.Map[String, String] = {
 
     def containsInSparkConf(key: String): Boolean = {
       sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
@@ -260,19 +275,7 @@ object SharedState extends Logging {
       sparkWarehouseDir
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
-    val confClone = sparkConf.clone()
-    val hadoopConfClone = new Configuration(hadoopConf)
-    // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
-    // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
-    // `SharedState` instance. This will be done only once then shared across `SparkSession`s
-    (initialConfigs -- Seq(WAREHOUSE_PATH.key, hiveWarehouseKey)).foreach {
-      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
-        logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
-        confClone.set(k, v)
-      case (k, v) =>
-        logDebug(s"Applying other initial session options to HadoopConf: $k -> $v")
-        hadoopConfClone.set(k, v)
-    }
-    (confClone, hadoopConfClone)
+    initialConfigs -- Seq(WAREHOUSE_PATH.key, hiveWarehouseKey)
+
   }
 }

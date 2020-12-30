@@ -387,11 +387,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   }
 
-  private val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
 
-  test(msg) {
+  test("SPARK-33944: can not set hive.metastore.warehouse.dir using session options") {
+    val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
     val logAppender = new LogAppender(msg)
-
     withLogAppender(logAppender) {
       SparkSession.builder()
         .master("local")
