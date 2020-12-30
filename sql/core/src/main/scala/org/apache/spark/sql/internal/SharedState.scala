@@ -276,6 +276,5 @@ object SharedState extends Logging {
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
     initialConfigs -- Seq(WAREHOUSE_PATH.key, hiveWarehouseKey)
-
   }
 }
