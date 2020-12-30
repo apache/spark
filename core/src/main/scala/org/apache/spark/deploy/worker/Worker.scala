@@ -66,10 +66,11 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
-  // If worker decommissioning is enabled register a handler on PWR to shutdown.
+  // If worker decommissioning is enabled register a handler on the configured signal to shutdown.
   if (conf.get(config.DECOMMISSION_ENABLED)) {
-    logInfo("Registering SIGPWR handler to trigger decommissioning.")
-    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
+    val signal = conf.get(config.Worker.WORKER_DECOMMISSION_SIGNAL)
+    logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+    SignalUtils.register(signal, "Failed to register SIGPWR handler - " +
       "disabling worker decommission feature.") {
        self.send(WorkerSigPWRReceived)
        true
