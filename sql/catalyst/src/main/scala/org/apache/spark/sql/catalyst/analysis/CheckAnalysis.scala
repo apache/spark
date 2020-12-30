@@ -215,6 +215,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
+            failAnalysis(
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {

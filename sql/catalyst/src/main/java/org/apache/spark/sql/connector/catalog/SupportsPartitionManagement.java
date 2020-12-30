@@ -139,4 +139,23 @@ public interface SupportsPartitionManagement extends Table {
      * @return an array of Identifiers for the partitions
      */
     InternalRow[] listPartitionIdentifiers(String[] names, InternalRow ident);
+
+    /**
+     * Rename an existing partition of the table.
+     *
+     * @param from an existing partition identifier to rename
+     * @param to new partition identifier
+     * @return true if renaming completes successfully otherwise false
+     * @throws UnsupportedOperationException If partition renaming is not supported
+     * @throws PartitionAlreadyExistsException If the `to` partition exists already
+     * @throws NoSuchPartitionException If the `from` partition does not exist
+     *
+     * @since 3.2.0
+     */
+    default boolean renamePartition(InternalRow from, InternalRow to)
+        throws UnsupportedOperationException,
+               PartitionAlreadyExistsException,
+               NoSuchPartitionException {
+      throw new UnsupportedOperationException("Partition renaming is not supported");
+    }
 }

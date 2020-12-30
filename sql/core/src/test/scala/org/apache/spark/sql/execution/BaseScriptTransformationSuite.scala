@@ -28,6 +28,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -123,7 +124,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         s"""
            |SELECT
            |TRANSFORM(a, b, c, d, e)
-           |USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
+           |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
            |FROM v
         """.stripMargin)
 
@@ -438,6 +443,31 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         // if the expected exception will be thrown.
         sql(query).collect()
       }
+    }
+  }
+
+  test("SPARK-33930: Script Transform default FIELD DELIMIT should be \u0001 (no serde)") {
+    withTempView("v") {
+      val df = Seq(
+        (1, 2, 3),
+        (2, 3, 4),
+        (3, 4, 5)
+      ).toDF("a", "b", "c")
+      df.createTempView("v")
+
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c)
+             |  ROW FORMAT DELIMITED
+             |  USING 'cat' AS (a)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |FROM v
+        """.stripMargin), identity,
+        Row("1\u00012\u00013") ::
+          Row("2\u00013\u00014") ::
+          Row("3\u00014\u00015") :: Nil)
     }
   }
 }

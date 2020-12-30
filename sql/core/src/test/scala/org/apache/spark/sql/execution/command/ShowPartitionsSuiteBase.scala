@@ -21,6 +21,17 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
+/**
+ * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * specific test suites:
+ *
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowPartitionsSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ */
 trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW PARTITIONS"
   // Gets the schema of `SHOW PARTITIONS`

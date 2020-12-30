@@ -17,11 +17,34 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
+/**
+ * The trait contains settings and utility functions. It can be mixed to the test suites for
+ * datasource v1 Hive external catalog. This trait complements the common trait
+ * `org.apache.spark.sql.execution.command.DDLCommandTestUtils` with utility functions and
+ * settings for all unified datasource V1 and V2 test suites.
+ */
 trait CommandSuiteBase extends TestHiveSingleton {
-  def version: String = "Hive V1"
+  def version: String = "Hive V1" // The prefix is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  def defaultUsing: String = "USING HIVE"
+  def defaultUsing: String = "USING HIVE" // The clause is used in creating tables under testing
+
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
+    val tablePath = t.split('.')
+    val tableName = tablePath.last
+    val ns = tablePath.init.mkString(".")
+    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
+    val information =
+      spark.sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
+        .select("information")
+        .first().getString(0)
+    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
+    assert(location.endsWith(expected))
+  }
 }

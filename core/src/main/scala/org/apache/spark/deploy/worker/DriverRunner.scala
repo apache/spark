@@ -160,7 +160,6 @@ private[deploy] class DriverRunner(
         driverDesc.jarUrl,
         driverDir,
         conf,
-        securityManager,
         SparkHadoopUtil.get.newConfiguration(conf),
         System.currentTimeMillis(),
         useCache = false)

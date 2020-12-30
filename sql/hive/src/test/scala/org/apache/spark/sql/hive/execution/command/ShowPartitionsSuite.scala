@@ -20,6 +20,10 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.command.v1
 
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check
+ * V1 Hive external table catalog.
+ */
 class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
   test("null and empty string as partition values") {
     import testImplicits._

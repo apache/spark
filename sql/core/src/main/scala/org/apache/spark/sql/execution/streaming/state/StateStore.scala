@@ -494,7 +494,9 @@ object StateStore extends Logging {
         StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
-      reportActiveStoreInstance(storeProviderId)
+      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+      providerIdsToUnload.foreach(unload(_))
       provider
     }
   }
@@ -569,12 +571,20 @@ object StateStore extends Logging {
     }
   }
 
-  private def reportActiveStoreInstance(storeProviderId: StateStoreProviderId): Unit = {
+  private def reportActiveStoreInstance(
+      storeProviderId: StateStoreProviderId,
+      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      coordinatorRef.foreach(_.reportActiveInstance(storeProviderId, host, executorId))
+      val providerIdsToUnload = coordinatorRef
+        .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
+        .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(s"Reported that the loaded instance $storeProviderId is active")
+      logDebug(s"The loaded instances are going to unload: ${providerIdsToUnload.mkString(", ")}")
+      providerIdsToUnload
+    } else {
+      Seq.empty[StateStoreProviderId]
     }
   }
 
