@@ -268,6 +268,10 @@ object QueryCompilationErrors {
       s"but $prettyName is not an aggregate function")
   }
 
+  def ignoreNullsWithUnsupportedFunctionError(prettyName: String): Throwable = {
+    new AnalysisException(s"Function $prettyName does not support IGNORE NULLS")
+  }
+
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")

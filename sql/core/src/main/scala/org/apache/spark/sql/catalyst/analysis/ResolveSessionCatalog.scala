@@ -212,23 +212,14 @@ class ResolveSessionCatalog(
     case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      DescribeDatabaseCommand(ns.head, d.extended)
+    case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
+      DescribeDatabaseCommand(db, d.extended)
 
-    case AlterNamespaceSetProperties(SessionCatalogAndNamespace(_, ns), properties) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      AlterDatabasePropertiesCommand(ns.head, properties)
+    case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
+      AlterDatabasePropertiesCommand(db, properties)
 
-    case AlterNamespaceSetLocation(SessionCatalogAndNamespace(_, ns), location) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      AlterDatabaseSetLocationCommand(ns.head, location)
+    case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
+      AlterDatabaseSetLocationCommand(db, location)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
@@ -373,27 +364,18 @@ class ResolveSessionCatalog(
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
+    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
+      DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
-      if (ns.length != 1) {
-          throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      ShowTablesCommand(Some(ns.head), pattern)
+    case ShowTables(DatabaseInSessionCatalog(db), pattern) =>
+      ShowTablesCommand(Some(db), pattern)
 
     case ShowTableExtended(
-        SessionCatalogAndNamespace(_, ns),
+        DatabaseInSessionCatalog(db),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
       ShowTablesCommand(
-        databaseName = Some(ns.head),
+        databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
         isExtended = true,
         partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
@@ -515,12 +497,7 @@ class ResolveSessionCatalog(
 
     case ShowViews(resolved: ResolvedNamespace, pattern) =>
       resolved match {
-        case SessionCatalogAndNamespace(_, ns) =>
-          // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
-          if (ns.length != 1) {
-            throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-          }
-          ShowViewsCommand(ns.head, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
@@ -679,15 +656,6 @@ class ResolveSessionCatalog(
     }
   }
 
-  object SessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(CatalogPlugin, Seq[String])] =
-      if (isSessionCatalog(resolved.catalog)) {
-        Some(resolved.catalog -> resolved.namespace)
-      } else {
-        None
-      }
-  }
-
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedView(ident, _) => Some(ident)
@@ -731,6 +699,19 @@ class ResolveSessionCatalog(
       case Some(_: FileDataSourceV2) => false
       case Some(_) => true
       case _ => false
+    }
+  }
+
+  private object DatabaseInSessionCatalog {
+    def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
+      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq()) =>
+        throw new AnalysisException("Database from v1 session catalog is not specified")
+      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case _ =>
+        assert(resolved.namespace.length > 1)
+        throw new AnalysisException("Nested databases are not supported by " +
+          s"v1 session catalog: ${resolved.namespace.map(quoteIfNeeded).mkString(".")}")
     }
   }
 }

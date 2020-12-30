@@ -363,6 +363,7 @@ Below is a list of all the keywords in Spark SQL.
 |REPAIR|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
+|RESPECT|non-reserved|non-reserved|non-reserved|
 |RESTRICT|non-reserved|non-reserved|non-reserved|
 |REVOKE|non-reserved|non-reserved|reserved|
 |RIGHT|reserved|strict-non-reserved|reserved|

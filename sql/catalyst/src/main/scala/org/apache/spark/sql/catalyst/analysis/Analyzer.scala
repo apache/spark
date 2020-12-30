@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -2113,7 +2113,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
+          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
               v1SessionCatalog.lookupFunction(funcId, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
@@ -2123,18 +2123,57 @@ class Analyzer(override val catalogManager: CatalogManager)
                   if (isDistinct || filter.isDefined) {
                     throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
                       wf.prettyName)
+                  } else if (ignoreNulls) {
+                    wf match {
+                      case nthValue: NthValue =>
+                        nthValue.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
+                          wf.prettyName)
+                    }
                   } else {
                     wf
+                  }
+                case owf: FrameLessOffsetWindowFunction =>
+                  if (isDistinct || filter.isDefined) {
+                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                      owf.prettyName)
+                  } else if (ignoreNulls) {
+                    owf match {
+                      case lead: Lead =>
+                        lead.copy(ignoreNulls = ignoreNulls)
+                      case lag: Lag =>
+                        lag.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
+                          owf.prettyName)
+                    }
+                  } else {
+                    owf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
                     throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
                   }
-                  AggregateExpression(agg, Complete, isDistinct, filter)
+                  if (ignoreNulls) {
+                    val aggFunc = agg match {
+                      case first: First => first.copy(ignoreNulls = ignoreNulls)
+                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
+                          agg.prettyName)
+                    }
+                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
+                  } else {
+                    AggregateExpression(agg, Complete, isDistinct, filter)
+                  }
                 // This function is not an aggregate function, just return the resolved one.
                 case other if (isDistinct || filter.isDefined) =>
                   throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
+                    other.prettyName)
+                case other if (ignoreNulls) =>
+                  throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
                     other.prettyName)
                 case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
