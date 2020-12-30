@@ -1698,10 +1698,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     val filter = Option(ctx.where).map(expression(_))
     val ignoreNulls =
-      Option(ctx.nullsOption).map(_.getType).getOrElse(SqlBaseParser.RESPECT) match {
-        case SqlBaseParser.RESPECT => false
-        case SqlBaseParser.IGNORE => true
-    }
+      Option(ctx.nullsOption).map(_.getType == SqlBaseParser.IGNORE).getOrElse(false)
     val function = UnresolvedFunction(
       getFunctionIdentifier(ctx.functionName), arguments, isDistinct, filter, ignoreNulls)
 

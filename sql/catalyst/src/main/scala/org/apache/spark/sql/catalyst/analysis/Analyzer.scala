@@ -2144,6 +2144,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                         lead.copy(ignoreNulls = ignoreNulls)
                       case lag: Lag =>
                         lag.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
+                          owf.prettyName)
                     }
                   } else {
                     owf
@@ -2154,17 +2157,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                     throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
                   }
                   if (ignoreNulls) {
-                    agg match {
-                      case first: First =>
-                        AggregateExpression(
-                          first.copy(ignoreNulls = ignoreNulls), Complete, isDistinct, filter)
-                      case last: Last =>
-                        AggregateExpression(
-                          last.copy(ignoreNulls = ignoreNulls), Complete, isDistinct, filter)
+                    val aggFunc = agg match {
+                      case first: First => first.copy(ignoreNulls = ignoreNulls)
+                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
                       case _ =>
                         throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
                           agg.prettyName)
                     }
+                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
                   } else {
                     AggregateExpression(agg, Complete, isDistinct, filter)
                   }

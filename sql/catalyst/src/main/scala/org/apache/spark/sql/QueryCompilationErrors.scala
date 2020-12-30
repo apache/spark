@@ -269,8 +269,7 @@ object QueryCompilationErrors {
   }
 
   def ignoreNullsWithUnsupportedFunctionError(prettyName: String): Throwable = {
-    new AnalysisException("IGNORE NULLS specified, " +
-      s"but $prettyName is not first, last or an offset window function")
+    new AnalysisException(s"Function $prettyName does not support IGNORE NULLS")
   }
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
