@@ -280,7 +280,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           DescribeColumnExec(desc.output, c, isExtended) :: Nil
         case nested =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(nested, removeAlias = true))
+            "DESC TABLE COLUMN", toPrettySQL(nested))
       }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>

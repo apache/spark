@@ -125,18 +125,17 @@ package object util extends Logging {
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
-  def usePrettyExpression(e: Expression, removeAlias: Boolean): Expression = e transform {
-    case a: Alias if removeAlias => usePrettyExpression(a.child, removeAlias)
+  def usePrettyExpression(e: Expression): Expression = e transform {
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case e: GetStructField =>
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-      PrettyAttribute(usePrettyExpression(e.child, removeAlias).sql + "." + name, e.dataType)
+      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
-      PrettyAttribute(usePrettyExpression(e.child, removeAlias) + "." + e.field.name, e.dataType)
+      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
     case r: RuntimeReplaceable =>
-      PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL(_, removeAlias))), r.dataType)
+      PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL)), r.dataType)
   }
 
   def quoteIdentifier(name: String): String = {
@@ -145,9 +144,7 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
-  def toPrettySQL(e: Expression, removeAlias: Boolean = false): String = {
-    usePrettyExpression(e, removeAlias).sql
-  }
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder

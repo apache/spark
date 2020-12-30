@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -248,9 +248,11 @@ class ResolveSessionCatalog(
           throw QueryCompilationErrors.columnDoesNotExistError(u.name)
         case a: Attribute =>
           DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
-        case nested =>
+        case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(nested, removeAlias = true))
+            "DESC TABLE COLUMN", toPrettySQL(child))
+        case other =>
+          throw new AnalysisException(s"[BUG] unexpected column expression: $other")
       }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the

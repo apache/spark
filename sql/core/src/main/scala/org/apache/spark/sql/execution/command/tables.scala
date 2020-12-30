@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, toPrettySQL, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
@@ -771,7 +771,7 @@ case class DescribeColumnCommand(
     if (!field.isInstanceOf[Attribute]) {
       // If the field is not an attribute after `resolve`, then it's a nested field.
       throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-        "DESC TABLE COLUMN", toPrettySQL(field, removeAlias = true))
+        "DESC TABLE COLUMN", colName)
     }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
