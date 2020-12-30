@@ -258,7 +258,8 @@ case class UnresolvedFunction(
     name: FunctionIdentifier,
     arguments: Seq[Expression],
     isDistinct: Boolean,
-    filter: Option[Expression] = None)
+    filter: Option[Expression] = None,
+    ignoreNulls: Boolean = false)
   extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq

@@ -213,6 +213,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
   errorTest(
+    "function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
+    "Function hex does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "some window function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
+    "Function percent_rank does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "aggregate function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
+    "Function count does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "higher order function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
     "nested aggregate functions",
     testRelation.groupBy($"a")(
       AggregateExpression(
