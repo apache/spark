@@ -431,7 +431,7 @@ object JdbcUtils extends Logging {
         val rawTime = rs.getTime(pos + 1)
         if (rawTime != null) {
           val rawTimeInNano = rawTime.toLocalTime().toNanoOfDay()
-          val timeInMillis = TimeUnit.NANOSECONDS.toMillis(rawTimeInNano).toInt
+          val timeInMillis = Math.toIntExact(TimeUnit.NANOSECONDS.toMillis(rawTimeInNano))
           row.setInt(pos, timeInMillis)
         } else {
           row.update(pos, null)
