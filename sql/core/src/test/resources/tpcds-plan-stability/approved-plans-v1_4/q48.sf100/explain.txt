@@ -172,7 +172,7 @@ Results [1]: [sum#22]
 
 (31) Exchange
 Input [1]: [sum#22]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
+Arguments: SinglePartition, true, [id=#23]
 
 (32) HashAggregate [codegen id : 6]
 Input [1]: [sum#22]

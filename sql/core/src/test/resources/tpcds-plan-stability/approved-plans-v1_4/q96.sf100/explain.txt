@@ -145,7 +145,7 @@ Results [1]: [count#15]
 
 (26) Exchange
 Input [1]: [count#15]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#16]
+Arguments: SinglePartition, true, [id=#16]
 
 (27) HashAggregate [codegen id : 5]
 Input [1]: [count#15]

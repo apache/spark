@@ -291,7 +291,7 @@ Results [1]: [count#16]
 
 (26) Exchange
 Input [1]: [count#16]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#17]
+Arguments: SinglePartition, true, [id=#17]
 
 (27) HashAggregate [codegen id : 5]
 Input [1]: [count#16]
@@ -378,7 +378,7 @@ Results [1]: [count#22]
 
 (45) Exchange
 Input [1]: [count#22]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
+Arguments: SinglePartition, true, [id=#23]
 
 (46) HashAggregate [codegen id : 10]
 Input [1]: [count#22]
@@ -472,7 +472,7 @@ Results [1]: [count#29]
 
 (66) Exchange
 Input [1]: [count#29]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#30]
+Arguments: SinglePartition, true, [id=#30]
 
 (67) HashAggregate [codegen id : 15]
 Input [1]: [count#29]
@@ -566,7 +566,7 @@ Results [1]: [count#36]
 
 (87) Exchange
 Input [1]: [count#36]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#37]
+Arguments: SinglePartition, true, [id=#37]
 
 (88) HashAggregate [codegen id : 20]
 Input [1]: [count#36]
@@ -660,7 +660,7 @@ Results [1]: [count#43]
 
 (108) Exchange
 Input [1]: [count#43]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#44]
+Arguments: SinglePartition, true, [id=#44]
 
 (109) HashAggregate [codegen id : 25]
 Input [1]: [count#43]
@@ -754,7 +754,7 @@ Results [1]: [count#50]
 
 (129) Exchange
 Input [1]: [count#50]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#51]
+Arguments: SinglePartition, true, [id=#51]
 
 (130) HashAggregate [codegen id : 30]
 Input [1]: [count#50]
@@ -848,7 +848,7 @@ Results [1]: [count#57]
 
 (150) Exchange
 Input [1]: [count#57]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#58]
+Arguments: SinglePartition, true, [id=#58]
 
 (151) HashAggregate [codegen id : 35]
 Input [1]: [count#57]
@@ -942,7 +942,7 @@ Results [1]: [count#64]
 
 (171) Exchange
 Input [1]: [count#64]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#65]
+Arguments: SinglePartition, true, [id=#65]
 
 (172) HashAggregate [codegen id : 40]
 Input [1]: [count#64]

@@ -108,7 +108,7 @@ Results [3]: [cs_item_sk#5, sum#12, count#13]
 
 (17) Exchange
 Input [3]: [cs_item_sk#5, sum#12, count#13]
-Arguments: hashpartitioning(cs_item_sk#5, 5), ENSURE_REQUIREMENTS, [id=#14]
+Arguments: hashpartitioning(cs_item_sk#5, 5), true, [id=#14]
 
 (18) HashAggregate
 Input [3]: [cs_item_sk#5, sum#12, count#13]

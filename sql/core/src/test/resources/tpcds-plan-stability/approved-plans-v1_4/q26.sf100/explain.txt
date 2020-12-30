@@ -178,7 +178,7 @@ Results [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37
 
 (32) Exchange
 Input [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37, sum#38, count#39]
-Arguments: hashpartitioning(i_item_id#22, 5), ENSURE_REQUIREMENTS, [id=#40]
+Arguments: hashpartitioning(i_item_id#22, 5), true, [id=#40]
 
 (33) HashAggregate [codegen id : 6]
 Input [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37, sum#38, count#39]

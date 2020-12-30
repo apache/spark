@@ -127,7 +127,7 @@ Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4, d_date_sk#7]
 
 (17) Exchange
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
-Arguments: hashpartitioning(inv_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#10]
+Arguments: hashpartitioning(inv_item_sk#2, 5), true, [id=#10]
 
 (18) Sort [codegen id : 4]
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
@@ -149,7 +149,7 @@ Condition : isnotnull(i_item_sk#11)
 
 (22) Exchange
 Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
-Arguments: hashpartitioning(i_item_sk#11, 5), ENSURE_REQUIREMENTS, [id=#16]
+Arguments: hashpartitioning(i_item_sk#11, 5), true, [id=#16]
 
 (23) Sort [codegen id : 6]
 Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
@@ -173,7 +173,7 @@ Results [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, 
 
 (27) Exchange
 Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, count#20]
-Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, i_category#14, 5), ENSURE_REQUIREMENTS, [id=#21]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, i_category#14, 5), true, [id=#21]
 
 (28) HashAggregate [codegen id : 8]
 Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, count#20]
@@ -215,7 +215,7 @@ Results [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
 
 (34) Exchange
 Input [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
-Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, 5), ENSURE_REQUIREMENTS, [id=#37]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, 5), true, [id=#37]
 
 (35) HashAggregate [codegen id : 17]
 Input [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
@@ -243,7 +243,7 @@ Results [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
 
 (39) Exchange
 Input [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
-Arguments: hashpartitioning(i_product_name#15, i_brand#12, 5), ENSURE_REQUIREMENTS, [id=#48]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, 5), true, [id=#48]
 
 (40) HashAggregate [codegen id : 26]
 Input [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
@@ -271,7 +271,7 @@ Results [3]: [i_product_name#15, sum#58, count#59]
 
 (44) Exchange
 Input [3]: [i_product_name#15, sum#58, count#59]
-Arguments: hashpartitioning(i_product_name#15, 5), ENSURE_REQUIREMENTS, [id=#60]
+Arguments: hashpartitioning(i_product_name#15, 5), true, [id=#60]
 
 (45) HashAggregate [codegen id : 35]
 Input [3]: [i_product_name#15, sum#58, count#59]
@@ -299,7 +299,7 @@ Results [2]: [sum#71, count#72]
 
 (49) Exchange
 Input [2]: [sum#71, count#72]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#73]
+Arguments: SinglePartition, true, [id=#73]
 
 (50) HashAggregate [codegen id : 44]
 Input [2]: [sum#71, count#72]

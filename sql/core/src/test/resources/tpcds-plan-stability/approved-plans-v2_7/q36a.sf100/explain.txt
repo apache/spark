@@ -162,7 +162,7 @@ Results [4]: [i_category#14, i_class#13, sum#18, sum#19]
 
 (25) Exchange
 Input [4]: [i_category#14, i_class#13, sum#18, sum#19]
-Arguments: hashpartitioning(i_category#14, i_class#13, 5), ENSURE_REQUIREMENTS, [id=#20]
+Arguments: hashpartitioning(i_category#14, i_class#13, 5), true, [id=#20]
 
 (26) HashAggregate [codegen id : 5]
 Input [4]: [i_category#14, i_class#13, sum#18, sum#19]
@@ -190,7 +190,7 @@ Results [5]: [i_category#14, sum#37, isEmpty#38, sum#39, isEmpty#40]
 
 (30) Exchange
 Input [5]: [i_category#14, sum#37, isEmpty#38, sum#39, isEmpty#40]
-Arguments: hashpartitioning(i_category#14, 5), ENSURE_REQUIREMENTS, [id=#41]
+Arguments: hashpartitioning(i_category#14, 5), true, [id=#41]
 
 (31) HashAggregate [codegen id : 11]
 Input [5]: [i_category#14, sum#37, isEmpty#38, sum#39, isEmpty#40]
@@ -210,7 +210,7 @@ Results [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class
 
 (34) Exchange
 Input [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26]
-Arguments: hashpartitioning(gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26, 5), ENSURE_REQUIREMENTS, [id=#49]
+Arguments: hashpartitioning(gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26, 5), true, [id=#49]
 
 (35) HashAggregate [codegen id : 13]
 Input [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26]
@@ -238,7 +238,7 @@ Results [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
 
 (39) Exchange
 Input [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#62]
+Arguments: SinglePartition, true, [id=#62]
 
 (40) HashAggregate [codegen id : 19]
 Input [4]: [sum#58, isEmpty#59, sum#60, isEmpty#61]
@@ -258,7 +258,7 @@ Results [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class
 
 (43) Exchange
 Input [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26]
-Arguments: hashpartitioning(gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26, 5), ENSURE_REQUIREMENTS, [id=#71]
+Arguments: hashpartitioning(gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26, 5), true, [id=#71]
 
 (44) HashAggregate [codegen id : 21]
 Input [6]: [gross_margin#23, i_category#14, i_class#13, t_category#24, t_class#25, lochierarchy#26]
@@ -269,7 +269,7 @@ Results [5]: [gross_margin#23, i_category#14, i_class#13, lochierarchy#26, CASE 
 
 (45) Exchange
 Input [5]: [gross_margin#23, i_category#14, i_class#13, lochierarchy#26, _w0#72]
-Arguments: hashpartitioning(lochierarchy#26, _w0#72, 5), ENSURE_REQUIREMENTS, [id=#73]
+Arguments: hashpartitioning(lochierarchy#26, _w0#72, 5), true, [id=#73]
 
 (46) Sort [codegen id : 22]
 Input [5]: [gross_margin#23, i_category#14, i_class#13, lochierarchy#26, _w0#72]

@@ -213,7 +213,7 @@ Input [11]: [cs_sold_date_sk#1, cs_item_sk#2, cs_order_number#3, cs_quantity#4, 
 
 (17) Exchange
 Input [9]: [cs_item_sk#2, cs_order_number#3, cs_quantity#4, cs_ext_sales_price#5, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
-Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#16]
+Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), true, [id=#16]
 
 (18) Sort [codegen id : 4]
 Input [9]: [cs_item_sk#2, cs_order_number#3, cs_quantity#4, cs_ext_sales_price#5, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
@@ -235,7 +235,7 @@ Condition : (isnotnull(cr_order_number#18) AND isnotnull(cr_item_sk#17))
 
 (22) Exchange
 Input [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
-Arguments: hashpartitioning(cr_order_number#18, cr_item_sk#17, 5), ENSURE_REQUIREMENTS, [id=#21]
+Arguments: hashpartitioning(cr_order_number#18, cr_item_sk#17, 5), true, [id=#21]
 
 (23) Sort [codegen id : 6]
 Input [4]: [cr_item_sk#17, cr_order_number#18, cr_return_quantity#19, cr_return_amount#20]
@@ -290,7 +290,7 @@ Input [11]: [ss_sold_date_sk#24, ss_item_sk#25, ss_ticket_number#26, ss_quantity
 
 (35) Exchange
 Input [9]: [ss_item_sk#25, ss_ticket_number#26, ss_quantity#27, ss_ext_sales_price#28, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
-Arguments: hashpartitioning(cast(ss_ticket_number#26 as bigint), cast(ss_item_sk#25 as bigint), 5), ENSURE_REQUIREMENTS, [id=#29]
+Arguments: hashpartitioning(cast(ss_ticket_number#26 as bigint), cast(ss_item_sk#25 as bigint), 5), true, [id=#29]
 
 (36) Sort [codegen id : 11]
 Input [9]: [ss_item_sk#25, ss_ticket_number#26, ss_quantity#27, ss_ext_sales_price#28, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
@@ -312,7 +312,7 @@ Condition : (isnotnull(sr_ticket_number#31) AND isnotnull(sr_item_sk#30))
 
 (40) Exchange
 Input [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return_amt#33]
-Arguments: hashpartitioning(sr_ticket_number#31, sr_item_sk#30, 5), ENSURE_REQUIREMENTS, [id=#34]
+Arguments: hashpartitioning(sr_ticket_number#31, sr_item_sk#30, 5), true, [id=#34]
 
 (41) Sort [codegen id : 13]
 Input [4]: [sr_item_sk#30, sr_ticket_number#31, sr_return_quantity#32, sr_return_amt#33]
@@ -338,7 +338,7 @@ Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 
 (46) Exchange
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23]
-Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23, 5), ENSURE_REQUIREMENTS, [id=#37]
+Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23, 5), true, [id=#37]
 
 (47) HashAggregate [codegen id : 16]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23]
@@ -387,7 +387,7 @@ Input [11]: [ws_sold_date_sk#38, ws_item_sk#39, ws_order_number#40, ws_quantity#
 
 (57) Exchange
 Input [9]: [ws_item_sk#39, ws_order_number#40, ws_quantity#41, ws_ext_sales_price#42, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
-Arguments: hashpartitioning(cast(ws_order_number#40 as bigint), cast(ws_item_sk#39 as bigint), 5), ENSURE_REQUIREMENTS, [id=#43]
+Arguments: hashpartitioning(cast(ws_order_number#40 as bigint), cast(ws_item_sk#39 as bigint), 5), true, [id=#43]
 
 (58) Sort [codegen id : 20]
 Input [9]: [ws_item_sk#39, ws_order_number#40, ws_quantity#41, ws_ext_sales_price#42, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, d_year#14]
@@ -409,7 +409,7 @@ Condition : (isnotnull(wr_order_number#45) AND isnotnull(wr_item_sk#44))
 
 (62) Exchange
 Input [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_amt#47]
-Arguments: hashpartitioning(wr_order_number#45, wr_item_sk#44, 5), ENSURE_REQUIREMENTS, [id=#48]
+Arguments: hashpartitioning(wr_order_number#45, wr_item_sk#44, 5), true, [id=#48]
 
 (63) Sort [codegen id : 22]
 Input [4]: [wr_item_sk#44, wr_order_number#45, wr_return_quantity#46, wr_return_amt#47]
@@ -435,7 +435,7 @@ Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 
 (68) Exchange
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23]
-Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23, 5), ENSURE_REQUIREMENTS, [id=#51]
+Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23, 5), true, [id=#51]
 
 (69) HashAggregate [codegen id : 25]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23]
@@ -453,7 +453,7 @@ Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 
 (71) Exchange
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum#54, sum#55]
-Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, 5), ENSURE_REQUIREMENTS, [id=#56]
+Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, 5), true, [id=#56]
 
 (72) HashAggregate [codegen id : 26]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum#54, sum#55]
@@ -464,7 +464,7 @@ Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 
 (73) Exchange
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#59, sales_amt#60]
-Arguments: hashpartitioning(i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, 5), ENSURE_REQUIREMENTS, [id=#61]
+Arguments: hashpartitioning(i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, 5), true, [id=#61]
 
 (74) Sort [codegen id : 27]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#59, sales_amt#60]
@@ -525,7 +525,7 @@ Input [11]: [cs_sold_date_sk#1, cs_item_sk#2, cs_order_number#3, cs_quantity#4, 
 
 (87) Exchange
 Input [9]: [cs_item_sk#2, cs_order_number#3, cs_quantity#4, cs_ext_sales_price#5, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
-Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#70]
+Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), true, [id=#70]
 
 (88) Sort [codegen id : 31]
 Input [9]: [cs_item_sk#2, cs_order_number#3, cs_quantity#4, cs_ext_sales_price#5, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
@@ -587,7 +587,7 @@ Input [11]: [ss_sold_date_sk#24, ss_item_sk#25, ss_ticket_number#26, ss_quantity
 
 (102) Exchange
 Input [9]: [ss_item_sk#25, ss_ticket_number#26, ss_quantity#27, ss_ext_sales_price#28, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
-Arguments: hashpartitioning(cast(ss_ticket_number#26 as bigint), cast(ss_item_sk#25 as bigint), 5), ENSURE_REQUIREMENTS, [id=#71]
+Arguments: hashpartitioning(cast(ss_ticket_number#26 as bigint), cast(ss_item_sk#25 as bigint), 5), true, [id=#71]
 
 (103) Sort [codegen id : 38]
 Input [9]: [ss_item_sk#25, ss_ticket_number#26, ss_quantity#27, ss_ext_sales_price#28, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
@@ -620,7 +620,7 @@ Results [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manuf
 
 (110) Exchange
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23]
-Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23, 5), ENSURE_REQUIREMENTS, [id=#74]
+Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23, 5), true, [id=#74]
 
 (111) HashAggregate [codegen id : 43]
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23]
@@ -669,7 +669,7 @@ Input [11]: [ws_sold_date_sk#38, ws_item_sk#39, ws_order_number#40, ws_quantity#
 
 (121) Exchange
 Input [9]: [ws_item_sk#39, ws_order_number#40, ws_quantity#41, ws_ext_sales_price#42, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
-Arguments: hashpartitioning(cast(ws_order_number#40 as bigint), cast(ws_item_sk#39 as bigint), 5), ENSURE_REQUIREMENTS, [id=#75]
+Arguments: hashpartitioning(cast(ws_order_number#40 as bigint), cast(ws_item_sk#39 as bigint), 5), true, [id=#75]
 
 (122) Sort [codegen id : 47]
 Input [9]: [ws_item_sk#39, ws_order_number#40, ws_quantity#41, ws_ext_sales_price#42, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, d_year#68]
@@ -702,7 +702,7 @@ Results [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manuf
 
 (129) Exchange
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23]
-Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23, 5), ENSURE_REQUIREMENTS, [id=#78]
+Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23, 5), true, [id=#78]
 
 (130) HashAggregate [codegen id : 52]
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#22, sales_amt#23]
@@ -720,7 +720,7 @@ Results [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manuf
 
 (132) Exchange
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sum#81, sum#82]
-Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, 5), ENSURE_REQUIREMENTS, [id=#83]
+Arguments: hashpartitioning(d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, 5), true, [id=#83]
 
 (133) HashAggregate [codegen id : 53]
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sum#81, sum#82]
@@ -731,7 +731,7 @@ Results [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manuf
 
 (134) Exchange
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#86, sales_amt#87]
-Arguments: hashpartitioning(i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, 5), ENSURE_REQUIREMENTS, [id=#88]
+Arguments: hashpartitioning(i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, 5), true, [id=#88]
 
 (135) Sort [codegen id : 54]
 Input [7]: [d_year#68, i_brand_id#63, i_class_id#64, i_category_id#65, i_manufact_id#66, sales_cnt#86, sales_amt#87]

@@ -111,7 +111,7 @@ Results [3]: [ws_item_sk#5, sum#12, count#13]
 
 (17) Exchange
 Input [3]: [ws_item_sk#5, sum#12, count#13]
-Arguments: hashpartitioning(ws_item_sk#5, 5), ENSURE_REQUIREMENTS, [id=#14]
+Arguments: hashpartitioning(ws_item_sk#5, 5), true, [id=#14]
 
 (18) HashAggregate
 Input [3]: [ws_item_sk#5, sum#12, count#13]
@@ -181,7 +181,7 @@ Results [1]: [sum#20]
 
 (32) Exchange
 Input [1]: [sum#20]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#21]
+Arguments: SinglePartition, true, [id=#21]
 
 (33) HashAggregate [codegen id : 7]
 Input [1]: [sum#20]

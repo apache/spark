@@ -217,7 +217,7 @@ Results [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum
 
 (31) Exchange
 Input [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42]
-Arguments: hashpartitioning(i_item_id#21, s_state#18, 5), ENSURE_REQUIREMENTS, [id=#43]
+Arguments: hashpartitioning(i_item_id#21, s_state#18, 5), true, [id=#43]
 
 (32) HashAggregate [codegen id : 6]
 Input [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42]
@@ -316,7 +316,7 @@ Results [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67
 
 (53) Exchange
 Input [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67, sum#68, count#69]
-Arguments: hashpartitioning(i_item_id#21, 5), ENSURE_REQUIREMENTS, [id=#70]
+Arguments: hashpartitioning(i_item_id#21, 5), true, [id=#70]
 
 (54) HashAggregate [codegen id : 12]
 Input [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67, sum#68, count#69]
@@ -411,7 +411,7 @@ Results [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, coun
 
 (74) Exchange
 Input [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, count#97]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#98]
+Arguments: SinglePartition, true, [id=#98]
 
 (75) HashAggregate [codegen id : 18]
 Input [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, count#97]

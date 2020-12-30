@@ -168,7 +168,7 @@ Results [1]: [count#14]
 
 (26) Exchange
 Input [1]: [count#14]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#15]
+Arguments: SinglePartition, true, [id=#15]
 
 (27) HashAggregate [codegen id : 5]
 Input [1]: [count#14]
@@ -255,7 +255,7 @@ Results [1]: [count#20]
 
 (45) Exchange
 Input [1]: [count#20]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#21]
+Arguments: SinglePartition, true, [id=#21]
 
 (46) HashAggregate [codegen id : 10]
 Input [1]: [count#20]
@@ -277,7 +277,7 @@ Input [2]: [amc#17, pmc#23]
 
 (50) Exchange
 Input [1]: [am_pm_ratio#25]
-Arguments: rangepartitioning(am_pm_ratio#25 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#26]
+Arguments: rangepartitioning(am_pm_ratio#25 ASC NULLS FIRST, 5), true, [id=#26]
 
 (51) Sort [codegen id : 12]
 Input [1]: [am_pm_ratio#25]
