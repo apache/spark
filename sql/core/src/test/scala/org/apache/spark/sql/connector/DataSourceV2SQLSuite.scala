@@ -937,7 +937,8 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM a.b")
     }
 
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    assert(exception.getMessage.contains(
+      "Nested databases are not supported by v1 session catalog: a.b"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
