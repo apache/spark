@@ -24,6 +24,9 @@ DESC EXTENDED desc_col_table key;
 
 DESC FORMATTED desc_col_table key;
 
+-- Describe a non-existent column
+DESC desc_col_table key1;
+
 -- Test complex columns
 CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
 

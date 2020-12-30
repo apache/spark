@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartit
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
@@ -277,8 +278,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       column match {
         case c: Attribute =>
           DescribeColumnExec(desc.output, c, isExtended) :: Nil
-        case _ =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError("DESC TABLE COLUMN")
+        case nested =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(nested, removeAlias = true))
       }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>

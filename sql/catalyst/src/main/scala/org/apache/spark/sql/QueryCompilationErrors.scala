@@ -98,7 +98,7 @@ object QueryCompilationErrors {
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
     new AnalysisException(
       s"Only one generator allowed per $clause clause but found " +
-        generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+        generators.size + ": " + generators.map(toPrettySQL(_)).mkString(", "))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
@@ -502,7 +502,7 @@ object QueryCompilationErrors {
     new AnalysisException(s"$command does not support nested column: $quoted")
   }
 
-  def commandNotSupportNestedColumnError(command: String): Throwable = {
-    new AnalysisException(s"$command does not support nested column")
+  def columnDoesNotExistError(colName: String): Throwable = {
+    new AnalysisException(s"Column $colName does not exist")
   }
 }
