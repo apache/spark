@@ -98,7 +98,7 @@ object QueryCompilationErrors {
   def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
     new AnalysisException(
       s"Only one generator allowed per $clause clause but found " +
-        generators.size + ": " + generators.map(toPrettySQL(_)).mkString(", "))
+        generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
   }
 
   def generatorOutsideSelectError(plan: LogicalPlan): Throwable = {
