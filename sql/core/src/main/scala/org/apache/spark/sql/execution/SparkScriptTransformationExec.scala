@@ -48,7 +48,7 @@ case class SparkScriptTransformationExec(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow] = {
 
-    val (outputStream, proc, inputStream, stderrBuffer) = initProc
+    val (outputStream, proc, inputStream, stderrBuffer) = initProc(hadoopConf)
 
     val outputProjection = new InterpretedProjection(inputExpressionsWithoutSerde, child.output)
 

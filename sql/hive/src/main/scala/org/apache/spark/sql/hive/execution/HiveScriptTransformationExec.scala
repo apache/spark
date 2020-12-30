@@ -140,7 +140,7 @@ case class HiveScriptTransformationExec(
       inputIterator: Iterator[InternalRow],
       hadoopConf: Configuration): Iterator[InternalRow] = {
 
-    val (outputStream, proc, inputStream, stderrBuffer) = initProc
+    val (outputStream, proc, inputStream, stderrBuffer) = initProc(hadoopConf)
 
     val (inputSerde, inputSoi) = initInputSerDe(ioschema, input).getOrElse((null, null))
 

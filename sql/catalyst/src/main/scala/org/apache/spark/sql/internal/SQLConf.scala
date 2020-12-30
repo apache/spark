@@ -2918,6 +2918,14 @@ object SQLConf {
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
+  val SCRIPT_TRANSFORMATION_COMMAND_WRAPPER =
+    buildConf("spark.sql.scriptTransformation.commandWrapper")
+      .internal()
+      .doc("Command wrapper for executor to execute transformation script.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("/bin/bash -c")
+
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
       .internal()
