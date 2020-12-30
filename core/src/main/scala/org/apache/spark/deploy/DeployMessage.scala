@@ -77,7 +77,7 @@ private[deploy] object DeployMessages {
   object DecommissionWorker extends DeployMessage
 
   /**
-   * A message that sent to the Worker itself when it receives PWR signal,
+   * A message that sent by the Worker to itself when it receives PWR signal,
    * indicating the Worker starts to decommission.
    */
   object WorkerSigPWRReceived extends DeployMessage
@@ -87,6 +87,7 @@ private[deploy] object DeployMessages {
    * decommissioning. It's used for the case where decommission is triggered at Worker.
    *
    * @param id the worker id
+   * @param workerRef the worker endpoint ref
    */
   case class WorkerDecommissioning(id: String, workerRef: RpcEndpointRef) extends DeployMessage
 

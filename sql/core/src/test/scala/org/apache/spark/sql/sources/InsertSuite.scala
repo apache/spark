@@ -756,6 +756,47 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
+        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(i int, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': date to int"))
+        assert(msg.contains("Cannot safely cast 'd': int to date"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
+        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
+        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
+      }
+    }
+  }
+
   test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
     SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
       withSQLConf(
@@ -804,7 +845,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         .add("s", StringType, false)
       val newTable = CatalogTable(
         identifier = TableIdentifier("test_table", None),
-        tableType = CatalogTableType.EXTERNAL,
+        tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat(
           locationUri = None,
           inputFormat = None,
@@ -826,21 +867,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
-    withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true") {
-      withTable("t") {
-        sql(
-          """
-            |CREATE TABLE t(i INT, part1 INT) USING PARQUET
-            |PARTITIONED BY (part1)
+    Seq(true, false).foreach { fastFail =>
+      withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true",
+        SQLConf.FASTFAIL_ON_FILEFORMAT_OUTPUT.key -> fastFail.toString) {
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t(i INT, part1 INT) USING PARQUET
+              |PARTITIONED BY (part1)
           """.stripMargin)
 
-        val df = Seq((1, 1)).toDF("i", "part1")
-        val err = intercept[SparkException] {
-          df.write.mode("overwrite").format("parquet").insertInto("t")
+          val df = Seq((1, 1)).toDF("i", "part1")
+          val err = intercept[SparkException] {
+            df.write.mode("overwrite").format("parquet").insertInto("t")
+          }
+
+          if (fastFail) {
+            assert(err.getCause.getMessage.contains("can not write to output file: " +
+              "org.apache.hadoop.fs.FileAlreadyExistsException"))
+          } else {
+            assert(err.getCause.getMessage.contains("Task failed while writing rows"))
+          }
         }
-        assert(err.getCause.getMessage.contains("can not write to output file: " +
-          "org.apache.hadoop.fs.FileAlreadyExistsException"))
       }
     }
   }
@@ -886,6 +935,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2='2') SELECT 1")
       sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'2' AS part2")
       sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'' AS part2")
+    }
+  }
+
+  test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
+    withTempPath { path =>
+      val msg = intercept[AnalysisException] {
+        sql(
+          s"""
+            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+            |SELECT * FROM (
+            | SELECT c3 FROM (
+            |  SELECT c1, c2 from values(1,2) t(c1, c2)
+            |  )
+            |)
+          """.stripMargin)
+      }.getMessage
+      assert(msg.contains("cannot resolve '`c3`' given input columns"))
     }
   }
 }

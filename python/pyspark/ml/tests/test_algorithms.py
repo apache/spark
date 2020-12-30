@@ -86,7 +86,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, rtol=0.1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -116,7 +116,7 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
-    def test_parallelism_doesnt_change_output(self):
+    def test_parallelism_does_not_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
@@ -333,7 +333,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

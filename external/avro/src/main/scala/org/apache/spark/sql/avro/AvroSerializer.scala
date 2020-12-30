@@ -49,7 +49,7 @@ private[sql] class AvroSerializer(
     nullable: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
 
-  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) {
+  def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
     this(rootCatalystType, rootAvroType, nullable,
       LegacyBehaviorPolicy.withName(SQLConf.get.getConf(
         SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE)))
@@ -255,20 +255,54 @@ private[sql] class AvroSerializer(
       result
   }
 
+  /**
+   * Resolve a possibly nullable Avro Type.
+   *
+   * An Avro type is nullable when it is a [[UNION]] of two types: one null type and another
+   * non-null type. This method will check the nullability of the input Avro type and return the
+   * non-null type within when it is nullable. Otherwise it will return the input Avro type
+   * unchanged. It will throw an [[UnsupportedAvroTypeException]] when the input Avro type is an
+   * unsupported nullable type.
+   *
+   * It will also log a warning message if the nullability for Avro and catalyst types are
+   * different.
+   */
   private def resolveNullableType(avroType: Schema, nullable: Boolean): Schema = {
-    if (avroType.getType == Type.UNION && nullable) {
-      // avro uses union to represent nullable type.
+    val (avroNullable, resolvedAvroType) = resolveAvroType(avroType)
+    warnNullabilityDifference(avroNullable, nullable)
+    resolvedAvroType
+  }
+
+  /**
+   * Check the nullability of the input Avro type and resolve it when it is nullable. The first
+   * return value is a [[Boolean]] indicating if the input Avro type is nullable. The second
+   * return value is the possibly resolved type.
+   */
+  private def resolveAvroType(avroType: Schema): (Boolean, Schema) = {
+    if (avroType.getType == Type.UNION) {
       val fields = avroType.getTypes.asScala
-      assert(fields.length == 2)
       val actualType = fields.filter(_.getType != Type.NULL)
-      assert(actualType.length == 1)
-      actualType.head
-    } else {
-      if (nullable) {
-        logWarning("Writing avro files with non-nullable avro schema with nullable catalyst " +
-          "schema will throw runtime exception if there is a record with null value.")
+      if (fields.length != 2 || actualType.length != 1) {
+        throw new UnsupportedAvroTypeException(
+          s"Unsupported Avro UNION type $avroType: Only UNION of a null type and a non-null " +
+            "type is supported")
       }
-      avroType
+      (true, actualType.head)
+    } else {
+      (false, avroType)
+    }
+  }
+
+  /**
+   * log a warning message if the nullability for Avro and catalyst types are different.
+   */
+  private def warnNullabilityDifference(avroNullable: Boolean, catalystNullable: Boolean): Unit = {
+    if (avroNullable && !catalystNullable) {
+      logWarning("Writing Avro files with nullable Avro schema and non-nullable catalyst schema.")
+    }
+    if (!avroNullable && catalystNullable) {
+      logWarning("Writing Avro files with non-nullable Avro schema and nullable catalyst " +
+        "schema will throw runtime exception if there is a record with null value.")
     }
   }
 }

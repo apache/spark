@@ -466,24 +466,26 @@ private[ml] class BlockLogisticAggregator(
 
     // in-place convert margins to multiplier
     // then, vec represents multiplier
+    var localLossSum = 0.0
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
       if (weight > 0) {
-        weightSum += weight
         val label = block.getLabel(i)
         val margin = vec(i)
         if (label > 0) {
           // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
-          lossSum += weight * Utils.log1pExp(margin)
+          localLossSum += weight * Utils.log1pExp(margin)
         } else {
-          lossSum += weight * (Utils.log1pExp(margin) - margin)
+          localLossSum += weight * (Utils.log1pExp(margin) - margin)
         }
         val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
         vec.values(i) = multiplier
       } else { vec.values(i) = 0.0 }
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += block.weightIter.sum
 
     // predictions are all correct, no gradient signal
     if (vec.values.forall(_ == 0)) return
@@ -502,6 +504,9 @@ private[ml] class BlockLogisticAggregator(
       case sm: SparseMatrix if !fitIntercept =>
         val gradSumVec = new DenseVector(gradientSumArray)
         BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
+
+      case m =>
+        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
     if (fitIntercept) gradientSumArray(numFeatures) += vec.values.sum
@@ -514,10 +519,11 @@ private[ml] class BlockLogisticAggregator(
     // mat here represents margins, shape: S X C
     val mat = DenseMatrix.zeros(size, numClasses)
     if (fitIntercept) {
+      val localCoefficientsArray = coefficientsArray
       val offset = numClasses * numFeatures
       var j = 0
       while (j < numClasses) {
-        val intercept = coefficientsArray(offset + j)
+        val intercept = localCoefficientsArray(offset + j)
         var i = 0
         while (i < size) { mat.update(i, j, intercept); i += 1 }
         j += 1
@@ -527,13 +533,13 @@ private[ml] class BlockLogisticAggregator(
 
     // in-place convert margins to multipliers
     // then, mat represents multipliers
+    var localLossSum = 0.0
     var i = 0
     val tmp = Array.ofDim[Double](numClasses)
     val interceptGradSumArr = if (fitIntercept) Array.ofDim[Double](numClasses) else null
     while (i < size) {
       val weight = block.getWeight(i)
       if (weight > 0) {
-        weightSum += weight
         val label = block.getLabel(i)
 
         var maxMargin = Double.NegativeInfinity
@@ -566,15 +572,17 @@ private[ml] class BlockLogisticAggregator(
         }
 
         if (maxMargin > 0) {
-          lossSum += weight * (math.log(sum) - marginOfLabel + maxMargin)
+          localLossSum += weight * (math.log(sum) - marginOfLabel + maxMargin)
         } else {
-          lossSum += weight * (math.log(sum) - marginOfLabel)
+          localLossSum += weight * (math.log(sum) - marginOfLabel)
         }
       } else {
         var j = 0; while (j < numClasses) { mat.update(i, j, 0.0); j += 1 }
       }
       i += 1
     }
+    lossSum += localLossSum
+    weightSum += block.weightIter.sum
 
     // mat (multipliers):             S X C, dense                                N
     // mat.transpose (multipliers):   C X S, dense                                T

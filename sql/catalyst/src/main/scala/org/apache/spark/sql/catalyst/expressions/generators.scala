@@ -135,7 +135,9 @@ case class UserDefinedGenerator(
       > SELECT _FUNC_(2, 1, 2, 3);
        1	2
        3	NULL
-  """)
+  """,
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Stack(children: Seq[Expression]) extends Generator {
 
@@ -360,7 +362,9 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       > SELECT _FUNC_(array(10, 20));
        10
        20
-  """)
+  """,
+  since = "1.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
@@ -383,7 +387,9 @@ case class Explode(child: Expression) extends ExplodeBase {
       > SELECT _FUNC_(array(10,20));
        0	10
        1	20
-  """)
+  """,
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
@@ -400,7 +406,9 @@ case class PosExplode(child: Expression) extends ExplodeBase {
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1	a
        2	b
-  """)
+  """,
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Inline(child: Expression) extends UnaryExpression with CollectionGenerator {
   override val inline: Boolean = true

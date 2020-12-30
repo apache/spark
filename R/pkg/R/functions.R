@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -338,10 +338,77 @@ NULL
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
 #'               percent_rank = over(percent_rank(), ws),
-#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws),
+#'               nth_value = over(nth_value(df$mpg, 3), ws))
 #' # Get ntile group id (1-4) for hp
 #' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
+NULL
+
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(
+#'   withColumn(
+#'     withColumn(df, "array", vector_to_array(df$features)),
+#'     "vector",
+#'     array_to_vector(column("array"))
+#'   )
+#' )
+#' }
+NULL
+
+#' Avro processing functions for Column operations
+#'
+#' Avro processing functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param jsonFormatSchema character Avro schema in JSON string format
+#' @param ... additional argument(s) passed as parser options.
+#' @name column_avro_functions
+#' @rdname column_avro_functions
+#' @family avro functions
+#' @note Avro is built-in but external data source module since Spark 2.4.
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#' schema <- paste(
+#'   c(
+#'     '{"type": "record", "namespace": "example.avro", "name": "Iris", "fields": [',
+#'     '{"type": ["double", "null"], "name": "Sepal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Sepal_Width"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Width"},',
+#'     '{"type": ["string", "null"], "name": "Species"}]}'
+#'   ),
+#'   collapse="\\n"
+#' )
+#'
+#' df_serialized <- select(
+#'   df,
+#'   alias(to_avro(alias(struct(column("*")), "fields")), "payload")
+#' )
+#'
+#' df_deserialized <- select(
+#'   df_serialized,
+#'   from_avro(df_serialized$payload, schema)
+#' )
+#'
+#' head(df_deserialized)
+#' }
 NULL
 
 #' @details
@@ -391,6 +458,19 @@ setMethod("acos",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "acos", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{acosh}: Computes inverse hyperbolic cosine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases acosh acosh,Column-method
+#' @note acosh since 3.1.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
             column(jc)
           })
 
@@ -462,6 +542,19 @@ setMethod("asin",
           })
 
 #' @details
+#' \code{asinh}: Computes inverse hyperbolic sine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.1.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
@@ -472,6 +565,19 @@ setMethod("atan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "atan", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Computes inverse hyperbolic tangent of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.1.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
@@ -806,6 +912,57 @@ setMethod("xxhash64",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg)) {
+                stopifnot(length(errMsg) == 1)
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x)) {
+              stopifnot(length(x) == 1)
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
@@ -1417,8 +1574,10 @@ setMethod("quarter",
           })
 
 #' @details
-#' \code{percentile_approx} Returns the approximate percentile value of
-#' numeric column at the given percentage.
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
 #'
 #' @param percentage Numeric percentage at which percentile should be computed
 #'                   All values should be between 0 and 1.
@@ -2765,7 +2924,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
@@ -3293,6 +3452,37 @@ setMethod("lead",
 
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "lead", col, as.integer(offset), defaultValue)
+            column(jc)
+          })
+
+#' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
             column(jc)
           })
 
@@ -4380,7 +4570,8 @@ setMethod("date_trunc",
           })
 
 #' @details
-#' \code{current_date}: Returns the current date as a date column.
+#' \code{current_date}: Returns the current date at the start of query evaluation as a date column.
+#' All calls of current_date within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_date current_date,missing-method
@@ -4396,7 +4587,8 @@ setMethod("current_date",
           })
 
 #' @details
-#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#' \code{current_timestamp}: Returns the current timestamp at the start of query evaluation as
+#' a timestamp column. All calls of current_timestamp within the same query return the same value.
 #'
 #' @rdname column_datetime_functions
 #' @aliases current_timestamp current_timestamp,missing-method
@@ -4405,5 +4597,117 @@ setMethod("current_timestamp",
           signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
+            column(jc)
+          })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{array_to_vector} Converts a column of array of numeric type into
+#' a column of dense vectors in MLlib
+#'
+#' @rdname column_ml_functions
+#' @aliases array_to_vector array_to_vector,Column-method
+#' @note array_to_vector since 3.1.0
+setMethod("array_to_vector",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "array_to_vector",
+              x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float64", "float32")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{from_avro} Converts a binary column of Avro format into its corresponding catalyst value.
+#' The specified schema must match the read data, otherwise the behavior is undefined:
+#' it may fail or return arbitrary result.
+#' To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+#' set via the option avroSchema.
+#'
+#' @rdname column_avro_functions
+#' @aliases from_avro from_avro,Column-method
+#' @note from_avro since 3.1.0
+setMethod("from_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema, ...) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic(
+              "org.apache.spark.sql.avro.functions", "from_avro",
+              x@jc,
+              jsonFormatSchema,
+              options
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{to_avro} Converts a column into binary of Avro format.
+#'
+#' @rdname column_avro_functions
+#' @aliases to_avro to_avro,Column-method
+#' @note to_avro since 3.1.0
+setMethod("to_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema = NULL) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            jc <- if (is.null(jsonFormatSchema)) {
+              callJStatic("org.apache.spark.sql.avro.functions", "to_avro", x@jc)
+            } else {
+              callJStatic(
+                "org.apache.spark.sql.avro.functions",
+                "to_avro",
+                x@jc,
+                jsonFormatSchema
+              )
+            }
             column(jc)
           })

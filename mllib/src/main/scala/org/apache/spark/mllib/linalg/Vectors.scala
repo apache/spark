@@ -289,6 +289,8 @@ class VectorUDT extends UserDefinedType[Vector] {
         row.setNullAt(2)
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
+      case v =>
+        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 

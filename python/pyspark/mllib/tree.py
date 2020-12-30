@@ -33,15 +33,18 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
 
     .. versionadded:: 1.3.0
     """
-    @since("1.3.0")
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points using
         the model trained.
 
-        .. note:: In Python, predict cannot currently be used within an RDD
-            transformation or action.
-            Call predict directly on the RDD instead.
+        .. versionadded:: 1.3.0
+
+        Notes
+        -----
+        In Python, predict cannot currently be used within an RDD
+        transformation or action.
+        Call predict directly on the RDD instead.
         """
         if isinstance(x, RDD):
             return self.call("predict", x.map(_convert_to_vector))
@@ -79,18 +82,23 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     .. versionadded:: 1.1.0
     """
-    @since("1.1.0")
     def predict(self, x):
         """
         Predict the label of one or more examples.
 
-        .. note:: In Python, predict cannot currently be used within an RDD
-            transformation or action.
-            Call predict directly on the RDD instead.
+        .. versionadded:: 1.1.0
 
-        :param x:
-          Data point (feature vector), or an RDD of data points (feature
-          vectors).
+        Parameters
+        ----------
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Data point (feature vector), or an RDD of data points (feature
+            vectors).
+
+        Notes
+        -----
+        In Python, predict cannot currently be used within an RDD
+        transformation or action.
+        Call predict directly on the RDD instead.
         """
         if isinstance(x, RDD):
             return self.call("predict", x.map(_convert_to_vector))
@@ -143,45 +151,50 @@ class DecisionTree(object):
         return DecisionTreeModel(model)
 
     @classmethod
-    @since("1.1.0")
     def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo,
                         impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                         minInfoGain=0.0):
         """
         Train a decision tree model for classification.
 
-        :param data:
-          Training data: RDD of LabeledPoint. Labels should take values
-          {0, 1, ..., numClasses-1}.
-        :param numClasses:
-          Number of classes for classification.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param impurity:
-          Criterion used for information gain calculation.
-          Supported values: "gini" or "entropy".
-          (default: "gini")
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 5)
-        :param maxBins:
-          Number of bins used for finding splits at each node.
-          (default: 32)
-        :param minInstancesPerNode:
-          Minimum number of instances required at child nodes to create
-          the parent split.
-          (default: 1)
-        :param minInfoGain:
-          Minimum info gain required to create a split.
-          (default: 0.0)
-        :return:
-          DecisionTreeModel.
+        .. versionadded:: 1.1.0
 
-        Example usage:
+        Parameters
+        ----------
+        data :  :py:class:`pyspark.RDD`
+            Training data: RDD of LabeledPoint. Labels should take values
+            {0, 1, ..., numClasses-1}.
+        numClasses : int
+            Number of classes for classification.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        impurity : str, optional
+            Criterion used for information gain calculation.
+            Supported values: "gini" or "entropy".
+            (default: "gini")
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 5)
+        maxBins : int, optional
+            Number of bins used for finding splits at each node.
+            (default: 32)
+        minInstancesPerNode : int, optional
+            Minimum number of instances required at child nodes to create
+            the parent split.
+            (default: 1)
+        minInfoGain : float, optional
+            Minimum info gain required to create a split.
+            (default: 0.0)
 
+        Returns
+        -------
+        :py:class:`DecisionTreeModel`
+
+        Examples
+        --------
         >>> from numpy import array
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
@@ -222,35 +235,39 @@ class DecisionTree(object):
         """
         Train a decision tree model for regression.
 
-        :param data:
-          Training data: RDD of LabeledPoint. Labels are real numbers.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param impurity:
-          Criterion used for information gain calculation.
-          The only supported value for regression is "variance".
-          (default: "variance")
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 5)
-        :param maxBins:
-          Number of bins used for finding splits at each node.
-          (default: 32)
-        :param minInstancesPerNode:
-          Minimum number of instances required at child nodes to create
-          the parent split.
-          (default: 1)
-        :param minInfoGain:
-          Minimum info gain required to create a split.
-          (default: 0.0)
-        :return:
-          DecisionTreeModel.
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            Training data: RDD of LabeledPoint. Labels are real numbers.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        impurity : str, optional
+            Criterion used for information gain calculation.
+            The only supported value for regression is "variance".
+            (default: "variance")
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 5)
+        maxBins : int, optional
+            Number of bins used for finding splits at each node.
+            (default: 32)
+        minInstancesPerNode : int, optional
+            Minimum number of instances required at child nodes to create
+            the parent split.
+            (default: 1)
+        minInfoGain : float, optional
+            Minimum info gain required to create a split.
+            (default: 0.0)
 
-        Example usage:
+        Returns
+        -------
+        :py:class:`DecisionTreeModel`
 
+        Examples
+        --------
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
         >>> from pyspark.mllib.linalg import SparseVector
@@ -313,7 +330,6 @@ class RandomForest(object):
         return RandomForestModel(model)
 
     @classmethod
-    @since("1.2.0")
     def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo, numTrees,
                         featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
                         seed=None):
@@ -321,44 +337,51 @@ class RandomForest(object):
         Train a random forest model for binary or multiclass
         classification.
 
-        :param data:
-          Training dataset: RDD of LabeledPoint. Labels should take values
-          {0, 1, ..., numClasses-1}.
-        :param numClasses:
-          Number of classes for classification.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param numTrees:
-          Number of trees in the random forest.
-        :param featureSubsetStrategy:
-          Number of features to consider for splits at each node.
-          Supported values: "auto", "all", "sqrt", "log2", "onethird".
-          If "auto" is set, this parameter is set based on numTrees:
-          if numTrees == 1, set to "all";
-          if numTrees > 1 (forest) set to "sqrt".
-          (default: "auto")
-        :param impurity:
-          Criterion used for information gain calculation.
-          Supported values: "gini" or "entropy".
-          (default: "gini")
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 4)
-        :param maxBins:
-          Maximum number of bins used for splitting features.
-          (default: 32)
-        :param seed:
-          Random seed for bootstrapping and choosing feature subsets.
-          Set as None to generate seed based on system time.
-          (default: None)
-        :return:
-          RandomForestModel that can be used for prediction.
+        .. versionadded:: 1.2.0
 
-        Example usage:
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            Training dataset: RDD of LabeledPoint. Labels should take values
+            {0, 1, ..., numClasses-1}.
+        numClasses : int
+            Number of classes for classification.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        numTrees : int
+            Number of trees in the random forest.
+        featureSubsetStrategy : str, optional
+            Number of features to consider for splits at each node.
+            Supported values: "auto", "all", "sqrt", "log2", "onethird".
+            If "auto" is set, this parameter is set based on numTrees:
+            if numTrees == 1, set to "all";
+            if numTrees > 1 (forest) set to "sqrt".
+            (default: "auto")
+        impurity : str, optional
+            Criterion used for information gain calculation.
+            Supported values: "gini" or "entropy".
+            (default: "gini")
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 4)
+        maxBins : int, optional
+            Maximum number of bins used for splitting features.
+            (default: 32)
+        seed : int, Optional
+            Random seed for bootstrapping and choosing feature subsets.
+            Set as None to generate seed based on system time.
+            (default: None)
 
+        Returns
+        -------
+        :py:class:`RandomForestModel`
+            that can be used for prediction.
+
+        Examples
+        --------
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import RandomForest
         >>>
@@ -405,47 +428,55 @@ class RandomForest(object):
                           maxDepth, maxBins, seed)
 
     @classmethod
-    @since("1.2.0")
     def trainRegressor(cls, data, categoricalFeaturesInfo, numTrees, featureSubsetStrategy="auto",
                        impurity="variance", maxDepth=4, maxBins=32, seed=None):
         """
         Train a random forest model for regression.
 
-        :param data:
-          Training dataset: RDD of LabeledPoint. Labels are real numbers.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param numTrees:
-          Number of trees in the random forest.
-        :param featureSubsetStrategy:
-          Number of features to consider for splits at each node.
-          Supported values: "auto", "all", "sqrt", "log2", "onethird".
-          If "auto" is set, this parameter is set based on numTrees:
-          if numTrees == 1, set to "all";
-          if numTrees > 1 (forest) set to "onethird" for regression.
-          (default: "auto")
-        :param impurity:
-          Criterion used for information gain calculation.
-          The only supported value for regression is "variance".
-          (default: "variance")
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 4)
-        :param maxBins:
-          Maximum number of bins used for splitting features.
-          (default: 32)
-        :param seed:
-          Random seed for bootstrapping and choosing feature subsets.
-          Set as None to generate seed based on system time.
-          (default: None)
-        :return:
-          RandomForestModel that can be used for prediction.
+        .. versionadded:: 1.2.0
 
-        Example usage:
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            Training dataset: RDD of LabeledPoint. Labels are real numbers.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        numTrees : int
+            Number of trees in the random forest.
+        featureSubsetStrategy : str, optional
+            Number of features to consider for splits at each node.
+            Supported values: "auto", "all", "sqrt", "log2", "onethird".
+            If "auto" is set, this parameter is set based on numTrees:
 
+            - if numTrees == 1, set to "all";
+            - if numTrees > 1 (forest) set to "onethird" for regression.
+
+            (default: "auto")
+        impurity : str, optional
+            Criterion used for information gain calculation.
+            The only supported value for regression is "variance".
+            (default: "variance")
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 4)
+        maxBins : int, optional
+            Maximum number of bins used for splitting features.
+            (default: 32)
+        seed : int, optional
+            Random seed for bootstrapping and choosing feature subsets.
+            Set as None to generate seed based on system time.
+            (default: None)
+
+        Returns
+        -------
+        :py:class:`RandomForestModel`
+            that can be used for prediction.
+
+        Examples
+        --------
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import RandomForest
         >>> from pyspark.mllib.linalg import SparseVector
@@ -505,45 +536,51 @@ class GradientBoostedTrees(object):
         return GradientBoostedTreesModel(model)
 
     @classmethod
-    @since("1.3.0")
     def trainClassifier(cls, data, categoricalFeaturesInfo,
                         loss="logLoss", numIterations=100, learningRate=0.1, maxDepth=3,
                         maxBins=32):
         """
         Train a gradient-boosted trees model for classification.
 
-        :param data:
-          Training dataset: RDD of LabeledPoint. Labels should take values
-          {0, 1}.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param loss:
-          Loss function used for minimization during gradient boosting.
-          Supported values: "logLoss", "leastSquaresError",
-          "leastAbsoluteError".
-          (default: "logLoss")
-        :param numIterations:
-          Number of iterations of boosting.
-          (default: 100)
-        :param learningRate:
-          Learning rate for shrinking the contribution of each estimator.
-          The learning rate should be between in the interval (0, 1].
-          (default: 0.1)
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 3)
-        :param maxBins:
-          Maximum number of bins used for splitting features. DecisionTree
-          requires maxBins >= max categories.
-          (default: 32)
-        :return:
-          GradientBoostedTreesModel that can be used for prediction.
+        .. versionadded:: 1.3.0
 
-        Example usage:
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            Training dataset: RDD of LabeledPoint. Labels should take values
+            {0, 1}.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        loss : str, optional
+            Loss function used for minimization during gradient boosting.
+            Supported values: "logLoss", "leastSquaresError",
+            "leastAbsoluteError".
+            (default: "logLoss")
+        numIterations : int, optional
+            Number of iterations of boosting.
+            (default: 100)
+        learningRate : float, optional
+            Learning rate for shrinking the contribution of each estimator.
+            The learning rate should be between in the interval (0, 1].
+            (default: 0.1)
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 3)
+        maxBins : int, optional
+            Maximum number of bins used for splitting features. DecisionTree
+            requires maxBins >= max categories.
+            (default: 32)
 
+        Returns
+        -------
+        :py:class:`GradientBoostedTreesModel`
+            that can be used for prediction.
+
+        Examples
+        --------
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import GradientBoostedTrees
         >>>
@@ -574,44 +611,50 @@ class GradientBoostedTrees(object):
                           loss, numIterations, learningRate, maxDepth, maxBins)
 
     @classmethod
-    @since("1.3.0")
     def trainRegressor(cls, data, categoricalFeaturesInfo,
                        loss="leastSquaresError", numIterations=100, learningRate=0.1, maxDepth=3,
                        maxBins=32):
         """
         Train a gradient-boosted trees model for regression.
 
-        :param data:
-          Training dataset: RDD of LabeledPoint. Labels are real numbers.
-        :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. An entry (n -> k)
-          indicates that feature n is categorical with k categories
-          indexed from 0: {0, 1, ..., k-1}.
-        :param loss:
-          Loss function used for minimization during gradient boosting.
-          Supported values: "logLoss", "leastSquaresError",
-          "leastAbsoluteError".
-          (default: "leastSquaresError")
-        :param numIterations:
-          Number of iterations of boosting.
-          (default: 100)
-        :param learningRate:
-          Learning rate for shrinking the contribution of each estimator.
-          The learning rate should be between in the interval (0, 1].
-          (default: 0.1)
-        :param maxDepth:
-          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
-          means 1 internal node + 2 leaf nodes).
-          (default: 3)
-        :param maxBins:
-          Maximum number of bins used for splitting features. DecisionTree
-          requires maxBins >= max categories.
-          (default: 32)
-        :return:
-          GradientBoostedTreesModel that can be used for prediction.
+        .. versionadded:: 1.3.0
 
-        Example usage:
+        Parameters
+        ----------
+        data :
+            Training dataset: RDD of LabeledPoint. Labels are real numbers.
+        categoricalFeaturesInfo : dict
+            Map storing arity of categorical features. An entry (n -> k)
+            indicates that feature n is categorical with k categories
+            indexed from 0: {0, 1, ..., k-1}.
+        loss : str, optional
+            Loss function used for minimization during gradient boosting.
+            Supported values: "logLoss", "leastSquaresError",
+            "leastAbsoluteError".
+            (default: "leastSquaresError")
+        numIterations : int, optional
+            Number of iterations of boosting.
+            (default: 100)
+        learningRate : float, optional
+            Learning rate for shrinking the contribution of each estimator.
+            The learning rate should be between in the interval (0, 1].
+            (default: 0.1)
+        maxDepth : int, optional
+            Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+            means 1 internal node + 2 leaf nodes).
+            (default: 3)
+        maxBins : int, optional
+            Maximum number of bins used for splitting features. DecisionTree
+            requires maxBins >= max categories.
+            (default: 32)
 
+        Returns
+        -------
+        :py:class:`GradientBoostedTreesModel`
+            that can be used for prediction.
+
+        Examples
+        --------
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import GradientBoostedTrees
         >>> from pyspark.mllib.linalg import SparseVector

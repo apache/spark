@@ -30,9 +30,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -358,30 +358,6 @@ object PartitioningUtils {
   }
 
   /**
-   * Normalize the column names in partition specification, w.r.t. the real partition column names
-   * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
-   * partition column named `month`, and it's case insensitive, we will normalize `monTh` to
-   * `month`.
-   */
-  def normalizePartitionSpec[T](
-      partitionSpec: Map[String, T],
-      partColNames: Seq[String],
-      tblName: String,
-      resolver: Resolver): Map[String, T] = {
-    val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
-        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
-      }
-      normalizedKey -> value
-    }
-
-    SchemaUtils.checkColumnNameDuplication(
-      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
-
-    normalizedPartSpec.toMap
-  }
-
-  /**
    * Resolves possible type conflicts between partitions by up-casting "lower" types using
    * [[findWiderTypeForPartitionColumn]].
    */
@@ -477,7 +453,7 @@ object PartitioningUtils {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
-      // It reduces the cases for decimals by disallowing values having scale (eg. `1.1`).
+      // It reduces the cases for decimals by disallowing values having scale (e.g. `1.1`).
       require(bigDecimal.scale <= 0)
       // `DecimalType` conversion can fail when
       //   1. The precision is bigger than 38.

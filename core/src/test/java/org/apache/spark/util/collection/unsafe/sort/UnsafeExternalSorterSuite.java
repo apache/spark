@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
-import org.hamcrest.Matchers;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -38,7 +37,6 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TestMemoryManager;
-import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
@@ -581,39 +579,27 @@ public class UnsafeExternalSorterSuite {
   }
 
   @Test
-  public void testOOMDuringSpill() throws Exception {
+  public void testNoOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    // we assume that given default configuration,
-    // the size of the data we insert to the sorter (ints)
-    // and assuming we shouldn't spill before pointers array is exhausted
-    // (memory manager is not configured to throw at this point)
-    // - so this loop runs a reasonable number of iterations (<2000).
-    // test indeed completed within <30ms (on a quad i7 laptop).
-    for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
+    for (int i = 0; i < 100; i++) {
       insertNumber(sorter, i);
     }
-    // we expect the next insert to attempt growing the pointerssArray first
-    // allocation is expected to fail, then a spill is triggered which
-    // attempts another allocation which also fails and we expect to see this
-    // OOM here.  the original code messed with a released array within the
-    // spill code and ended up with a failed assertion.  we also expect the
-    // location of the OOM to be
-    // org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
-    memoryManager.markconsequentOOM(2);
-    try {
-      insertNumber(sorter, 1024);
-      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+
+    // Check that spilling still succeeds when the task is starved for memory.
+    memoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    sorter.spill();
+    memoryManager.resetConsequentOOM();
+
+    // Ensure that records can be appended after spilling, i.e. check that the sorter will allocate
+    // the new pointer array that it could not allocate while spilling.
+    for (int i = 0; i < 100; ++i) {
+      insertNumber(sorter, i);
     }
-    // we expect an SparkOutOfMemoryError here, anything else (i.e the original NPE is a failure)
-    catch (SparkOutOfMemoryError oom){
-      String oomStackTrace = Utils.exceptionString(oom);
-      assertThat("expected SparkOutOfMemoryError in " +
-        "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
-        oomStackTrace,
-        Matchers.containsString(
-          "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
-    }
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
+
 
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {

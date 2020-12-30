@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -85,10 +84,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     if (env.conf.get(DECOMMISSION_ENABLED)) {
       logInfo("Registering PWR handler to trigger decommissioning.")
       SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling executor decommission feature.") {
-        self.send(ExecutorSigPWRReceived)
-        true
-      }
+        "disabling executor decommission feature.") (self.askSync[Boolean](ExecutorSigPWRReceived))
     }
 
     logInfo("Connecting to driver: " + driverUrl)
@@ -209,15 +205,27 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case DecommissionExecutor =>
       decommissionSelf()
+  }
 
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ExecutorSigPWRReceived =>
-      decommissionSelf()
-      if (driver.nonEmpty) {
-        // Tell driver we starts decommissioning so it stops trying to schedule us
-        driver.get.askSync[Boolean](ExecutorDecommissioning(executorId))
-      } else {
-        logError("No driver to message decommissioning.")
+      var driverNotified = false
+      try {
+        driver.foreach { driverRef =>
+          // Tell driver that we are starting decommissioning so it stops trying to schedule us
+          driverNotified = driverRef.askSync[Boolean](ExecutorDecommissioning(executorId))
+          if (driverNotified) decommissionSelf()
+        }
+      } catch {
+        case e: Exception =>
+          if (driverNotified) {
+            logError("Fail to decommission self (but driver has been notified).", e)
+          } else {
+            logError("Fail to tell driver that we are starting decommissioning", e)
+          }
+          decommissioned = false
       }
+      context.reply(decommissioned)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -340,6 +348,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Will exit when finished decommissioning")
     } catch {
       case e: Exception =>
+        decommissioned = false
         logError("Unexpected error while decommissioning self", e)
     }
   }

@@ -25,5 +25,5 @@ This page summarizes the basic steps required to setup and get started with PySp
 .. toctree::
     :maxdepth: 2
 
-    installation
+    install
     quickstart

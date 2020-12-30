@@ -20,9 +20,11 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.dsl.plans
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ListQuery, Literal, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project, Union}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.types.IntegerType
 
@@ -31,7 +33,7 @@ class QueryPlanSuite extends SparkFunSuite {
   test("origin remains the same after mapExpressions (SPARK-23823)") {
     CurrentOrigin.setPosition(0, 0)
     val column = AttributeReference("column", IntegerType)(NamedExpression.newExprId)
-    val query = plans.DslLogicalPlan(plans.table("table")).select(column)
+    val query = DslLogicalPlan(table("table")).select(column)
     CurrentOrigin.reset()
 
     val mappedQuery = query mapExpressions {
@@ -82,5 +84,21 @@ class QueryPlanSuite extends SparkFunSuite {
 
     assert(countRelationsInPlan == 2)
     assert(countRelationsInPlanAndSubqueries == 5)
+  }
+
+  test("SPARK-33035: consecutive attribute updates in parent plan nodes") {
+    val testRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+        case p @ Project(projList, _) =>
+          // Assigns new `ExprId`s for output references
+          val newPlan = p.copy(projectList = projList.map { ne => Alias(ne, ne.name)() })
+          val attrMapping = p.output.zip(newPlan.output)
+          newPlan -> attrMapping
+      }
+    }
+
+    val t = LocalRelation('a.int, 'b.int)
+    val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
+    assert(testRule(plan).resolved)
   }
 }

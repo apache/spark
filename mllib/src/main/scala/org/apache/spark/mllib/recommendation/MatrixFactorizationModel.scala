@@ -386,12 +386,12 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
       val userFeatures = spark.read.parquet(userPath(path)).rdd.map {
-        case Row(id: Int, features: Seq[_]) =>
-          (id, features.asInstanceOf[Seq[Double]].toArray)
+        case Row(id: Int, features: scala.collection.Seq[_]) =>
+          (id, features.asInstanceOf[scala.collection.Seq[Double]].toArray)
       }
       val productFeatures = spark.read.parquet(productPath(path)).rdd.map {
-        case Row(id: Int, features: Seq[_]) =>
-          (id, features.asInstanceOf[Seq[Double]].toArray)
+        case Row(id: Int, features: scala.collection.Seq[_]) =>
+          (id, features.asInstanceOf[scala.collection.Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

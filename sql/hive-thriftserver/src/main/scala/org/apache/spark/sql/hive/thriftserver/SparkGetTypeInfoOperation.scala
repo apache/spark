@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.thriftserver
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
+import org.apache.hadoop.hive.serde2.thrift.Type
+import org.apache.hadoop.hive.serde2.thrift.Type._
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.operation.GetTypeInfoOperation
 import org.apache.hive.service.cli.session.HiveSession
@@ -61,7 +63,7 @@ private[hive] class SparkGetTypeInfoOperation(
       parentSession.getUsername)
 
     try {
-      ThriftserverShimUtils.supportedType().foreach(typeInfo => {
+      SparkGetTypeInfoUtil.supportedType.foreach(typeInfo => {
         val rowData = Array[AnyRef](
           typeInfo.getName, // TYPE_NAME
           typeInfo.toJavaSQLType.asInstanceOf[AnyRef], // DATA_TYPE
@@ -88,5 +90,15 @@ private[hive] class SparkGetTypeInfoOperation(
     } catch onError()
 
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
+  }
+}
+
+private[hive] object SparkGetTypeInfoUtil {
+  val supportedType: Seq[Type] = {
+    Seq(NULL_TYPE, BOOLEAN_TYPE, STRING_TYPE, BINARY_TYPE,
+      TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
+      FLOAT_TYPE, DOUBLE_TYPE, DECIMAL_TYPE,
+      DATE_TYPE, TIMESTAMP_TYPE,
+      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE, CHAR_TYPE, VARCHAR_TYPE)
   }
 }

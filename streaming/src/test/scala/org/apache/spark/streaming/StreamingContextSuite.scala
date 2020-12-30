@@ -293,8 +293,7 @@ class StreamingContextSuite
     }
   }
 
-  // TODO (SPARK-31728): re-enable it
-  ignore("stop gracefully") {
+  test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
     conf.set("spark.dummyTimeConfig", "3600s")
     val sc = new SparkContext(conf)
