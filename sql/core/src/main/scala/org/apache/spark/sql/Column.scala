@@ -190,6 +190,8 @@ class Column(val expr: Expression) extends Logging {
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
 
+    // It's more reasonable to treat user specify expression as unresolved expression,
+    // then we should assign name after analyze.
     case expr: Expression => UnresolvedAlias(expr)
   }
 
