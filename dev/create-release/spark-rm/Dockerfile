@@ -24,7 +24,7 @@
 # * R-base/R-base-dev (4.0.3)
 # * Ruby (2.7.0)
 #
-# You can test it and generate the dependency list as below:
+# You can test it as below:
 #   cd dev/create-release/spark-rm
 #   docker build -t spark-rm --build-arg UID=$UID .
 
