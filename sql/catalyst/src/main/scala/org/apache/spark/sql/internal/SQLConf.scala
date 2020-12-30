@@ -2924,7 +2924,7 @@ object SQLConf {
       .doc("Command wrapper for executor to execute transformation script.")
       .version("3.2.0")
       .stringConf
-      .createWithDefault("/bin/bash -c")
+      .createWithDefault("")
 
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")

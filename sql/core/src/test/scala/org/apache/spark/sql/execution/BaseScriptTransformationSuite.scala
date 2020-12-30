@@ -482,7 +482,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      // test '/bin/bash -c python /path/to/script.py'
+      // test 'python /path/to/script.py' with local file
       checkAnswer(
         sql(
           s"""
@@ -501,7 +501,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           'd.cast("string"),
           'e.cast("string")).collect())
 
-      // test '/bin/bash -c /path/to/script.py' with script not executable
+      // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
         checkAnswer(
           sql(
@@ -523,7 +523,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       }.getMessage
       assert(e1.contains("Permission denied"))
 
-      // test '/bin/bash -c /path/to/script.py' with script executable
+      // test `/path/to/script.py' with script executable
       scriptFilePath.setExecutable(true)
       checkAnswer(
         sql(
@@ -546,102 +546,41 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
 
-      // test '/bin/bash -c script.py'
-      val e2 = intercept[TestFailedException] {
-        checkAnswer(
-          sql(
-            s"""
-               |SELECT TRANSFORM(a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |  USING '${scriptFilePath.getName}' AS (a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |FROM v
-        """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
-      }.getMessage()
-      assert(e2.contains("command not found"))
-    }
-  }
-
-  test("SPARK-33934: Check execute command wrapper is empty") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = copyAndGetResourceFile(
-      "test_script.py", "_test_empty.py").getAbsoluteFile
-    withTempView("v") {
-      withSQLConf(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key -> "") {
-        val df = Seq(
-          (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
-          (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
-          (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
-        ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
-        df.createTempView("v")
-
-        scriptFilePath.setExecutable(true)
-        sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
+      // test `script.py` when file added
+      checkAnswer(
         sql(
           s"""
-             |SELECT TRANSFORM(a)
+             |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'pwd' AS (a)
+             |  USING '${scriptFilePath.getName}' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY '&'
-             |FROM (SELECT 1 AS a) TEMP
-        """.stripMargin).show(false)
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
 
+      // test `python script.py` when file added
+      checkAnswer(
         sql(
           s"""
-             |SELECT TRANSFORM(a)
+             |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'ls' AS (a)
+             |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
-             |  FIELDS TERMINATED BY '&'
-             |FROM (SELECT 1 AS a) TEMP
-        """.stripMargin).show(false)
-
-        // test 'python script.py'
-        checkAnswer(
-          sql(
-            s"""
-               |SELECT TRANSFORM(a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |FROM v
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
         """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
-
-        // test 'script.py'
-        checkAnswer(
-          sql(
-            s"""
-               |SELECT TRANSFORM(a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |  USING '${scriptFilePath.getName}' AS (a, b, c, d, e)
-               |  ROW FORMAT DELIMITED
-               |  FIELDS TERMINATED BY '\t'
-               |FROM v
-        """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
-      }
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
     }
   }
 }

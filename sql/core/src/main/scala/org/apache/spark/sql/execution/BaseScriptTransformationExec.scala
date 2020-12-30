@@ -77,7 +77,15 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   protected def initProc(hadoopConf: Configuration): ProcParameters = {
     val wrapper = splitArgs(hadoopConf.get(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key))
-    val cmd = wrapper.toList ++ List(script)
+    val cmdArgs = splitArgs(script)
+    val prog = cmdArgs(0)
+    if(!new File(prog).isAbsolute) {
+      val progFile = new File(SparkFiles.get(prog))
+      if (progFile.exists()) {
+        cmdArgs(0) = progFile.getAbsolutePath
+      }
+    }
+    val cmd = wrapper.toList ++ cmdArgs.toList
     val builder = new ProcessBuilder(cmd.asJava)
       .directory(new File(SparkFiles.getRootDirectory()))
 
