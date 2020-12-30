@@ -16,8 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.io.OutputStreamWriter
 import java.nio.charset.Charset
 
+import com.univocity.parsers.common.NormalizedString
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
@@ -37,7 +39,8 @@ class CsvOutputWriter(
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path), charset)
 
-  private val gen = new UnivocityGenerator(dataSchema, writer, params)
+  private val gen = CsvOutputWriter.createUnivocityGenerator(params.maxColumnNameLength, writer,
+    dataSchema, params)
 
   if (params.headerFlag) {
     gen.writeHeaders()
@@ -46,4 +49,16 @@ class CsvOutputWriter(
   override def write(row: InternalRow): Unit = gen.write(row)
 
   override def close(): Unit = gen.close()
+}
+
+object CsvOutputWriter {
+
+  def createUnivocityGenerator(
+      maxLength: Int,
+      writer: OutputStreamWriter,
+      dataSchema: StructType,
+      params: CSVOptions): UnivocityGenerator = this.synchronized {
+    NormalizedString.getCache.setMaxStringLength(maxLength)
+    new UnivocityGenerator(dataSchema, writer, params)
+  }
 }

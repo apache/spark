@@ -2448,8 +2448,27 @@ abstract class CSVSuite
         .option("header", "true")
         .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
         .csv(dataPath).collect()
-      val exceptResults = Array(row1, row2)
-      assert(result.sameElements(exceptResults))
+      val expectedResults = Array(row1, row2)
+      assert(result.sameElements(expectedResults))
+    }
+  }
+
+  test("write csv data correctly with the configurable max column name length") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      val row1 = Row("a")
+      val superLongHeader = (0 until 1025).map(_ => "c").mkString("")
+      val df = Seq(s"${row1.getString(0)}").toDF(superLongHeader)
+      df.repartition(1)
+        .write
+        .option("header", "true")
+        .option("maxColumnNameLength", 1025)
+        .csv(dataPath)
+      val result = spark.read
+        .option("header", "true")
+        .csv(dataPath)
+        .collect()
+      assert(result.sameElements(Array(row1)))
     }
   }
 }

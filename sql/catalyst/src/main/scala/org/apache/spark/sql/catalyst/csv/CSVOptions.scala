@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.time.ZoneId
 import java.util.Locale
 
+import com.univocity.parsers.common.NormalizedString
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
@@ -135,7 +136,6 @@ class CSVOptions(
   val positiveInf = parameters.getOrElse("positiveInf", "Inf")
   val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
-
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
@@ -161,6 +161,9 @@ class CSVOptions(
   val maxColumns = getInt("maxColumns", 20480)
 
   val maxCharsPerColumn = getInt("maxCharsPerColumn", -1)
+
+  val maxColumnNameLength = getInt("maxColumnNameLength",
+    NormalizedString.getCache.getMaxStringLength)
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
