@@ -15,14 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 
-class BucketedReadWithHiveSupportSuite extends BucketedReadSuite with TestHiveSingleton {
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+/**
+ * Physical plan node for renaming a table partition.
+ */
+case class AlterTableRenamePartitionExec(
+    table: SupportsPartitionManagement,
+    from: ResolvedPartitionSpec,
+    to: ResolvedPartitionSpec) extends V2CommandExec {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    table.renamePartition(from.ident, to.ident)
+    Seq.empty
   }
 }

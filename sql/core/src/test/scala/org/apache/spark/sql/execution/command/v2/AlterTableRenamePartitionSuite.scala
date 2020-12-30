@@ -17,21 +17,31 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
 
+/**
+ * The class contains tests for the `ALTER TABLE .. RENAME PARTITION` command
+ * to check V2 table catalogs.
+ */
 class AlterTableRenamePartitionSuite
   extends command.AlterTableRenamePartitionSuiteBase
   with CommandSuiteBase {
 
-  // TODO(SPARK-33859): Support V2 ALTER TABLE .. RENAME PARTITION
-  test("single part partition") {
+  test("with location") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      val errMsg = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables"))
+      createSinglePartTable(t)
+      val loc = "location1"
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 2) LOCATION '$loc'")
+      sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
+      checkLocation(t, Map("id" -> "2"), loc)
+
+      sql(s"ALTER TABLE $t PARTITION (id = 2) RENAME TO PARTITION (id = 3)")
+      checkPartitions(t, Map("id" -> "1"), Map("id" -> "3"))
+      // `InMemoryPartitionTableCatalog` should keep the original location
+      checkLocation(t, Map("id" -> "3"), loc)
+      checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
     }
   }
 }

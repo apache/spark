@@ -39,7 +39,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
+    val batches = Batch("Json optimization", FixedPoint(10), OptimizeCsvJsonExprs) :: Nil
   }
 
   val schema = StructType.fromDDL("a int, b int")

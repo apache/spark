@@ -33,11 +33,26 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTablePosition("COMMENT ON TABLE unknown IS 'hello'", "unknown")
   }
 
+  test("SPARK-33918: UnresolvedView should retain sql text position") {
+    verifyViewPosition("DROP VIEW unknown", "unknown")
+    verifyViewPosition("ALTER VIEW unknown SET TBLPROPERTIES ('k'='v')", "unknown")
+    verifyViewPosition("ALTER VIEW unknown UNSET TBLPROPERTIES ('k')", "unknown")
+    verifyViewPosition("ALTER VIEW unknown AS SELECT 1", "unknown")
+  }
+
   private def verifyTablePosition(sql: String, table: String): Unit = {
+    verifyPosition(sql, table, "Table")
+  }
+
+  private def verifyViewPosition(sql: String, table: String): Unit = {
+    verifyPosition(sql, table, "View")
+  }
+
+  private def verifyPosition(sql: String, table: String, msgPrefix: String): Unit = {
     val expectedPos = sql.indexOf(table)
     assert(expectedPos != -1)
     assertAnalysisError(
       parsePlan(sql),
-      Seq(s"Table not found: $table; line 1 pos $expectedPos"))
+      Seq(s"$msgPrefix not found: $table; line 1 pos $expectedPos"))
   }
 }
