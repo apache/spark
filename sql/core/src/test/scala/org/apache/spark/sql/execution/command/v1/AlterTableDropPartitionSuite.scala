@@ -43,7 +43,7 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
     }
   }
 
-  test("SPARK-33941: invalidate cache after partition dropping") {
+  test("SPARK-33941: refresh cache after partition dropping") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
