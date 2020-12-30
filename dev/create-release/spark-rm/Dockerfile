@@ -71,7 +71,6 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   $APT_INSTALL python3-pip python3-setuptools && \
   # qpdf is required for CRAN checks to pass.
   $APT_INSTALL qpdf jq && \
-  # Change default python version to python3.
   pip3 install $PIP_PKGS && \
   # Install R packages and dependencies used when building.
   # R depends on pandoc*, libssl (which are installed above).
