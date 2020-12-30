@@ -20,9 +20,8 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, Expression, If}
 import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, MapFilter, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, Filter, Join, LogicalPlan, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
 
@@ -54,6 +53,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
+    case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
     case p: LogicalPlan => p transformExpressions {
       case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
       case cw @ CaseWhen(branches, _) =>
@@ -92,8 +93,12 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       val newBranches = cw.branches.map { case (cond, value) =>
         replaceNullWithFalse(cond) -> replaceNullWithFalse(value)
       }
-      val newElseValue = cw.elseValue.map(replaceNullWithFalse)
-      CaseWhen(newBranches, newElseValue)
+      if (newBranches.forall(_._2 == FalseLiteral) && cw.elseValue.isEmpty) {
+        FalseLiteral
+      } else {
+        val newElseValue = cw.elseValue.map(replaceNullWithFalse)
+        CaseWhen(newBranches, newElseValue)
+      }
     case i @ If(pred, trueVal, falseVal) if i.dataType == BooleanType =>
       If(replaceNullWithFalse(pred), replaceNullWithFalse(trueVal), replaceNullWithFalse(falseVal))
     case e if e.dataType == BooleanType =>

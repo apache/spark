@@ -44,7 +44,8 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('26/08/2015', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "csv_funcs")
 // scalastyle:on line.size.limit
 case class CsvToStructs(
     schema: StructType,
@@ -144,9 +145,10 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       struct<_c0:int,_c1:string>
+       STRUCT<`_c0`: INT, `_c1`: STRING>
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "csv_funcs")
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
@@ -186,7 +188,7 @@ case class SchemaOfCsv(
     val inferSchema = new CSVInferSchema(parsedOptions)
     val fieldTypes = inferSchema.inferRowType(startType, row)
     val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.catalogString)
+    UTF8String.fromString(st.sql)
   }
 
   override def prettyName: String = "schema_of_csv"
@@ -205,7 +207,8 @@ case class SchemaOfCsv(
       > SELECT _FUNC_(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy'));
        26/08/2015
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "csv_funcs")
 // scalastyle:on line.size.limit
 case class StructsToCsv(
      options: Map[String, String],

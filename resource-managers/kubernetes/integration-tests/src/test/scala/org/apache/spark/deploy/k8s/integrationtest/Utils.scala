@@ -16,21 +16,23 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import java.io.{Closeable, File, PrintWriter}
+import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.util.Try
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import okhttp3.Response
+import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
+import org.apache.commons.compress.utils.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Utils => SparkUtils}
 
 object Utils extends Logging {
 
@@ -60,15 +62,15 @@ object Utils extends Logging {
       val openLatch: CountDownLatch = new CountDownLatch(1)
       val closeLatch: CountDownLatch = new CountDownLatch(1)
 
-      override def onOpen(response: Response) {
+      override def onOpen(response: Response): Unit = {
         openLatch.countDown()
       }
 
-      override def onClose(a: Int, b: String) {
+      override def onClose(a: Int, b: String): Unit = {
         closeLatch.countDown()
       }
 
-      override def onFailure(e: Throwable, r: Response) {
+      override def onFailure(e: Throwable, r: Response): Unit = {
       }
 
       def waitForInputStreamToConnect(): Unit = {
@@ -114,28 +116,64 @@ object Utils extends Logging {
     filename
   }
 
-  def getExamplesJarAbsolutePath(sparkHomeDir: Path): String = {
-    val jarName = getExamplesJarName()
-    val jarPathsFound = Files
+  def getTestFileAbsolutePath(fileName: String, sparkHomeDir: Path): String = {
+    val filePathsFound = Files
       .walk(sparkHomeDir)
       .filter(Files.isRegularFile(_))
-      .filter((f: Path) => {f.toFile.getName == jarName})
+      .filter((f: Path) => {f.toFile.getName == fileName})
     // we should not have more than one here under current test build dir
     // we only need one though
-    val jarPath = jarPathsFound
+    val filePath = filePathsFound
       .iterator()
       .asScala
       .map(_.toAbsolutePath.toString)
       .toArray
       .headOption
-    jarPath match {
-      case Some(jar) => jar
-      case _ => throw new SparkException(s"No valid $jarName file was found " +
+    filePath match {
+      case Some(file) => file
+      case _ => throw new SparkException(s"No valid $fileName file was found " +
         s"under spark home test dir ${sparkHomeDir.toAbsolutePath}!")
     }
   }
 
   def isHadoop3(): Boolean = {
     VersionInfo.getVersion.startsWith("3")
+  }
+
+  def createZipFile(inFile: String, outFile: String): Unit = {
+    val fileToZip = new File(inFile)
+    val fis = new FileInputStream(fileToZip)
+    val fos = new FileOutputStream(outFile)
+    val zipOut = new ZipOutputStream(fos)
+    val zipEntry = new ZipEntry(fileToZip.getName)
+    zipOut.putNextEntry(zipEntry)
+    IOUtils.copy(fis, zipOut)
+    IOUtils.closeQuietly(fis)
+    IOUtils.closeQuietly(zipOut)
+  }
+
+  def createTarGzFile(inFile: String, outFile: String): Unit = {
+    val oFile = new File(outFile)
+    val fileToTarGz = new File(inFile)
+    Utils.tryWithResource(
+      new FileInputStream(fileToTarGz)
+    ) { fis =>
+      Utils.tryWithResource(
+        new TarArchiveOutputStream(
+          new GzipCompressorOutputStream(
+            new FileOutputStream(oFile)))
+      ) { tOut =>
+        val tarEntry = new TarArchiveEntry(fileToTarGz, fileToTarGz.getName)
+        // Each entry does not keep the file permission from the input file.
+        // Setting permissions in the input file do not work. Just simply set
+        // to 777.
+        tarEntry.setMode(0x81ff)
+        tOut.putArchiveEntry(tarEntry)
+        IOUtils.copy(fis, tOut)
+        tOut.closeArchiveEntry()
+        tOut.finish()
+      }
+    }
+    oFile.deleteOnExit()
   }
 }

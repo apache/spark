@@ -156,8 +156,8 @@ class FoldablePropagationSuite extends PlanTest {
     val query = expand.where(a1.isNotNull).select(a1, a2).analyze
     val optimized = Optimize.execute(query)
     val correctExpand = expand.copy(projections = Seq(
-      Seq(Literal(null), c2),
-      Seq(c1, Literal(null))))
+      Seq(Literal(null), Literal(2)),
+      Seq(Literal(1), Literal(null))))
     val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
     comparePlans(optimized, correctAnswer)
   }

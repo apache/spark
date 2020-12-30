@@ -61,9 +61,10 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
-    cacheManager.lookupCachedData(plan).map { cachedData =>
+    val planToLookup = sparkSession.sessionState.executePlan(plan).analyzed
+    cacheManager.lookupCachedData(planToLookup).map { cachedData =>
       val columnsToAnalyze = getColumnsToAnalyze(
-        tableIdent, cachedData.plan, columnNames, allColumns)
+        tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
       cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
       cachedData
     }.isDefined
@@ -71,9 +72,8 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
     if (!analyzeColumnInCachedData(plan, sparkSession)) {
-      val catalog = sparkSession.sessionState.catalog
-      val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-      throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+      throw new AnalysisException(
+        s"Temporary view $tableIdent is not cached for analyzing columns.")
     }
   }
 

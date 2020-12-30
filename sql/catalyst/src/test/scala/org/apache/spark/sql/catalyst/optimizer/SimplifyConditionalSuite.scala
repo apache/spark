@@ -199,4 +199,28 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
         If(Factorial(5) > 100L, b, nullLiteral).eval(EmptyRow))
     }
   }
+
+  test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
+      IsNotNull(UnresolvedAttribute("a")))
+    assertEquivalent(
+      If(IsNotNull(UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
+      IsNull(UnresolvedAttribute("a")))
+
+    assertEquivalent(
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), TrueLiteral, FalseLiteral),
+      GreaterThan(Rand(0), UnresolvedAttribute("a")))
+    assertEquivalent(
+      If(GreaterThan(Rand(0), UnresolvedAttribute("a")), FalseLiteral, TrueLiteral),
+      LessThanOrEqual(Rand(0), UnresolvedAttribute("a")))
+  }
+
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
+    Seq(GreaterThan('a, 1), GreaterThan(Rand(0), 1)).foreach { condition =>
+      assertEquivalent(
+        CaseWhen((condition, Literal.create(null, IntegerType)) :: Nil, None),
+        Literal.create(null, IntegerType))
+    }
+  }
 }

@@ -116,7 +116,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
+    val STARTED, COMPILED, CANCELED, TIMEDOUT, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 }

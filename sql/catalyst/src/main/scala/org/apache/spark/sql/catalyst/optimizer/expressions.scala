@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -41,12 +41,25 @@ import org.apache.spark.sql.types._
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
+
+  private def hasNoSideEffect(e: Expression): Boolean = e match {
+    case _: Attribute => true
+    case _: Literal => true
+    case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals. This rule is technically not necessary. Placing this
       // here avoids running the next rule for Literal values, which would create a new Literal
       // object and running eval unnecessarily.
       case l: Literal => l
+
+      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length)
+      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+        Literal(c.children.length / 2)
 
       // Fold expressions that are foldable.
       case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
@@ -57,7 +70,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
 /**
  * Substitutes [[Attribute Attributes]] which can be statically evaluated with their corresponding
  * value in conjunctive [[Expression Expressions]]
- * eg.
+ * e.g.
  * {{{
  *   SELECT * FROM table WHERE i = 5 AND j = i + 3
  *   ==>  SELECT * FROM table WHERE i = 5 AND j = 8
@@ -177,7 +190,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenAdd(
     expression: Expression,
     groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Add(l, r) if !groupSet.contains(expr) =>
+    case expr @ Add(l, r, _) if !groupSet.contains(expr) =>
       flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
     case other => other :: Nil
   }
@@ -185,7 +198,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def flattenMultiply(
     expression: Expression,
     groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Multiply(l, r) if !groupSet.contains(expr) =>
+    case expr @ Multiply(l, r, _) if !groupSet.contains(expr) =>
       flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
     case other => other :: Nil
   }
@@ -201,23 +214,24 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // We have to respect aggregate expressions which exists in grouping expressions when plan
       // is an Aggregate operator, otherwise the optimized expression could not be derived from
       // grouping expressions.
+      // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
       val groupingExpressionSet = collectGroupingExpressions(q)
       q transformExpressionsDown {
-      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+      case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
           val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y, f)), c, f)
         } else {
           a
         }
-      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+      case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
         if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
           val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y, f)), c, f)
         } else {
           m
         }
@@ -461,6 +475,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case If(TrueLiteral, trueValue, _) => trueValue
       case If(FalseLiteral, _, falseValue) => falseValue
       case If(Literal(null, _), _, falseValue) => falseValue
+      case If(cond, TrueLiteral, FalseLiteral) => cond
+      case If(cond, FalseLiteral, TrueLiteral) => Not(cond)
       case If(cond, trueValue, falseValue)
         if cond.deterministic && trueValue.semanticEquals(falseValue) => trueValue
       case If(cond, l @ Literal(null, _), FalseLiteral) if !cond.nullable => And(cond, l)
@@ -509,6 +525,65 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
+
+      case e @ CaseWhen(branches, None)
+          if branches.forall(_._2.semanticEquals(Literal(null, e.dataType))) =>
+        Literal(null, e.dataType)
+    }
+  }
+}
+
+
+/**
+ * Push the foldable expression into (if / case) branches.
+ */
+object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
+
+  // To be conservative here: it's only a guaranteed win if all but at most only one branch
+  // end up being not foldable.
+  private def atMostOneUnfoldable(exprs: Seq[Expression]): Boolean = {
+    val (foldables, others) = exprs.partition(_.foldable)
+    foldables.nonEmpty && others.length < 2
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case a: Alias => a // Skip an alias.
+      case u @ UnaryExpression(i @ If(_, trueValue, falseValue))
+          if atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = u.withNewChildren(Array(trueValue)),
+          falseValue = u.withNewChildren(Array(falseValue)))
+
+      case u @ UnaryExpression(c @ CaseWhen(branches, elseValue))
+          if atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
+          elseValue.map(e => u.withNewChildren(Array(e))))
+
+      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.withNewChildren(Array(trueValue, right)),
+          falseValue = b.withNewChildren(Array(falseValue, right)))
+
+      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+        i.copy(
+          trueValue = b.withNewChildren(Array(left, trueValue)),
+          falseValue = b.withNewChildren(Array(left, falseValue)))
+
+      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
+          elseValue.map(e => b.withNewChildren(Array(e, right))))
+
+      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+        c.copy(
+          branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
+          elseValue.map(e => b.withNewChildren(Array(left, e))))
     }
   }
 }
@@ -529,27 +604,33 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(input, Literal(pattern, StringType), escapeChar) =>
+    case l @ Like(input, Literal(pattern, StringType), escapeChar) =>
       if (pattern == null) {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        val escapeStr = String.valueOf(escapeChar)
         pattern.toString match {
-          case startsWith(prefix) if !prefix.endsWith(escapeStr) =>
+          // There are three different situations when pattern containing escapeChar:
+          // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
+          // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
+          // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
+          // Although there are patterns can be optimized if we handle the escape first, we just
+          // skip this rule if pattern contains any escapeChar for simplicity.
+          case p if p.contains(escapeChar) => l
+          case startsWith(prefix) =>
             StartsWith(input, Literal(prefix))
           case endsWith(postfix) =>
             EndsWith(input, Literal(postfix))
           // 'a%a' pattern is basically same with 'a%' && '%a'.
           // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-          case startsAndEndsWith(prefix, postfix) if !prefix.endsWith(escapeStr) =>
+          case startsAndEndsWith(prefix, postfix) =>
             And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
               And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
-          case contains(infix) if !infix.endsWith(escapeStr) =>
+          case contains(infix) =>
             Contains(input, Literal(infix))
           case equalTo(str) =>
             EqualTo(input, Literal(str))
-          case _ => Like(input, Literal.create(pattern, StringType), escapeChar)
+          case _ => l
         }
       }
   }
@@ -684,6 +765,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
           case LeftOuter => newJoin.right.output
           case RightOuter => newJoin.left.output
           case FullOuter => newJoin.left.output ++ newJoin.right.output
+          case _ => Nil
         })
         val newFoldableMap = AttributeMap(foldableMap.baseMap.values.filterNot {
           case (attr, _) => missDerivedAttrsSet.contains(attr)

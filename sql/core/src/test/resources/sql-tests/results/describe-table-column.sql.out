@@ -77,7 +77,7 @@ DESC desc_col_temp_view key1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column key1 does not exist;
+Column key1 does not exist
 
 
 -- !query
@@ -188,7 +188,7 @@ DESC FORMATTED desc_complex_col_table col.x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-DESC TABLE COLUMN command does not support nested data types: col.x;
+DESC TABLE COLUMN command does not support nested data types: col.x
 
 
 -- !query

@@ -23,7 +23,9 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
+    Union,
 )
 from pyspark.ml._typing import M, P, T, ParamMap
 
@@ -66,9 +68,11 @@ class Estimator(Generic[M], Params, metaclass=abc.ABCMeta):
     @overload
     def fit(self, dataset: DataFrame, params: Optional[ParamMap] = ...) -> M: ...
     @overload
-    def fit(self, dataset: DataFrame, params: List[ParamMap]) -> List[M]: ...
+    def fit(
+        self, dataset: DataFrame, params: Union[List[ParamMap], Tuple[ParamMap]]
+    ) -> List[M]: ...
     def fitMultiple(
-        self, dataset: DataFrame, params: List[ParamMap]
+        self, dataset: DataFrame, params: Sequence[ParamMap]
     ) -> Iterable[Tuple[int, M]]: ...
 
 class Transformer(Params, metaclass=abc.ABCMeta):

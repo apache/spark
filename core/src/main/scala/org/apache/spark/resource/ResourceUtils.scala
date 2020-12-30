@@ -29,8 +29,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CPUS_PER_TASK, EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
-import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING, SKIP_VALIDATE_CORES_TESTING}
+import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
+import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
 import org.apache.spark.util.Utils
 
 /**

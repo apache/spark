@@ -86,6 +86,16 @@ that these options will be deprecated in future release as more optimizations ar
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.files.minPartitionNum</code></td>
+    <td>Default Parallelism</td>
+    <td>
+      The suggested (not guaranteed) minimum number of split file partitions. If not set, the default
+      value is `spark.default.parallelism`. This configuration is effective only when using file-based
+      sources such as Parquet, JSON and ORC.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.broadcastTimeout</code></td>
     <td>300</td>
     <td>
@@ -280,7 +290,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
        <td>10</td>
        <td>
-         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewedPartitionThresholdInBytes</code>.
+         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
        </td>
        <td>3.0.0</td>
      </tr>

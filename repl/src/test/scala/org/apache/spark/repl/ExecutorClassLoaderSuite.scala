@@ -28,7 +28,6 @@ import java.util.Collections
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.io.Source
-import scala.language.implicitConversions
 
 import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, anyString}
@@ -114,10 +113,9 @@ class ExecutorClassLoaderSuite
     val classLoader = new ExecutorClassLoader(
       new SparkConf(), null, url1, parentLoader, true)
 
-    // load 'scala.Option', using ClassforName to do the exact same behavior as
-    // what JavaDeserializationStream does
-
     // scalastyle:off classforname
+    // load 'scala.Option', using Class.forName to do the exact same behavior as
+    // what JavaDeserializationStream does
     val optionClass = Class.forName("scala.Option", false, classLoader)
     // scalastyle:on classforname
 
@@ -233,6 +231,7 @@ class ExecutorClassLoaderSuite
       .setMaster("local")
       .setAppName("executor-class-loader-test")
       .set("spark.network.timeout", "11s")
+      .set("spark.network.timeoutInterval", "11s")
       .set("spark.repl.class.outputDir", tempDir1.getAbsolutePath)
     val sc = new SparkContext(conf)
     try {

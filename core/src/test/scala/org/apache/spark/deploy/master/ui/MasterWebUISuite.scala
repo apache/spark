@@ -21,7 +21,6 @@ import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.Date
-import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable.HashMap
 
@@ -32,7 +31,6 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
-import org.apache.spark.internal.config.UI
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 
 

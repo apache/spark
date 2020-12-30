@@ -25,7 +25,7 @@ ML Pipeline APIs
 .. currentmodule:: pyspark.ml
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Transformer
@@ -44,7 +44,7 @@ Parameters
 .. currentmodule:: pyspark.ml.param
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Param
@@ -58,7 +58,7 @@ Feature
 .. currentmodule:: pyspark.ml.feature
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ANOVASelector
@@ -126,7 +126,7 @@ Classification
 .. currentmodule:: pyspark.ml.classification
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     LinearSVC
@@ -169,7 +169,7 @@ Clustering
 .. currentmodule:: pyspark.ml.clustering
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BisectingKMeans
@@ -196,6 +196,7 @@ ML Functions
 .. autosummary::
     :toctree: api/
 
+    array_to_vector
     vector_to_array
 
 
@@ -205,7 +206,7 @@ Vector and Matrix
 .. currentmodule:: pyspark.ml.linalg
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Vector
@@ -224,7 +225,7 @@ Recommendation
 .. currentmodule:: pyspark.ml.recommendation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ALS
@@ -237,7 +238,7 @@ Regression
 .. currentmodule:: pyspark.ml.regression
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     AFTSurvivalRegression
@@ -268,7 +269,7 @@ Statistics
 .. currentmodule:: pyspark.ml.stat
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ANOVATest
@@ -287,7 +288,7 @@ Tuning
 .. currentmodule:: pyspark.ml.tuning
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ParamGridBuilder
@@ -303,7 +304,7 @@ Evaluation
 .. currentmodule:: pyspark.ml.evaluation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Evaluator
@@ -321,7 +322,7 @@ Frequency Pattern Mining
 .. currentmodule:: pyspark.ml.fpm
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     FPGrowth
@@ -335,7 +336,7 @@ Image
 .. currentmodule:: pyspark.ml.image
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     ImageSchema
@@ -348,7 +349,7 @@ Utilities
 .. currentmodule:: pyspark.ml.util
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BaseReadWrite

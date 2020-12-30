@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 class DB2ConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val driver = registerDriver(DB2ConnectionProvider.driverClass)
-    val provider = new DB2ConnectionProvider(driver, options("jdbc:db2://localhost/db2"))
+    val provider = new DB2ConnectionProvider()
+    val driver = registerDriver(provider.driverClass)
 
-    testSecureConnectionProvider(provider)
+    testSecureConnectionProvider(provider, driver, options("jdbc:db2://localhost/db2"))
   }
 }

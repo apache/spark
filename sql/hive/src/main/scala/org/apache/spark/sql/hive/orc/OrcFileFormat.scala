@@ -47,7 +47,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcOptions
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
@@ -75,7 +75,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConf()),
+        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
         ignoreCorruptFiles
       )
     }
@@ -139,7 +139,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
+      OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
@@ -296,7 +296,7 @@ private[orc] class OrcOutputWriter(
 
   override def close(): Unit = {
     if (recordWriterInstantiated) {
-      // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
+      // Hive ORC initializes its private `writer` field at the first write.
       OrcFileFormat.addSparkVersionMetadata(recordWriter)
       recordWriter.close(Reporter.NULL)
     }

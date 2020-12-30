@@ -169,7 +169,7 @@ class FeatureTests(SparkSessionTestCase):
 
         # Test an empty vocabulary
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
                 CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
@@ -232,6 +232,7 @@ class FeatureTests(SparkSessionTestCase):
         model = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label",
                                                outputCol="indexed", handleInvalid="keep")
         self.assertEqual(model.labels, ["a", "b", "c"])
+        self.assertEqual(model.labelsArray, [("a", "b", "c")])
 
         df1 = self.spark.createDataFrame([
             (0, "a"),

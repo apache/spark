@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -70,17 +71,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("us and julian day") {
-    val (d, ns) = toJulianDay(0)
+    val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(0))
     assert(d === JULIAN_DAY_OF_EPOCH)
     assert(ns === 0)
-    assert(fromJulianDay(d, ns) == 0L)
+    assert(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)) == 0L)
 
     Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
       Timestamp.valueOf("2015-06-11 20:10:10.100"),
       Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
-      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(fromJavaTimestamp(t)))
       assert(ns > 0)
-      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
+      val t1 = toJavaTimestamp(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)))
       assert(t.equals(t1))
     }
   }
@@ -517,18 +518,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(time == None)
   }
 
-  test("truncTimestamp") {
-    def testTrunc(
-        level: Int,
-        expected: String,
-        inputTS: Long,
-        zoneId: ZoneId = defaultZoneId): Unit = {
-      val truncated =
-        DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
-      val expectedTS = toTimestamp(expected, defaultZoneId)
-      assert(truncated === expectedTS.get)
-    }
+  def testTrunc(
+      level: Int,
+      expected: String,
+      inputTS: Long,
+      zoneId: ZoneId = defaultZoneId): Unit = {
+    val truncated = DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
+    val expectedTS = toTimestamp(expected, defaultZoneId)
+    assert(truncated === expectedTS.get)
+  }
 
+  test("SPARK-33404: test truncTimestamp when time zone offset from UTC has a " +
+    "granularity of seconds") {
+    for (zid <- ALL_TIMEZONES) {
+      withDefaultTimeZone(zid) {
+        val inputTS = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "1769-10-17T17:10:02", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "1769-10-17T17:10:02.123", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "1769-10-17T17:10:02.123456",
+          inputTS.get, zid)
+      }
+    }
+  }
+
+  test("truncTimestamp") {
     val defaultInputTS = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2015-03-05T09:32:05.359123"), defaultZoneId)
     val defaultInputTS1 = DateTimeUtils.stringToTimestamp(

@@ -27,7 +27,7 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_PI,
       mainClass = "",
-      expectedLogOnCompletion = Seq("Pi is roughly 3"),
+      expectedDriverLogOnCompletion = Seq("Pi is roughly 3"),
       appArgs = Array("5"),
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
@@ -35,14 +35,13 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false)
   }
 
-  test("Run PySpark with Python3 to test a pyfiles example", k8sTestTag) {
+  test("Run PySpark to test a pyfiles example", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
-      .set("spark.kubernetes.pyspark.pythonVersion", "3")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_FILES,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Python runtime version check is: True",
         "Python environment version check is: True",
         "Python runtime version check for executor is: True"),
@@ -57,13 +56,12 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
   test("Run PySpark with memory customization", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.container.image", pyImage)
-      .set("spark.kubernetes.pyspark.pythonVersion", "3")
       .set("spark.kubernetes.memoryOverheadFactor", s"$memOverheadConstant")
       .set("spark.executor.pyspark.memory", s"${additionalMemory}m")
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_MEMORY_CHECK,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "PySpark Worker Memory Check is: True"),
       appArgs = Array(s"$additionalMemoryInBytes"),
       driverPodChecker = doDriverMemoryCheck,
