@@ -26,7 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ConvertToLocalRelation, NestedColumnAliasingSuite, ReorderAssociativeOperator}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3757,6 +3757,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     })
+  }
+
+  test("SPARK-33945: handles a random seed consisting of an expr tree") {
+    val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.mkString(",")) {
+      sql("SELECT rand(1 + 1)").collect()
+      sql("SELECT randn(1 + 1)").collect()
+    }
   }
 }
 

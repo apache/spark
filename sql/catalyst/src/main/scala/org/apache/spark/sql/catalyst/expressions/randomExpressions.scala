@@ -44,8 +44,8 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
   }
 
   @transient protected lazy val seed: Long = child match {
-    case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType) => s.asInstanceOf[Long]
+    case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
+    case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
     case _ => throw new AnalysisException(
       s"Input argument to $prettyName must be an integer, long or null literal.")
   }
