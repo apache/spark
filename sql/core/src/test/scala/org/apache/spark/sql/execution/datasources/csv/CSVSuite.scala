@@ -2453,7 +2453,7 @@ abstract class CSVSuite
     }
   }
 
-  test("write csv data correctly with the configurable max column name length") {
+  test("SPARK-33940: write csv data correctly with the configurable max column name length") {
     withTempPath { path =>
       val dataPath = path.getCanonicalPath
       val row1 = Row("a")
