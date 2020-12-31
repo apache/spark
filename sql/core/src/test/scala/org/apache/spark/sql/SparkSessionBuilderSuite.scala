@@ -399,7 +399,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
   }
-  
+
   test("SPARK-33944: no warning setting spark.sql.warehouse.dir using session options") {
     val msg = "Not allowing to set hive.metastore.warehouse.dir in SparkSession's options"
     val logAppender = new LogAppender(msg)
