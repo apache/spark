@@ -30,6 +30,7 @@ try:
 except ImportError:
     has_resource_module = False
 import traceback
+import warnings
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
@@ -45,6 +46,7 @@ from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, Cogro
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
+from pyspark.warnings import PySparkResourceWarning
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -500,7 +502,10 @@ def main(infile, outfile):
 
             except (resource.error, OSError, ValueError) as e:
                 # not all systems support resource limits, so warn instead of failing
-                print("WARN: Failed to set memory limit: {0}\n".format(e), file=sys.stderr)
+                warnings.warn(
+                    "Failed to set memory limit: {0}\n".format(e),
+                    PySparkResourceWarning
+                )
 
         # initialize global state
         taskContext = None

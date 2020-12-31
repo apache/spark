@@ -25,6 +25,7 @@ from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
+from pyspark.warnings import PySparkFutureWarning
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -76,7 +77,8 @@ class SQLContext(object):
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-                DeprecationWarning)
+                PySparkFutureWarning
+            )
 
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -123,7 +125,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
 
         if (cls._instantiatedContext is None
                 or SQLContext._instantiatedContext._sc._jsc is None):
@@ -229,7 +232,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
         return self.sparkSession.udf.register(name, f, returnType)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
@@ -243,7 +247,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
@@ -597,7 +602,8 @@ class HiveContext(SQLContext):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
         if jhiveContext is None:
             sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
             sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()

@@ -27,6 +27,7 @@ from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
+from pyspark.warnings import PySparkWarning
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
            'HashingTF', 'IDFModel', 'IDF', 'Word2Vec', 'Word2VecModel',
@@ -260,7 +261,10 @@ class StandardScaler(object):
     """
     def __init__(self, withMean=False, withStd=True):
         if not (withMean or withStd):
-            warnings.warn("Both withMean and withStd are false. The model does nothing.")
+            warnings.warn(
+                "Both withMean and withStd are false. The model does nothing.",
+                PySparkWarning
+            )
         self.withMean = withMean
         self.withStd = withStd
 

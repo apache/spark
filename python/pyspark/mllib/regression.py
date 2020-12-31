@@ -25,6 +25,7 @@ from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
+from pyspark.warnings import PySparkFutureWarning
 
 __all__ = ['LabeledPoint', 'LinearModel',
            'LinearRegressionModel', 'LinearRegressionWithSGD',
@@ -299,7 +300,7 @@ class LinearRegressionWithSGD(object):
             (default: 0.001)
         """
         warnings.warn(
-            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", DeprecationWarning)
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", PySparkFutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -453,7 +454,8 @@ class LassoWithSGD(object):
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
             "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
 
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
@@ -607,7 +609,7 @@ class RidgeRegressionWithSGD(object):
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
             "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
-            "LinearRegression.", DeprecationWarning)
+            "LinearRegression.", PySparkFutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),

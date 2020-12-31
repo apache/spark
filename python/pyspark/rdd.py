@@ -47,7 +47,7 @@ from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import fail_on_stopiteration, _parse_memory
-
+from pyspark.warnings import PySparkFutureWarning
 
 __all__ = ["RDD"]
 
@@ -448,8 +448,10 @@ class RDD(object):
         >>> rdd.mapPartitionsWithSplit(f).sum()
         6
         """
-        warnings.warn("mapPartitionsWithSplit is deprecated; "
-                      "use mapPartitionsWithIndex instead", DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "mapPartitionsWithSplit is deprecated; use mapPartitionsWithIndex instead",
+            PySparkFutureWarning, stacklevel=2
+        )
         return self.mapPartitionsWithIndex(f, preservesPartitioning)
 
     def getNumPartitions(self):
@@ -960,7 +962,8 @@ class RDD(object):
         warnings.warn(
             "Deprecated in 3.1, Use pyspark.InheritableThread with "
             "the pinned thread mode enabled.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
 
         with SCCallSiteSync(self.context) as css:
             sock_info = self.ctx._jvm.PythonRDD.collectAndServeWithJobGroup(

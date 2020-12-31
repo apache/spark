@@ -29,6 +29,7 @@ import heapq
 from pyspark.serializers import BatchedSerializer, PickleSerializer, FlattenedValuesSerializer, \
     CompressedSerializer, AutoBatchedSerializer
 from pyspark.util import fail_on_stopiteration
+from pyspark.warnings import PySparkWarning
 
 
 try:
@@ -57,8 +58,10 @@ except ImportError:
                     return int(line.split()[1]) >> 10
 
         else:
-            warnings.warn("Please install psutil to have better "
-                          "support with spilling")
+            warnings.warn(
+                "Please install psutil to have better support with spilling",
+                PySparkWarning
+            )
             if platform.system() == "Darwin":
                 import resource
                 rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss

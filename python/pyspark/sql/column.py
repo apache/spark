@@ -22,6 +22,7 @@ import warnings
 from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
+from pyspark.warnings import PySparkFutureWarning
 
 __all__ = ["Column"]
 
@@ -323,7 +324,8 @@ class Column(object):
                 "A column as 'key' in getItem is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[key]` or `column.key` syntax "
                 "instead.",
-                DeprecationWarning)
+                PySparkFutureWarning
+            )
         return self[key]
 
     def getField(self, name):
@@ -354,7 +356,8 @@ class Column(object):
                 "A column as 'name' in getField is deprecated as of Spark 3.0, and will not "
                 "be supported in the future release. Use `column[name]` or `column.name` syntax "
                 "instead.",
-                DeprecationWarning)
+                PySparkFutureWarning
+            )
         return self[name]
 
     def withField(self, fieldName, col):

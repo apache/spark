@@ -24,6 +24,7 @@ from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
     DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.warnings import PySparkWarning
 
 
 class PandasConversionMixin(object):
@@ -84,7 +85,7 @@ class PandasConversionMixin(object):
                         "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e))
-                    warnings.warn(msg)
+                    warnings.warn(msg, PySparkWarning)
                     use_arrow = False
                 else:
                     msg = (
@@ -93,7 +94,7 @@ class PandasConversionMixin(object):
                         "reached the error below and will not continue because automatic fallback "
                         "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % str(e))
-                    warnings.warn(msg)
+                    warnings.warn(msg, PySparkWarning)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
@@ -134,7 +135,7 @@ class PandasConversionMixin(object):
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
                         "effect on failures in the middle of "
                         "computation.\n  %s" % str(e))
-                    warnings.warn(msg)
+                    warnings.warn(msg, PySparkWarning)
                     raise
 
         # Below is toPandas without Arrow optimization.
@@ -286,7 +287,7 @@ class SparkConversionMixin(object):
                         "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e))
-                    warnings.warn(msg)
+                    warnings.warn(msg, PySparkWarning)
                 else:
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
@@ -294,7 +295,7 @@ class SparkConversionMixin(object):
                         "reached the error below and will not continue because automatic "
                         "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
                         "has been set to false.\n  %s" % str(e))
-                    warnings.warn(msg)
+                    warnings.warn(msg, PySparkWarning)
                     raise
         data = self._convert_from_pandas(data, schema, timezone)
         return self._create_dataframe(data, schema, samplingRatio, verifySchema)

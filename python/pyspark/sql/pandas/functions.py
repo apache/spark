@@ -24,6 +24,7 @@ from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
+from pyspark.warnings import PySparkWarning
 
 
 class PandasUDFType(object):
@@ -389,7 +390,7 @@ def _create_pandas_udf(f, returnType, evalType):
         warnings.warn(
             "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
             "pandas UDF instead of specifying pandas UDF type which will be deprecated "
-            "in the future releases. See SPARK-28264 for more details.", UserWarning)
+            "in the future releases. See SPARK-28264 for more details.", PySparkWarning)
     elif evalType in [PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
                       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF]:

@@ -22,6 +22,7 @@ from collections import namedtuple
 from pyspark import since
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StructType
+from pyspark.warnings import PySparkFutureWarning
 
 
 Database = namedtuple("Database", "name description locationUri")
@@ -153,7 +154,8 @@ class Catalog(object):
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
         return self.createTable(tableName, path, source, schema, **options)
 
     def createTable(
@@ -251,7 +253,8 @@ class Catalog(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            DeprecationWarning)
+            PySparkFutureWarning
+        )
         return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)

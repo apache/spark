@@ -31,6 +31,7 @@ from pyspark.sql.types import DataType, StructType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
+from pyspark.warnings import PySparkWarning
 
 __all__ = ["SparkSession"]
 
@@ -543,8 +544,11 @@ class SparkSession(SparkConversionMixin):
                 return SparkSession.builder.getOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
             if conf.get('spark.sql.catalogImplementation', '').lower() == 'hive':
-                warnings.warn("Fall back to non-hive support because failing to access HiveConf, "
-                              "please make sure you build spark with hive")
+                warnings.warn(
+                    "Fall back to non-hive support because failing to access HiveConf, "
+                    "please make sure you build spark with hive",
+                    PySparkWarning
+                )
 
         return SparkSession.builder.getOrCreate()
 
