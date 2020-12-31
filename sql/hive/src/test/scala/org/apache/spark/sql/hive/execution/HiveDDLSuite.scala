@@ -2901,27 +2901,24 @@ class HiveDDLSuite
   }
 
   test("SPARK-33865: Hive DDL with avro should check col name") {
-    withTable("tbl", "t1") {
-      withView("view1") {
-        spark.sql("CREATE TABLE tbl(id long)")
-        spark.sql("INSERT OVERWRITE TABLE tbl VALUES 4")
-        spark.sql("CREATE VIEW view1 AS SELECT id FROM tbl")
-
+    withTable("t1") {
+      withView("v") {
+        spark.range(1).createTempView("v")
 
         val e1 = intercept[SchemaParseException] {
           spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-            "AS SELECT ID, ABS(ID) FROM view1")
+            "AS SELECT ID, ABS(ID) FROM v")
         }.getMessage
         assert(e1.contains("Illegal character in: abs(ID)"))
 
         val e2 = intercept[SchemaParseException] {
           spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-            "AS SELECT ID, IF(ID=1,1,0) FROM view1")
+            "AS SELECT ID, IF(ID=1,1,0) FROM v")
         }.getMessage
         assert(e2.contains("Illegal initial character: (IF((ID = CAST(1 AS BIGINT)), 1, 0))"))
 
         spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-          "AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B FROM view1")
+          "AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B FROM v")
         val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
           StructField("A", LongType, true), StructField("B", LongType, true)))
         assert(spark.table("t1").schema == expectedSchema)
