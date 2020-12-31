@@ -113,16 +113,15 @@ private[spark] object KubernetesClientUtils extends Logging {
         try {
           source = Source.fromFile(file)(Codec.UTF8)
           val (fileName, fileContent) = file.getName -> source.mkString
-          truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
-          if (truncatedMapSize < maxSize) {
+          if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
             truncatedMap.put(fileName, fileContent)
+            truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
           } else {
             logWarning(s"Skipped a conf file $fileName, due to size constraint." +
               s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
           }
         } catch {
           case e: MalformedInputException =>
-            truncatedMapSize = truncatedMapSize - (file.getName.length + file.length)
             logWarning(
               s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
             None
@@ -141,18 +140,19 @@ private[spark] object KubernetesClientUtils extends Logging {
   }
 
   private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
-    // At the moment configmaps do not support storing binary content.
-    // configMaps do not allow for size greater than 1.5 MiB(configurable).
+    // At the moment configmaps do not support storing binary content (i.e. skip jar,tar,gzip,zip),
+    // and configMaps do not allow for size greater than 1.5 MiB(configurable).
     // https://etcd.io/docs/v3.4.0/dev-guide/limit/
-    // We exclude all the template files and user provided spark conf or properties,
-    // and binary files (e.g. jars and zip). Spark properties are resolved in a different step.
     def testIfTooLargeOrBinary(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
-      f.getName.matches(".*\\.(gz|zip|jar|tar)") ||
-      f.getName.matches(".*\\.template") ||
+      f.getName.matches(".*\\.(gz|zip|jar|tar)")
+
+    // We exclude all the template files and user provided spark conf or properties,
+    // Spark properties are resolved in a different step.
+    def testIfSparkConfOrTemplates(f: File) = f.getName.matches(".*\\.template") ||
       f.getName.matches("spark.*(conf|properties)")
 
     val fileFilter = (f: File) => {
-      f.isFile && !testIfTooLargeOrBinary(f)
+      f.isFile && !testIfTooLargeOrBinary(f) && !testIfSparkConfOrTemplates(f)
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)

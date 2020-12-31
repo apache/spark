@@ -105,7 +105,7 @@ private[spark] object Config extends Logging {
         " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
       .version("3.1.0")
       .longConf
-      .createWithDefault(1573000) // 1.5 MiB
+      .createWithDefault(1572864) // 1.5 MiB
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
