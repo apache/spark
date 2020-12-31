@@ -323,6 +323,8 @@ jobs:
       run: |
         apt-get install -y libcurl4-openssl-dev pandoc
         python3.6 -m pip install sphinx mkdocs numpy
+        apt-get update -y
+        apt-get install -y ruby ruby-dev
         gem install jekyll jekyll-redirect-from rouge
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
     - name: Scala linter
