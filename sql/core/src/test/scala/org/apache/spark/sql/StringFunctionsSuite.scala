@@ -279,27 +279,55 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("string trim functions") {
-    val df = Seq(("  example  ", "", "example")).toDF("a", "b", "c")
+    val df = Seq(("  example  ", "example", "e", "xe", "emlp", "elxp", "xyz"))
+      .toDF("a", "c", "e", "xe", "emlp", "elxp", "xyz")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ", "  example", "example"))
 
     checkAnswer(
-      df.select(ltrim($"c", "e"), rtrim($"c", "e"), trim($"c", "e")),
+      df.select(ltrim($"c", $"e"), rtrim($"c", $"e"), trim($"c", $"e")),
       Row("xample", "exampl", "xampl"))
 
     checkAnswer(
-      df.select(ltrim($"c", "xe"), rtrim($"c", "emlp"), trim($"c", "elxp")),
+      df.select(ltrim($"c", $"xe"), rtrim($"c", $"emlp"), trim($"c", $"elxp")),
       Row("ample", "exa", "am"))
 
     checkAnswer(
-      df.select(trim($"c", "xyz")),
+      df.select(trim($"c", $"xyz")),
       Row("example"))
 
     checkAnswer(
       df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
       Row("example  ", "  example", "example"))
+  }
+
+  test("binary trim functions") {
+    val df = Seq(("  example  ".getBytes, "example".getBytes, "e".getBytes, "xe".getBytes,
+      "emlp".getBytes, "elxp".getBytes, "xyz".getBytes)).
+      toDF("a", "b", "e", "xe", "emlp", "elxp", "xyz")
+
+    checkAnswer(
+      df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
+      Row("example  ".getBytes, "  example".getBytes, "example".getBytes))
+
+    checkAnswer(
+      df.select(ltrim($"b", $"e"), rtrim($"b", $"e"), trim($"b", $"e")),
+      Row("xample".getBytes, "exampl".getBytes, "xampl".getBytes))
+
+    checkAnswer(
+      df.select(
+        ltrim($"b", $"xe"), rtrim($"b", $"emlp"), trim($"b", $"elxp")),
+      Row("ample".getBytes, "exa".getBytes, "am".getBytes))
+
+    checkAnswer(
+      df.select(trim($"b", $"xyz")),
+      Row("example".getBytes))
+
+    checkAnswer(
+      df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
+      Row("example  ".getBytes, "  example".getBytes, "example".getBytes))
   }
 
   test("string formatString function") {

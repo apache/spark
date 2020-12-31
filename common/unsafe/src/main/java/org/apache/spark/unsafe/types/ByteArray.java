@@ -101,4 +101,117 @@ public final class ByteArray {
     }
     return result;
   }
+
+  /**
+   * Trims bytes representing spaces from both ends of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @return this byte array with no bytes representing spaces at the start or end
+   */
+  public static byte[] trim(byte[] srcArr) {
+    return trim(srcArr, " ".getBytes());
+  }
+
+  /**
+   * Trims instances of the given trim byte array from both ends of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @param trimArr the trim byte array
+   * @return this byte array with no occurrences of the trim byte array at the start or end,
+   * or `null` if `trimArr` is `null`
+   */
+  public static byte[] trim(byte[] srcArr, byte[] trimArr) {
+    return trimLeft(trimRight(srcArr, trimArr), trimArr);
+  }
+
+  /**
+   * Trims bytes representing spaces from the start of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @return this byte array with no bytes representing spaces at the start
+   */
+  public static byte[] trimLeft(byte[] srcArr) {
+    return trimLeft(srcArr, " ".getBytes());
+  }
+
+  /**
+   * Trims instances of the given trim byte array from the start of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @param trimArr the trim byte array
+   * @return this byte array with no occurrences of the trim byte array at the start,
+   * or `null` if `trimArr` is `null`
+   */
+  public static byte[] trimLeft(byte[] srcArr, byte[] trimArr) {
+    if (trimArr == null) {
+      return null;
+    } else if (trimArr.length == 0 || srcArr.length == 0) {
+      return srcArr;
+    } else {
+      // the searching byte position in the source byte array
+      int searchIdx = 0;
+
+      while (searchIdx < srcArr.length) {
+        boolean matched = false;
+        for (byte b: trimArr) {
+          if (b == srcArr[searchIdx]) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) {
+          searchIdx += 1;
+        } else {
+          break;
+        }
+      }
+      return subStringSQL(srcArr, searchIdx + 1, srcArr.length - searchIdx);
+    }
+  }
+
+  /**
+   * Trims bytes representing spaces from the end of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @return this byte array with no bytes representing spaces at the end
+   */
+  public static byte[] trimRight(byte[] srcArr) {
+    return trimRight(srcArr, " ".getBytes());
+  }
+
+  /**
+   * Trims instances of the given trim byte array from the end of this byte array.
+   *
+   * @param srcArr the source byte array
+   * @param trimArr the trim byte array
+   * @return this byte array with no occurrences of the trim byte array at the end,
+   * or `null` if `trimArr` is `null`
+   */
+  public static byte[] trimRight(byte[] srcArr, byte[] trimArr) {
+    if (trimArr == null) {
+      return null;
+    } else if (trimArr.length == 0) {
+      return srcArr;
+    } else {
+      // the searching byte position in the source byte array
+      int searchIdx = srcArr.length - 1;
+
+      while (searchIdx > -1) {
+        boolean matched = false;
+        for (byte b: trimArr) {
+          if (b == srcArr[searchIdx]) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) {
+          searchIdx -= 1;
+        } else {
+          break;
+        }
+      }
+
+      return subStringSQL(srcArr, 0, searchIdx + 1);
+    }
+  }
 }

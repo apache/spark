@@ -1655,11 +1655,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val trimStr = Option(ctx.trimStr).map(expression)
     Option(ctx.trimOption).map(_.getType).getOrElse(SqlBaseParser.BOTH) match {
       case SqlBaseParser.BOTH =>
-        StringTrim(srcStr, trimStr)
+        Trim(srcStr, trimStr)
       case SqlBaseParser.LEADING =>
-        StringTrimLeft(srcStr, trimStr)
+        TrimLeft(srcStr, trimStr)
       case SqlBaseParser.TRAILING =>
-        StringTrimRight(srcStr, trimStr)
+        TrimRight(srcStr, trimStr)
       case other =>
         throw new ParseException("Function trim doesn't support with " +
           s"type $other. Please use BOTH, LEADING or TRAILING as trim type", ctx)

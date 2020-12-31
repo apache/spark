@@ -854,33 +854,33 @@ class PlanParserSuite extends AnalysisTest {
 
     assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
-      StringTrim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
+      Trim(Literal("@ $ % & ()abc "), Some(Literal("@$%&( )abc")))
     )
     assertTrimPlans(
       "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
-      StringTrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
+      TrimLeft(Literal("[ ccccbcc "), Some(Literal("c []")))
     )
     assertTrimPlans(
       "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
-      StringTrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
+      TrimRight(Literal("bc...,,,&&&ccc"), Some(Literal("c&^,.")))
     )
 
     assertTrimPlans(
       "SELECT TRIM(BOTH FROM '  bunch o blanks  ')",
-      StringTrim(Literal("  bunch o blanks  "), None)
+      Trim(Literal("  bunch o blanks  "), None)
     )
     assertTrimPlans(
       "SELECT TRIM(LEADING FROM '  bunch o blanks  ')",
-      StringTrimLeft(Literal("  bunch o blanks  "), None)
+      TrimLeft(Literal("  bunch o blanks  "), None)
     )
     assertTrimPlans(
       "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
-      StringTrimRight(Literal("  bunch o blanks  "), None)
+      TrimRight(Literal("  bunch o blanks  "), None)
     )
 
     assertTrimPlans(
       "SELECT TRIM('xyz' FROM 'yxTomxx')",
-      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+      Trim(Literal("yxTomxx"), Some(Literal("xyz")))
     )
   }
 

@@ -266,9 +266,6 @@
 | org.apache.spark.sql.catalyst.expressions.StringSplit | split | SELECT split('oneAtwoBthreeC', '[ABC]') | struct<split(oneAtwoBthreeC, [ABC], -1):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.StringToMap | str_to_map | SELECT str_to_map('a:1,b:2,c:3', ',', ':') | struct<str_to_map(a:1,b:2,c:3, ,, :):map<string,string>> |
 | org.apache.spark.sql.catalyst.expressions.StringTranslate | translate | SELECT translate('AaBbCc', 'abc', '123') | struct<translate(AaBbCc, abc, 123):string> |
-| org.apache.spark.sql.catalyst.expressions.StringTrim | trim | SELECT trim('    SparkSQL   ') | struct<trim(    SparkSQL   ):string> |
-| org.apache.spark.sql.catalyst.expressions.StringTrimLeft | ltrim | SELECT ltrim('    SparkSQL   ') | struct<ltrim(    SparkSQL   ):string> |
-| org.apache.spark.sql.catalyst.expressions.StringTrimRight | rtrim | SELECT rtrim('    SparkSQL   ') | struct<rtrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToCsv | to_csv | SELECT to_csv(named_struct('a', 1, 'b', 2)) | struct<to_csv(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.StructsToJson | to_json | SELECT to_json(named_struct('a', 1, 'b', 2)) | struct<to_json(named_struct(a, 1, b, 2)):string> |
 | org.apache.spark.sql.catalyst.expressions.Substring | substr | SELECT substr('Spark SQL', 5) | struct<substr(Spark SQL, 5, 2147483647):string> |
@@ -284,6 +281,9 @@
 | org.apache.spark.sql.catalyst.expressions.ToUnixTimestamp | to_unix_timestamp | SELECT to_unix_timestamp('2016-04-08', 'yyyy-MM-dd') | struct<to_unix_timestamp(2016-04-08, yyyy-MM-dd):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TransformKeys | transform_keys | SELECT transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1) | struct<transform_keys(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |
 | org.apache.spark.sql.catalyst.expressions.TransformValues | transform_values | SELECT transform_values(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1) | struct<transform_values(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), lambdafunction((namedlambdavariable() + 1), namedlambdavariable(), namedlambdavariable())):map<int,int>> |
+| org.apache.spark.sql.catalyst.expressions.Trim | trim | SELECT trim('    SparkSQL   ') | struct<trim(    SparkSQL   ):string> |
+| org.apache.spark.sql.catalyst.expressions.TrimLeft | ltrim | SELECT ltrim('    SparkSQL   ') | struct<ltrim(    SparkSQL   ):string> |
+| org.apache.spark.sql.catalyst.expressions.TrimRight | rtrim | SELECT rtrim('    SparkSQL   ') | struct<rtrim(    SparkSQL   ):string> |
 | org.apache.spark.sql.catalyst.expressions.TruncDate | trunc | SELECT trunc('2019-08-04', 'week') | struct<trunc(CAST(2019-08-04 AS DATE), week):date> |
 | org.apache.spark.sql.catalyst.expressions.TruncTimestamp | date_trunc | SELECT date_trunc('YEAR', '2015-03-05T09:32:05.359') | struct<date_trunc(YEAR, CAST(2015-03-05T09:32:05.359 AS TIMESTAMP)):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TypeOf | typeof | SELECT typeof(1) | struct<typeof(1):string> |

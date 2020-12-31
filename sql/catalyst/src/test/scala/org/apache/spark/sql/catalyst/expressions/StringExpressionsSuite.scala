@@ -553,100 +553,217 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
-  test("TRIM") {
+  test("TRIM for string") {
     val s = 'a.string.at(0)
-    checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
-    checkEvaluation(StringTrim("aa", "a"), "", create_row(" abdef "))
-    checkEvaluation(StringTrim(Literal(" aabbtrimccc"), "ab cd"), "trim", create_row("bdef"))
-    checkEvaluation(StringTrim(Literal("a<a >@>.,>"), "a.,@<>"), " ", create_row(" abdef "))
-    checkEvaluation(StringTrim(s), "abdef", create_row(" abdef "))
-    checkEvaluation(StringTrim(s, "abd"), "ef", create_row("abdefa"))
-    checkEvaluation(StringTrim(s, "a"), "bdef", create_row("aaabdefaaaa"))
-    checkEvaluation(StringTrim(s, "SLSQ"), "park", create_row("SSparkSQLS"))
+    checkEvaluation(Trim(Literal(" aa  ")), "aa", create_row(" abdef "))
+    checkEvaluation(Trim("aa", "a"), "", create_row(" abdef "))
+    checkEvaluation(Trim(Literal(" aabbtrimccc"), "ab cd"), "trim", create_row("bdef"))
+    checkEvaluation(Trim(Literal("a<a >@>.,>"), "a.,@<>"), " ", create_row(" abdef "))
+    checkEvaluation(Trim(s), "abdef", create_row(" abdef "))
+    checkEvaluation(Trim(s, "abd"), "ef", create_row("abdefa"))
+    checkEvaluation(Trim(s, "a"), "bdef", create_row("aaabdefaaaa"))
+    checkEvaluation(Trim(s, "SLSQ"), "park", create_row("SSparkSQLS"))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
-    checkEvaluation(StringTrim(s, "花世界"), "", create_row("花花世界花花"))
-    checkEvaluation(StringTrim(s, "花 "), "世界", create_row(" 花花世界花花"))
-    checkEvaluation(StringTrim(s, "花 "), "世界", create_row(" 花 花 世界 花 花 "))
-    checkEvaluation(StringTrim(s, "a花世"), "界", create_row("aa花花世界花花aa"))
-    checkEvaluation(StringTrim(s, "a@#( )"), "花花世界花花", create_row("aa()花花世界花花@ #"))
-    checkEvaluation(StringTrim(Literal("花trim"), "花 "), "trim", create_row(" abdef "))
+    checkEvaluation(Trim(s), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(Trim(s, "花世界"), "", create_row("花花世界花花"))
+    checkEvaluation(Trim(s, "花 "), "世界", create_row(" 花花世界花花"))
+    checkEvaluation(Trim(s, "花 "), "世界", create_row(" 花 花 世界 花 花 "))
+    checkEvaluation(Trim(s, "a花世"), "界", create_row("aa花花世界花花aa"))
+    checkEvaluation(Trim(s, "a@#( )"), "花花世界花花", create_row("aa()花花世界花花@ #"))
+    checkEvaluation(Trim(Literal("花trim"), "花 "), "trim", create_row(" abdef "))
     // scalastyle:on
-    checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+    checkEvaluation(Trim(Literal("a"), Literal.create(null, StringType)), null)
+    checkEvaluation(Trim(Literal.create(null, StringType), Literal("a")), null)
 
     // Test escaping of arguments
-    GenerateUnsafeProjection.generate(StringTrim(Literal("\"quote"), Literal("\"quote")) :: Nil)
+    GenerateUnsafeProjection.generate(Trim(Literal("\"quote"), Literal("\"quote")) :: Nil)
 
-    checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
-    checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
+    checkEvaluation(Trim(Literal("yxTomxx"), Literal("xyz")), "Tom")
+    checkEvaluation(Trim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
-  test("LTRIM") {
-    val s = 'a.string.at(0)
-    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(Literal("aa"), "a"), "", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(Literal("aa "), "a "), "", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(Literal("aabbcaaaa"), "ab"), "caaaa", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(s, "a"), "bdefa", create_row("abdefa"))
-    checkEvaluation(StringTrimLeft(s, "a "), "bdefaaaa", create_row(" aaabdefaaaa"))
-    checkEvaluation(StringTrimLeft(s, "Spk"), "arkSQLS", create_row("SSparkSQLS"))
+  test("TRIM for binary") {
+    val s = 'a.binary.at(0)
+    checkEvaluation(Trim(Literal(" aa  ".getBytes)), "aa".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(Trim("aa".getBytes, "a".getBytes), "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(Trim(Literal(" aabbtrimccc".getBytes), "ab cd".getBytes),
+      "trim".getBytes, create_row("bdef".getBytes))
+    checkEvaluation(Trim(Literal("a<a >@>.,>".getBytes), "a.,@<>".getBytes),
+      " ".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(Trim(s), "abdef".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(Trim(s, "abd".getBytes), "ef".getBytes, create_row("abdefa".getBytes))
+    checkEvaluation(Trim(s, "a".getBytes), "bdef".getBytes, create_row("aaabdefaaaa".getBytes))
+    checkEvaluation(Trim(s, "SLSQ".getBytes), "park".getBytes, create_row("SSparkSQLS".getBytes))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
-    checkEvaluation(StringTrimLeft(s, "花"), "世界花花", create_row("花花世界花花"))
-    checkEvaluation(StringTrimLeft(s, "花 世"), "界花花", create_row(" 花花世界花花"))
-    checkEvaluation(StringTrimLeft(s, "花"), "a花花世界花花 ", create_row("a花花世界花花 "))
-    checkEvaluation(StringTrimLeft(s, "a花界"), "世界花花aa", create_row("aa花花世界花花aa"))
-    checkEvaluation(StringTrimLeft(s, "a世界"), "花花世界花花", create_row("花花世界花花"))
+    checkEvaluation(Trim(s), "花花世界".getBytes, create_row("  花花世界 ".getBytes))
+    checkEvaluation(Trim(s, "花世界".getBytes), "".getBytes, create_row("花花世界花花".getBytes))
+    checkEvaluation(Trim(s, "花 ".getBytes), "世界".getBytes, create_row(" 花花世界花花".getBytes))
+    checkEvaluation(Trim(s, "花 ".getBytes), "世界".getBytes, create_row(" 花 花 世界 花 花 ".getBytes))
+    checkEvaluation(Trim(s, "a花世".getBytes), "界".getBytes, create_row("aa花花世界花花aa".getBytes))
+    checkEvaluation(Trim(s, "a@#( )".getBytes), "花花世界花花".getBytes, create_row("aa()花花世界花花@ #".getBytes))
+    checkEvaluation(Trim(Literal("花trim".getBytes), "花 ".getBytes), "trim".getBytes, create_row(" abdef ".getBytes))
     // scalastyle:on
-    checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
-    checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+    checkEvaluation(Trim(Literal("a".getBytes), Literal.create(null, BinaryType)), null)
+    checkEvaluation(Trim(Literal.create(null, BinaryType), Literal("a".getBytes)), null)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      StringTrimLeft(Literal("\"quote"), Literal("\"quote")) :: Nil)
+      Trim(Literal("\"quote".getBytes), Literal("\"quote".getBytes)) :: Nil)
 
-    checkEvaluation(StringTrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
-    checkEvaluation(StringTrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
-    checkEvaluation(StringTrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
+    checkEvaluation(Trim(Literal("yxTomxx".getBytes), Literal("xyz".getBytes)), "Tom".getBytes)
+    checkEvaluation(Trim(Literal("xxxbarxxx".getBytes), Literal("x".getBytes)), "bar".getBytes)
+  }
+
+  test("LTRIM for string") {
+    val s = 'a.string.at(0)
+    checkEvaluation(TrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
+    checkEvaluation(TrimLeft(Literal("aa"), "a"), "", create_row(" abdef "))
+    checkEvaluation(TrimLeft(Literal("aa "), "a "), "", create_row(" abdef "))
+    checkEvaluation(TrimLeft(Literal("aabbcaaaa"), "ab"), "caaaa", create_row(" abdef "))
+    checkEvaluation(TrimLeft(s), "abdef ", create_row(" abdef "))
+    checkEvaluation(TrimLeft(s, "a"), "bdefa", create_row("abdefa"))
+    checkEvaluation(TrimLeft(s, "a "), "bdefaaaa", create_row(" aaabdefaaaa"))
+    checkEvaluation(TrimLeft(s, "Spk"), "arkSQLS", create_row("SSparkSQLS"))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(TrimLeft(s), "花花世界 ", create_row("  花花世界 "))
+    checkEvaluation(TrimLeft(s, "花"), "世界花花", create_row("花花世界花花"))
+    checkEvaluation(TrimLeft(s, "花 世"), "界花花", create_row(" 花花世界花花"))
+    checkEvaluation(TrimLeft(s, "花"), "a花花世界花花 ", create_row("a花花世界花花 "))
+    checkEvaluation(TrimLeft(s, "a花界"), "世界花花aa", create_row("aa花花世界花花aa"))
+    checkEvaluation(TrimLeft(s, "a世界"), "花花世界花花", create_row("花花世界花花"))
+    // scalastyle:on
+    checkEvaluation(TrimLeft(Literal.create(null, StringType), Literal("a")), null)
+    checkEvaluation(TrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      TrimLeft(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    checkEvaluation(TrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
+    checkEvaluation(TrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
+    checkEvaluation(TrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
+  }
+
+  test("LTRIM for binary") {
+    val s = 'a.binary.at(0)
+    checkEvaluation(TrimLeft(Literal(" aa  ".getBytes)),
+      "aa  ".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimLeft(Literal("aa".getBytes), "a".getBytes),
+      "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimLeft(Literal("aa ".getBytes), "a ".getBytes),
+      "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimLeft(Literal("aabbcaaaa".getBytes), "ab".getBytes),
+      "caaaa".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimLeft(s), "abdef ".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimLeft(s, "a".getBytes), "bdefa".getBytes, create_row("abdefa".getBytes))
+    checkEvaluation(TrimLeft(s, "a ".getBytes),
+      "bdefaaaa".getBytes, create_row(" aaabdefaaaa".getBytes))
+    checkEvaluation(TrimLeft(s, "Spk".getBytes),
+      "arkSQLS".getBytes, create_row("SSparkSQLS".getBytes))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(TrimLeft(s), "花花世界 ".getBytes, create_row("  花花世界 ".getBytes))
+    checkEvaluation(TrimLeft(s, "花".getBytes), "世界花花".getBytes, create_row("花花世界花花".getBytes))
+    checkEvaluation(TrimLeft(s, "花 世".getBytes), "界花花".getBytes, create_row(" 花花世界花花".getBytes))
+    checkEvaluation(TrimLeft(s, "花".getBytes), "a花花世界花花 ".getBytes, create_row("a花花世界花花 ".getBytes))
+    checkEvaluation(TrimLeft(s, "a花界".getBytes), "世界花花aa".getBytes, create_row("aa花花世界花花aa".getBytes))
+    checkEvaluation(TrimLeft(s, "a世界".getBytes), "花花世界花花".getBytes, create_row("花花世界花花".getBytes))
+    // scalastyle:on
+    checkEvaluation(TrimLeft(Literal.create(null, BinaryType), Literal("a".getBytes)), null)
+    checkEvaluation(TrimLeft(Literal("a".getBytes), Literal.create(null, BinaryType)), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      TrimLeft(Literal("\"quote".getBytes), Literal("\"quote".getBytes)) :: Nil)
+
+    checkEvaluation(TrimLeft(Literal("zzzytest".getBytes), Literal("xyz".getBytes)),
+      "test".getBytes)
+    checkEvaluation(TrimLeft(Literal("zzzytestxyz".getBytes), Literal("xyz".getBytes)),
+      "testxyz".getBytes)
+    checkEvaluation(TrimLeft(Literal("xyxXxyLAST WORD".getBytes), Literal("xy".getBytes)),
+      "XxyLAST WORD".getBytes)
   }
 
   test("RTRIM") {
     val s = 'a.string.at(0)
-    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(Literal("a"), "a"), "", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(Literal("ab"), "ab"), "", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(Literal("aabbaaaa %"), "a %"), "aabb", create_row("def"))
-    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(s, "a"), "abdef", create_row("abdefa"))
-    checkEvaluation(StringTrimRight(s, "abf de"), "", create_row(" aaabdefaaaa"))
-    checkEvaluation(StringTrimRight(s, "S*&"), "SSparkSQL", create_row("SSparkSQLS*"))
+    checkEvaluation(TrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
+    checkEvaluation(TrimRight(Literal("a"), "a"), "", create_row(" abdef "))
+    checkEvaluation(TrimRight(Literal("ab"), "ab"), "", create_row(" abdef "))
+    checkEvaluation(TrimRight(Literal("aabbaaaa %"), "a %"), "aabb", create_row("def"))
+    checkEvaluation(TrimRight(s), " abdef", create_row(" abdef "))
+    checkEvaluation(TrimRight(s, "a"), "abdef", create_row("abdefa"))
+    checkEvaluation(TrimRight(s, "abf de"), "", create_row(" aaabdefaaaa"))
+    checkEvaluation(TrimRight(s, "S*&"), "SSparkSQL", create_row("SSparkSQLS*"))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrimRight(Literal("a"), "花"), "a", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(Literal("花"), "a"), "花", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(Literal("花花世界"), "界花世"), "", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
-    checkEvaluation(StringTrimRight(s, "花a#"), "花花世界", create_row("花花世界花花###aa花"))
-    checkEvaluation(StringTrimRight(s, "花"), "", create_row("花花花花"))
-    checkEvaluation(StringTrimRight(s, "花 界b@"), " 花花世", create_row(" 花花世 b界@花花 "))
+    checkEvaluation(TrimRight(Literal("a"), "花"), "a", create_row(" abdef "))
+    checkEvaluation(TrimRight(Literal("花"), "a"), "花", create_row(" abdef "))
+    checkEvaluation(TrimRight(Literal("花花世界"), "界花世"), "", create_row(" abdef "))
+    checkEvaluation(TrimRight(s), "  花花世界", create_row("  花花世界 "))
+    checkEvaluation(TrimRight(s, "花a#"), "花花世界", create_row("花花世界花花###aa花"))
+    checkEvaluation(TrimRight(s, "花"), "", create_row("花花花花"))
+    checkEvaluation(TrimRight(s, "花 界b@"), " 花花世", create_row(" 花花世 b界@花花 "))
     // scalastyle:on
-    checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
+    checkEvaluation(TrimRight(Literal("a"), Literal.create(null, StringType)), null)
+    checkEvaluation(TrimRight(Literal.create(null, StringType), Literal("a")), null)
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
-      StringTrimRight(Literal("\"quote"), Literal("\"quote")) :: Nil)
+      TrimRight(Literal("\"quote"), Literal("\"quote")) :: Nil)
 
-    checkEvaluation(StringTrimRight(Literal("testxxzx"), Literal("xyz")), "test")
-    checkEvaluation(StringTrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
-    checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
+    checkEvaluation(TrimRight(Literal("testxxzx"), Literal("xyz")), "test")
+    checkEvaluation(TrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
+    checkEvaluation(TrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
+  }
+
+  test("RTRIM for binary") {
+    val s = 'a.binary.at(0)
+    checkEvaluation(TrimRight(Literal(" aa  ".getBytes)),
+      " aa".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(Literal("a".getBytes), "a".getBytes),
+      "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(Literal("ab".getBytes), "ab".getBytes),
+      "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(Literal("aabbaaaa %".getBytes), "a %".getBytes),
+      "aabb".getBytes, create_row("def".getBytes))
+    checkEvaluation(TrimRight(s), " abdef".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(s, "a".getBytes), "abdef".getBytes, create_row("abdefa".getBytes))
+    checkEvaluation(TrimRight(s, "abf de".getBytes),
+      "".getBytes, create_row(" aaabdefaaaa".getBytes))
+    checkEvaluation(TrimRight(s, "S*&".getBytes),
+      "SSparkSQL".getBytes, create_row("SSparkSQLS*".getBytes))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(TrimRight(Literal("a".getBytes), "花".getBytes), "a".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(Literal("花".getBytes), "a".getBytes), "花".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(Literal("花花世界".getBytes), "界花世".getBytes), "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(TrimRight(s), "  花花世界".getBytes, create_row("  花花世界 ".getBytes))
+    checkEvaluation(TrimRight(s, "花a#".getBytes), "花花世界".getBytes, create_row("花花世界花花###aa花".getBytes))
+    checkEvaluation(TrimRight(s, "花".getBytes), "".getBytes, create_row("花花花花".getBytes))
+    checkEvaluation(TrimRight(s, "花 界b@".getBytes), " 花花世".getBytes, create_row(" 花花世 b界@花花 ".getBytes))
+    // scalastyle:on
+    checkEvaluation(TrimRight(Literal("a".getBytes), Literal.create(null, BinaryType)), null)
+    checkEvaluation(TrimRight(Literal.create(null, BinaryType), Literal("a".getBytes)), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      TrimRight(Literal("\"quote".getBytes), Literal("\"quote".getBytes)) :: Nil)
+
+    checkEvaluation(TrimRight(Literal("testxxzx".getBytes), Literal("xyz".getBytes)),
+      "test".getBytes)
+    checkEvaluation(TrimRight(Literal("xyztestxxzx".getBytes), Literal("xyz".getBytes)),
+      "xyztest".getBytes)
+    checkEvaluation(TrimRight(Literal("TURNERyxXxy".getBytes), Literal("xy".getBytes)),
+      "TURNERyxX".getBytes)
   }
 
   test("FORMAT") {

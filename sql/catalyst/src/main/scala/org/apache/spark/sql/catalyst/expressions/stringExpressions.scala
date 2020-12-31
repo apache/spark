@@ -751,267 +751,348 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def prettyName: String = "find_in_set"
 }
 
-trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
+trait TrimExpression extends Expression with ImplicitCastInputTypes {
 
-  protected def srcStr: Expression
-  protected def trimStr: Option[Expression]
+  protected def srcExpr: Expression
+  protected def trimExprOpt: Option[Expression]
   protected def direction: String
 
-  override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def children: Seq[Expression] = srcExpr +: trimExprOpt.toSeq
+  override def dataType: DataType = srcExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq.fill(children.size)(TypeCollection(StringType, BinaryType))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      TypeUtils.checkForSameTypeInputExpr(
+        children.map(_.dataType), s"function $prettyName")
+    } else {
+      inputTypeCheck
+    }
+  }
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   protected def doEval(srcString: UTF8String): UTF8String
+  protected def doEval(srcBytes: Array[Byte]): Array[Byte]
   protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
+  protected def doEval(srcBytes: Array[Byte], trimBytes: Array[Byte]): Array[Byte]
+
+  private lazy val evalFunc = srcExpr.dataType match {
+    case StringType =>
+      (input: InternalRow) => {
+        val srcString = srcExpr.eval(input).asInstanceOf[UTF8String]
+        if (srcString == null) {
+          null
+        } else if (trimExprOpt.isDefined) {
+          doEval(srcString, trimExprOpt.get.eval(input).asInstanceOf[UTF8String])
+        } else {
+          doEval(srcString)
+        }
+      }
+    case BinaryType =>
+      (input: InternalRow) => {
+        val srcBytes = srcExpr.eval (input).asInstanceOf[Array[Byte]]
+        if (srcBytes == null) {
+          null
+        } else if (trimExprOpt.isDefined) {
+          doEval(srcBytes, trimExprOpt.get.eval(input).asInstanceOf[Array[Byte]])
+        } else {
+          doEval(srcBytes)
+        }
+      }
+  }
 
   override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else if (trimStr.isDefined) {
-      doEval(srcString, trimStr.get.eval(input).asInstanceOf[UTF8String])
-    } else {
-      doEval(srcString)
-    }
+    evalFunc(input)
   }
 
   protected val trimMethod: String
 
+  private lazy val resultType = srcExpr.dataType match {
+    case StringType => "UTF8String"
+    case BinaryType => "byte[]"
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+    val src = evals(0)
 
     if (evals.length == 1) {
+      val resultCode = srcExpr.dataType match {
+        case StringType => s"${src.value}.$trimMethod()"
+        case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value})"
+      }
       ev.copy(code = code"""
-         |${srcString.code}
-         |boolean ${ev.isNull} = false;
-         |UTF8String ${ev.value} = null;
-         |if (${srcString.isNull}) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${ev.value} = ${srcString.value}.$trimMethod();
-         |}""".stripMargin)
+        |${src.code}
+        |boolean ${ev.isNull} = false;
+        |$resultType ${ev.value} = null;
+        |if (${src.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${ev.value} = $resultCode;
+        |}""".stripMargin)
     } else {
-      val trimString = evals(1)
+      val trim = evals(1)
+      val resultCode = srcExpr.dataType match {
+        case StringType => s"${src.value}.$trimMethod(${trim.value})"
+        case BinaryType =>
+          s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value}, ${trim.value})"
+      }
       ev.copy(code = code"""
-         |${srcString.code}
-         |boolean ${ev.isNull} = false;
-         |UTF8String ${ev.value} = null;
-         |if (${srcString.isNull}) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${trimString.code}
-         |  if (${trimString.isNull}) {
-         |    ${ev.isNull} = true;
-         |  } else {
-         |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
-         |  }
-         |}""".stripMargin)
+        |${src.code}
+        |boolean ${ev.isNull} = false;
+        |$resultType ${ev.value} = null;
+        |if (${src.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${trim.code}
+        |  if (${trim.isNull}) {
+        |    ${ev.isNull} = true;
+        |  } else {
+        |    ${ev.value} = $resultCode;
+        |  }
+        |}""".stripMargin)
     }
   }
 
-  override def sql: String = if (trimStr.isDefined) {
-    s"TRIM($direction ${trimStr.get.sql} FROM ${srcStr.sql})"
+  override def sql: String = if (trimExprOpt.isDefined) {
+    s"TRIM($direction ${trimExprOpt.get.sql} FROM ${srcExpr.sql})"
   } else {
     super.sql
   }
 }
 
-object StringTrim {
-  def apply(str: Expression, trimStr: Expression) : StringTrim = StringTrim(str, Some(trimStr))
-  def apply(str: Expression) : StringTrim = StringTrim(str, None)
+object Trim {
+  def apply(srcExpr: Expression, trimExpr: Expression) : Trim = Trim(srcExpr, Some(trimExpr))
+  def apply(srcExpr: Expression) : Trim = Trim(srcExpr, None)
 }
 
 /**
- * A function that takes a character string, removes the leading and trailing characters matching
- * with any character in the trim string, returns the new string.
- * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both
- * ends. The trim function will have one argument, which contains the source string.
- * If BOTH and trimStr keywords are specified, it trims the characters from both ends, and the trim
- * function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
- * the function searches for each character in the source string, removes the characters from the
- * source string until it encounters the first non-match character.
- * BOTH: removes any character from both ends of the source string that matches characters in the
- * trim string.
+ * A function that takes a character string or byte array, removes the leading and trailing
+ * characters/bytes matching with any character/byte in the trim string or trim byte array, returns
+ * the new string or byte array.
+ * If BOTH and trim keywords are not specified, it defaults to remove space character or byte of
+ * space character from both ends. The trim function will have one argument, which contains the
+ * source string or source byte array.
+ * If BOTH and trim keywords are specified, it trims the characters or bytes from both ends, and
+ * the trim function will have two arguments, the first argument contains trim, the second argument
+ * contains the source string or source byte array.
+ * trim: A character string or byte array to be trimmed from the source string or source byte array,
+ * if it has multiple characters/bytes, the function searches for each character/byte in the source
+ * string or source byte array, removes the characters/bytes from the source string or source byte
+ * array until it encounters the first non-match character/byte.
+ * BOTH: removes any character/byte from both ends of the source string or source byte array that
+ * matches characters/bytes in the trim string or trim byte array.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(src) - Removes the leading and trailing space characters/bytes from `src`.
 
-    _FUNC_(BOTH FROM str) - Removes the leading and trailing space characters from `str`.
+    _FUNC_(BOTH FROM src) - Removes the leading and trailing space characters/bytes from `src`.
 
-    _FUNC_(LEADING FROM str) - Removes the leading space characters from `str`.
+    _FUNC_(LEADING FROM src) - Removes the leading space characters/bytes from `src`.
 
-    _FUNC_(TRAILING FROM str) - Removes the trailing space characters from `str`.
+    _FUNC_(TRAILING FROM src) - Removes the trailing space characters/bytes from `src`.
 
-    _FUNC_(trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+    _FUNC_(trim FROM src) - Remove the leading and trailing `trim` characters/bytes from `src`.
 
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`.
+    _FUNC_(BOTH trim FROM src) - Remove the leading and trailing `trim` characters/bytes from `src`.
 
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`.
+    _FUNC_(LEADING trim FROM src) - Remove the leading `trim` characters/bytes from `src`.
 
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`.
+    _FUNC_(TRAILING trim FROM src) - Remove the trailing `trim` characters/bytes from `src`.
   """,
   arguments = """
     Arguments:
-      * str - a string expression
-      * trimStr - the trim string characters to trim, the default value is a single space
-      * BOTH, FROM - these are keywords to specify trimming string characters from both ends of
-          the string
-      * LEADING, FROM - these are keywords to specify trimming string characters from the left
-          end of the string
-      * TRAILING, FROM - these are keywords to specify trimming string characters from the right
-          end of the string
+      * srcExpr - a string or binary expression
+      * trimOpt - the trim string characters or bytes to trim, the default value is a single space
+          or byte of single space
+      * BOTH, FROM - these are keywords to specify trimming string characters or bytes from both
+          ends of the srcExpr
+      * LEADING, FROM - these are keywords to specify trimming string characters or bytes from the
+          left end of the srcExpr
+      * TRAILING, FROM - these are keywords to specify trimming string characters or bytes from the
+          right end of the srcExpr
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
       > SELECT _FUNC_(BOTH FROM '    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(BOTH FROM encode('    SparkSQL   ', 'utf-8'));
        SparkSQL
       > SELECT _FUNC_(LEADING FROM '    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(LEADING FROM encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
       > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
+           SparkSQL
+      > SELECT _FUNC_(TRAILING FROM encode('    SparkSQL   ', 'utf-8'));
            SparkSQL
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
+      > SELECT _FUNC_('SL' FROM encode('SSparkSQLS', 'utf-8'));
+       parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
+       parkSQ
+      > SELECT _FUNC_(BOTH 'SL' FROM encode('SSparkSQLS', 'utf-8'));
        parkSQ
       > SELECT _FUNC_(LEADING 'SL' FROM 'SSparkSQLS');
        parkSQLS
+      > SELECT _FUNC_(LEADING 'SL' FROM encode('SSparkSQLS', 'utf-8'));
+       parkSQLS
       > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
+       SSparkSQ
+      > SELECT _FUNC_(TRAILING 'SL' FROM encode('SSparkSQLS', 'utf-8'));
        SSparkSQ
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+case class Trim(srcExpr: Expression, trimExprOpt: Option[Expression] = None)
+  extends TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimExpr: Expression, srcExpr: Expression) = this(srcExpr, Option(trimExpr))
 
-  def this(srcStr: Expression) = this(srcStr, None)
+  def this(srcExpr: Expression) = this(srcExpr, None)
 
   override def prettyName: String = "trim"
 
   override protected def direction: String = "BOTH"
 
   override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
-
+  override def doEval(srcBytes: Array[Byte]): Array[Byte] = ByteArray.trim(srcBytes)
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trim(trimString)
+  override def doEval(srcBytes: Array[Byte], trimBytes: Array[Byte]): Array[Byte] =
+    ByteArray.trim(srcBytes, trimBytes)
 
   override val trimMethod: String = "trim"
 }
 
-object StringTrimLeft {
-  def apply(str: Expression, trimStr: Expression): StringTrimLeft =
-    StringTrimLeft(str, Some(trimStr))
-  def apply(str: Expression): StringTrimLeft = StringTrimLeft(str, None)
+object TrimLeft {
+  def apply(srcExpr: Expression, trimExpr: Expression): TrimLeft =
+    TrimLeft(srcExpr, Some(trimExpr))
+  def apply(srcExpr: Expression): TrimLeft = TrimLeft(srcExpr, None)
 }
 
 /**
- * A function that trims the characters from left end for a given string.
- * If LEADING and trimStr keywords are not specified, it defaults to remove space character from
- * the left end. The ltrim function will have one argument, which contains the source string.
- * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The
- * ltrim function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: the function removes any character from the left end of the source string which matches
- * with the characters from trimStr, it stops at the first non-match character.
- * LEADING: removes any character from the left end of the source string that matches characters in
- * the trim string.
+ * A function that trims the characters/bytes from left end for a given string or byte array.
+ * If LEADING and trim keywords are not specified, it defaults to remove space character or byte
+ * of space character from the left end. The ltrim function will have one argument, which contains
+ * the source string or source byte array.
+ * If LEADING and trim keywords are specified, it trims the characters/bytes from left end. The
+ * ltrim function will have two arguments, the first argument contains trim, the second argument
+ * contains the source string or source byte array.
+ * trim: the function removes any character/byte from the left end of the source string or source
+ * byte array which matches with the characters/bytes from trim, it stops at the first non-match
+ * character/byte.
+ * LEADING: removes any character/byte from the left end of the source string or source byte array
+ * that matches characters/bytes in the trim string or trim byte array.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Removes the leading space characters from `str`.
+    _FUNC_(src) - Removes the leading space characters/bytes from `src`.
   """,
   arguments = """
     Arguments:
-      * str - a string expression
-      * trimStr - the trim string characters to trim, the default value is a single space
+      * srcExpr - a string or binary expression
+      * trimOpt - the trim string or trim binary to trim, the default value is a single space or
+          byte of single space
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+case class TrimLeft(srcExpr: Expression, trimExprOpt: Option[Expression] = None)
+  extends TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimExpr: Expression, srcExpr: Expression) = this(srcExpr, Option(trimExpr))
 
-  def this(srcStr: Expression) = this(srcStr, None)
+  def this(srcExpr: Expression) = this(srcExpr, None)
 
   override def prettyName: String = "ltrim"
 
   override protected def direction: String = "LEADING"
 
   override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
-
+  override def doEval(srcBytes: Array[Byte]): Array[Byte] = ByteArray.trimLeft(srcBytes)
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trimLeft(trimString)
+  override def doEval(srcBytes: Array[Byte], trimBytes: Array[Byte]): Array[Byte] =
+    ByteArray.trimLeft(srcBytes, trimBytes)
 
   override val trimMethod: String = "trimLeft"
 }
 
-object StringTrimRight {
-  def apply(str: Expression, trimStr: Expression): StringTrimRight =
-    StringTrimRight(str, Some(trimStr))
-  def apply(str: Expression) : StringTrimRight = StringTrimRight(str, None)
+object TrimRight {
+  def apply(srcExpr: Expression, trimExpr: Expression): TrimRight =
+    TrimRight(srcExpr, Some(trimExpr))
+  def apply(srcExpr: Expression) : TrimRight = TrimRight(srcExpr, None)
 }
 
 /**
- * A function that trims the characters from right end for a given string.
- * If TRAILING and trimStr keywords are not specified, it defaults to remove space character
- * from the right end. The rtrim function will have one argument, which contains the source string.
- * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The
- * rtrim function will have two arguments, the first argument contains trimStr, the second argument
- * contains the source string.
- * trimStr: the function removes any character from the right end of source string which matches
- * with the characters from trimStr, it stops at the first non-match character.
- * TRAILING: removes any character from the right end of the source string that matches characters
- * in the trim string.
+ * A function that trims the characters/bytes from right end for a given string or byte array.
+ * If TRAILING and trim keywords are not specified, it defaults to remove space character of byte
+ * of space character from the right end. The rtrim function will have one argument, which contains
+ * the source string or source byte array.
+ * If TRAILING and trim keywords are specified, it trims the characters/bytes from right end. The
+ * rtrim function will have two arguments, the first argument contains trim, the second argument
+ * contains the source string or source byte array.
+ * trim: the function removes any character/byte from the right end of source string or source
+ * byte array which matches with the characters/bytes from trim, it stops at the first non-match
+ * character/byte.
+ * TRAILING: removes any character/byte from the right end of the source string or source byte array
+ * that matches characters/bytes in the trim string or trim byte array.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str) - Removes the trailing space characters from `str`.
+    _FUNC_(src) - Removes the trailing space characters/bytes from `src`.
   """,
   arguments = """
     Arguments:
-      * str - a string expression
-      * trimStr - the trim string characters to trim, the default value is a single space
+      * srcExpr - a string or binary expression
+      * trimOpt - the trim string or trim binary to trim, the default value is a single space or
+          byte of single space
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
   """,
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = None)
-  extends String2TrimExpression {
+case class TrimRight(srcExpr: Expression, trimExprOpt: Option[Expression] = None)
+  extends TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimExpr: Expression, srcExpr: Expression) = this(srcExpr, Option(trimExpr))
 
-  def this(srcStr: Expression) = this(srcStr, None)
+  def this(srcExpr: Expression) = this(srcExpr, None)
 
   override def prettyName: String = "rtrim"
 
   override protected def direction: String = "TRAILING"
 
   override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
-
+  override def doEval(srcBytes: Array[Byte]): Array[Byte] = ByteArray.trimRight(srcBytes)
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
     srcString.trimRight(trimString)
+  override def doEval(srcBytes: Array[Byte], trimBytes: Array[Byte]): Array[Byte] =
+    ByteArray.trimRight(srcBytes, trimBytes)
 
   override val trimMethod: String = "trimRight"
 }
