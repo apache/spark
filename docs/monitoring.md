@@ -1228,7 +1228,6 @@ when running in local mode.
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=plugin.\<Plugin Class Name>
