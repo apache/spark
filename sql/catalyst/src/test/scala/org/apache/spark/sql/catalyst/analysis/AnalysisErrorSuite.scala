@@ -184,22 +184,22 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
+    "Function hex does not support DISTINCT" :: Nil)
 
   errorTest(
     "non aggregate function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
-    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
+    "Function hex does not support FILTER clause" :: Nil)
 
   errorTest(
     "distinct window function",
     CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
-    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+    "Function percent_rank does not support DISTINCT" :: Nil)
 
   errorTest(
     "window function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
-    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+    "Function percent_rank does not support FILTER clause" :: Nil)
 
   errorTest(
     "higher order function with filter predicate",
