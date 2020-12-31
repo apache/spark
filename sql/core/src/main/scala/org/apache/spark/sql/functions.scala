@@ -2606,12 +2606,21 @@ object functions {
   def ltrim(e: Column): Column = withExpr {TrimLeft(e.expr) }
 
   /**
-   * Trim the specified `trim` from left end for the specified string/bytes column.
+   * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
    * @since 2.3.0
    */
-  def ltrim(e: Column, trim: Column): Column = withExpr {
-    TrimLeft(e.expr, trim.expr)
+  def ltrim(e: Column, trimString: String): Column = withExpr {
+    TrimLeft(e.expr, Literal(trimString))
+  }
+
+  /**
+   * Trim the specified bytes from left end for the specified bytes column.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def ltrim(e: Column, trimBytes: Array[Byte]): Column = withExpr {
+    TrimLeft(e.expr, Literal(trimBytes))
   }
 
   /**
@@ -2699,12 +2708,21 @@ object functions {
   def rtrim(e: Column): Column = withExpr { TrimRight(e.expr) }
 
   /**
-   * Trim the specified `trim` from right end for the specified string/bytes column.
+   * Trim the specified character string from right end for the specified string column.
    * @group string_funcs
    * @since 2.3.0
    */
-  def rtrim(e: Column, trim: Column): Column = withExpr {
-    TrimRight(e.expr, trim.expr)
+  def rtrim(e: Column, trimString: String): Column = withExpr {
+    TrimRight(e.expr, Literal(trimString))
+  }
+
+  /**
+   * Trim the specified bytes from right end for the specified bytes column.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def rtrim(e: Column, trimBytes: Array[Byte]): Column = withExpr {
+    TrimRight(e.expr, Literal(trimBytes))
   }
 
   /**
@@ -2821,12 +2839,21 @@ object functions {
   def trim(e: Column): Column = withExpr { Trim(e.expr) }
 
   /**
-   * Trim the specified character/bytes from both ends for the specified string/bytes column.
+   * Trim the specified character from both ends for the specified string column.
    * @group string_funcs
    * @since 2.3.0
    */
-  def trim(e: Column, trim: Column): Column = withExpr {
-    Trim(e.expr, trim.expr)
+  def trim(e: Column, trimString: String): Column = withExpr {
+    Trim(e.expr, Literal(trimString))
+  }
+
+  /**
+   * Trim the specified bytes from both ends for the specified bytes column.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def trim(e: Column, trimBytes: Array[Byte]): Column = withExpr {
+    Trim(e.expr, Literal(trimBytes))
   }
 
   /**

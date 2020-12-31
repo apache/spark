@@ -279,23 +279,22 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("string trim functions") {
-    val df = Seq(("  example  ", "example", "e", "xe", "emlp", "elxp", "xyz"))
-      .toDF("a", "c", "e", "xe", "emlp", "elxp", "xyz")
+    val df = Seq(("  example  ", "example")).toDF("a", "b")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ", "  example", "example"))
 
     checkAnswer(
-      df.select(ltrim($"c", $"e"), rtrim($"c", $"e"), trim($"c", $"e")),
+      df.select(ltrim($"b", "e"), rtrim($"b", "e"), trim($"b", "e")),
       Row("xample", "exampl", "xampl"))
 
     checkAnswer(
-      df.select(ltrim($"c", $"xe"), rtrim($"c", $"emlp"), trim($"c", $"elxp")),
+      df.select(ltrim($"b", "xe"), rtrim($"b", "emlp"), trim($"b", "elxp")),
       Row("ample", "exa", "am"))
 
     checkAnswer(
-      df.select(trim($"c", $"xyz")),
+      df.select(trim($"b", "xyz")),
       Row("example"))
 
     checkAnswer(
@@ -304,25 +303,23 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("binary trim functions") {
-    val df = Seq(("  example  ".getBytes, "example".getBytes, "e".getBytes, "xe".getBytes,
-      "emlp".getBytes, "elxp".getBytes, "xyz".getBytes)).
-      toDF("a", "b", "e", "xe", "emlp", "elxp", "xyz")
+    val df = Seq(("  example  ".getBytes, "example".getBytes)).toDF("a", "b")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ".getBytes, "  example".getBytes, "example".getBytes))
 
     checkAnswer(
-      df.select(ltrim($"b", $"e"), rtrim($"b", $"e"), trim($"b", $"e")),
+      df.select(ltrim($"b", "e".getBytes), rtrim($"b", "e".getBytes), trim($"b", "e".getBytes)),
       Row("xample".getBytes, "exampl".getBytes, "xampl".getBytes))
 
     checkAnswer(
       df.select(
-        ltrim($"b", $"xe"), rtrim($"b", $"emlp"), trim($"b", $"elxp")),
+        ltrim($"b", "xe".getBytes), rtrim($"b", "emlp".getBytes), trim($"b", "elxp".getBytes)),
       Row("ample".getBytes, "exa".getBytes, "am".getBytes))
 
     checkAnswer(
-      df.select(trim($"b", $"xyz")),
+      df.select(trim($"b", "xyz".getBytes)),
       Row("example".getBytes))
 
     checkAnswer(
