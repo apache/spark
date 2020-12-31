@@ -1035,7 +1035,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql(
           """
             |SELECT TRANSFORM (d1, d2, d3)
-            | USING '\'cat 1>&2\'' AS (a,b,c)
+            | USING '/bin/bash -c \'cat 1>&2\'' AS (a,b,c)
             |FROM script_trans
           """.stripMargin).count())
     }
