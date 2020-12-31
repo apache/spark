@@ -3769,7 +3769,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         val msg = intercept[AnalysisException] {
           sql(s"SELECT $f(id + 1) FROM range(0, 3)").collect()
         }.getMessage
-        assert(msg.contains("must be an integer, long or null literal"))
+        assert(msg.contains("must be an integer or long constant"))
       }
     }
   }
