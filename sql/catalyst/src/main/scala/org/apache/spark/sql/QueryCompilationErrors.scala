@@ -582,16 +582,7 @@ object QueryCompilationErrors {
   }
 
   def invalidPartitionSpecError(details: String): Throwable = {
-    new AnalysisException(
-      s"Partition spec is invalid. $details")
-  }
-
-  def partitionSpecNotContainedInDefinedPartitionSpecError(
-      s: TablePartitionSpec, table: CatalogTable): Throwable = {
-    new AnalysisException(
-      s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
-        s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
-        s"in table '${table.identifier}'")
+    new AnalysisException(s"Partition spec is invalid. $details")
   }
 
   def functionAlreadyExistsError(func: FunctionIdentifier): Throwable = {
