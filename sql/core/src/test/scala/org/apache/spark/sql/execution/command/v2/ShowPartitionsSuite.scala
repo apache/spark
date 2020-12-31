@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -38,23 +38,11 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
     }
   }
 
-  test("SPARK-33889: null and empty string as partition values") {
-    import testImplicits._
+  test("SPARK-33889, SPARK-33904: null and empty string as partition values") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      val df = Seq((0, ""), (1, null)).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable(t)
-
-      runShowPartitionsSql(
-        s"SHOW PARTITIONS $t",
-        Row("part=") ::
-        Row("part=null") :: Nil)
-      checkAnswer(spark.table(t),
-        Row(0, "") ::
-        Row(1, null) :: Nil)
+      createNullPartTable(t, "parquet")
+      runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=") :: Row("part=null") :: Nil)
+      checkAnswer(spark.table(t), Row(0, "") :: Row(1, null) :: Nil)
     }
   }
 }
