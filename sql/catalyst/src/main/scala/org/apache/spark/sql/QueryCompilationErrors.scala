@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, MultiLikeBase, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -500,5 +500,9 @@ object QueryCompilationErrors {
 
   def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
     new AnalysisException(s"$command does not support nested column: $quoted")
+  }
+
+  def cannotSimplifyMultiLikeError(multi: MultiLikeBase): Throwable = {
+    new AnalysisException(s"can not simplify $multi by LikeSimplification")
   }
 }

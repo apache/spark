@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -682,6 +682,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
         case l: LikeAny => Or(replaceExpressions.reduceLeft(Or), l.copy(patterns = remains))
         case l: NotLikeAny =>
           Or(replaceExpressions.map(Not(_)).reduceLeft(Or), l.copy(patterns = remains))
+        case _ => throw QueryCompilationErrors.cannotSimplifyMultiLikeError(multi)
       }
     }
   }
