@@ -3762,8 +3762,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-33945: handles a random seed consisting of an expr tree") {
     val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.mkString(",")) {
-      sql("SELECT rand(1 + 1)").collect()
-      sql("SELECT randn(1 + 1)").collect()
+      Seq("rand", "randn").foreach { f =>
+        // Just checks if a query works correctly
+        sql(s"SELECT $f(1 + 1)").collect()
+
+        val msg = intercept[AnalysisException] {
+          sql(s"SELECT $f(id + 1) FROM range(0, 3)").collect()
+        }.getMessage
+        assert(msg.contains("must be an integer, long or null literal"))
+      }
     }
   }
 }
