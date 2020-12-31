@@ -692,7 +692,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        simplifyLike(input, pattern.toString).getOrElse(l)
+        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
       }
     case l @ LikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
