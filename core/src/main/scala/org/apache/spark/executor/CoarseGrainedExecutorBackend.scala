@@ -85,7 +85,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       val signal = env.conf.get(EXECUTOR_DECOMMISSION_SIGNAL)
       logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
       SignalUtils.register(signal, s"Failed to register SIG$signal handler - disabling" +
-        s" executor decommission feature.") (self.askSync[Boolean](ExecutorDecomSigReceived))
+        s" executor decommission feature.") (self.askSync[Boolean](ExecutorDecommissionSigReceived))
     }
 
     logInfo("Connecting to driver: " + driverUrl)
@@ -209,7 +209,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case ExecutorDecomSigReceived =>
+    case ExecutorDecommissionSigReceived =>
       var driverNotified = false
       try {
         driver.foreach { driverRef =>

@@ -104,7 +104,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // A message that sent to the executor itself when it receives a signal,
   // indicating the executor starts to decommission.
-  object ExecutorDecomSigReceived extends CoarseGrainedClusterMessage
+  object ExecutorDecommissionSigReceived extends CoarseGrainedClusterMessage
 
   case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage

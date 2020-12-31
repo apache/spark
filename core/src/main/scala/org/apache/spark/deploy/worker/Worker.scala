@@ -72,7 +72,7 @@ private[deploy] class Worker(
     logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
     SignalUtils.register(signal, s"Failed to register SIG$signal handler - " +
       "disabling worker decommission feature.") {
-       self.send(WorkerDecomSigReceived)
+       self.send(WorkerDecommissionSigReceived)
        true
     }
   } else {
@@ -683,7 +683,7 @@ private[deploy] class Worker(
     case DecommissionWorker =>
       decommissionSelf()
 
-    case WorkerDecomSigReceived =>
+    case WorkerDecommissionSigReceived =>
       decommissionSelf()
       // Tell the Master that we are starting decommissioning
       // so it stops trying to launch executor/driver on us
