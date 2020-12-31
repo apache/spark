@@ -2615,13 +2615,16 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-33939: Make Column.named use UnresolvedAlias to assign name") {
-    val df1 = spark.range(1).selectExpr("id as id1", "id as id2")
-      .selectExpr("cast(struct(id1, id2).id1 as int)")
+    val df = spark.range(1).selectExpr("id as id1", "id as id2")
+    val df1 = df.selectExpr("cast(struct(id1, id2).id1 as int)")
     assert(df1.schema.head.name == "CAST(struct(id1, id2).id1 AS INT)")
 
-    val df2 = spark.range(1).selectExpr("id as id1", "id as id2")
-      .select(hex(expr("struct(id1, id2).id1")))
+    val df2 = df.select(hex(expr("struct(id1, id2).id1")))
     assert(df2.schema.head.name == "hex(struct(id1, id2).id1)")
+
+    // this test is to make sure we don't have a regression.
+    val df3 = df.selectExpr("id1 == null")
+    assert(df3.schema.head.name == "(id1 = NULL)")
   }
 }
 
