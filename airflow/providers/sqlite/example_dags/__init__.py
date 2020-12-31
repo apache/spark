@@ -1,3 +1,4 @@
+#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -14,33 +15,3 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
----
-package-name: apache-airflow-providers-sqlite
-name: SQLite
-description: |
-    `SQLite <https://www.sqlite.org/>`__
-
-versions:
-  - 1.0.0
-
-integrations:
-  - integration-name: SQLite
-    external-doc-url: https://www.sqlite.org/index.html
-    how-to-guide:
-      - /docs/apache-airflow-providers-sqlite/operators.rst
-    tags: [software]
-
-operators:
-  - integration-name: SQLite
-
-    python-modules:
-      - airflow.providers.sqlite.operators.sqlite
-
-hooks:
-  - integration-name: SQLite
-    python-modules:
-      - airflow.providers.sqlite.hooks.sqlite
-
-hook-class-names:
-  - airflow.providers.sqlite.hooks.sqlite.SqliteHook
