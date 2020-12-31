@@ -141,9 +141,11 @@ case class HyperLogLogPlusPlus(
 
 object HyperLogLogPlusPlus {
   def validateDoubleLiteral(exp: Expression): Double = exp match {
-    case Literal(d: Double, DoubleType) => d
-    case Literal(dec: Decimal, _) => dec.toDouble
+    case e if e.foldable && e.dataType == DoubleType =>
+      e.eval().asInstanceOf[Double]
+    case e if e.foldable && e.dataType.isInstanceOf[DecimalType] =>
+      e.eval().asInstanceOf[Decimal].toDouble
     case _ =>
-      throw new AnalysisException("The second argument should be a double literal.")
+      throw new AnalysisException("The second argument should be a double constant.")
   }
 }

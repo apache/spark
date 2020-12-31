@@ -28,7 +28,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ConvertToLocalRelation, NestedColumnAliasingSuite, ReorderAssociativeOperator}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3823,6 +3823,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
       System.clearProperty("ivy.home")
+    }
+  }
+
+  test("SPARK-33949: Make approx_count_distinct result consistent whether Optimize rule exists " +
+    "or not") {
+    val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.mkString(",")) {
+      sql("select approx_count_distinct(1, 0.01 + 0.02)")
+      val msg = intercept[AnalysisException] {
+        sql("select approx_count_distinct(1, 1)")
+      }.getMessage
+      assert(msg.contains("The second argument should be a double constant"))
     }
   }
 }
