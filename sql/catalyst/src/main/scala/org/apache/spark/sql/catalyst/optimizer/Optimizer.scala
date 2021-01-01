@@ -1012,6 +1012,15 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+
+        /**
+         * Ignore noop projects. We can not rely on [[RemoveNoopOperators]],
+         * because it will be called after [[ReplaceDistinctWithAggregate]],
+         * and then we will be not able to combine the unions with distincts.
+         * These noop projects are present in several TPCDS queries.
+         */
+        case p @ Project(_, child) if child.sameOutput(p) =>
+          stack.push(child)
         case child =>
           flattened += child
       }
