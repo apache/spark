@@ -111,7 +111,8 @@ public class UDTFStack3 extends GenericUDTF {
                 int index = ii * numCols + jj + 1;
                 if (index < args.length) {
                     forwardObj[jj] =
-                            returnOIResolvers.get(jj).convertIfNecessary(args[index], argOIs.get(index));
+                            returnOIResolvers.get(jj)
+                                    .convertIfNecessary(args[index], argOIs.get(index));
                 } else {
                     forwardObj[ii] = null;
                 }
