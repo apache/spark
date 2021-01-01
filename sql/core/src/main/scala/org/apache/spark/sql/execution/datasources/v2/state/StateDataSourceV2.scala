@@ -89,16 +89,10 @@ class StateDataSourceV2 extends TableProvider with DataSourceRegister {
 
   private def getLastCommittedBatch(checkpointLocation: String): Long = {
     val commitLog = new CommitLog(session, new Path(checkpointLocation, "commits").toString)
-    val lastCommittedBatchId = commitLog.getLatest() match {
-      case Some((lastId, _)) => lastId
-      case None => -1
+    commitLog.getLatest() match {
+      case Some((lastId, _)) => lastId.toLong + 1
+      case _ => throw new AnalysisException("No committed batch found.")
     }
-
-    if (lastCommittedBatchId < 0) {
-      throw new AnalysisException("No committed batch found.")
-    }
-
-    lastCommittedBatchId.toLong + 1
   }
 
   override def supportsExternalMetadata(): Boolean = true
