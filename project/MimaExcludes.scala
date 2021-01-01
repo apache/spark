@@ -36,6 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
+    // [SPARK-33955] Add latest offsets to source progress
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SourceProgress.this")
   )
 
   // Exclude rules for 3.1.x
