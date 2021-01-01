@@ -212,7 +212,7 @@ private[hive] case class HiveGenericUDTF(
   @transient
   protected lazy val inputInspectors = {
     val inspectors = children.map(toInspector)
-    val fields = inspectors.indices.map(index => s"col$index").asJava
+    val fields = inspectors.indices.map(index => s"_col$index").asJava
     ObjectInspectorFactory.getStandardStructObjectInspector(fields, inspectors.asJava)
   }
 
