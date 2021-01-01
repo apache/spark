@@ -2176,8 +2176,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql(
         s"""
            |CREATE TEMPORARY FUNCTION udtf_stack2
-           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack3'
         """.stripMargin)
       val e = intercept[org.apache.spark.sql.AnalysisException] {
         sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
@@ -2558,6 +2557,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
         }
       }
+    }
+  }
+
+  test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+    withUserDefinedFunction("udtf_stack" -> true) {
+      // More detail about org.apache.spark.sql.hive.execution.UDTFStack2 could see SPARK-21101.
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      val cnt = sql(
+        "SELECT udtf_stack(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
+      assert(cnt === 2)
     }
   }
 }
