@@ -27,7 +27,7 @@ from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
-from pyspark.warnings import PySparkFutureWarning
+from pyspark.util import PySparkFutureWarning
 
 
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',

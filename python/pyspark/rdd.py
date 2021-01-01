@@ -46,8 +46,7 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration, _parse_memory
-from pyspark.warnings import PySparkFutureWarning
+from pyspark.util import fail_on_stopiteration, _parse_memory, PySparkFutureWarning
 
 __all__ = ["RDD"]
 

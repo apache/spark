@@ -22,7 +22,7 @@ from collections import namedtuple
 from pyspark import since
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StructType
-from pyspark.warnings import PySparkFutureWarning
+from pyspark.util import PySparkFutureWarning
 
 
 Database = namedtuple("Database", "name description locationUri")

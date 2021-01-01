@@ -20,7 +20,7 @@ import warnings
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.warnings import PySparkWarning
+from pyspark.util import PySparkWarning
 
 
 class PandasGroupedOpsMixin(object):

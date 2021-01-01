@@ -22,7 +22,7 @@ import warnings
 from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.sql.types import DataType, StructField, StructType, IntegerType, StringType
-from pyspark.warnings import PySparkFutureWarning
+from pyspark.util import PySparkFutureWarning
 
 __all__ = ["Column"]
 

@@ -24,7 +24,7 @@ from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
-from pyspark.warnings import PySparkWarning
+from pyspark.util import PySparkWarning
 
 
 class PandasUDFType(object):

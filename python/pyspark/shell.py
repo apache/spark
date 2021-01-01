@@ -28,7 +28,7 @@ import warnings
 
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.warnings import PySparkWarning
+from pyspark.util import PySparkWarning
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])

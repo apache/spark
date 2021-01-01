@@ -45,7 +45,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
-from pyspark.warnings import PySparkWarning
+from pyspark.util import PySparkWarning
 
 __all__ = ['LinearSVC', 'LinearSVCModel',
            'LinearSVCSummary', 'LinearSVCTrainingSummary',

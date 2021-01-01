@@ -24,7 +24,7 @@ from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
     DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.warnings import PySparkWarning
+from pyspark.util import PySparkWarning
 
 
 class PandasConversionMixin(object):

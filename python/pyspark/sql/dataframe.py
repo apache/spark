@@ -34,7 +34,7 @@ from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
-from pyspark.warnings import PySparkFutureWarning, PySparkWarning
+from pyspark.util import PySparkFutureWarning, PySparkWarning
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
