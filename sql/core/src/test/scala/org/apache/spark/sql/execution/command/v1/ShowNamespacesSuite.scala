@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -30,6 +31,13 @@ import org.apache.spark.sql.execution.command
 trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   override protected def topNamespaces(ns: Seq[String]): Seq[String] = {
     ns :+ "default"
+  }
+
+  test("IN namespace doesn't exist") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in dummy")
+    }.getMessage
+    assert(errMsg.contains("Namespace 'dummy' not found"))
   }
 }
 

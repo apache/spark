@@ -1278,10 +1278,6 @@ class DataSourceV2SQLSuite
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
     testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
-
-    // Try to look up namespaces that do not exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
   }
 
   test("ShowNamespaces: change catalog and namespace with USE statements") {
