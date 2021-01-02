@@ -3827,7 +3827,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-xxxxx: Combine distinct unions that have noop project between them") {
+  test("SPARK-33964: Combine distinct unions that have noop project between them") {
     val df = sql("""
       |SELECT a, b FROM (
       |  SELECT a, b FROM testData2
