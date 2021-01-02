@@ -551,6 +551,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case _ => join
       }
       LocalLimit(exp, newJoin)
+
+    case LocalLimit(exp, s: Sort) =>
+      LocalLimit(exp, s.copy(child = LocalLimit(exp, stripGlobalLimitIfPresent(s.child))))
   }
 }
 

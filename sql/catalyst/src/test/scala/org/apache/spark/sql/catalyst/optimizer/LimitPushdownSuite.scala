@@ -194,4 +194,11 @@ class LimitPushdownSuite extends PlanTest {
       LocalLimit(1, y.groupBy(Symbol("b"))(count(1))))).analyze
     comparePlans(expected2, optimized2)
   }
+
+  test("SPARK-33960: Limit push down support Sort") {
+    val originalQuery = x.sortBy($"x.a".asc).limit(2)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = LocalLimit(2, x).sortBy($"x.a".asc).limit(2).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
