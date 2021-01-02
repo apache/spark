@@ -430,7 +430,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("do not use table stats while looking in table cache") {
+  test("SPARK-33963: do not use table stats while looking in table cache") {
     val t = "table_on_test"
     withTable(t) {
       sql(s"CREATE TABLE $t (col int)")
