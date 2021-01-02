@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowNamespaces
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowNamespacesParserSuite  extends AnalysisTest with SharedSparkSession {
+class ShowNamespacesParserSuite extends AnalysisTest with SharedSparkSession {
   test("all namespaces") {
     Seq("SHOW NAMESPACES", "SHOW DATABASES").foreach { sqlCmd =>
       comparePlans(
