@@ -1793,40 +1793,6 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
-  test("show databases: basic") {
-    comparePlans(
-      parsePlan("SHOW DATABASES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
-  }
-
-  test("show databases: FROM/IN operator is not allowed") {
-    def verify(sql: String): Unit = {
-      val exc = intercept[ParseException] { parsePlan(sql) }
-      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
-    }
-
-    verify("SHOW DATABASES FROM testcat.ns1.ns2")
-    verify("SHOW DATABASES IN testcat.ns1.ns2")
-  }
-
-  test("show namespaces") {
-    comparePlans(
-      parsePlan("SHOW NAMESPACES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
-  }
-
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
