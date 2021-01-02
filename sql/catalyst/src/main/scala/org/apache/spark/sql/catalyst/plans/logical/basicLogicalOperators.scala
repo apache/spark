@@ -545,7 +545,7 @@ case class Range(
   }
 
   override def computeStats(): Statistics = {
-    Statistics(sizeInBytes = LongType.defaultSize * numElements)
+    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements))
   }
 
   override def outputOrdering: Seq[SortOrder] = {

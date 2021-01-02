@@ -44,7 +44,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(sizeInBytes = 4 * 8)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8, Some(4))
     checkStats(
       range,
       expectedStatsCboOn = rangeStats,
