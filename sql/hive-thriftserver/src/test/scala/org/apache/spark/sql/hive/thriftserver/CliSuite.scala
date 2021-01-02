@@ -575,51 +575,40 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
-    runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 'test';" -> "test" )
-    runCliWithin(1.minute)(";;/* SELECT 'test';*/ SELECT 'test';" -> "test" )
-    runCliWithin(1.minute)("/* SELECT 'test';*/;; SELECT 'test';" -> "test" )
-    runCliWithin(1.minute)("SELECT 'test'; -- SELECT 'test';" -> "")
-    runCliWithin(1.minute)("SELECT 'test'; /* SELECT 'test';*/" -> "")
-    runCliWithin(1.minute)("/*$meta chars{^\\;}*/ SELECT 'test';" -> "test")
-    runCliWithin(1.minute)("/*\nmulti-line\n*/ SELECT 'test';" -> "test")
-    runCliWithin(1.minute)("/*/* multi-level bracketed*/ SELECT 'test';" -> "test")
+    runCliWithin(3.minute)(
+      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
+      "SELECT 'test'; -- SELECT 'test';" -> "",
+      "SELECT 'test'; /* SELECT 'test';*/" -> "",
+      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
+      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
+      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+    )
 
-    val dataFilePath =
-      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val testHintTablePath = Utils.createTempDir()
 
     runCliWithin(3.minute)(
-      "CREATE TABLE test(key INT, val STRING) USING hive;"
+      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2), (2, 3), (3, 4), (4, 5), (5, 6)" +
+        " as t1(key, val);"
         -> "",
-      s"""LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test;""".stripMargin
+      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1), (3, 2), (4, 3), (5, 4), (6, 5)" +
+        " as t2(key, val);"
         -> "",
-      s"""CREATE TABLE testHint(key string, val string) USING hive
-         |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
+      s"""CREATE TABLE testHint(key int, val int) USING hive
+        |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
+        -> "",
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ broadcast(t1) */ t1.* from t1 join t2" +
+        " on t1.key=t2.val;"
         -> ""
     )
 
-    runCliWithin(2.minutes)(
-      "INSERT OVERWRITE TABLE testHint SELECT key, val FROM test;"
-        -> ""
-    )
-    var dataFiles = testHintTablePath.listFiles().filterNot{ file =>
+    val dataFiles = testHintTablePath.listFiles().filterNot{ file =>
       file.getName.startsWith(".") || file.getName.startsWith("_")
     }
     assert(dataFiles.size == 1)
 
-    runCliWithin(2.minutes)(
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ REPARTITION(3) */ key, val FROM test;"
-        -> ""
-    )
-    dataFiles = testHintTablePath.listFiles().filterNot{ file =>
-      file.getName.startsWith(".") || file.getName.startsWith("_")
-    }
-    assert(dataFiles.size == 3)
-
-    runCliWithin(2.minute)(
-      "DROP TABLE test;" -> "",
-      "DROP TABLE testHint;" -> ""
-    )
+    runCliWithin(1.minute)("DROP TABLE testHint;" -> "")
     Utils.deleteRecursively(testHintTablePath)
   }
 }
