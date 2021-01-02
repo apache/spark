@@ -84,6 +84,12 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(globalLimit, stats)
   }
 
+  test("tail estimation") {
+    checkStats(Tail(Literal(1), plan), Statistics(sizeInBytes = 12, rowCount = Some(1)))
+    checkStats(Tail(Literal(20), plan), plan.stats.copy(attributeStats = AttributeMap(Nil)))
+    checkStats(Tail(Literal(0), plan), Statistics(sizeInBytes = 1, rowCount = Some(0)))
+  }
+
   test("sample estimation") {
     val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)
     checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
