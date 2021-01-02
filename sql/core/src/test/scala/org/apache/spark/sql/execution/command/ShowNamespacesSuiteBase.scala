@@ -103,6 +103,7 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       Seq(
         "'*db1A'" -> Seq("showdb1a"),
+        "'*2*'" -> Seq("showdb2b"),
         "'*db1A|*db2B'" -> Seq("showdb1a", "showdb2b")
       ).foreach { case (pattern, expected) =>
         runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE $pattern", expected)
