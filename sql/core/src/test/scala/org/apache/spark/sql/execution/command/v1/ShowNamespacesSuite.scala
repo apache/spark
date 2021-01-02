@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands
@@ -41,4 +42,19 @@ trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
   }
 }
 
-class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase
+class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase {
+  test("case sensitivity") {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
+          sql(s"CREATE NAMESPACE $catalog.AAA")
+          sql(s"CREATE NAMESPACE $catalog.bbb")
+          val expected = if (caseSensitive) "AAA" else "aaa"
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq(expected, "bbb")))
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq(expected))
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq(expected))
+        }
+      }
+    }
+  }
+}

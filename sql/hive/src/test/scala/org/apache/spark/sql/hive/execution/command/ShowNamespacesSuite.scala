@@ -18,9 +18,24 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `SHOW NAMESPACES` and `SHOW DATABASES` commands to check
  * V1 Hive external table catalog.
  */
-class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase
+class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBase {
+  test("case sensitivity") {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
+          sql(s"CREATE NAMESPACE $catalog.AAA")
+          sql(s"CREATE NAMESPACE $catalog.bbb")
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq("aaa", "bbb")))
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("aaa"))
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("aaa"))
+        }
+      }
+    }
+  }
+}
