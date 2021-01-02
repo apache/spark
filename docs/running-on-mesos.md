@@ -481,6 +481,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driver.memoryOverhead</code></td>
+  <td>driver memory * 0.10, with minimum of 384</td>
+  <td>
+    The amount of additional memory, specified in MB, to be allocated to the driver. By default,
+    the overhead will be larger of either 384 or 10% of <code>spark.driver.memory</code>. If set,
+    the final overhead will be this value. Only applies to cluster mode.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>

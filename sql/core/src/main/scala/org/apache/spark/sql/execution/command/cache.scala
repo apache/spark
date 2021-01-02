@@ -17,32 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-
-case class UncacheTableCommand(
-    multipartIdentifier: Seq[String],
-    ifExists: Boolean) extends RunnableCommand {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val tableName = multipartIdentifier.quoted
-    table(sparkSession, tableName).foreach { table =>
-      val cascade = !sparkSession.sessionState.catalog.isTempView(multipartIdentifier)
-      sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade)
-    }
-    Seq.empty[Row]
-  }
-
-  private def table(sparkSession: SparkSession, name: String): Option[DataFrame] = {
-    try {
-      Some(sparkSession.table(name))
-    } catch {
-      case ex: AnalysisException if ifExists && ex.getMessage.contains("Table or view not found") =>
-        None
-    }
-  }
-}
 
 /**
  * Clear all cached data from the in-memory cache.

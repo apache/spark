@@ -15,23 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.connector.distributions;
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
-
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
-  }
+/**
+ * A distribution where tuples have been ordered across partitions according
+ * to ordering expressions, but not necessarily within a given partition.
+ *
+ * @since 3.2.0
+ */
+@Experimental
+public interface OrderedDistribution extends Distribution {
+  /**
+   * Returns ordering expressions.
+   */
+  SortOrder[] ordering();
 }

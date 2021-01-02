@@ -18,11 +18,11 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 
+/**
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
+ * V1 Hive external table catalog.
+ */
 class AlterTableAddPartitionSuite
     extends v1.AlterTableAddPartitionSuiteBase
-    with TestHiveSingleton {
-  override def version: String = "Hive V1"
-  override def defaultUsing: String = "USING HIVE"
-}
+    with CommandSuiteBase

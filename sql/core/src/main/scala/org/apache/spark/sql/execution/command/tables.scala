@@ -21,7 +21,6 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -36,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -116,12 +115,13 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
+    val newTableSchema = CharVarcharUtils.getRawSchema(sourceTableDesc.schema)
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
         storage = newStorage,
-        schema = sourceTableDesc.schema,
+        schema = newTableSchema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
@@ -193,18 +193,19 @@ case class AlterTableRenameCommand(
     } else {
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
-      // If an exception is thrown here we can just assume the table is uncached;
-      // this can happen with Hive tables when the underlying catalog is in-memory.
-      val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
-      if (wasCached) {
+      // If `optStorageLevel` is defined, the old table was cached.
+      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
+        sparkSession.table(oldName.unquotedString))
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      if (wasCached) {
-        sparkSession.catalog.cacheTable(newName.unquotedString)
+      optStorageLevel.foreach { storageLevel =>
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]
@@ -236,7 +237,8 @@ case class AlterTableAddColumnsCommand(
       conf.caseSensitiveAnalysis)
     DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
 
-    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
+    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
+    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -631,7 +633,7 @@ case class DescribeTableCommand(
       }
       describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
-      val metadata = catalog.getTableMetadata(table)
+      val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
@@ -782,9 +784,11 @@ case class DescribeColumnCommand(
       None
     }
 
+    val dataType = CharVarcharUtils.getRawType(field.metadata)
+      .getOrElse(field.dataType).catalogString
     val buffer = ArrayBuffer[Row](
       Row("col_name", field.name),
-      Row("data_type", field.dataType.catalogString),
+      Row("data_type", dataType),
       Row("comment", comment.getOrElse("NULL"))
     )
     if (isExtended) {
@@ -1111,7 +1115,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       throw new AnalysisException(
         s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {
-      val tableMetadata = catalog.getTableMetadata(table)
+      val tableMetadata = catalog.getTableRawMetadata(table)
 
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
@@ -1262,7 +1266,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
+    val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       throw new AnalysisException(

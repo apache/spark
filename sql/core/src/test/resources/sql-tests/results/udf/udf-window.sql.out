@@ -321,7 +321,7 @@ SELECT udf(val), cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER 
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table;
+Window function row_number() requires window to be ordered, please add ORDER BY clause. For example SELECT row_number()(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table
 
 
 -- !query

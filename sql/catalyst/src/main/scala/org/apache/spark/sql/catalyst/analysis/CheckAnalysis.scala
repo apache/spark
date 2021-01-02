@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -95,14 +96,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw new IllegalStateException(
-          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
-        u.failAnalysis(s"Table not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
         u.failAnalysis(
@@ -111,12 +111,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             s"$cmd expects a view.")
 
       case u: UnresolvedView =>
-        u.failAnalysis(s"View not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTableOrView =>
         val viewStr = if (u.allowTempView) "view" else "permanent view"
         u.failAnalysis(
-          s"Table or $viewStr not found for '${u.commandName}': ${u.multipartIdentifier.quoted}")
+          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
@@ -125,7 +125,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
       case CacheTable(u: UnresolvedRelation, _, _, _) =>
-        failAnalysis(s"Table or view not found for `CACHE TABLE`: ${u.multipartIdentifier.quoted}")
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case UncacheTable(u: UnresolvedRelation, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
@@ -212,6 +215,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
+            failAnalysis(
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {
@@ -425,18 +432,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               if (output.length != queryColumnNames.length) {
                 // If the view output doesn't have the same number of columns with the query column
                 // names, throw an AnalysisException.
-                throw new AnalysisException(
-                  s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
-                    "number of columns with the query column names " +
-                    s"${queryColumnNames.mkString("[", ",", "]")}")
+                throw QueryCompilationErrors.viewOutputNumberMismatchQueryColumnNamesError(
+                  output, queryColumnNames)
               }
               val resolver = SQLConf.get.resolver
               queryColumnNames.map { colName =>
                 child.output.find { attr =>
                   resolver(attr.name, colName)
-                }.getOrElse(throw new AnalysisException(
-                  s"Attribute with name '$colName' is not found in " +
-                    s"'${child.output.map(_.name).mkString("(", ",", ")")}'"))
+                }.getOrElse(throw QueryCompilationErrors.attributeNotFoundError(colName, child))
               }
             } else {
               child.output
@@ -448,9 +451,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 // output, so we should cast the attribute to the dataType of the view output
                 // attribute. Will throw an AnalysisException if the cast is not a up-cast.
                 if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-                  throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-                    s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} " +
-                    "as it may truncate\n")
+                  throw QueryCompilationErrors.cannotUpCastAsAttributeError(
+                    originAttr, attr)
                 }
               case _ =>
             }
@@ -525,7 +527,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
-                val field = findField("update", update.fieldNames)
+                val field = {
+                  val f = findField("update", update.fieldNames)
+                  CharVarcharUtils.getRawType(f.metadata)
+                    .map(dt => f.copy(dataType = dt))
+                    .getOrElse(f)
+                }
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>
@@ -546,7 +553,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   case _ =>
                     // update is okay
                 }
-                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+
+                // We don't need to handle nested types here which shall fail before
+                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+                  case (CharType(l1), CharType(l2)) => l1 == l2
+                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
+                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                  case _ => Cast.canUpCast(from, to)
+                }
+
+                if (!canAlterColumnType(field.dataType, update.newDataType)) {
                   alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
@@ -586,8 +602,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
             checkAlterTablePartition(table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _, _) =>
+          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
             checkAlterTablePartition(table, parts)
+
+          case AlterTableRenamePartition(ResolvedTable(_, _, table), from, _) =>
+            checkAlterTablePartition(table, Seq(from))
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
@@ -668,8 +687,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                """.stripMargin)
 
           case _: UnresolvedHint =>
-            throw new IllegalStateException(
-              "Internal error: logical hint operator should have been removed during analysis")
+            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>

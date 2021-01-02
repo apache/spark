@@ -1276,7 +1276,6 @@ These metrics are exposed by Spark executors.
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=plugin.\<Plugin Class Name>
