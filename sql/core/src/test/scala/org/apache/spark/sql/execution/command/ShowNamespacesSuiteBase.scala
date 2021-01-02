@@ -110,4 +110,20 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     }
   }
+
+  test("change catalog and namespace with USE statements") {
+    try {
+      withNamespace(s"$catalog.ns") {
+        sql(s"CREATE NAMESPACE $catalog.ns")
+        sql(s"USE $catalog")
+        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns")))
+
+        sql("USE ns")
+        // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
+        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns")))
+      }
+    } finally {
+      spark.sessionState.catalogManager.reset()
+    }
+  }
 }
