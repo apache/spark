@@ -91,6 +91,7 @@ case class CustomShuffleReaderExec private(
       UnknownPartitioning(partitionSpecs.length)
     }
   }
+
   override def stringArgs: Iterator[Any] = {
     val desc = if (isLocalReader) {
       "local"
