@@ -575,16 +575,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
-    runCliWithin(3.minute)(
-      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
-      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
-      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
-      "SELECT 'test'; -- SELECT 'test';" -> "",
-      "SELECT 'test'; /* SELECT 'test';*/" -> "",
-      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
-      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
-      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
-    )
+    runCliWithin(1.minute)("/* SELECT 'test';*/ SELECT 'test';" -> "test")
+    runCliWithin(1.minute)(";;/* SELECT 'test';*/ SELECT 'test';" -> "test")
+    runCliWithin(1.minute)("/* SELECT 'test';*/;; SELECT 'test';" -> "test")
+    runCliWithin(1.minute)("SELECT 'test'; -- SELECT 'test';" -> "")
+    runCliWithin(1.minute)("SELECT 'test'; /* SELECT 'test';*/" -> "")
+    runCliWithin(1.minute)("/*$meta chars{^\\;}*/ SELECT 'test';" -> "test")
+    runCliWithin(1.minute)("/*\nmulti-line\n*/ SELECT 'test';" -> "test")
+    runCliWithin(1.minute)("/*/* multi-level bracketed*/ SELECT 'test';" -> "test")
 
     val testHintTablePath = Utils.createTempDir()
 
@@ -592,14 +590,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2), (2, 3), (3, 4), (4, 5), (5, 6)" +
         " as t1(key, val);"
         -> "",
-      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1), (3, 2), (4, 3), (5, 4), (6, 5)" +
-        " as t2(key, val);"
-        -> "",
       s"""CREATE TABLE testHint(key int, val int) USING hive
         |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
         -> "",
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ broadcast(t1) */ t1.* from t1 join t2" +
-        " on t1.key=t2.val;"
+      "INSERT OVERWRITE TABLE testHint SELECT /*+ broadcast(t1) */ a.* from t1 a join t1 b" +
+        " on a.key=b.val;"
         -> ""
     )
 
