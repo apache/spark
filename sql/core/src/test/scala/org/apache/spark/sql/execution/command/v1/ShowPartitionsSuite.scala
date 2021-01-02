@@ -20,6 +20,14 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ */
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   test("show everything in the default database") {
     val table = "dateTable"
@@ -63,6 +71,9 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
   }
 }
 
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V1 In-Memory table catalog.
+ */
 class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
   // The test is placed here because it fails with `USING HIVE`:
   // org.apache.spark.sql.AnalysisException:
@@ -94,22 +105,13 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("null and empty string as partition values") {
-    import testImplicits._
-    withTable("t") {
-      val df = Seq((0, ""), (1, null)).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable("t")
-
+  test("SPARK-33904: null and empty string as partition values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
       runShowPartitionsSql(
-        "SHOW PARTITIONS t",
+        s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
-      checkAnswer(spark.table("t"),
-        Row(0, null) ::
-        Row(1, null) :: Nil)
+      checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
     }
   }
 }

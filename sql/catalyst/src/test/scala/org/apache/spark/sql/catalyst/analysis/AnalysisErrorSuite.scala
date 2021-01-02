@@ -213,6 +213,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
 
   errorTest(
+    "function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
+    "Function hex does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "some window function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
+    "Function percent_rank does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "aggregate function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
+    "Function count does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "higher order function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
     "nested aggregate functions",
     testRelation.groupBy($"a")(
       AggregateExpression(
@@ -699,5 +719,18 @@ class AnalysisErrorSuite extends AnalysisTest {
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
     assertAnalysisError(plan, "Table or view not found:" :: Nil)
+  }
+
+  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
+    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    }
+    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+    }
   }
 }

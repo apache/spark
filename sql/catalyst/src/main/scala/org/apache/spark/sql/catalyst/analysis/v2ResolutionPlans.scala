@@ -52,8 +52,8 @@ case class UnresolvedTable(
 case class UnresolvedView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTemp: Boolean = true,
-    relationTypeMismatchHint: Option[String] = None) extends LeafNode {
+    allowTemp: Boolean,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
