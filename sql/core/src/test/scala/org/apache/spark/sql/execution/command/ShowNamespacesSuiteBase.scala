@@ -42,7 +42,7 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   protected def topNamespaces(ns: Seq[String]): Seq[String]
 
-  test("a namespace doesn't exist") {
+  test("IN namespace doesn't exist") {
     val errMsg = intercept[AnalysisException] {
       sql("SHOW NAMESPACES in dummy")
     }.getMessage
@@ -65,6 +65,30 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("exact matching") {
+    withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
+      sql(s"CREATE NAMESPACE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns2")
+      Seq(
+        s"SHOW NAMESPACES IN $catalog LIKE 'ns2'",
+        s"SHOW NAMESPACES IN $catalog 'ns2'",
+        s"SHOW NAMESPACES FROM $catalog LIKE 'ns2'",
+        s"SHOW NAMESPACES FROM $catalog 'ns2'").foreach { sqlCmd =>
+        withClue(sqlCmd) {
+          runShowNamespacesSql(sqlCmd, Seq("ns2"))
+        }
+      }
+    }
+  }
+
+  test("does not match to any namespace") {
+    Seq(
+      "SHOW DATABASES LIKE 'non-existentdb'",
+      "SHOW NAMESPACES 'non-existentdb'").foreach { sqlCmd =>
+      runShowNamespacesSql(sqlCmd, Seq.empty)
+    }
+  }
+
   test("show root namespaces with the default catalog") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
       runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq.empty))
@@ -75,6 +99,20 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
         runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns1", "ns2")))
         runShowNamespacesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
+      }
+    }
+  }
+
+  test("complex namespace patterns") {
+    withNamespace(s"$catalog.showdb2b", s"$catalog.showdb1a") {
+      sql(s"CREATE NAMESPACE $catalog.showdb2b")
+      sql(s"CREATE NAMESPACE $catalog.showdb1a")
+
+      Seq(
+        "'*db1A'" -> Seq("showdb1a"),
+        "'*db1A|*db2B'" -> Seq("showdb1a", "showdb2b")
+      ).foreach { case (pattern, expected) =>
+        runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE $pattern", expected)
       }
     }
   }
