@@ -156,6 +156,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
+      RemoveNoopOperators,
       CombineUnions) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
@@ -490,7 +491,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(_, child) if child.sameOutput(p) => child
 
@@ -1012,15 +1013,6 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
-
-        /**
-         * Ignore noop projects. We can not rely on [[RemoveNoopOperators]],
-         * because it will be called after [[ReplaceDistinctWithAggregate]],
-         * and then we will be not able to combine the unions with distincts.
-         * These noop projects are present in several TPCDS queries.
-         */
-        case p @ Project(_, child) if child.sameOutput(p) =>
-          stack.push(child)
         case child =>
           flattened += child
       }

@@ -240,23 +240,4 @@ class SetOperationSuite extends PlanTest {
       Union(testRelation :: testRelation :: testRelation :: testRelation :: Nil, true, false)
     comparePlans(unionOptimized2, unionCorrectAnswer2, false)
   }
-
-  test("SPARK-xxxxx: Combine distinct unions that have noop project between them") {
-    val query1 = Distinct(Union(
-      Distinct(Union(testRelation, testRelation2)).select('a, 'b, 'c),
-      testRelation3
-    ))
-    val query2 = Distinct(Union(
-      testRelation,
-      Distinct(Union(testRelation2, testRelation3)).select('d, 'e, 'f)
-    ))
-
-    val optimized1 = Optimize.execute(query1.analyze)
-    val optimized2 = Optimize.execute(query2.analyze)
-
-    val expected = Distinct(Union(testRelation :: testRelation2 :: testRelation3 :: Nil))
-
-    comparePlans(optimized1, expected)
-    comparePlans(optimized2, expected)
-  }
 }
