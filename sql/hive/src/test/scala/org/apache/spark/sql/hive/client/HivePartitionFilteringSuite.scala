@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
@@ -41,7 +42,7 @@ class HivePartitionFilteringSuite(version: String)
 
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4
-  private val chunkValue = Seq("aa", "ab", "ba", "bb")
+  private val chunkValue = Seq("aa", "ab", "ba", "bb", DEFAULT_PARTITION_NAME)
   private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03")
   private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03")
   private val testPartitionCount =
@@ -414,14 +415,17 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
-  test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {
-    testMetastorePartitionFiltering(
-      attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),
-      dsValue,
-      hValue,
-      chunkValue,
-      dateValue,
-      dateStrValue)
+  test("getPartitionsByFilter returns all partitions: IS NULL / IS NOT NULL") {
+    Seq(attr("chunk").isNull, attr("chunk").isNotNull,
+      attr("d").isNull, attr("d").isNotNull).foreach { filterExpr =>
+      testMetastorePartitionFiltering(
+        filterExpr,
+        dsValue,
+        hValue,
+        chunkValue,
+        dateValue,
+        dateStrValue)
+    }
   }
 
   private def testMetastorePartitionFiltering(
