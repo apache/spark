@@ -401,6 +401,16 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
   }
 
+  test("timestamp add hours") {
+    val ts1 = date(1997, 2, 28, 10, 30, 0)
+    val ts2 = date(1997, 2, 28, 14, 30, 0)
+    assert(timestampAddHours(ts1, 4, defaultZoneId) === ts2)
+
+    val ts3 = date(1997, 2, 27, 16, 0, 0, 0, LA)
+    val ts4 = date(1997, 2, 27, 12, 0, 0, 0, LA)
+    assert(timestampAddHours(ts3, -4, LA) === ts4)
+  }
+
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
     val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)

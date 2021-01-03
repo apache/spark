@@ -1445,6 +1445,40 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val prettyName: String = "to_utc_timestamp"
 }
 
+
+
+case class AddHours(startTime: Expression, numHours: Expression, timeZoneId: Option[String] = None)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant
+    with TimeZoneAwareExpression {
+
+  def this(startTime: Expression, numHours: Expression) = this(startTime, numHours, None)
+
+  override def left: Expression = startTime
+  override def right: Expression = numHours
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, IntegerType)
+
+  override def dataType: DataType = TimestampType
+
+  override def nullSafeEval(start: Any, hours: Any): Any = {
+    DateTimeUtils.timestampAddHours(start.asInstanceOf[Long], hours.asInstanceOf[Int], zoneId)
+  }
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (st, h) => {
+      s"""$dtu.timestampAddHours($st, $h, $zid)"""
+    })
+  }
+
+  override def prettyName: String = "add_hours"
+}
+
+
 /**
  * Returns the date that is num_months after start_date.
  */

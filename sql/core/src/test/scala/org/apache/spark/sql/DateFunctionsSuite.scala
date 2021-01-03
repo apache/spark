@@ -323,6 +323,39 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
 
+  test("function add_hours") {
+    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
+    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
+    val df = Seq((1, t1), (2, t2)).toDF("n", "t")
+    checkAnswer(
+      df.select(add_hours(col("t"), lit(2))),
+      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
+    checkAnswer(
+      df.select(add_hours(col("t"), lit(-2))),
+      Seq(Row(Timestamp.valueOf("2015-09-30 22:00:01")),
+        Row(Timestamp.valueOf("2016-02-28 22:00:02"))))
+    checkAnswer(
+      df.selectExpr("add_hours(t, 2)"),
+      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
+    checkAnswer(
+      df.selectExpr("add_hours(t, -2)"),
+      Seq(Row(Timestamp.valueOf("2015-09-30 22:00:01")),
+        Row(Timestamp.valueOf("2016-02-28 22:00:02"))))
+    checkAnswer(
+      df.withColumn("x", lit(2)).select(add_hours(col("t"), col("x"))),
+      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
+        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
+    val d1 = Date.valueOf("2015-08-31")
+    val d2 = Date.valueOf("2015-02-28")
+    val df2 = Seq((1, d1), (2, d2)).toDF("n", "d")
+    checkAnswer(
+      df2.select(add_hours(col("d"), lit(1))),
+      Seq(Row(Timestamp.valueOf("2015-08-31 01:00:00")),
+        Row(Timestamp.valueOf("2015-02-28 01:00:00"))))
+  }
+
   test("function add_months") {
     val d1 = Date.valueOf("2015-08-31")
     val d2 = Date.valueOf("2015-02-28")

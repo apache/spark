@@ -2842,6 +2842,20 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns the timestamp that is `numHours` after `startTime`.
+   *
+   * @param startTime A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numHours The number of hours to add to `startTime`, can be negative to subtract hours
+   * @return A timestamp, or null if `startTime` was a string that could not be cast to a timestamp
+   * @group datetime_funcs
+   * @since TBD
+   */
+  def add_hours(startTime: Column, numHours: Column): Column = withExpr {
+    AddHours(startTime.expr, numHours.expr)
+  }
+
+  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that

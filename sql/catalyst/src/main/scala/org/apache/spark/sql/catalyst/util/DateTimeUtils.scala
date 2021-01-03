@@ -575,6 +575,21 @@ object DateTimeUtils {
   }
 
   /**
+   * Adds hours to a timestamp represented as the number of
+   * microseconds since 1970-01-01 00:00:00Z.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAddHours(
+    start: Long,
+    hours: Int,
+    zoneId: ZoneId): Long = {
+    val resultTimestamp = microsToInstant(start)
+      .atZone(zoneId)
+      .plusHours(hours)
+    instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
