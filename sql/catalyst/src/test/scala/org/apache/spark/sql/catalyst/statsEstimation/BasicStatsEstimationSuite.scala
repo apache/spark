@@ -44,7 +44,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
 
   test("range") {
     val range = Range(1, 5, 1, None)
-    val rangeStats = Statistics(sizeInBytes = 4 * 8)
+    val rangeStats = Statistics(sizeInBytes = 4 * 8, Some(4))
     checkStats(
       range,
       expectedStatsCboOn = rangeStats,
@@ -82,6 +82,12 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val stats = Statistics(sizeInBytes = 1, rowCount = Some(0))
     checkStats(localLimit, stats)
     checkStats(globalLimit, stats)
+  }
+
+  test("tail estimation") {
+    checkStats(Tail(Literal(1), plan), Statistics(sizeInBytes = 12, rowCount = Some(1)))
+    checkStats(Tail(Literal(20), plan), plan.stats.copy(attributeStats = AttributeMap(Nil)))
+    checkStats(Tail(Literal(0), plan), Statistics(sizeInBytes = 1, rowCount = Some(0)))
   }
 
   test("sample estimation") {
