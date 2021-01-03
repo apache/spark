@@ -78,11 +78,13 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   protected def initProc(hadoopConf: Configuration): ProcParameters = {
     val wrapper = splitArgs(hadoopConf.get(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key))
     val cmdArgs = splitArgs(script)
-    val prog = cmdArgs(0)
-    if(!new File(prog).isAbsolute) {
-      val progFile = new File(SparkFiles.get(prog))
-      if (progFile.exists()) {
-        cmdArgs(0) = progFile.getAbsolutePath
+    val program = cmdArgs(0)
+    if (!new File(program).isAbsolute) {
+      val pathFinder = new PathFinder("PATH")
+      pathFinder.prependPathComponent(SparkFiles.getRootDirectory())
+      val programFile = pathFinder.getAbsolutePath(program)
+      if (programFile.isDefined) {
+        cmdArgs(0) = programFile.get.getAbsolutePath
       }
     }
     val cmd = wrapper.toList ++ cmdArgs.toList
@@ -427,5 +429,48 @@ object ScriptTransformationIOSchema {
       input.recordReaderClass,
       input.recordWriterClass,
       input.schemaLess)
+  }
+}
+
+/**
+ * Maps a relative pathname to an absolute pathname using the PATH environment.
+ */
+class PathFinder(val envPath: String) {
+  private var pathEnv = System.getenv(envPath)
+  private var pathSep = File.pathSeparator
+  private var fileSep = File.separator
+
+  /**
+   * Appends the specified component to the path list.
+   */
+  def prependPathComponent(str: String): Unit = {
+    pathEnv = str + pathSep + pathEnv
+  }
+
+  /**
+   * Returns the full path name of this file if it is listed in the path.
+   */
+  def getAbsolutePath(filename: String): Option[File] = {
+    if (pathEnv == null || pathSep == null || fileSep == null) {
+      None
+    } else {
+      pathEnv.split(pathSep).map(entry => {
+        var file = new File(entry)
+        try {
+          if (file.isDirectory) {
+            file = new File(entry + fileSep + filename)
+          }
+
+          if (file.isFile && file.canRead) {
+            file
+          } else {
+            null
+          }
+        } catch {
+          case NonFatal(f) =>
+            null
+        }
+      }).find(Option(_).isDefined)
+    }
   }
 }
