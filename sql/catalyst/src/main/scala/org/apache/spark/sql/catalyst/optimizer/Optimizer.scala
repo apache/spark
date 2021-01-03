@@ -353,18 +353,16 @@ object EliminateDistinct extends Rule[LogicalPlan] {
       ae.copy(isDistinct = false)
   }
 
-  private def isDuplicateAgnostic(af: AggregateFunction): Boolean = {
-    af match {
-      case _: Max => true
-      case _: Min => true
-      case _: BitAndAgg => true
-      case _: BitOrAgg => true
-      case _: First => true
-      case _: Last => true
-      case _: HyperLogLogPlusPlus => true
-      case _: CollectSet => true
-      case _ => false
-    }
+  private def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
+    case _: Max => true
+    case _: Min => true
+    case _: BitAndAgg => true
+    case _: BitOrAgg => true
+    case _: First => true
+    case _: Last => true
+    case _: HyperLogLogPlusPlus => true
+    case _: CollectSet => true
+    case _ => false
   }
 }
 
