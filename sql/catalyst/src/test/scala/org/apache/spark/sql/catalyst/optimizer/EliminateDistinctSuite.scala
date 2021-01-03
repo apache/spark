@@ -18,6 +18,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -32,25 +34,26 @@ class EliminateDistinctSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int)
 
-  test("Eliminate Distinct in Max") {
-    val query = testRelation
-      .select(maxDistinct('a).as('result))
-      .analyze
-    val answer = testRelation
-      .select(max('a).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
-  }
-
-  test("Eliminate Distinct in Min") {
-    val query = testRelation
-      .select(minDistinct('a).as('result))
-      .analyze
-    val answer = testRelation
-      .select(min('a).as('result))
-      .analyze
-    assert(query != answer)
-    comparePlans(Optimize.execute(query), answer)
+  Seq(
+    ("max", Max(_)),
+    ("min", Min(_)),
+    ("approx_count_distinct", HyperLogLogPlusPlus(_: Expression)),
+    ("first", First(_, ignoreNulls = true)),
+    ("last", Last(_, ignoreNulls = true)),
+    ("bit_and", BitAndAgg(_)),
+    ("bit_or", BitOrAgg(_)),
+    ("collect_set", CollectSet(_: Expression))
+  ).foreach {
+    case (name, agg) =>
+      test(s"Eliminate Distinct in $name") {
+        val query = testRelation
+          .select(agg('a).toAggregateExpression(isDistinct = true).as('result))
+          .analyze
+        val answer = testRelation
+          .select(agg('a).toAggregateExpression(isDistinct = false).as('result))
+          .analyze
+        assert(query != answer)
+        comparePlans(Optimize.execute(query), answer)
+    }
   }
 }

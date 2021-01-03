@@ -351,7 +351,9 @@ object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
     case ae: AggregateExpression if ae.isDistinct =>
       ae.aggregateFunction match {
-        case _: Max | _: Min => ae.copy(isDistinct = false)
+        case _: Max | _: Min | _: BitAndAgg | _: BitOrAgg => ae.copy(isDistinct = false)
+        case _: First | _: Last | _: HyperLogLogPlusPlus => ae.copy(isDistinct = false)
+        case _: CollectSet => ae.copy(isDistinct = false)
         case _ => ae
       }
   }
