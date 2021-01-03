@@ -47,7 +47,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
     case e if child.foldable && e.dataType == IntegerType => e.eval().asInstanceOf[Int]
     case e if child.foldable && e.dataType == LongType => e.eval().asInstanceOf[Long]
     case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer or long constant.")
+      s"Input argument to $prettyName must be an integer, long, or null constant.")
   }
 
   override def nullable: Boolean = false
