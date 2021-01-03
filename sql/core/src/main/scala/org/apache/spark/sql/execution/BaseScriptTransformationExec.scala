@@ -58,11 +58,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def doExecute(): RDD[InternalRow] = {
-    val hadoopConf = sqlContext.sessionState.newHadoopConf()
-    hadoopConf.set(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key,
+    sparkContext.setLocalProperty(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key,
       conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER))
     val broadcastedHadoopConf =
-      new SerializableConfiguration(hadoopConf)
+      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
@@ -75,8 +74,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  protected def initProc(hadoopConf: Configuration): ProcParameters = {
-    val wrapper = splitArgs(hadoopConf.get(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key))
+  protected def initProc: ProcParameters = {
+    val wrapper = splitArgs(conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER))
     val cmdArgs = splitArgs(script)
     val program = cmdArgs(0)
     if (!new File(program).isAbsolute) {
