@@ -452,7 +452,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-33992: char/varchar resolution in correlated sub query ") {
+  test("SPARK-33992: char/varchar resolution in correlated sub query") {
     withTable("t1", "t2") {
       sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
       sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
@@ -462,7 +462,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(sql(
         """
           |SELECT v FROM t1
-          | WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
+          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
         Row("c"))
     }
   }

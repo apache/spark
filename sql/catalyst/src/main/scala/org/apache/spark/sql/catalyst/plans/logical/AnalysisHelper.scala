@@ -127,11 +127,18 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
       rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
   : LogicalPlan = {
     if (!analyzed) {
-      AnalysisHelper.allowInvokingTransformsInAnalyzer {
-        transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
-      }
+      transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
     } else {
       self
+    }
+  }
+
+  override def transformUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
+      skipCond: LogicalPlan => Boolean,
+      canGetOutput: LogicalPlan => Boolean): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.transformUpWithNewOutput(rule, skipCond, canGetOutput)
     }
   }
 
