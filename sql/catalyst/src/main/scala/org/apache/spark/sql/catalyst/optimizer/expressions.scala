@@ -637,7 +637,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
-      input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
+      input: Expression, pattern: String, escapeChar: Char = '\\'): Expression = {
     if (pattern.contains(escapeChar)) {
       // There are three different situations when pattern containing escapeChar:
       // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
@@ -645,32 +645,33 @@ object LikeSimplification extends Rule[LogicalPlan] {
       // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
       // Although there are patterns can be optimized if we handle the escape first, we just
       // skip this rule if pattern contains any escapeChar for simplicity.
-      None
+      null
     } else {
       pattern match {
         case startsWith(prefix) =>
-          Some(StartsWith(input, Literal(prefix)))
+          StartsWith(input, Literal(prefix))
         case endsWith(postfix) =>
-          Some(EndsWith(input, Literal(postfix)))
+          EndsWith(input, Literal(postfix))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
-            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix)))))
+          And(GreaterThanOrEqual(Length(input), Literal(prefix.length + postfix.length)),
+            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
         case contains(infix) =>
-          Some(Contains(input, Literal(infix)))
+          Contains(input, Literal(infix))
         case equalTo(str) =>
-          Some(EqualTo(input, Literal(str)))
-        case _ => None
+          EqualTo(input, Literal(str))
+        case _ => null
       }
     }
   }
 
   private def simplifyMultiLike(
       child: Expression, patterns: Seq[UTF8String], multi: MultiLikeBase): Expression = {
-    val (remainPatterns, replacements) = patterns.map { p =>
-      simplifyLike(child, p.toString).getOrElse(p)
-    }.partition(_.isInstanceOf[UTF8String])
+    val (remainPatternMap, replacementMap) =
+      patterns.map { p => p -> simplifyLike(child, p.toString)}.partition(_._2 == null)
+    val remainPatterns = remainPatternMap.map(_._1)
+    val replacements = replacementMap.map(_._2)
     if (replacements.isEmpty) {
       multi
     } else {
@@ -694,7 +695,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
         // If pattern is null, return null value directly, since "col like null" == null.
         Literal(null, BooleanType)
       } else {
-        simplifyLike(input, pattern.toString, escapeChar).getOrElse(l)
+        Option(simplifyLike(input, pattern.toString, escapeChar)).getOrElse(l)
       }
     case l @ LikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
     case l @ NotLikeAll(child, patterns) => simplifyMultiLike(child, patterns, l)
