@@ -394,21 +394,23 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // fails to talk to the StateStoreCoordinator and unloads all the StateStores
       .set(RPC_NUM_RETRIES, 1)
     val opId = 0
-    val dir = newDir()
-    val storeProviderId = StateStoreProviderId(StateStoreId(dir, opId, 0), UUID.randomUUID)
+    val dir1 = newDir()
+    val storeProviderId1 = StateStoreProviderId(StateStoreId(dir1, opId, 0), UUID.randomUUID)
+    val dir2 = newDir()
+    val storeProviderId2 = StateStoreProviderId(StateStoreId(dir2, opId, 1), UUID.randomUUID)
     val sqlConf = new SQLConf()
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
     // Make maintenance thread do snapshots and cleanups very fast
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 10L)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
-    val provider = newStoreProvider(storeProviderId.storeId)
+    val provider = newStoreProvider(storeProviderId1.storeId)
 
     var latestStoreVersion = 0
 
     def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
-        val store = StateStore.get(storeProviderId, keySchema, valueSchema, None,
+        val store = StateStore.get(storeProviderId1, keySchema, valueSchema, None,
           latestStoreVersion, storeConf, hadoopConf)
         put(store, "a", i)
         store.commit()
@@ -428,7 +430,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
           eventually(timeout(timeoutDuration)) {
             // Store should have been reported to the coordinator
-            assert(coordinatorRef.getLocation(storeProviderId).nonEmpty,
+            assert(coordinatorRef.getLocation(storeProviderId1).nonEmpty,
               "active instance was not reported")
 
             // Background maintenance should clean up and generate snapshots
@@ -452,33 +454,44 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
           // If driver decides to deactivate all stores related to a query run,
           // then this instance should be unloaded
-          coordinatorRef.deactivateInstances(storeProviderId.queryRunId)
+          coordinatorRef.deactivateInstances(storeProviderId1.queryRunId)
           eventually(timeout(timeoutDuration)) {
-            assert(!StateStore.isLoaded(storeProviderId))
+            assert(!StateStore.isLoaded(storeProviderId1))
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeProviderId1, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
-          assert(StateStore.isLoaded(storeProviderId))
+          assert(StateStore.isLoaded(storeProviderId1))
 
           // If some other executor loads the store, then this instance should be unloaded
-          coordinatorRef.reportActiveInstance(storeProviderId, "other-host", "other-exec")
+          coordinatorRef
+            .reportActiveInstance(storeProviderId1, "other-host", "other-exec", Seq.empty)
           eventually(timeout(timeoutDuration)) {
-            assert(!StateStore.isLoaded(storeProviderId))
+            assert(!StateStore.isLoaded(storeProviderId1))
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId, keySchema, valueSchema, indexOrdinal = None,
+          StateStore.get(storeProviderId1, keySchema, valueSchema, indexOrdinal = None,
             latestStoreVersion, storeConf, hadoopConf)
-          assert(StateStore.isLoaded(storeProviderId))
+          assert(StateStore.isLoaded(storeProviderId1))
+
+          // If some other executor loads the store, and when this executor loads other store,
+          // then this executor should unload inactive instances immediately.
+          coordinatorRef
+            .reportActiveInstance(storeProviderId1, "other-host", "other-exec", Seq.empty)
+          StateStore.get(storeProviderId2, keySchema, valueSchema, indexOrdinal = None,
+            0, storeConf, hadoopConf)
+          assert(!StateStore.isLoaded(storeProviderId1))
+          assert(StateStore.isLoaded(storeProviderId2))
         }
       }
 
       // Verify if instance is unloaded if SparkContext is stopped
       eventually(timeout(timeoutDuration)) {
         require(SparkEnv.get === null)
-        assert(!StateStore.isLoaded(storeProviderId))
+        assert(!StateStore.isLoaded(storeProviderId1))
+        assert(!StateStore.isLoaded(storeProviderId2))
         assert(!StateStore.isMaintenanceRunning)
       }
     }

@@ -56,17 +56,15 @@ private[sql] class SharedState(
   private[sql] val (conf, hadoopConf) = {
     // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
     // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
-    SharedState.loadHiveConfFile(
+    val initialConfigsWithoutWarehouse = SharedState.loadHiveConfFile(
       sparkContext.conf, sparkContext.hadoopConfiguration, initialConfigs)
+
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
     // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
     // `SharedState` instance. This will be done only once then shared across `SparkSession`s
-    initialConfigs.foreach {
-      case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
-        logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
-          s"in SparkSession's options, it should be set statically for cross-session usages")
+    initialConfigsWithoutWarehouse.foreach {
       case (k, v) if SQLConf.staticConfKeys.contains(k) =>
         logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
@@ -228,7 +226,8 @@ object SharedState extends Logging {
   def loadHiveConfFile(
       sparkConf: SparkConf,
       hadoopConf: Configuration,
-      initialConfigs: scala.collection.Map[String, String] = Map.empty): Unit = {
+      initialConfigs: scala.collection.Map[String, String] = Map.empty)
+    : scala.collection.Map[String, String] = {
 
     def containsInSparkConf(key: String): Boolean = {
       sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
@@ -248,6 +247,10 @@ object SharedState extends Logging {
     }
     val sparkWarehouseOption =
       initialConfigs.get(WAREHOUSE_PATH.key).orElse(sparkConf.getOption(WAREHOUSE_PATH.key))
+    if (initialConfigs.contains(hiveWarehouseKey)) {
+      logWarning(s"Not allowing to set $hiveWarehouseKey in SparkSession's options, please use " +
+        s"${WAREHOUSE_PATH.key} to set statically for cross-session usages")
+    }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(hiveWarehouseKey)
     // Set the Hive metastore warehouse path to the one we use
@@ -272,5 +275,6 @@ object SharedState extends Logging {
       sparkWarehouseDir
     }
     logInfo(s"Warehouse path is '$warehousePath'.")
+    initialConfigs -- Seq(WAREHOUSE_PATH.key, hiveWarehouseKey)
   }
 }

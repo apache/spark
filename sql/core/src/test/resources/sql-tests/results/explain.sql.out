@@ -878,7 +878,7 @@ struct<plan:string>
 == Physical Plan ==
 * HashAggregate (5)
 +- Exchange (4)
-   +- HashAggregate (3)
+   +- * HashAggregate (3)
       +- * ColumnarToRow (2)
          +- Scan parquet default.explain_temp1 (1)
 
@@ -892,7 +892,7 @@ ReadSchema: struct<key:int,val:int>
 (2) ColumnarToRow [codegen id : 1]
 Input [2]: [key#x, val#x]
 
-(3) HashAggregate
+(3) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys: []
 Functions [3]: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]

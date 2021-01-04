@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.DataType;
  * example, a partition value produced by bucket(id, 16) could be exposed by a metadata column. In
  * this case, {@link #transform()} should return a non-null {@link Transform} that produced the
  * metadata column's values.
+ *
+ * @since 3.1.0
  */
 @Evolving
 public interface MetadataColumn {
