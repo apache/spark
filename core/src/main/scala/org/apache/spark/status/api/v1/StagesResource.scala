@@ -154,6 +154,29 @@ private[v1] class StagesResource extends BaseAppResource {
     }
   }
 
+  @GET
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/executorMetricsDistribution")
+  def executorSummary(
+      @PathParam("stageId") stageId: Int,
+      @PathParam("stageAttemptId") stageAttemptId: Int,
+      @DefaultValue("0.05,0.25,0.5,0.75,0.95")
+      @QueryParam("quantiles") quantileString: String): ExecutorMetricsDistributions = {
+    withUI { ui =>
+      val quantiles = quantileString.split(",").map { s =>
+        try {
+          s.toDouble
+        } catch {
+          case nfe: NumberFormatException =>
+            throw new BadParameterException("quantiles", "double", s)
+        }
+      }
+
+      ui.store.stageExecutorSummary(stageId, stageAttemptId, quantiles).getOrElse(
+        throw new NotFoundException(s"No executor reported metrics yet.")
+      )
+    }
+  }
+
   // Performs pagination on the server side
   def doPagination(queryParameters: MultivaluedMap[String, String], stageId: Int,
     stageAttemptId: Int, isSearch: Boolean, totalRecords: Int): Seq[TaskData] = {

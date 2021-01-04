@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.{DeserializationContext, JsonDeserializer,
 import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, TaskResourceRequest}
@@ -168,6 +169,19 @@ private[spark] class ExecutorMetricsJsonSerializer
 
   override def isEmpty(provider: SerializerProvider, value: Option[ExecutorMetrics]): Boolean =
     value.isEmpty
+}
+
+private[spark] class ExecutorMetricsDistributionJsonSerializer
+  extends JsonSerializer[ExecutorMetricsDistributions] {
+  override def serialize(
+      metrics: ExecutorMetricsDistributions,
+      jsonGenerator: JsonGenerator,
+      serializerProvider: SerializerProvider): Unit = {
+    val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+      metric -> metrics.getMetricDistribution(metric)
+    }
+    jsonGenerator.writeObject(metricsMap)
+  }
 }
 
 class JobData private[spark](
@@ -359,6 +373,21 @@ class TaskMetricDistributions private[spark](
     val outputMetrics: OutputMetricDistributions,
     val shuffleReadMetrics: ShuffleReadMetricDistributions,
     val shuffleWriteMetrics: ShuffleWriteMetricDistributions)
+
+@DeveloperApi
+@JsonSerialize(using = classOf[ExecutorMetricsDistributionJsonSerializer])
+class ExecutorMetricsDistributions private[spark](
+    val quantiles: IndexedSeq[Double],
+    val executorMetrics: IndexedSeq[ExecutorMetrics]) {
+  private lazy val count = executorMetrics.length
+  private lazy val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
+
+  /** Returns the distributions for the specified metric. */
+  def getMetricDistribution(metricName: String): IndexedSeq[Double] = {
+    val sorted = executorMetrics.map(_.getMetricValue(metricName)).sorted
+    indices.map(i => sorted(i.toInt).toDouble).toIndexedSeq
+  }
+}
 
 class InputMetricDistributions private[spark](
     val bytesRead: IndexedSeq[Double],

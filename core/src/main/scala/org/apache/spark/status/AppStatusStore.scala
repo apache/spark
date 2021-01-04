@@ -146,6 +146,20 @@ private[spark] class AppStatusStore(
     (stage, stageDataWrapper.jobIds.toSeq)
   }
 
+  def stageExecutorSummary(
+      stageId: Int,
+      stageAttemptId: Int,
+      unsortedQuantiles: Array[Double]): Option[v1.ExecutorMetricsDistributions] = {
+    val quantiles = unsortedQuantiles.sorted
+    val summary = executorSummary(stageId, stageAttemptId)
+    if (summary.isEmpty) {
+      None
+    } else {
+      val executorMetricsSummary = summary.values.flatMap(_.peakMemoryMetrics).toIndexedSeq
+      Some(new v1.ExecutorMetricsDistributions(quantiles, executorMetricsSummary))
+    }
+  }
+
   def taskCount(stageId: Int, stageAttemptId: Int): Long = {
     store.count(classOf[TaskDataWrapper], "stage", Array(stageId, stageAttemptId))
   }

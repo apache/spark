@@ -504,6 +504,14 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     </td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/executorMetricsDistribution</code></td>
+    <td>
+      Summary peak executor metrics of all executors in the given stage attempt.
+      <br><code>?quantiles</code> summarize the metrics with the given quantiles.
+      <br>Example: <code>?quantiles=0.01,0.5,0.99</code>
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/executors</code></td>
     <td>A list of all active executors for the given application.</td>
   </tr>
