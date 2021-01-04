@@ -508,7 +508,7 @@ querySpecification
       fromClause?
       whereClause?
       aggregationClause?
-      havingClause?                                                       #transformQuerySpecification
+      havingClause?                                                         #transformQuerySpecification
     | selectClause
       fromClause?
       lateralView*

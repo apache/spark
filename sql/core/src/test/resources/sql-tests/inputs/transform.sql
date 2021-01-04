@@ -190,18 +190,18 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp;
 
-SELECT TRANSFORM (b, a, CAST(c AS STRING) )
+SELECT TRANSFORM (b, a, CAST(c AS STRING))
 USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (1,2,3)
+SELECT TRANSFORM (1, 2, 3)
 USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM(1,2)
-USING 'cat' AS (a INT,b INT)
+SELECT TRANSFORM(1, 2)
+USING 'cat' AS (a INT, b INT)
 FROM script_trans
 LIMIT 1;
 
@@ -211,11 +211,11 @@ CASE
   WHEN c > 100 THEN 1
   WHEN c < 100 THEN 2
 ELSE 3 END)
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b,  c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (b, a, c + 1 )
+SELECT TRANSFORM (b, a, c + 1)
 USING 'cat' AS (a,b,c)
 FROM script_trans
 WHERE a <= 4;

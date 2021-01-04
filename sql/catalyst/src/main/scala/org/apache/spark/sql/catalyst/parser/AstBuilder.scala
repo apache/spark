@@ -589,7 +589,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx.transformClause,
       ctx.whereClause,
       ctx.aggregationClause,
-      ctx.havingClause, from
+      ctx.havingClause,
+      from
     )
   }
 
