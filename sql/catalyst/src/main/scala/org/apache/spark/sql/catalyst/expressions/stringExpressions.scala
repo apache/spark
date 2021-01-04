@@ -811,14 +811,13 @@ trait TrimExpression extends Expression with ImplicitCastInputTypes {
 
   protected val trimMethod: String
 
-  private lazy val resultType = srcExpr.dataType match {
-    case StringType => "UTF8String"
-    case BinaryType => "byte[]"
-  }
-
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val src = evals(0)
+    val resultType = srcExpr.dataType match {
+      case StringType => "UTF8String"
+      case BinaryType => "byte[]"
+    }
 
     if (evals.length == 1) {
       val resultCode = srcExpr.dataType match {
