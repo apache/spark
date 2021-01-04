@@ -425,6 +425,26 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest with Privat
     }
   }
 
+  test("SPARK-33152: equality constraints from aliases") {
+    val plan1 = LocalRelation('a.int)
+      .select('a as 'a2, 'a as 'b2)
+      .analyze
+
+    verifyConstraints(plan1.constraints, ExpressionSet(Seq(
+      resolveColumn(plan1, "a2") <=> resolveColumn(plan1, "b2")
+    )))
+
+    val plan2 = LocalRelation()
+      .select(rand(0) as 'a2, rand(0) as 'b2)
+      .analyze
+
+    // No equality from non-deterministic expressions
+    verifyConstraints(plan2.constraints, ExpressionSet(Seq(
+      IsNotNull(resolveColumn(plan2, "a2")),
+      IsNotNull(resolveColumn(plan2, "b2"))
+    )))
+  }
+
   test("SPARK-33152: Avoid exponential growth of constraints") {
     val validConstraints = PrivateMethod[ExpressionSet](Symbol("validConstraints"))
 
