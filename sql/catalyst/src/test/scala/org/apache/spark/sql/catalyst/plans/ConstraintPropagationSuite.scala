@@ -425,6 +425,18 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest with Privat
     }
   }
 
+  test("SPARK-33152: infer from child constraint") {
+    val plan = LocalRelation('a.int, 'b.int)
+      .where('a === 'b)
+      .select('a, ('b + 1) as 'b2)
+      .analyze
+
+    verifyConstraints(plan.constraints, ExpressionSet(Seq(
+      IsNotNull(resolveColumn(plan, "a")),
+      resolveColumn(plan, "a") + 1  <=> resolveColumn(plan, "b2")
+    )))
+  }
+
   test("SPARK-33152: equality constraints from aliases") {
     val plan1 = LocalRelation('a.int)
       .select('a as 'a2, 'a as 'b2)
