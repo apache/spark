@@ -178,7 +178,8 @@ abstract class UnaryNode extends LogicalPlan {
 
     // For each expression collect its aliases
     val aliasMap = projectList.collect{
-      case alias @ Alias(expr, _) if !expr.foldable => (expr.canonicalized, alias)
+      case alias @ Alias(expr, _) if !expr.foldable && expr.deterministic =>
+        (expr.canonicalized, alias)
     }.groupBy(_._1).mapValues(_.map(_._2))
     val remainingExpressions = collection.mutable.Set(aliasMap.keySet.toSeq: _*)
 
