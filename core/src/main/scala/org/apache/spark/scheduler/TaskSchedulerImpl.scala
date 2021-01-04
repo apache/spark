@@ -669,16 +669,17 @@ private[spark] class TaskSchedulerImpl(
         if (launchedAnyTask && taskSet.isBarrier) {
           val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
           // Check whether the barrier tasks are partially launched.
-          if (barrierPendingLaunchTasks.size != taskSet.numTasks) {
+          if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
             barrierPendingLaunchTasks.foreach { task =>
               // revert all assigned resources
               availableCpus(task.assignedOfferIndex) += task.assignedCores
               task.assignedResources.foreach { case (rName, rInfo) =>
-                availableResources(task.assignedOfferIndex)(rName).prependAll(rInfo.addresses)
+                availableResources(task.assignedOfferIndex)(rName).appendAll(rInfo.addresses)
               }
               // re-add the task to the schedule pending list
               taskSet.addPendingTask(task.index)
             }
+            taskSet.currentLocalityIndex = 0
           } else {
             // All tasks are able to launch in this barrier task set. Let's do
             // some preparation work before launching them.
