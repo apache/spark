@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-A LIKE predicate is used to search for a specific pattern. LIKE predicate also supports multiple patterns with predicate quantifiers includes `SOME`, `ANY`, `ALL`.
+A LIKE predicate is used to search for a specific pattern. LIKE predicate also supports multiple patterns with predicate quantifiers include `SOME`, `ANY`, `ALL`.
 
 ### Syntax
 
