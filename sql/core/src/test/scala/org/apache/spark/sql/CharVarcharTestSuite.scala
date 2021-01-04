@@ -451,6 +451,21 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         Seq(Row("char(5)"), Row("varchar(3)")))
     }
   }
+
+  test("SPARK-33992: char/varchar resolution in correlated sub query ") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+
+      checkAnswer(sql(
+        """
+          |SELECT v FROM t1
+          | WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
+        Row("c"))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
