@@ -591,9 +591,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1) AS t2(k, v);"
         -> "",
-      "EXPLAIN EXTENDED SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+      "EXPLAIN SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
         -> "SortMergeJoin",
-      "EXPLAIN EXTENDED SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+      "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
         -> "BroadcastHashJoin"
     )
   }
