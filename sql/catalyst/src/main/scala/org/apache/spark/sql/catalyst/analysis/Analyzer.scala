@@ -253,6 +253,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveTables ::
       ResolvePartitionSpec ::
       AddMetadataColumns ::
+      DeduplicateRelations ::
       ResolveReferences ::
       ResolveCreateNamedStruct ::
       ResolveDeserializer ::
@@ -1431,122 +1432,77 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     /**
-     * Generate a new logical plan for the right child with different expression IDs
-     * for all conflicting attributes.
+     * Resolves the attribute and extract value expressions(s) by traversing the
+     * input expression in top down manner. The traversal is done in top-down manner as
+     * we need to skip over unbound lambda function expression. The lambda expressions are
+     * resolved in a different rule [[ResolveLambdaVariables]]
+     *
+     * Example :
+     * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
+     *
+     * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]]
+     *
+     * Note : In this routine, the unresolved attributes are resolved from the input plan's
+     * children attributes.
+     *
+     * @param e The expression need to be resolved.
+     * @param q The LogicalPlan whose children are used to resolve expression's attribute.
+     * @param trimAlias When true, trim unnecessary alias of `GetStructField`. Note that,
+     *                  we cannot trim the alias of top-level `GetStructField`, as we should
+     *                  resolve `UnresolvedAttribute` to a named expression. The caller side
+     *                  can trim the alias of top-level `GetStructField` if it's safe to do so.
+     * @return resolved Expression.
      */
-    private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
-      val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-      logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
-        s"between $left and $right")
+    private def resolveExpressionTopDown(
+        e: Expression,
+        q: LogicalPlan,
+        trimAlias: Boolean = false): Expression = {
 
-      /**
-       * For LogicalPlan likes MultiInstanceRelation, Project, Aggregate, etc, whose output doesn't
-       * inherit directly from its children, we could just stop collect on it. Because we could
-       * always replace all the lower conflict attributes with the new attributes from the new
-       * plan. Theoretically, we should do recursively collect for Generate and Window but we leave
-       * it to the next batch to reduce possible overhead because this should be a corner case.
-       */
-      def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
-        // Handle base relations that might appear more than once.
-        case oldVersion: MultiInstanceRelation
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          val newVersion = oldVersion.newInstance()
-          newVersion.copyTagsFrom(oldVersion)
-          Seq((oldVersion, newVersion))
-
-        case oldVersion: SerializeFromObject
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(
-            serializer = oldVersion.serializer.map(_.newInstance()))))
-
-        // Handle projects that create conflicting aliases.
-        case oldVersion @ Project(projectList, _)
-            if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(projectList = newAliases(projectList))))
-
-        // We don't need to search child plan recursively if the projectList of a Project
-        // is only composed of Alias and doesn't contain any conflicting attributes.
-        // Because, even if the child plan has some conflicting attributes, the attributes
-        // will be aliased to non-conflicting attributes by the Project at the end.
-        case _ @ Project(projectList, _)
-          if findAliases(projectList).size == projectList.size =>
-          Nil
-
-        case oldVersion @ Aggregate(_, aggregateExpressions, _)
-            if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(
-            aggregateExpressions = newAliases(aggregateExpressions))))
-
-        // We don't search the child plan recursively for the same reason as the above Project.
-        case _ @ Aggregate(_, aggregateExpressions, _)
-          if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
-          Nil
-
-        case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
-
-        case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
-
-        case oldVersion @ MapInPandas(_, output, _)
-            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
-
-        case oldVersion: Generate
-            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
-          val newOutput = oldVersion.generatorOutput.map(_.newInstance())
-          Seq((oldVersion, oldVersion.copy(generatorOutput = newOutput)))
-
-        case oldVersion: Expand
-            if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
-          val producedAttributes = oldVersion.producedAttributes
-          val newOutput = oldVersion.output.map { attr =>
-            if (producedAttributes.contains(attr)) {
-              attr.newInstance()
-            } else {
-              attr
+      def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
+        if (e.resolved) return e
+        e match {
+          case f: LambdaFunction if !f.bound => f
+          case u @ UnresolvedAttribute(nameParts) =>
+            // Leave unchanged if resolution fails. Hopefully will be resolved next round.
+            val resolved =
+              withPosition(u) {
+                q.resolveChildren(nameParts, resolver)
+                  .orElse(resolveLiteralFunction(nameParts, u, q))
+                  .getOrElse(u)
+              }
+            val result = resolved match {
+              // As the comment of method `resolveExpressionTopDown`'s param `trimAlias` said,
+              // when trimAlias = true, we will trim unnecessary alias of `GetStructField` and
+              // we won't trim the alias of top-level `GetStructField`. Since we will call
+              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
+              // `GetStructField` here is safe.
+              case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
+              case others => others
             }
-          }
-          Seq((oldVersion, oldVersion.copy(output = newOutput)))
-
-        case oldVersion @ Window(windowExpressions, _, _, child)
-            if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
-            .nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
-
-        case oldVersion @ ScriptTransformation(_, _, output, _, _)
-            if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
-          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
-
-        case _ => plan.children.flatMap(collectConflictPlans)
+            logDebug(s"Resolving $u to $result")
+            result
+          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
+            ExtractValue(child, fieldExpr, resolver)
+          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+        }
       }
 
-      val conflictPlans = collectConflictPlans(right)
+      innerResolve(e, isTopLevel = true)
+    }
 
-      /*
-       * Note that it's possible `conflictPlans` can be empty which implies that there
-       * is a logical plan node that produces new references that this rule cannot handle.
-       * When that is the case, there must be another rule that resolves these conflicts.
-       * Otherwise, the analysis will fail.
-       */
-      if (conflictPlans.isEmpty) {
-        right
-      } else {
-        val planMapping = conflictPlans.toMap
-        right.transformUpWithNewOutput {
-          case oldPlan =>
-            val newPlanOpt = planMapping.get(oldPlan)
-            newPlanOpt.map { newPlan =>
-              newPlan -> oldPlan.output.zip(newPlan.output)
-            }.getOrElse(oldPlan -> Nil)
-        }
+    private def hasConflictingAttrs(p: LogicalPlan): Boolean = {
+      p.children.length > 1 && {
+        val numDistinctAttrs = p.children.flatMap(_.output.map(_.exprId)).distinct.length
+        val numOutputAttrs = p.children.map(_.output.length).sum
+        numDistinctAttrs < numOutputAttrs
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p: LogicalPlan if !p.childrenResolved => p
+
+      // Wait for the rule `DeduplicateRelations` to resolve conflicting attrs first.
+      case p: LogicalPlan if hasConflictingAttrs(p) => p
 
       // If the projection list contains Stars, expand it.
       case p: Project if containsStar(p.projectList) =>
@@ -1569,37 +1525,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g: Generate if containsStar(g.generator.children) =>
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
 
-      // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
-        j.copy(right = dedupRight(left, right))
       case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
         val leftRes = leftAttributes
           .map(x => resolveExpressionByPlanOutput(x, left).asInstanceOf[Attribute])
         val rightRes = rightAttributes
           .map(x => resolveExpressionByPlanOutput(x, right).asInstanceOf[Attribute])
         f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
-      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
-      // deduplicate the right side plan, so that we won't produce an invalid self-join later.
-      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
-        i.copy(right = dedupRight(left, right))
-      case e @ Except(left, right, _) if !e.duplicateResolved =>
-        e.copy(right = dedupRight(left, right))
-      // Only after we finish by-name resolution for Union
-      case u: Union if !u.byName && !u.duplicateResolved =>
-        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
-        // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-          head +: tail.map {
-            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-              child
-            case child =>
-              val projectList = child.output.map { attr =>
-                Alias(attr, attr.name)()
-              }
-              Project(projectList, child)
-          }
-        }
-        u.copy(children = newChildren)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
@@ -1754,17 +1685,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           Assignment(resolvedKey, resolvedValue)
         }
       }
-    }
-
-    def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
-      expressions.map {
-        case a: Alias => Alias(a.child, a.name)()
-        case other => other
-      }
-    }
-
-    def findAliases(projectList: Seq[NamedExpression]): AttributeSet = {
-      AttributeSet(projectList.collect { case a: Alias => a.toAttribute })
     }
 
     // This method is used to trim groupByExpressions/selectedGroupByExpressions's top-level
