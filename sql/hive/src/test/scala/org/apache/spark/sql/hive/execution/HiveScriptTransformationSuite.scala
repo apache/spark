@@ -111,7 +111,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
-    assert(e.getMessage.contains("No such file or directory"))
+    assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
@@ -150,7 +150,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           ioschema = hiveIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
-    assert(e.getMessage.contains("No such file or directory"))
+    assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 

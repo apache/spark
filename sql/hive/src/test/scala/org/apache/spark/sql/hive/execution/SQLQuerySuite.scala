@@ -1032,12 +1032,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val data = (1 to 100000).map { i => (i, i, i) }
       data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
       assert(0 ===
-        sql(
-          """
-            |SELECT TRANSFORM (d1, d2, d3)
-            | USING '/bin/bash -c \'cat 1>&2\'' AS (a,b,c)
-            |FROM script_trans
-          """.stripMargin).count())
+        sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans").count())
     }
   }
 

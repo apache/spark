@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.ArrayList
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -47,8 +46,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def child: SparkPlan
   def ioschema: ScriptTransformationIOSchema
 
-  type ProcParameters = (OutputStream, Process, InputStream, CircularBuffer)
-
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
     input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
   }
@@ -58,8 +55,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def doExecute(): RDD[InternalRow] = {
-    sparkContext.setLocalProperty(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER.key,
-      conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER))
     val broadcastedHadoopConf =
       new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
 
@@ -74,21 +69,13 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     }
   }
 
-  protected def initProc: ProcParameters = {
-    val wrapper = splitArgs(conf.getConf(SQLConf.SCRIPT_TRANSFORMATION_COMMAND_WRAPPER))
-    val cmdArgs = splitArgs(script)
-    val program = cmdArgs(0)
-    if (!new File(program).isAbsolute) {
-      val pathFinder = new PathFinder("PATH")
-      pathFinder.prependPathComponent(SparkFiles.getRootDirectory())
-      val programFile = pathFinder.getAbsolutePath(program)
-      if (programFile.isDefined) {
-        cmdArgs(0) = programFile.get.getAbsolutePath
-      }
-    }
-    val cmd = wrapper.toList ++ cmdArgs.toList
+  protected def initProc: (OutputStream, Process, InputStream, CircularBuffer) = {
+    val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
       .directory(new File(SparkFiles.getRootDirectory()))
+    val path = SparkFiles.getRootDirectory() + File.pathSeparator +
+      System.getenv("PATH")
+    builder.environment().put("PATH", path)
 
     val proc = builder.start()
     val inputStream = proc.getInputStream
@@ -196,55 +183,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
           s"Error: ${stderrBuffer.toString}", cause)
       }
     }
-  }
-
-  def splitArgs(args: String): Array[String] = {
-    val OUTSIDE = 1
-    val SINGLEQ = 2
-    val DOUBLEQ = 3
-    val argList = new ArrayList[String]
-    val ch = args.toCharArray
-    val clen = ch.length
-    var state = OUTSIDE
-    var argstart = 0
-    var c = 0
-    while (c <= clen) {
-      val last = c == clen
-      var lastState = state
-      var endToken = false
-      if (!last) {
-        if (ch(c) == '\'') {
-          if (state == OUTSIDE) {
-            state = SINGLEQ
-          } else if (state == SINGLEQ) {
-            state = OUTSIDE
-          }
-          endToken = state != lastState
-        } else if (ch(c) == '"') {
-          if (state == OUTSIDE) {
-            state = DOUBLEQ
-          } else if (state == DOUBLEQ) {
-            state = OUTSIDE
-          }
-          endToken = state != lastState
-        } else if (ch(c) == ' ') {
-          if (state == OUTSIDE) {
-            endToken = true
-          }
-        }
-      }
-      if (last || endToken) {
-        if (c == argstart) {
-          // unquoted space
-        } else {
-          argList.add(args.substring(argstart, c))
-        }
-        argstart = c + 1
-        lastState = state
-      }
-      c += 1
-    }
-    argList.toArray(new Array[String](0))
   }
 
   private lazy val outputFieldWriters: Seq[String => Any] = output.map { attr =>
@@ -428,48 +366,5 @@ object ScriptTransformationIOSchema {
       input.recordReaderClass,
       input.recordWriterClass,
       input.schemaLess)
-  }
-}
-
-/**
- * Maps a relative pathname to an absolute pathname using the PATH environment.
- */
-class PathFinder(val envPath: String) {
-  private var pathEnv = System.getenv(envPath)
-  private var pathSep = File.pathSeparator
-  private var fileSep = File.separator
-
-  /**
-   * Appends the specified component to the path list.
-   */
-  def prependPathComponent(str: String): Unit = {
-    pathEnv = str + pathSep + pathEnv
-  }
-
-  /**
-   * Returns the full path name of this file if it is listed in the path.
-   */
-  def getAbsolutePath(filename: String): Option[File] = {
-    if (pathEnv == null || pathSep == null || fileSep == null) {
-      None
-    } else {
-      pathEnv.split(pathSep).map(entry => {
-        var file = new File(entry)
-        try {
-          if (file.isDirectory) {
-            file = new File(entry + fileSep + filename)
-          }
-
-          if (file.isFile && file.canRead) {
-            file
-          } else {
-            null
-          }
-        } catch {
-          case NonFatal(f) =>
-            null
-        }
-      }).find(Option(_).isDefined)
-    }
   }
 }
