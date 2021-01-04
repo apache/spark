@@ -21,6 +21,9 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.types.{StringType, StructType}
 
+/**
+ * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
+ */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
   override def showSchema: StructType = {

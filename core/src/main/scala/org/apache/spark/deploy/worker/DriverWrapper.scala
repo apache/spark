@@ -19,10 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
@@ -79,27 +77,21 @@ object DriverWrapper extends Logging {
     val secMgr = new SecurityManager(sparkConf)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) =
-      Seq(
-        "spark.jars.excludes",
-        "spark.jars.packages",
-        "spark.jars.repositories",
-        "spark.jars.ivy",
-        "spark.jars.ivySettings"
-      ).map(sys.props.get(_).orNull)
+    val ivyProperties = DependencyUtils.getIvyProperties()
 
-    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
-      packages, repositories, ivyRepoPath, Option(ivySettingsPath))
+    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(true,
+      ivyProperties.packagesExclusions, ivyProperties.packages, ivyProperties.repositories,
+      ivyProperties.ivyRepoPath, Option(ivyProperties.ivySettingsPath))
     val jars = {
       val jarsProp = sys.props.get(config.JARS.key).orNull
-      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+      if (resolvedMavenCoordinates.nonEmpty) {
+        DependencyUtils.mergeFileLists(jarsProp,
+          DependencyUtils.mergeFileLists(resolvedMavenCoordinates: _*))
       } else {
         jarsProp
       }
     }
-    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf,
-      secMgr)
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
     DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }

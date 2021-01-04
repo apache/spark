@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -210,23 +212,14 @@ class ResolveSessionCatalog(
     case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      DescribeDatabaseCommand(ns.head, d.extended)
+    case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
+      DescribeDatabaseCommand(db, d.extended)
 
-    case AlterNamespaceSetProperties(SessionCatalogAndNamespace(_, ns), properties) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      AlterDatabasePropertiesCommand(ns.head, properties)
+    case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
+      AlterDatabasePropertiesCommand(db, properties)
 
-    case AlterNamespaceSetLocation(SessionCatalogAndNamespace(_, ns), location) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      AlterDatabaseSetLocationCommand(ns.head, location)
+    case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
+      AlterDatabaseSetLocationCommand(db, location)
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
@@ -235,8 +228,23 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended) =>
-      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
+    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+      // For views, the column will not be resolved by `ResolveReferences` because
+      // `ResolvedView` stores only the identifier.
+      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
+
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+      column match {
+        case u: UnresolvedAttribute =>
+          throw QueryCompilationErrors.columnDoesNotExistError(u.name)
+        case a: Attribute =>
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+        case Alias(child, _) =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(child))
+        case other =>
+          throw new AnalysisException(s"[BUG] unexpected column expression: $other")
+      }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -356,29 +364,18 @@ class ResolveSessionCatalog(
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
       CreateDatabaseCommand(ns.head, c.ifNotExists, location, comment, newProperties)
 
-    case d @ DropNamespace(SessionCatalogAndNamespace(_, ns), _, _) =>
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      DropDatabaseCommand(ns.head, d.ifExists, d.cascade)
+    case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
+      DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(SessionCatalogAndNamespace(_, ns), pattern) =>
-      assert(ns.nonEmpty)
-      if (ns.length != 1) {
-          throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
-      ShowTablesCommand(Some(ns.head), pattern)
+    case ShowTables(DatabaseInSessionCatalog(db), pattern) =>
+      ShowTablesCommand(Some(db), pattern)
 
     case ShowTableExtended(
-        SessionCatalogAndNamespace(_, ns),
+        DatabaseInSessionCatalog(db),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
-      assert(ns.nonEmpty)
-      if (ns.length != 1) {
-        throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-      }
       ShowTablesCommand(
-        databaseName = Some(ns.head),
+        databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
         isExtended = true,
         partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
@@ -445,12 +442,11 @@ class ResolveSessionCatalog(
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableRenamePartitionStatement(tbl, from, to) =>
-      val v1TableName = parseV1Table(tbl, "ALTER TABLE RENAME PARTITION")
-      AlterTableRenamePartitionCommand(
-        v1TableName.asTableIdentifier,
-        from,
-        to)
+    case AlterTableRenamePartition(
+        ResolvedV1TableIdentifier(ident),
+        UnresolvedPartitionSpec(from, _),
+        UnresolvedPartitionSpec(to, _)) =>
+      AlterTableRenamePartitionCommand(ident.asTableIdentifier, from, to)
 
     case AlterTableDropPartition(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
@@ -501,13 +497,7 @@ class ResolveSessionCatalog(
 
     case ShowViews(resolved: ResolvedNamespace, pattern) =>
       resolved match {
-        case SessionCatalogAndNamespace(_, ns) =>
-          // Fallback to v1 ShowViewsCommand since there is no view API in v2 catalog
-          assert(ns.nonEmpty)
-          if (ns.length != 1) {
-            throw QueryCompilationErrors.invalidDatabaseNameError(ns.quoted)
-          }
-          ShowViewsCommand(ns.head, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
@@ -666,18 +656,16 @@ class ResolveSessionCatalog(
     }
   }
 
-  object SessionCatalogAndNamespace {
-    def unapply(resolved: ResolvedNamespace): Option[(CatalogPlugin, Seq[String])] =
-      if (isSessionCatalog(resolved.catalog)) {
-        Some(resolved.catalog -> resolved.namespace)
-      } else {
-        None
-      }
+  object ResolvedViewIdentifier {
+    def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
+      case ResolvedView(ident, _) => Some(ident)
+      case _ => None
+    }
   }
 
   object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
-      case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case ResolvedTable(catalog, ident, _: V1Table, _) if isSessionCatalog(catalog) => Some(ident)
       case _ => None
     }
   }
@@ -685,7 +673,7 @@ class ResolveSessionCatalog(
   object ResolvedV1TableOrViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedV1TableIdentifier(ident) => Some(ident)
-      case ResolvedView(ident, _) => Some(ident)
+      case ResolvedViewIdentifier(ident) => Some(ident)
       case _ => None
     }
   }
@@ -711,6 +699,19 @@ class ResolveSessionCatalog(
       case Some(_: FileDataSourceV2) => false
       case Some(_) => true
       case _ => false
+    }
+  }
+
+  private object DatabaseInSessionCatalog {
+    def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
+      case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
+      case ResolvedNamespace(_, Seq()) =>
+        throw new AnalysisException("Database from v1 session catalog is not specified")
+      case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
+      case _ =>
+        assert(resolved.namespace.length > 1)
+        throw new AnalysisException("Nested databases are not supported by " +
+          s"v1 session catalog: ${resolved.namespace.map(quoteIfNeeded).mkString(".")}")
     }
   }
 }

@@ -457,7 +457,9 @@ object CatalystTypeConverters {
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
-    case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
+    case arr: Array[Byte] => arr
+    case arr: Array[Char] => StringConverter.toCatalyst(arr)
+    case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>
       ArrayBasedMapData(
         map,
