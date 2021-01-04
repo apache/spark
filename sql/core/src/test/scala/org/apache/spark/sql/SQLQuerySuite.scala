@@ -3831,6 +3831,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.mkString(",")) {
       sql("select approx_count_distinct(1, 0.01 + 0.02)")
+      // make sure we don't have a regression
       val msg = intercept[AnalysisException] {
         sql("select approx_count_distinct(1, 1)")
       }.getMessage
