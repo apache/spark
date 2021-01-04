@@ -1198,7 +1198,7 @@ private[spark] object SparkSubmitUtils {
    * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
    * @param cacheDirectory Directory where jars are cached
-   * @return  List of paths for the dependencies
+   * @return List of paths for the dependencies
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
