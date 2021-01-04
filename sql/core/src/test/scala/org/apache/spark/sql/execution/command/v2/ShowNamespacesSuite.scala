@@ -33,7 +33,7 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
     .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)
 
   test("IN namespace doesn't exist") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key-> catalog) {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
       runShowNamespacesSql("SHOW NAMESPACES in dummy", Seq.empty)
     }
     runShowNamespacesSql(s"SHOW NAMESPACES in $catalog.ns1", Seq.empty)
@@ -41,7 +41,7 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
   }
 
   test("default v2 catalog doesn't support namespace") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key-> "testcat_no_namespace") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat_no_namespace") {
       val errMsg = intercept[AnalysisException] {
         sql("SHOW NAMESPACES")
       }.getMessage
