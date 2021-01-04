@@ -19,11 +19,15 @@ package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure TPCDS query performance.
@@ -38,7 +42,10 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
  * }}}
  */
-object TPCDSQueryBenchmark extends SqlBasedBenchmark {
+object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
+
+  private lazy val warehousePath =
+    Utils.createTempDir(namePrefix = "spark-warehouse").getAbsolutePath
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
@@ -50,6 +57,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
       .set("spark.sql.crossJoin.enabled", "true")
+      .set("spark.sql.warehouse.dir", warehousePath)
 
     SparkSession.builder.config(conf).getOrCreate()
   }
@@ -60,9 +68,14 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
     "web_returns", "web_site", "reason", "call_center", "warehouse", "ship_mode", "income_band",
     "time_dim", "web_page")
 
-  def setupTables(dataLocation: String): Map[String, Long] = {
+  def setupTables(dataLocation: String, createTempView: Boolean): Map[String, Long] = {
     tables.map { tableName =>
-      spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
+      val df = spark.read.parquet(s"$dataLocation/$tableName")
+      if (createTempView) {
+        df.createOrReplaceTempView(tableName)
+      } else {
+        df.write.saveAsTable(tableName)
+      }
       tableName -> spark.table(tableName).count()
     }.toMap
   }
@@ -146,7 +159,25 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
         s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
     }
 
-    val tableSizes = setupTables(benchmarkArgs.dataLocation)
+    val tableSizes = setupTables(benchmarkArgs.dataLocation,
+      createTempView = !benchmarkArgs.cboEnabled)
+    if (benchmarkArgs.cboEnabled) {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.JOIN_REORDER_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.HISTOGRAM_ENABLED.key}=true")
+
+      // Analyze all the tables before running TPCDS queries
+      val startTime = System.nanoTime()
+      tables.foreach { tableName =>
+        spark.sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS")
+      }
+      logInfo("The elapsed time to analyze all the tables is " +
+        s"${(System.nanoTime() - startTime) / NANOS_PER_SECOND.toDouble} seconds")
+    } else {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=false")
+    }
+
     runTpcdsQueries(queryLocation = "tpcds", queries = queriesV1_4ToRun, tableSizes)
     runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
       nameSuffix = nameSuffixForQueriesV2_7)
