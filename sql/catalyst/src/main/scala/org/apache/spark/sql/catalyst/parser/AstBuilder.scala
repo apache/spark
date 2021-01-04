@@ -149,9 +149,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       withTransformQuerySpecification(
         ctx,
         ctx.transformClause,
+        ctx.lateralView,
         ctx.whereClause,
         ctx.aggregationClause,
         ctx.havingClause,
+        ctx.windowClause,
         plan
       )
     } else {
@@ -587,9 +589,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     withTransformQuerySpecification(
       ctx,
       ctx.transformClause,
+      ctx.lateralView,
       ctx.whereClause,
       ctx.aggregationClause,
       ctx.havingClause,
+      ctx.windowClause,
       from
     )
   }
@@ -645,16 +649,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   private def withTransformQuerySpecification(
       ctx: ParserRuleContext,
       transformClause: TransformClauseContext,
+      lateralView: java.util.List[LateralViewContext],
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
+      windowClause: WindowClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    // Add where.
-    val withFilter = relation.optionalMap(whereClause)(withWhereClause)
-
-    // Create the transform.
-    val expressions = visitNamedExpressionSeq(transformClause.namedExpressionSeq)
-
     // Create the attributes.
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
@@ -670,39 +670,21 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         AttributeReference("value", StringType)()), true)
     }
 
-    val namedExpressions = expressions.map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
-    }
-
-    def createProject() = if (namedExpressions.nonEmpty) {
-      Project(namedExpressions, withFilter)
-    } else {
-      withFilter
-    }
-
-    val withProject = if (aggregationClause == null && havingClause != null) {
-      if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
-        // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
-        withHavingClause(havingClause, createProject())
-      } else {
-        // According to SQL standard, HAVING without GROUP BY means global aggregate.
-        withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
-      }
-    } else if (aggregationClause != null) {
-      val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
-      aggregate.optionalMap(havingClause)(withHavingClause)
-    } else {
-      // When hitting this branch, `having` must be null.
-      createProject()
-    }
+    val plan = visitCommonSelectQueryClausePlan(relation,
+      lateralView,
+      transformClause.namedExpressionSeq,
+      whereClause,
+      aggregationClause,
+      havingClause,
+      windowClause,
+      isDistinct = false)
 
     // Create the transform.
     ScriptTransformation(
       Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
-      withProject,
+      plan,
       withScriptIOSchema(
         ctx,
         transformClause.inRowFormat,
@@ -730,13 +712,41 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
       relation: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val isDistinct = selectClause.setQuantifier() != null &&
+      selectClause.setQuantifier().DISTINCT() != null
+
+    // Visit common project
+    val plan = visitCommonSelectQueryClausePlan(
+      relation,
+      lateralView,
+      selectClause.namedExpressionSeq,
+      whereClause,
+      aggregationClause,
+      havingClause,
+      windowClause,
+      isDistinct)
+
+    // Hint
+    selectClause.hints.asScala.foldRight(plan)(withHints)
+  }
+
+  def visitCommonSelectQueryClausePlan(
+      relation: LogicalPlan,
+      lateralView: java.util.List[LateralViewContext],
+      namedExpressionSeq: NamedExpressionSeqContext,
+      whereClause: WhereClauseContext,
+      aggregationClause: AggregationClauseContext,
+      havingClause: HavingClauseContext,
+      windowClause: WindowClauseContext,
+      isDistinct: Boolean): LogicalPlan = {
     // Add lateral views.
     val withLateralView = lateralView.asScala.foldLeft(relation)(withGenerate)
 
     // Add where.
     val withFilter = withLateralView.optionalMap(whereClause)(withWhereClause)
 
-    val expressions = visitNamedExpressionSeq(selectClause.namedExpressionSeq)
+    val expressions = visitNamedExpressionSeq(namedExpressionSeq)
+
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
       case e: NamedExpression => e
@@ -766,9 +776,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     // Distinct
-    val withDistinct = if (
-      selectClause.setQuantifier() != null &&
-      selectClause.setQuantifier().DISTINCT() != null) {
+    val withDistinct = if (isDistinct) {
       Distinct(withProject)
     } else {
       withProject
@@ -777,8 +785,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     // Window
     val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
 
-    // Hint
-    selectClause.hints.asScala.foldRight(withWindow)(withHints)
+    withWindow
   }
 
   // Script Transform's input/output format.

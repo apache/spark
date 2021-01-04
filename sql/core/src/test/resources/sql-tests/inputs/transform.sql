@@ -216,40 +216,70 @@ FROM script_trans
 WHERE a <= 4;
 
 SELECT TRANSFORM (b, a, c + 1)
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
 SELECT TRANSFORM (*)
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
 SELECT TRANSFORM (b AS d, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4
+GROUP BY b;
+
+SELECT TRANSFORM (b AS d, MAX(a) FILTER (WHERE a > 3) AS max_a, CAST(SUM(c) AS STRING))
 USING 'cat' AS (a,b,c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b;
 
 SELECT TRANSFORM (b, MAX(a) as max_a, CAST(sum(c) AS STRING))
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 2
 GROUP BY b;
 
 SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
 HAVING max_a > 0;
 
 SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a,b,c)
+USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
 HAVING max(a) > 1;
+
+SELECT TRANSFORM (b, MAX(a) OVER w as max_a, CAST(SUM(c) OVER w AS STRING))
+USING 'cat' AS (a, b, c)
+FROM script_trans
+WHERE a <= 4
+WINDOW w AS (PARTITION BY b ORDER BY a);
+
+set spark.sql.legacy.bucketedTableScan.outputOrdering=true;
+
+SELECT TRANSFORM (MAX(a) as max_a, CAST(SUM(c) AS STRING))
+USING 'cat' AS (a, b)
+FROM script_trans
+WHERE a <= 4
+HAVING max(a) > 1;
+
+SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING), myCol, myCol2)
+USING 'cat' AS (a, b, c, d, e)
+FROM script_trans
+LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
+LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
+WHERE a <= 4
+GROUP BY b, myCol, myCol2
+HAVING max(a) > 1;
+
 
 FROM
 (FROM script_trans SELECT TRANSFORM(a, b) USING 'cat' AS (`a` INT, b STRING)) t

@@ -46,7 +46,7 @@ SELECT * FROM (
   SELECT course, earnings FROM courseSales
 )
 PIVOT (
-  sum(earnings)
+  sum(earnings)LATERAL VIEW
   FOR course IN ('dotNET', 'Java')
 );
 
