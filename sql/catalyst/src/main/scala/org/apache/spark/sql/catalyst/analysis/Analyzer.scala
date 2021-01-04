@@ -219,6 +219,8 @@ class Analyzer(override val catalogManager: CatalogManager)
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   override def batches: Seq[Batch] = Seq(
+    Batch("Initialize Cast Tag", Once,
+      InitializeCastTag),
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
       // However, when manipulating deeply nested schema, `UpdateFields` expression tree could be
@@ -297,6 +299,20 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
+
+  /**
+   * Initialize the tag of Cast so we can distinguish the auto-generated Cast by Analyzer and
+   * strip auto-generated cast when resolving UnresolvedAlias.
+   */
+  object InitializeCastTag extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.transformExpressions {
+        case c: Cast =>
+          c.setTagValue(Cast.AUTO_GENERATED_TAG, false)
+          c
+      }
+    }
+  }
 
   /**
    * For [[Add]]:
@@ -390,6 +406,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             case e if !e.resolved => u
             case g: Generator => MultiAlias(g, Nil)
             case c @ Cast(ne: NamedExpression, _, _) => Alias(c, ne.name)()
+            case c: Cast if c.getTagValue(Cast.AUTO_GENERATED_TAG).getOrElse(true) =>
+              Alias(c, toPrettySQL(c.child))()
             case e: ExtractValue => Alias(e, toPrettySQL(e))()
             case e if optGenAliasFunc.isDefined =>
               Alias(child, optGenAliasFunc.get.apply(e))()
