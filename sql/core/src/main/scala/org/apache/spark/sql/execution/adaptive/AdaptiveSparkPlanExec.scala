@@ -189,8 +189,8 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = result.newStages ++ stagesToReplace
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
-          // SPARK-33933: We should materialize BroadcastQueryState first to avoid broadcast timeout
-          // Sort the new stages by class type to make sure BroadcastQueryState precede others
+          // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
+          // for tasks to be scheduled and leading to broadcast timeout.
           val reorderedNewStages = result.newStages
             .sortWith {
               case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
