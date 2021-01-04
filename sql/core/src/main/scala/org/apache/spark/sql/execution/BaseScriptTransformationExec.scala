@@ -371,8 +371,8 @@ case class ScriptTransformationIOSchema(
 
 object ScriptTransformationIOSchema {
   val defaultFormat = Map(
-    ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATLINES", "\n"),
+    ("TOK_TABLEROWFORMATFIELD", "\u0001"),
     ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
     ("TOK_TABLEROWFORMATMAPKEYS", "\u0003")
   )
