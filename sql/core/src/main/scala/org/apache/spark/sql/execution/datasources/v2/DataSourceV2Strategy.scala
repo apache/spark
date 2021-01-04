@@ -356,12 +356,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement, _),
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
         parts,
         ignoreIfNotExists,
         purge) =>
       AlterTableDropPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfNotExists, purge) :: Nil
+        table,
+        parts.asResolvedPartitionSpecs,
+        ignoreIfNotExists,
+        purge,
+        invalidateCache(r, recacheTable = true)) :: Nil
 
     case AlterTableRenamePartition(
         ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>

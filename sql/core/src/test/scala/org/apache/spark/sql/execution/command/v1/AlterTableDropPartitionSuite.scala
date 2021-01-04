@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -40,21 +40,6 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP PARTITION (id = 1) PURGE")
       checkPartitions(t) // no partitions
-    }
-  }
-
-  test("SPARK-33950: refresh cache after partition dropping") {
-    withTable("t") {
-      sql(s"CREATE TABLE t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-      sql("INSERT INTO t PARTITION (part=0) SELECT 0")
-      sql("INSERT INTO t PARTITION (part=1) SELECT 1")
-      assert(!spark.catalog.isCached("t"))
-      sql("CACHE TABLE t")
-      assert(spark.catalog.isCached("t"))
-      checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(1, 1)))
-      sql("ALTER TABLE t DROP PARTITION (part=0)")
-      assert(spark.catalog.isCached("t"))
-      checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, 1)))
     }
   }
 }
