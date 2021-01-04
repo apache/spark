@@ -181,7 +181,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-abstract class MultiLikeBase
+sealed trait MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[UTF8String]
