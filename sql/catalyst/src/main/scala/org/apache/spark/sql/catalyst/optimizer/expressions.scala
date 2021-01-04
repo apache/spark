@@ -515,8 +515,9 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         val (h, t) = branches.span(_._1 != TrueLiteral)
         CaseWhen( h :+ t.head, None)
 
-      case e @ CaseWhen(branches, Some(elseValue))
-          if branches.forall(_._2.semanticEquals(elseValue)) =>
+      case e @ CaseWhen(branches, elseOpt)
+          if branches.forall(_._2.semanticEquals(elseOpt.getOrElse(Literal(null, e.dataType)))) =>
+        val elseValue = elseOpt.getOrElse(Literal(null, e.dataType))
         // For non-deterministic conditions with side effect, we can not remove it, or change
         // the ordering. As a result, we try to remove the deterministic conditions from the tail.
         var hitNonDeterministicCond = false
@@ -532,10 +533,6 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
         }
-
-      case e @ CaseWhen(branches, None)
-          if branches.forall(_._2.semanticEquals(Literal(null, e.dataType))) =>
-        Literal(null, e.dataType)
     }
   }
 }

@@ -114,7 +114,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     val expectedBranches = Seq(
       (UnresolvedAttribute("i") < Literal(10)) -> FalseLiteral,
       (UnresolvedAttribute("i") > Literal(40)) -> TrueLiteral)
-    val expectedCond = CaseWhen(expectedBranches)
+    val expectedCond = CaseWhen(expectedBranches, FalseLiteral)
 
     testFilter(originalCond, expectedCond)
     testJoin(originalCond, expectedCond)
@@ -135,7 +135,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       (UnresolvedAttribute("i") < Literal(10)) -> TrueLiteral,
       (UnresolvedAttribute("i") > Literal(10)) -> FalseLiteral,
       TrueLiteral -> TrueLiteral)
-    val expectedCond = CaseWhen(expectedBranches)
+    val expectedCond = CaseWhen(expectedBranches, FalseLiteral)
 
     testFilter(originalCond, expectedCond)
     testJoin(originalCond, expectedCond)
@@ -238,7 +238,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       FalseLiteral)
     val condition = CaseWhen(Seq((UnresolvedAttribute("i") > Literal(10)) -> branchValue))
     val expectedCond = CaseWhen(Seq(
-      (UnresolvedAttribute("i") > Literal(10), (Literal(2) === nestedCaseWhen) <=> TrueLiteral)))
+      (UnresolvedAttribute("i") > Literal(10), (Literal(2) === nestedCaseWhen) <=> TrueLiteral)),
+      FalseLiteral)
     testFilter(originalCond = condition, expectedCond = expectedCond)
     testJoin(originalCond = condition, expectedCond = expectedCond)
     testDelete(originalCond = condition, expectedCond = expectedCond)

@@ -260,14 +260,13 @@ class PushFoldableIntoBranchesSuite
   }
 
   test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
-    Seq(a, LessThan(Rand(1), Literal(0.5))).foreach { condition =>
-      assertEquivalent(
-        EqualTo(CaseWhen(Seq((condition, Literal.create(null, IntegerType)))), Literal(2)),
-        Literal.create(null, BooleanType))
-      assertEquivalent(
-        EqualTo(CaseWhen(Seq((condition, Literal("str")))).cast(IntegerType), Literal(2)),
-        Literal.create(null, BooleanType))
-    }
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal.create(null, IntegerType)))), Literal(2)),
+      Literal.create(null, BooleanType))
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal("str")))).cast(IntegerType),
+        Literal(2)),
+      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal.create(null, BooleanType)))))
   }
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
