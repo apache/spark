@@ -583,27 +583,15 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("/*$meta chars{^\\;}*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*\nmulti-line\n*/ SELECT 'test';" -> "test")
     runCliWithin(1.minute)("/*/* multi-level bracketed*/ SELECT 'test';" -> "test")
+  }
 
-    val testHintTablePath = Utils.createTempDir()
-
-    runCliWithin(3.minute)(
-      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2), (2, 3), (3, 4), (4, 5), (5, 6)" +
-        " as t1(key, val);"
+  test("SPARK-33100: test statements with hint in bracketed comment in spark-sql") {
+    runCliWithin(2.minute)(
+      "CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES(1, 2), (2, 3), (3, 4), (4, 5), (5, 6)" +
+        " AS t(key, val);"
         -> "",
-      s"""CREATE TABLE testHint(key int, val int) USING hive
-        |LOCATION '${testHintTablePath.getAbsolutePath}';""".stripMargin
-        -> "",
-      "INSERT OVERWRITE TABLE testHint SELECT /*+ broadcast(t1) */ a.* from t1 a join t1 b" +
-        " on a.key=b.val;"
-        -> ""
+      "EXPLAIN EXTENDED SELECT /*+ broadcast(t) */ a.* FROM t a JOIN t b ON a.key=b.val;"
+        -> "'UnresolvedHint broadcast, ['t]"
     )
-
-    val dataFiles = testHintTablePath.listFiles().filterNot{ file =>
-      file.getName.startsWith(".") || file.getName.startsWith("_")
-    }
-    assert(dataFiles.size == 1)
-
-    runCliWithin(1.minute)("DROP TABLE testHint;" -> "")
-    Utils.deleteRecursively(testHintTablePath)
   }
 }
