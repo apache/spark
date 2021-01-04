@@ -31,6 +31,8 @@ license: |
   - In Spark 3.2, `ALTER TABLE .. RENAME TO PARTITION` throws `PartitionAlreadyExistsException` instead of `AnalysisException` for tables from Hive external when the target partition already exists.
 
   - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`.
+  
+  - In Spark 3.2, string function includes `trim`, `ltrim`, `rtrim` accept bytes will return result with binary type instead of string type.　To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.trimResultType` to `true`
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 

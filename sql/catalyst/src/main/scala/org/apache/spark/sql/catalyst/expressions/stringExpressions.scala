@@ -758,7 +758,11 @@ trait TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcExpr +: trimExprOpt.toSeq
-  override def dataType: DataType = srcExpr.dataType
+  override def dataType: DataType = if (SQLConf.get.legacyTrimResultType) {
+    StringType
+  } else {
+    srcExpr.dataType
+  }
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(TypeCollection(StringType, BinaryType))
 
@@ -797,10 +801,17 @@ trait TrimExpression extends Expression with ImplicitCastInputTypes {
         val srcBytes = srcExpr.eval (input).asInstanceOf[Array[Byte]]
         if (srcBytes == null) {
           null
-        } else if (trimExprOpt.isDefined) {
-          doEval(srcBytes, trimExprOpt.get.eval(input).asInstanceOf[Array[Byte]])
         } else {
-          doEval(srcBytes)
+          val result = if (trimExprOpt.isDefined) {
+            doEval(srcBytes, trimExprOpt.get.eval(input).asInstanceOf[Array[Byte]])
+          } else {
+            doEval(srcBytes)
+          }
+          if (SQLConf.get.legacyTrimResultType) {
+            UTF8String.fromBytes(result)
+          } else {
+            result
+          }
         }
       }
   }
@@ -816,13 +827,21 @@ trait TrimExpression extends Expression with ImplicitCastInputTypes {
     val src = evals(0)
     val resultType = srcExpr.dataType match {
       case StringType => "UTF8String"
+      case BinaryType if SQLConf.get.legacyTrimResultType => "UTF8String"
       case BinaryType => "byte[]"
+    }
+    val treatLegacyResultType = (code: String) => if (SQLConf.get.legacyTrimResultType) {
+      s"UTF8String.fromBytes($code)"
+    } else {
+      code
     }
 
     if (evals.length == 1) {
       val resultCode = srcExpr.dataType match {
         case StringType => s"${src.value}.$trimMethod()"
-        case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value})"
+        case BinaryType => treatLegacyResultType(
+          s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value})")
+
       }
       ev.copy(code = code"""
         |${src.code}
@@ -837,8 +856,8 @@ trait TrimExpression extends Expression with ImplicitCastInputTypes {
       val trim = evals(1)
       val resultCode = srcExpr.dataType match {
         case StringType => s"${src.value}.$trimMethod(${trim.value})"
-        case BinaryType =>
-          s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value}, ${trim.value})"
+        case BinaryType => treatLegacyResultType(
+          s"org.apache.spark.unsafe.types.ByteArray.$trimMethod(${src.value}, ${trim.value})")
       }
       ev.copy(code = code"""
         |${src.code}

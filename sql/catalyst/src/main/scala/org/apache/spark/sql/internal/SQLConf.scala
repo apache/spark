@@ -3036,6 +3036,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_TRIM_RESULT_TYPE =
+    buildConf("spark.sql.legacy.trimResultType")
+      .internal()
+      .doc("When true, even if the input expression of Trim is a byte array, the result type " +
+        "is string, otherwise, it is binary. " +
+        "Before version 3.2.0, the result type is always string.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3693,6 +3703,8 @@ class SQLConf extends Serializable with Logging {
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def legacyTrimResultType: Boolean = getConf(SQLConf.LEGACY_TRIM_RESULT_TYPE)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -327,6 +327,32 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("example  ".getBytes, "  example".getBytes, "example".getBytes))
   }
 
+  test("binary trim functions use legacy config") {
+    withSQLConf(SQLConf.LEGACY_TRIM_RESULT_TYPE.key -> "true") {
+      val df = Seq(("  example  ".getBytes, "example".getBytes)).toDF("a", "b")
+      checkAnswer(
+        df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
+        Row("example  ", "  example", "example"))
+
+      checkAnswer(
+        df.select(ltrim($"b", "e".getBytes), rtrim($"b", "e".getBytes), trim($"b", "e".getBytes)),
+        Row("xample", "exampl", "xampl"))
+
+      checkAnswer(
+        df.select(
+          ltrim($"b", "xe".getBytes), rtrim($"b", "emlp".getBytes), trim($"b", "elxp".getBytes)),
+        Row("ample", "exa", "am"))
+
+      checkAnswer(
+        df.select(trim($"b", "xyz".getBytes)),
+        Row("example"))
+
+      checkAnswer(
+        df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
+        Row("example  ", "  example", "example"))
+    }
+  }
+
   test("string formatString function") {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 
